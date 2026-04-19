@@ -17,6 +17,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
+import connectors
+
 # --- MongoDB ----------------------------------------------------------------
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -147,6 +149,8 @@ class Metric(BaseModel):
     format: MetricFormat = "number"
     order: int = 0
     goal_direction: Literal["above", "below"] = "above"
+    source_type: Optional[str] = None  # e.g. "convertkit_tag_new_subscribers"
+    source_params: Optional[dict] = None  # connector-specific config
 
 
 class MetricCreate(BaseModel):
@@ -156,6 +160,8 @@ class MetricCreate(BaseModel):
     goal: float = 0
     format: MetricFormat = "number"
     goal_direction: Literal["above", "below"] = "above"
+    source_type: Optional[str] = None
+    source_params: Optional[dict] = None
 
 
 class MetricUpdate(BaseModel):
@@ -166,6 +172,8 @@ class MetricUpdate(BaseModel):
     format: Optional[MetricFormat] = None
     order: Optional[int] = None
     goal_direction: Optional[Literal["above", "below"]] = None
+    source_type: Optional[str] = None
+    source_params: Optional[dict] = None
 
 
 class WeeklyValue(BaseModel):
@@ -741,6 +749,86 @@ async def on_shutdown():
 @api.get("/")
 async def root():
     return {"service": "ayci-team-dashboard", "ok": True}
+
+
+# --- Sync (external-source pull) -------------------------------------------
+def _monday_of_date(iso_date: str) -> str:
+    from datetime import date as _date
+    y, m, d = [int(x) for x in iso_date.split("-")]
+    d_obj = _date(y, m, d)
+    delta = d_obj.weekday()
+    return (d_obj - timedelta(days=delta)).isoformat()
+
+
+@api.get("/sync/discover")
+async def sync_discover(admin: dict = Depends(require_admin)):
+    """Return picker options (shows/tags/spaces/boards) for Settings UI."""
+    return await connectors.discover()
+
+
+@api.get("/sync/connectors")
+async def sync_connectors(user: dict = Depends(get_current_user)):
+    return sorted(connectors.CONNECTORS.keys())
+
+
+class SyncRequest(BaseModel):
+    week_start: Optional[str] = None  # YYYY-MM-DD (Monday); defaults to current week
+    overwrite: bool = False           # if True, overwrite existing cell values
+
+
+@api.post("/sync/run")
+async def sync_run(req: SyncRequest, user: dict = Depends(get_current_user)):
+    # Compute window (Monday 00:00 → Sunday 23:59 UTC — close enough for weekly metrics)
+    if req.week_start:
+        week_start = _monday_of_date(req.week_start)
+    else:
+        today = datetime.now(timezone.utc).date().isoformat()
+        week_start = _monday_of_date(today)
+    start_dt = datetime.fromisoformat(week_start + "T00:00:00+00:00")
+    end_dt = start_dt + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    start_iso = start_dt.isoformat().replace("+00:00", "Z")
+    end_iso = end_dt.isoformat().replace("+00:00", "Z")
+
+    metrics = await db.metrics.find({"source_type": {"$ne": None}}, {"_id": 0}).to_list(1000)
+    results = []
+    for m in metrics:
+        source_type = m.get("source_type")
+        if not source_type:
+            continue
+        try:
+            value = await connectors.pull_value(
+                source_type, m.get("source_params") or {}, start_iso, end_iso
+            )
+            # upsert respecting overwrite flag
+            existing = await db.weekly_values.find_one({"metric_id": m["id"], "week_start": week_start})
+            if existing and not req.overwrite:
+                results.append({
+                    "metric_id": m["id"], "name": m["name"], "value": existing.get("value"),
+                    "pulled": value, "written": False, "reason": "existing value preserved",
+                })
+                continue
+            if existing:
+                await db.weekly_values.update_one(
+                    {"metric_id": m["id"], "week_start": week_start},
+                    {"$set": {"value": value}},
+                )
+            else:
+                wv = WeeklyValue(metric_id=m["id"], week_start=week_start, value=value)
+                await db.weekly_values.insert_one(wv.model_dump())
+            results.append({
+                "metric_id": m["id"], "name": m["name"], "value": value, "pulled": value, "written": True,
+            })
+        except Exception as e:
+            logger.warning(f"Sync failed for metric {m.get('name')}: {e}")
+            results.append({
+                "metric_id": m["id"], "name": m["name"], "error": str(e), "written": False,
+            })
+    return {
+        "week_start": week_start,
+        "window": {"start": start_iso, "end": end_iso},
+        "total_metrics_with_source": len(metrics),
+        "results": results,
+    }
 
 
 app.include_router(api)

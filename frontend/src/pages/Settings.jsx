@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Link2 } from "lucide-react";
 import { formatValue } from "@/lib/format";
+import MetricSourceDialog from "@/components/MetricSourceDialog";
 
 const CATEGORIES = [
   "GROWTH + INTEREST",
@@ -213,6 +214,7 @@ function MetricsSection({ isAdmin }) {
   const [metrics, setMetrics] = useState([]);
   const [team, setTeam] = useState([]);
   const [open, setOpen] = useState(false);
+  const [sourceMetric, setSourceMetric] = useState(null);
   const [form, setForm] = useState({ name: "", category: "GROWTH + INTEREST", owner_ids: [], goal: 0, format: "number", goal_direction: "above" });
 
   const load = useCallback(async () => {
@@ -330,6 +332,7 @@ function MetricsSection({ isAdmin }) {
             <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Category</th>
             <th className="text-right px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Goal</th>
             <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Format</th>
+            <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Source</th>
             {isAdmin && <th />}
           </tr>
         </thead>
@@ -340,6 +343,28 @@ function MetricsSection({ isAdmin }) {
               <td className="px-6 py-2.5 text-xs text-[var(--ayci-ink-muted)]">{m.category}</td>
               <td className="px-6 py-2.5 text-right metric-number">{formatValue(m.goal, m.format)}</td>
               <td className="px-6 py-2.5 capitalize text-[var(--ayci-ink-muted)]">{m.format}</td>
+              <td className="px-6 py-2.5">
+                {m.source_type ? (
+                  <button
+                    onClick={() => isAdmin && setSourceMetric(m)}
+                    className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200 hover:bg-sky-100"
+                    data-testid={`metric-source-${m.id}`}
+                  >
+                    <Link2 className="w-3 h-3" />
+                    {m.source_type.replace(/_/g, " ")}
+                  </button>
+                ) : isAdmin ? (
+                  <button
+                    onClick={() => setSourceMetric(m)}
+                    className="text-[11px] text-[var(--ayci-accent)] hover:underline"
+                    data-testid={`metric-source-${m.id}`}
+                  >
+                    + Connect source
+                  </button>
+                ) : (
+                  <span className="text-xs text-[var(--ayci-ink-muted)]">manual</span>
+                )}
+              </td>
               {isAdmin && (
                 <td className="px-6 py-2.5 text-right">
                   <Button variant="ghost" size="icon" onClick={() => remove(m.id)} data-testid={`metric-delete-${m.id}`}>
@@ -351,6 +376,12 @@ function MetricsSection({ isAdmin }) {
           ))}
         </tbody>
       </table>
+      <MetricSourceDialog
+        open={!!sourceMetric}
+        onOpenChange={(o) => !o && setSourceMetric(null)}
+        metric={sourceMetric}
+        onSaved={load}
+      />
     </Panel>
   );
 }

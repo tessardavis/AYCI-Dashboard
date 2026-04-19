@@ -31,18 +31,47 @@ Build a clean, modern team performance dashboard for AYCI Academy (a company hel
 - ✅ Design: Navy sidebar + teal accent, Manrope+Inter fonts, soft green/red highlights per spec, professional doctor avatars from design agent.
 - ✅ Backend 18/18 pytest passed; frontend e2e verified via screenshots.
 
+## Implemented (2026-02 — Auto-Sync pass 1)
+- ✅ External-source connectors (backend/connectors.py):
+  - **Transistor.fm** — weekly downloads for a show (auto-discovery of shows)
+  - **ConvertKit v3** — total new subs, new tag-subscribers in window, avg broadcast CTR
+  - **Circle** — new non-Academy members, active Academy member count (space pagination)
+  - **Monday.com (GraphQL)** — items on a board created this week, optionally filtered by status
+- ✅ Metric model extended with `source_type` + `source_params` (per-metric connector config).
+- ✅ `/api/sync/discover` — returns all shows / tags / spaces / boards for dropdown pickers.
+- ✅ `/api/sync/run` — pulls live values for all source-configured metrics, upserts into weekly_values.
+- ✅ Settings → Metrics now shows a "Source" column with "+ Connect source" / source-chip.
+- ✅ `MetricSourceDialog` — searchable picker for tags (1037 CK tags) and boards (139 Monday boards), form validation per connector type.
+- ✅ **Sync** button on Weekly Scorecard header — triggers live pull; toast summarises written/failed.
+- ✅ **Live data confirmed**: Podcast Downloads (1,149 from Transistor), EEC Joiners (56 from ConvertKit), People Joined The Waitlist (384 from ConvertKit APR-26 tag).
+
+## Pending data-source config (waiting on user)
+- **Stripe live key** → 4 revenue metrics (New Signup Revenue, Upgrade Revenue, Refunds, Missed Payments). Connector not yet built; blocked on key.
+- **YouTube API key + channel ID** → Podcast Views (YouTube). Connector not yet built; blocked on key.
+- **Calendly team plan** → Hours of Private Tier Calls. Blocked on team setup.
+- **Monday.com status-column values** (Results Received / Interview / Testimonial / Win) → 4 metrics on "Academy Members" board — user to configure in Settings.
+- **Circle Academy space ID** → user to pick in Settings.
+- **New Subscribers / ConvertKit CTR / New Signups From Waitlist** → user to pick tag/configuration in Settings.
+
 ## Prioritized backlog
 **P1**
+- **Stripe connector** (revenue, refunds, missed payments, subscriptions) — awaits key from user
+- **YouTube Data API v3** connector — awaits key
+- **Scheduled auto-sync** at 06:00 Europe/London every Monday (APScheduler inside FastAPI process)
 - Drag-and-drop re-ordering of metrics within a category (spec mentions but not yet).
 - Quarter archiving (make old quarters read-only once new one is active).
-- `/api/auth/refresh` endpoint (refresh_token is issued but unused — future extension).
+- `/api/auth/refresh` endpoint (refresh_token issued but unused).
 
 **P2**
-- Per-user rock-edit restriction (currently any authenticated user can update any rock; spec says "own rocks" — add ownership check if needed).
-- Drag-and-drop / CSV export of scorecard.
+- Calendly integration when team plan is active.
+- "Sync preview" mode — show what would be pulled without writing.
+- Per-user rock-edit restriction (currently any authenticated user can update any rock).
+- CSV export of scorecard.
 - Real-time updates via WebSocket (for Monday live meetings).
 - Email/Slack digest reminder before Monday meeting.
 
 ## Next tasks
-- Wait for user feedback on design, data accuracy, and desired enhancements.
-- Consider: Monday-morning auto-email to team summarising last week's scorecard + flagged off-track rocks (strong team-adoption hook).
+- Wait for: Stripe live restricted key, YouTube API key + channel ID.
+- Build Stripe connector (new signup vs upgrade rule, refunds count + £, missed payments).
+- Build YouTube connector (weekly views, configurable channel/playlist).
+- Add APScheduler cron for 06:00 Mon Europe/London auto-sync.

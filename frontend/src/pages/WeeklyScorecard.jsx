@@ -6,7 +6,7 @@ import Sparkline from "@/components/Sparkline";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { Filter, X } from "lucide-react";
+import { Filter, X, RefreshCw } from "lucide-react";
 
 const CATEGORY_ORDER = [
   "GROWTH + INTEREST",
@@ -27,6 +27,7 @@ export default function WeeklyScorecard() {
   const [filterOwnerId, setFilterOwnerId] = useState(null);
   const [editingCell, setEditingCell] = useState(null); // { metric_id, week_start }
   const [editingValue, setEditingValue] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE), []);
   const teamById = useMemo(() => {
@@ -150,6 +151,29 @@ export default function WeeklyScorecard() {
 
   const onTrackPct = summary.withValue === 0 ? 0 : Math.round((summary.onTrack / summary.withValue) * 100);
 
+  const runSync = async (overwrite = false) => {
+    setSyncing(true);
+    try {
+      const { data } = await apiClient.post("/sync/run", { overwrite });
+      await loadAll();
+      const written = data.results.filter((r) => r.written).length;
+      const errors = data.results.filter((r) => r.error);
+      if (written > 0) toast.success(`Synced ${written} metric${written === 1 ? "" : "s"} from external sources`);
+      if (errors.length > 0) {
+        toast.error(
+          `${errors.length} metric${errors.length === 1 ? "" : "s"} failed: ${errors.slice(0, 2).map((e) => e.name).join(", ")}`
+        );
+      }
+      if (written === 0 && errors.length === 0) {
+        toast.info("No connected sources yet — configure them in Settings → Metrics");
+      }
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="p-8 lg:p-12 ayci-fade-up">
       <PageHeader
@@ -157,7 +181,19 @@ export default function WeeklyScorecard() {
         title="Weekly Scorecard"
         description="The numbers your team reviews every Monday. Click a cell to enter this week's values."
         right={
-          <SummaryRing onTrack={summary.onTrack} total={summary.withValue} pct={onTrackPct} />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => runSync(false)}
+              disabled={syncing}
+              data-testid="scorecard-sync-btn"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-[var(--ayci-border)] bg-white text-sm font-medium hover:border-[var(--ayci-accent)] hover:text-[var(--ayci-accent)] transition-colors disabled:opacity-50"
+              title="Pull weekly values from external sources (Transistor, ConvertKit, Circle, Monday)"
+            >
+              <RefreshCw className={"w-4 h-4 " + (syncing ? "animate-spin" : "")} />
+              {syncing ? "Syncing…" : "Sync"}
+            </button>
+            <SummaryRing onTrack={summary.onTrack} total={summary.withValue} pct={onTrackPct} />
+          </div>
         }
       />
 
