@@ -1,0 +1,50 @@
+{
+  "summary": "End-to-end testing of AYCI Team Dashboard MVP. Backend: 18/18 pytest tests passed covering auth (login/me/logout/cookies), seed data (7 team, 19 metrics, 17 Q2 2026 rocks, 3 launches with daily regs, 4 weeks of weekly values), RBAC (admin-only POST metrics/team/rocks, user can PATCH rocks/launches/weekly-values), and persistence (upsert + GET verify). Frontend: login page loads with email prefilled, login succeeds, sidebar nav + logout all work, Weekly Scorecard renders 13 week columns with categories, owner avatars, goals, sparklines, green/red colored cells and summary ring; Quarterly Rocks renders cards grouped by owner with On Track/Off Track/Done pills and expandable notes; Launch Dashboard renders KPI cards, daily-registrations line chart with previous-launch overlay, Good/Better/Best target stepped bar, editable sales breakdown auto-computing revenue, and launch-over-launch bar chart; Settings shows all 5 tabs (Team/Users/Metrics/Rocks/Launches). Logout redirects to /login.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware", "issue": "allow_origins=['*'] combined with allow_credentials=True is invalid per CORS spec; browsers reject Access-Control-Allow-Origin: * with credentials. Works via server-side testing but may break production browser calls from other origins. Recommend setting CORS_ORIGINS to explicit origin list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "WeeklyScorecard", "issue": "React console warning: 'Each child in a list should have a unique key prop' in WeeklyScorecard render method — missing key on a mapped child", "selector": "WeeklyScorecard.jsx", "priority": "LOW"},
+      {"component": "scorecard-summary", "issue": "Text 'Welcome back' toast then summary reads '0%0 / 0on track this week' — missing whitespace/line-breaks between '0%', '0 / 0', and 'on track this week' makes it hard to read", "selector": "[data-testid='scorecard-summary']", "priority": "LOW"},
+      {"component": "Recharts containers", "issue": "Many console warnings: 'width(-1) and height(-1) of chart should be greater than 0' on initial sparkline/chart render. Cosmetic; charts display correctly once sized.", "selector": "ResponsiveContainer sparklines", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Weekly Scorecard", "issues": ["Current week (WC most recent) shows no values because seed intentionally skips current week → summary always shows '0 / 0 on track this week' on fresh install; consider seeding current-week stub or showing 'No data entered yet' copy."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add missing React key on the mapped child inside WeeklyScorecard (see console warning).",
+    "Add whitespace/markup in scorecard-summary so '0%', '0 / 0', 'on track this week' don't collapse together.",
+    "Tighten CORS_ORIGINS to the actual frontend origin(s) since allow_credentials=True requires explicit origins.",
+    "Optionally: fix recharts 'width -1 height -1' warnings by giving parent a min-width/height or using fixed dims for sparkline."
+  ],
+  "critical_code_review_comments": [
+    "server.py CORS misconfigured: allow_origins='*' + allow_credentials=True is invalid in browsers with credentialed requests.",
+    "set_auth_cookies uses secure=False — acceptable for preview but production deployment must set secure=True for SameSite=None; current 'lax' is fine for same-site UI.",
+    "No rate-limiting / brute-force lockout on /auth/login (playbook requirement mentioned 5-fail lockout). Not implemented.",
+    "server.py is 755 lines — approaching size limit; consider splitting seed logic into seeds.py and routes into modules.",
+    "on_event('startup')/('shutdown') is deprecated in recent FastAPI; consider lifespan handler.",
+    "create_access_token/create_refresh_token call datetime.now(timezone.utc) inside body — fine, but type='refresh' tokens are never used anywhere (no /auth/refresh endpoint). Dead code.",
+    "_seed_metrics only defines 19 metrics but DELIVERY+OPERATIONS only has 1 metric; matches spec but category is sparse."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)",
+    "/app/test_reports/pytest/pytest_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "~95% — all primary flows render and work per screenshots; only cosmetic warnings"},
+  "test_credentials": "admin@ayci.com / Admin@2026 (from /app/memory/test_credentials.md). Created regression non-admin: test_user_regression@ayci.com / UserPass@2026",
+  "seed_data_creation": "Tests create TEST_ prefixed metric/team/rock entries and clean up. Regression non-admin user is persistent in DB for reuse.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests in /app/backend/tests/backend_test.py work reliably via REACT_APP_BACKEND_URL. For frontend Playwright, add explicit waits after navigation (wait_for_selector on scorecard-row-*, rock-status-*, kpi-regs) before counting elements — initial count-immediately queries returned 0 because React had not finished hydrating, though the UI itself is fully functional in screenshots. All data-testid attributes specified in the review request are present in the components.",
+  "rca of the issue": "No critical bugs found. Minor React key warning originates in WeeklyScorecard list iteration (likely sparkline or owner avatars map without key). Recharts '-1 width/height' warnings happen on first paint before ResponsiveContainer measures parent — harmless."
+}
