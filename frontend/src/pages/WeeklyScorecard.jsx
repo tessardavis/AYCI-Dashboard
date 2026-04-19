@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { formatValue, lastNWeekStarts, formatWeekLabel, isOnTrack } from "@/lib/format";
 import PageHeader from "@/components/PageHeader";
@@ -222,8 +222,8 @@ export default function WeeklyScorecard() {
                   const items = grouped[cat] || [];
                   if (items.length === 0) return null;
                   return (
-                    <>
-                      <tr key={`cat-${cat}`} className="bg-[var(--ayci-sidebar)]">
+                    <Fragment key={cat}>
+                      <tr className="bg-[var(--ayci-sidebar)]">
                         <td
                           colSpan={4 + weeks.length}
                           className="sticky left-0 px-4 py-2 text-[11px] uppercase tracking-[0.2em] text-white font-display font-semibold"
@@ -346,7 +346,7 @@ function SummaryRing({ onTrack, total, pct }) {
       className="flex items-center gap-4 bg-white border border-[var(--ayci-border)] rounded-lg px-5 py-4 shadow-sm"
       data-testid="scorecard-summary"
     >
-      <div className="relative w-[68px] h-[68px]">
+      <div className="relative w-[68px] h-[68px] shrink-0">
         <svg width="68" height="68" className="-rotate-90">
           <circle cx="34" cy="34" r={r} stroke="#E2E8F0" strokeWidth="6" fill="none" />
           <circle
@@ -365,11 +365,12 @@ function SummaryRing({ onTrack, total, pct }) {
           <span className="metric-number text-sm font-bold text-[var(--ayci-ink)]">{pct}%</span>
         </div>
       </div>
-      <div>
+      <div className="leading-tight">
         <div className="font-display text-2xl font-bold metric-number text-[var(--ayci-ink)]">
-          {onTrack}<span className="text-[var(--ayci-ink-muted)] font-normal"> / {total}</span>
+          {onTrack}
+          <span className="text-[var(--ayci-ink-muted)] font-normal"> / {total}</span>
         </div>
-        <div className="text-xs text-[var(--ayci-ink-muted)]">on track this week</div>
+        <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">on track this week</div>
       </div>
     </div>
   );
