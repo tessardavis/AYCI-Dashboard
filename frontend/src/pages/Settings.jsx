@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -88,11 +88,11 @@ function TeamSection({ isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", role_title: "", avatar_url: "" });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const { data } = await apiClient.get("/team");
     setTeam(data);
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     try {
@@ -215,11 +215,11 @@ function MetricsSection({ isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", category: "GROWTH + INTEREST", owner_ids: [], goal: 0, format: "number", goal_direction: "above" });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [m, t] = await Promise.all([apiClient.get("/metrics"), apiClient.get("/team")]);
     setMetrics(m.data); setTeam(t.data);
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     try {
@@ -362,11 +362,11 @@ function RocksSection({ isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ owner_id: "", title: "", status: "on_track", due_date: "2026-06-30", notes: "", quarter: "Q2 2026" });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [r, t] = await Promise.all([apiClient.get("/rocks"), apiClient.get("/team")]);
     setRocks(r.data); setTeam(t.data);
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     try {
@@ -453,11 +453,11 @@ function LaunchesSection({ isAdmin }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", start_date: "", webinar_date: "", target_good: 140000, target_better: 160000, target_best: 200000 });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const { data } = await apiClient.get("/launches");
     setLaunches(data);
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     try {

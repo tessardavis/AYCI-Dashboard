@@ -5,8 +5,10 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ayci-dashboard.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_EMAIL = "admin@ayci.com"
-ADMIN_PASSWORD = "Admin@2026"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@ayci.com")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Admin@2026")
+TEST_USER_EMAIL = os.environ.get("TEST_USER_EMAIL", "test_user_regression@ayci.com")
+TEST_USER_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "UserPass@2026")
 
 
 # ---- Shared fixtures -------------------------------------------------------
@@ -26,8 +28,8 @@ def admin_session():
 @pytest.fixture(scope="session")
 def user_session(admin_session):
     """Create (or reuse) a non-admin user and return an authenticated session."""
-    email = "test_user_regression@ayci.com"
-    password = "UserPass@2026"
+    email = TEST_USER_EMAIL
+    password = TEST_USER_PASSWORD
     # Register via admin (ignore if exists)
     admin_session.post(f"{API}/auth/register",
                        json={"email": email, "password": password, "name": "Regression User", "role": "user"},
@@ -115,12 +117,12 @@ class TestSeed:
         assert r.status_code == 200
         launches = r.json()
         assert len(launches) == 3
-        names = {l["name"] for l in launches}
+        names = {lc["name"] for lc in launches}
         assert names == {"NOV-25", "FEB-26", "APR-26"}
 
     def test_launch_data_and_daily_regs(self, admin_session):
         launches = admin_session.get(f"{API}/launches", timeout=30).json()
-        apr = next(l for l in launches if l["name"] == "APR-26")
+        apr = next(lc for lc in launches if lc["name"] == "APR-26")
         rd = admin_session.get(f"{API}/launches/{apr['id']}/data", timeout=30)
         assert rd.status_code == 200
         assert rd.json()["launch_id"] == apr["id"]
@@ -129,7 +131,7 @@ class TestSeed:
         regs = rr.json()
         assert len(regs) > 0, "expected seeded daily registrations for APR-26"
         # Check NOV-25 sum ~= total_regs
-        nov = next(l for l in launches if l["name"] == "NOV-25")
+        nov = next(lc for lc in launches if lc["name"] == "NOV-25")
         nov_regs = admin_session.get(f"{API}/launches/{nov['id']}/daily-registrations", timeout=30).json()
         assert sum(d["count"] for d in nov_regs) > 0
 
@@ -169,7 +171,7 @@ class TestMutations:
 
     def test_patch_launch_data(self, admin_session):
         launches = admin_session.get(f"{API}/launches", timeout=30).json()
-        apr = next(l for l in launches if l["name"] == "APR-26")
+        apr = next(lc for lc in launches if lc["name"] == "APR-26")
         r = admin_session.patch(
             f"{API}/launches/{apr['id']}/data",
             json={"sales_academy_count": 42},

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { formatValue, lastNWeekStarts, formatWeekLabel, isOnTrack } from "@/lib/format";
 import PageHeader from "@/components/PageHeader";
@@ -325,7 +325,7 @@ export default function WeeklyScorecard() {
                           </tr>
                         );
                       })}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -53,7 +53,7 @@ export default function QuarterlyRocks() {
   const [expandedNotes, setExpandedNotes] = useState({});
   const [notesDraft, setNotesDraft] = useState({});
 
-  const loadData = async (q) => {
+  const loadData = useCallback(async (q) => {
     try {
       const [t, r, qs] = await Promise.all([
         apiClient.get("/team"),
@@ -66,11 +66,11 @@ export default function QuarterlyRocks() {
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData(quarter);
-  }, [quarter]);
+  }, [quarter, loadData]);
 
   const byOwner = useMemo(() => {
     const m = {};

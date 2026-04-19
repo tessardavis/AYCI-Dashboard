@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
 import {
@@ -42,52 +42,58 @@ export default function LaunchDashboard() {
   const [allData, setAllData] = useState({}); // launch_id -> data
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await apiClient.get("/launches");
-        const sorted = [...data].sort((a, b) =>
-          (b.start_date || "").localeCompare(a.start_date || "")
-        );
-        setLaunches(sorted);
-        if (sorted.length > 0) setLaunchId(sorted[0].id);
-      } catch (e) {
-        toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-      }
-    })();
+  const loadLaunches = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/launches");
+      const sorted = [...data].sort((a, b) =>
+        (b.start_date || "").localeCompare(a.start_date || "")
+      );
+      setLaunches(sorted);
+      if (sorted.length > 0) setLaunchId((current) => current || sorted[0].id);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
   }, []);
 
   useEffect(() => {
-    if (!launchId || launches.length === 0) return;
-    const idx = launches.findIndex((l) => l.id === launchId);
-    const prev = idx >= 0 && idx + 1 < launches.length ? launches[idx + 1] : null;
-    (async () => {
-      setLoading(true);
-      try {
-        const calls = [
-          apiClient.get(`/launches/${launchId}/data`),
-          apiClient.get(`/launches/${launchId}/daily-registrations`),
-        ];
-        if (prev) {
-          calls.push(apiClient.get(`/launches/${prev.id}/daily-registrations`));
-        }
-        const results = await Promise.all(calls);
-        setLaunchData(results[0].data);
-        setDaily(results[1].data);
-        setPrevDaily(prev ? results[2].data : []);
+    loadLaunches();
+  }, [loadLaunches]);
 
-        // Fetch all launch data for comparison chart (once)
-        const allDataResp = await Promise.all(
-          launches.map((l) => apiClient.get(`/launches/${l.id}/data`).then((r) => [l.id, r.data]))
-        );
-        setAllData(Object.fromEntries(allDataResp));
-      } catch (e) {
-        toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-      } finally {
-        setLoading(false);
+  const loadLaunchDetail = useCallback(async (activeId, currentLaunches) => {
+    if (!activeId || currentLaunches.length === 0) return;
+    const idx = currentLaunches.findIndex((l) => l.id === activeId);
+    const prev = idx >= 0 && idx + 1 < currentLaunches.length ? currentLaunches[idx + 1] : null;
+    setLoading(true);
+    try {
+      const calls = [
+        apiClient.get(`/launches/${activeId}/data`),
+        apiClient.get(`/launches/${activeId}/daily-registrations`),
+      ];
+      if (prev) {
+        calls.push(apiClient.get(`/launches/${prev.id}/daily-registrations`));
       }
-    })();
-  }, [launchId, launches]);
+      const results = await Promise.all(calls);
+      setLaunchData(results[0].data);
+      setDaily(results[1].data);
+      setPrevDaily(prev ? results[2].data : []);
+
+      // Fetch all launch data for comparison chart
+      const allDataResp = await Promise.all(
+        currentLaunches.map((l) =>
+          apiClient.get(`/launches/${l.id}/data`).then((r) => [l.id, r.data])
+        )
+      );
+      setAllData(Object.fromEntries(allDataResp));
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLaunchDetail(launchId, launches);
+  }, [launchId, launches, loadLaunchDetail]);
 
   const activeLaunch = useMemo(
     () => launches.find((l) => l.id === launchId) || null,
