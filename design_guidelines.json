@@ -1,0 +1,71 @@
+{
+  "theme": "light",
+  "archetype": "Swiss & High-Contrast (Notion + Financial Dashboard)",
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "Inter",
+    "instructions": "Use Manrope for all headings with tracking-tight. Use Inter for body text. Numbers in metrics should be large and bold. Labels should be smaller and muted grey. Avoid standard bold for headings where light or black weights create better tension."
+  },
+  "colors": {
+    "primary": "#0EA5E9",
+    "sidebar_bg": "#1A1F36",
+    "sidebar_text": "#94A3B8",
+    "sidebar_text_active": "#FFFFFF",
+    "background": "#F8FAFC",
+    "card_bg": "#FFFFFF",
+    "text_main": "#111827",
+    "text_muted": "#6B7280",
+    "success_bg": "#E8F5E9",
+    "success_text": "#166534",
+    "danger_bg": "#FFEBEE",
+    "danger_text": "#991B1B",
+    "border": "#E2E8F0"
+  },
+  "spacing_and_layout": {
+    "canvas_padding": "p-8 lg:p-12",
+    "card_padding": "p-6 lg:p-8",
+    "gap": "gap-6 lg:gap-8",
+    "border_radius": "rounded-lg",
+    "shadows": "shadow-sm",
+    "card_borders": "border border-gray-100"
+  },
+  "components": {
+    "sidebar": "Persistent left sidebar. Dark navy background. Active items highlighted with subtle background or teal border. Logo placeholder at the top with 'AYCI Academy'.",
+    "weekly_scorecard": "Data table with sticky first column. Metrics grouped by category. On-track cells colored soft green, off-track soft red. Use Recharts for sparklines.",
+    "quarterly_rocks": "Grid layout for team members. Status pills (On Track/Off Track/Done). Ring progress chart for summary.",
+    "launch_dashboard": "Grid of KPI cards at top. Recharts Area/Line chart for daily registrations with previous launch overlay. Stepped progress bar for Good/Better/Best tiers.",
+    "status_pills": "Small border radius (rounded-full), bold small text, specific background colors."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1612943705904-e2e101abcd19?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBkb2N0b3IlMjBwb3J0cmFpdHxlbnwwfHx8fDE3NzY2MjU3MzR8MA&ixlib=rb-4.1.0&q=85",
+        "category": "avatar",
+        "description": "Male doctor profile for team member avatar"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1615177393114-bd2917a4f74a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBkb2N0b3IlMjBwb3J0cmFpdHxlbnwwfHx8fDE3NzY2MjU3MzR8MA&ixlib=rb-4.1.0&q=85",
+        "category": "avatar",
+        "description": "Male doctor profile for team member avatar"
+      },
+      {
+        "url": "https://images.pexels.com/photos/19438566/pexels-photo-19438566.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "avatar",
+        "description": "South Asian male doctor profile for team member avatar"
+      },
+      {
+        "url": "https://images.pexels.com/photos/32160037/pexels-photo-32160037.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "avatar",
+        "description": "Young male doctor profile for team member avatar"
+      }
+    ]
+  },
+  "motion_and_interactions": {
+    "hover_states": "Cards lift slightly (-translate-y-0.5) with increased shadow. Interactive rows in table get a very subtle gray background.",
+    "transitions": "Use transition-all duration-200 ease-in-out for buttons, links, and cards."
+  },
+  "testing": {
+    "instructions": "All interactive elements MUST have data-testid attributes (e.g., data-testid='sidebar-nav-scorecard', data-testid='metric-cell-12')."
+  },
+  "instructions_to_main_agent": "Ensure the layout matches the 'Notion meets financial dashboard' requirement. The sidebar must be #1A1F36. Implement Recharts for charting. Do not use placehold.it or any generic placeholder service. Use the avatar images provided. Build a robust, responsive table for the Weekly Scorecard that allows horizontal scrolling for the 13 weeks. Implement a clean layout avoiding visual clutter. Use the exact hex codes provided in the colors section."
+}
