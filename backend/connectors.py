@@ -350,6 +350,126 @@ async def monday_weekly_status_count(params: dict, start_iso: str, end_iso: str)
     return float(count)
 
 
+# ------------------------------------------------------------------ Stripe
+STRIPE_API = "https://api.stripe.com/v1"
+
+
+def _stripe_auth() -> tuple:
+    return (os.environ.get("STRIPE_API_KEY", ""), "")
+
+
+def _to_unix(iso: str) -> int:
+    """Convert ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) to Unix epoch seconds (UTC)."""
+    from datetime import datetime
+    return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+
+
+async def _stripe_list_all(client: httpx.AsyncClient, path: str, params: dict) -> list[dict]:
+    out: list[dict] = []
+    starting_after: str | None = None
+    while True:
+        q = {"limit": 100, **params}
+        if starting_after:
+            q["starting_after"] = starting_after
+        r = await client.get(f"{STRIPE_API}{path}", auth=_stripe_auth(), params=q)
+        r.raise_for_status()
+        body = r.json()
+        data = body.get("data", [])
+        out.extend(data)
+        if not body.get("has_more") or not data:
+            break
+        starting_after = data[-1]["id"]
+    return out
+
+
+async def _customer_has_prior_paid(client: httpx.AsyncClient, customer_id: str, before_ts: int) -> bool:
+    """True if this customer has a succeeded charge before `before_ts`."""
+    params = {"customer": customer_id, "created[lt]": before_ts, "limit": 1}
+    r = await client.get(f"{STRIPE_API}/charges", auth=_stripe_auth(), params=params)
+    r.raise_for_status()
+    for ch in r.json().get("data", []):
+        if ch.get("status") == "succeeded" and ch.get("paid"):
+            return True
+    return False
+
+
+async def _stripe_classify_charges(start_iso: str, end_iso: str) -> dict:
+    """Return dict: {'signup_gbp':..., 'upgrade_gbp':..., 'all_gbp':...} for succeeded GBP charges in window."""
+    start_ts = _to_unix(start_iso)
+    end_ts = _to_unix(end_iso)
+    upgrade_min_pence = int(float(os.environ.get("STRIPE_UPGRADE_MIN_GBP", "90")) * 100)
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        charges = await _stripe_list_all(c, "/charges", {"created[gte]": start_ts, "created[lte]": end_ts})
+        # Only succeeded GBP, non-refunded (refunds handled separately)
+        gbp = [
+            ch for ch in charges
+            if ch.get("currency") == "gbp"
+            and ch.get("status") == "succeeded"
+            and ch.get("paid")
+        ]
+        signup_pence = 0
+        upgrade_pence = 0
+        all_pence = 0
+        checked_customer_prior: dict[str, bool] = {}
+        for ch in gbp:
+            amount_net = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
+            all_pence += amount_net
+            cust = ch.get("customer")
+            if not cust:
+                # one-off charge without a customer — treat as signup
+                signup_pence += amount_net
+                continue
+            if cust not in checked_customer_prior:
+                checked_customer_prior[cust] = await _customer_has_prior_paid(c, cust, start_ts)
+            if not checked_customer_prior[cust]:
+                signup_pence += amount_net
+            elif amount_net >= upgrade_min_pence:
+                upgrade_pence += amount_net
+    return {
+        "signup_gbp": signup_pence / 100.0,
+        "upgrade_gbp": upgrade_pence / 100.0,
+        "all_gbp": all_pence / 100.0,
+    }
+
+
+async def stripe_new_signup_revenue(params: dict, start_iso: str, end_iso: str) -> float:
+    data = await _stripe_classify_charges(start_iso, end_iso)
+    return round(data["signup_gbp"], 2)
+
+
+async def stripe_upgrade_revenue(params: dict, start_iso: str, end_iso: str) -> float:
+    data = await _stripe_classify_charges(start_iso, end_iso)
+    return round(data["upgrade_gbp"], 2)
+
+
+async def stripe_refunds_count(params: dict, start_iso: str, end_iso: str) -> float:
+    start_ts = _to_unix(start_iso)
+    end_ts = _to_unix(end_iso)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        refunds = await _stripe_list_all(c, "/refunds", {"created[gte]": start_ts, "created[lte]": end_ts})
+    return float(sum(1 for r in refunds if r.get("currency") == "gbp" and r.get("status") == "succeeded"))
+
+
+async def stripe_refunds_amount(params: dict, start_iso: str, end_iso: str) -> float:
+    start_ts = _to_unix(start_iso)
+    end_ts = _to_unix(end_iso)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        refunds = await _stripe_list_all(c, "/refunds", {"created[gte]": start_ts, "created[lte]": end_ts})
+    total_pence = sum(int(r.get("amount", 0)) for r in refunds if r.get("currency") == "gbp" and r.get("status") == "succeeded")
+    return round(total_pence / 100.0, 2)
+
+
+async def stripe_missed_payments_count(params: dict, start_iso: str, end_iso: str) -> float:
+    """Count of failed succeeded=false charges + failed-invoice payments in window."""
+    start_ts = _to_unix(start_iso)
+    end_ts = _to_unix(end_iso)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        charges = await _stripe_list_all(c, "/charges", {"created[gte]": start_ts, "created[lte]": end_ts})
+    failed = [ch for ch in charges if ch.get("status") == "failed"]
+    return float(len(failed))
+
+
 # ------------------------------------------------------------------ Registry
 ConnectorFn = Callable[[dict, str, str], Awaitable[float]]
 
@@ -365,6 +485,12 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "circle_active_academy_members": circle_active_academy_members,
     # Monday
     "monday_items_created_this_week": monday_weekly_status_count,
+    # Stripe
+    "stripe_new_signup_revenue": stripe_new_signup_revenue,
+    "stripe_upgrade_revenue": stripe_upgrade_revenue,
+    "stripe_refunds_count": stripe_refunds_count,
+    "stripe_refunds_amount": stripe_refunds_amount,
+    "stripe_missed_payments_count": stripe_missed_payments_count,
 }
 
 

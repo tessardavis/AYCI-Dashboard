@@ -29,6 +29,11 @@ const CONNECTORS = [
   { key: "circle_new_non_academy_members", label: "Circle — new members NOT in Academy space", fields: ["academy_space_id"] },
   { key: "circle_active_academy_members", label: "Circle — active members in Academy space", fields: ["academy_space_id"] },
   { key: "monday_items_created_this_week", label: "Monday.com — items on a board this week (by status)", fields: ["board_id", "status_column_title", "status_values"] },
+  { key: "stripe_new_signup_revenue", label: "Stripe — new-signup revenue (£) this week", fields: [] },
+  { key: "stripe_upgrade_revenue", label: "Stripe — upgrade revenue (£) this week", fields: [] },
+  { key: "stripe_refunds_count", label: "Stripe — refunds count this week", fields: [] },
+  { key: "stripe_refunds_amount", label: "Stripe — refund amount (£) this week", fields: [] },
+  { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
 ];
 
 export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved }) {
