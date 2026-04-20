@@ -678,6 +678,126 @@ async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso
     return float(count)
 
 
+async def tally_avg_rating_this_week(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"form_id": "68koZk"}
+    Averages all LINEAR_SCALE / RATING / numeric answers across submissions in window.
+    Returns 0.0 if no submissions.
+    """
+    form_id = params.get("form_id")
+    if not form_id:
+        raise ValueError("Tally rating connector needs form_id")
+    scores: list[float] = []
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 100:
+            r = await c.get(
+                f"{TALLY_BASE}/forms/{form_id}/submissions",
+                headers=_tally_headers(),
+                params={"page": page, "limit": 100},
+            )
+            r.raise_for_status()
+            body = r.json()
+            items = body.get("submissions") or body.get("items") or body.get("data") or []
+            if not items:
+                break
+            oldest = None
+            for s in items:
+                ts = str(s.get("submittedAt") or s.get("createdAt") or "")
+                oldest = ts
+                if not (start_iso <= ts <= end_iso):
+                    continue
+                for r_ in s.get("responses", []):
+                    ans = r_.get("answer")
+                    if isinstance(ans, (int, float)):
+                        scores.append(float(ans))
+                    elif isinstance(ans, str):
+                        try:
+                            scores.append(float(ans))
+                        except ValueError:
+                            continue
+            if oldest and oldest < start_iso:
+                break
+            if len(items) < 100:
+                break
+            page += 1
+    if not scores:
+        return 0.0
+    return round(sum(scores) / len(scores), 2)
+
+
+async def _ck_tag_emails(tag_id: int) -> set[str]:
+    """Return the set of email addresses currently subscribed to a ConvertKit tag."""
+    emails: set[str] = set()
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 100:
+            r = await c.get(
+                f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions",
+                params={"api_secret": _ck_secret(), "page": page, "per_page": 1000},
+            )
+            r.raise_for_status()
+            body = r.json()
+            for s in body.get("subscriptions", []):
+                em = (s.get("subscriber") or {}).get("email_address") or s.get("email_address")
+                if em:
+                    emails.add(em.strip().lower())
+            total_pages = body.get("total_pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+    return emails
+
+
+async def stripe_new_signups_from_waitlist(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"waitlist_tag_id": 14407524}
+    Count of Stripe first-charge customers in window whose email is on the given
+    ConvertKit waitlist tag.
+    """
+    tag_id = params.get("waitlist_tag_id")
+    if not tag_id:
+        raise ValueError("waitlist signups connector needs waitlist_tag_id")
+
+    waitlist_emails = await _ck_tag_emails(int(tag_id))
+    if not waitlist_emails:
+        return 0.0
+
+    start_ts = _to_unix(start_iso)
+    end_ts = _to_unix(end_iso)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        charges = await _stripe_list_all(
+            c, "/charges", {"created[gte]": start_ts, "created[lte]": end_ts}
+        )
+        paid_charges = [
+            ch for ch in charges
+            if ch.get("currency") == "gbp" and ch.get("status") == "succeeded" and ch.get("paid")
+        ]
+        # Unique first-charge customers in window whose email is on waitlist
+        counted_emails: set[str] = set()
+        for ch in paid_charges:
+            cust_id = ch.get("customer")
+            receipt_email = (ch.get("billing_details") or {}).get("email") or ch.get("receipt_email")
+            if not cust_id and not receipt_email:
+                continue
+            # Determine first-charge
+            if cust_id:
+                prior = await _customer_has_prior_paid(c, cust_id, start_ts)
+                if prior:
+                    continue
+                # Fetch customer email
+                cust_r = await c.get(f"{STRIPE_API}/customers/{cust_id}", auth=_stripe_auth())
+                email = (cust_r.json() or {}).get("email")
+            else:
+                email = receipt_email
+            if not email:
+                continue
+            em_lc = email.strip().lower()
+            if em_lc in waitlist_emails and em_lc not in counted_emails:
+                counted_emails.add(em_lc)
+    return float(len(counted_emails))
+
+
 # ------------------------------------------------------------------ Calendly
 CALENDLY_BASE = "https://api.calendly.com"
 
@@ -856,6 +976,9 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "youtube_weekly_views_on_new_videos": youtube_weekly_views_on_new_videos,
     # Tally
     "tally_form_submissions_this_week": tally_form_submissions_this_week,
+    "tally_avg_rating_this_week": tally_avg_rating_this_week,
+    # Stripe + ConvertKit combo
+    "stripe_new_signups_from_waitlist": stripe_new_signups_from_waitlist,
     # Calendly
     "calendly_events_this_week": calendly_events_this_week,
     "calendly_hours_this_week": calendly_events_hours_this_week,

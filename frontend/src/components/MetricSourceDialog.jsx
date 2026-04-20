@@ -36,6 +36,8 @@ const CONNECTORS = [
   { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
   { key: "youtube_weekly_views_on_new_videos", label: "YouTube — views on new videos published this week", fields: ["channel_id"] },
   { key: "tally_form_submissions_this_week", label: "Tally — form submissions this week (optionally filtered by answer text)", fields: ["form_id", "answer_contains"] },
+  { key: "tally_avg_rating_this_week", label: "Tally — average of rating answers this week (satisfaction)", fields: ["form_id"] },
+  { key: "stripe_new_signups_from_waitlist", label: "Stripe + ConvertKit — new signups whose email is on waitlist tag", fields: ["waitlist_tag_id"] },
   { key: "calendly_events_this_week", label: "Calendly — scheduled events of a type this week", fields: ["event_type_uuid"] },
   { key: "calendly_hours_this_week", label: "Calendly — total hours of events across types this week", fields: ["event_type_uuids"] },
   { key: "circle_space_posts_this_week", label: "Circle — new posts in a space this week", fields: ["space_id"] },
@@ -181,6 +183,17 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
               <p className="text-[11px] text-[var(--ayci-ink-muted)] mt-1">
                 Case-insensitive substring match on any answer in the submission. Leave blank to count every submission.
               </p>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("waitlist_tag_id") && (
+            <div>
+              <Label>ConvertKit waitlist tag</Label>
+              <TagPicker
+                tags={discovery?.convertkit_tags || []}
+                value={params.waitlist_tag_id}
+                onChange={(v) => setParams({ ...params, waitlist_tag_id: Number(v) })}
+              />
             </div>
           )}
 
