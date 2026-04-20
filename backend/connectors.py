@@ -613,6 +613,102 @@ async def youtube_weekly_views_on_new_videos(params: dict, start_iso: str, end_i
     return float(total_views)
 
 
+# ------------------------------------------------------------------ Tally
+TALLY_BASE = "https://api.tally.so"
+
+
+def _tally_headers() -> dict:
+    return {"Authorization": f"Bearer {os.environ.get('TALLY_API_KEY', '')}"}
+
+
+async def tally_list_forms() -> list[dict]:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        r = await c.get(f"{TALLY_BASE}/forms", headers=_tally_headers())
+        r.raise_for_status()
+        body = r.json()
+        items = body.get("items") or body.get("forms") or body.get("data") or []
+        return [{"id": f.get("id"), "name": f.get("name") or f.get("title", "?")} for f in items]
+
+
+async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"form_id": "nGyGj2"}
+    Counts submissions to a Tally form with submittedAt in window.
+    Paginates newest-first and stops when we pass start_iso.
+    """
+    form_id = params.get("form_id")
+    if not form_id:
+        raise ValueError("Tally connector needs form_id")
+    count = 0
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 100:
+            r = await c.get(
+                f"{TALLY_BASE}/forms/{form_id}/submissions",
+                headers=_tally_headers(),
+                params={"page": page, "limit": 100},
+            )
+            r.raise_for_status()
+            body = r.json()
+            items = body.get("submissions") or body.get("items") or body.get("data") or []
+            if not items:
+                break
+            oldest = None
+            for s in items:
+                ts = str(s.get("submittedAt") or s.get("createdAt") or "")
+                oldest = ts
+                if start_iso <= ts <= end_iso:
+                    count += 1
+            if oldest and oldest < start_iso:
+                break
+            if len(items) < 100:
+                break
+            page += 1
+    return float(count)
+
+
+# ------------------------------------------------------------------ Circle — posts in a space
+async def circle_list_spaces_with_posts() -> list[dict]:
+    # Re-use list_spaces
+    return await circle_list_spaces()
+
+
+async def circle_space_posts_this_week(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"space_id": 996901}
+    Counts posts in a specific Circle space with created_at inside the window.
+    """
+    space_id = params.get("space_id")
+    if not space_id:
+        raise ValueError("Circle posts connector needs space_id")
+    count = 0
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 100:
+            r = await c.get(
+                f"{CIRCLE_BASE}/posts",
+                headers=_circle_headers(),
+                params={"space_id": int(space_id), "per_page": 100, "page": page, "sort": "created_at", "order": "desc"},
+            )
+            r.raise_for_status()
+            body = r.json()
+            recs = body.get("records") or body.get("data") or []
+            if not recs:
+                break
+            oldest = None
+            for p in recs:
+                created = str(p.get("created_at") or "")
+                oldest = created
+                if start_iso <= created <= end_iso:
+                    count += 1
+            if oldest and oldest < start_iso:
+                break
+            if len(recs) < 100:
+                break
+            page += 1
+    return float(count)
+
+
 # ------------------------------------------------------------------ Registry
 ConnectorFn = Callable[[dict, str, str], Awaitable[float]]
 
@@ -636,6 +732,10 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "stripe_missed_payments_count": stripe_missed_payments_count,
     # YouTube
     "youtube_weekly_views_on_new_videos": youtube_weekly_views_on_new_videos,
+    # Tally
+    "tally_form_submissions_this_week": tally_form_submissions_this_week,
+    # Circle posts
+    "circle_space_posts_this_week": circle_space_posts_this_week,
 }
 
 
@@ -646,6 +746,7 @@ async def discover() -> dict:
         "convertkit_tags": [],
         "circle_spaces": [],
         "monday_boards": [],
+        "tally_forms": [],
         "youtube_channel": None,
         "errors": {},
     }
@@ -665,6 +766,10 @@ async def discover() -> dict:
         out["monday_boards"] = await monday_list_boards()
     except Exception as e:
         out["errors"]["monday"] = str(e)
+    try:
+        out["tally_forms"] = await tally_list_forms()
+    except Exception as e:
+        out["errors"]["tally"] = str(e)
     yt_handle = os.environ.get("YOUTUBE_CHANNEL_HANDLE")
     if yt_handle:
         try:

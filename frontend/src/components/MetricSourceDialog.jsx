@@ -35,6 +35,8 @@ const CONNECTORS = [
   { key: "stripe_refunds_amount", label: "Stripe — refund amount (£) this week", fields: [] },
   { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
   { key: "youtube_weekly_views_on_new_videos", label: "YouTube — views on new videos published this week", fields: ["channel_id"] },
+  { key: "tally_form_submissions_this_week", label: "Tally — form submissions this week", fields: ["form_id"] },
+  { key: "circle_space_posts_this_week", label: "Circle — new posts in a space this week", fields: ["space_id"] },
 ];
 
 export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved }) {
@@ -146,6 +148,40 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                 value={params.tag_id}
                 onChange={(v) => setParams({ ...params, tag_id: v })}
               />
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("form_id") && (
+            <div>
+              <Label>Tally form</Label>
+              <Select
+                value={params.form_id ? String(params.form_id) : ""}
+                onValueChange={(v) => setParams({ ...params, form_id: v })}
+              >
+                <SelectTrigger data-testid="tally-form-select"><SelectValue placeholder="Pick a form" /></SelectTrigger>
+                <SelectContent>
+                  {(discovery?.tally_forms || []).map((f) => (
+                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("space_id") && (
+            <div>
+              <Label>Circle space</Label>
+              <Select
+                value={params.space_id ? String(params.space_id) : ""}
+                onValueChange={(v) => setParams({ ...params, space_id: Number(v) })}
+              >
+                <SelectTrigger data-testid="circle-space-select"><SelectValue placeholder="Pick a space" /></SelectTrigger>
+                <SelectContent>
+                  {(discovery?.circle_spaces || []).map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
