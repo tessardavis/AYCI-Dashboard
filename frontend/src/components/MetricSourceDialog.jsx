@@ -34,6 +34,7 @@ const CONNECTORS = [
   { key: "stripe_refunds_count", label: "Stripe — refunds count this week", fields: [] },
   { key: "stripe_refunds_amount", label: "Stripe — refund amount (£) this week", fields: [] },
   { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
+  { key: "youtube_weekly_views_on_new_videos", label: "YouTube — views on new videos published this week", fields: ["channel_id"] },
 ];
 
 export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved }) {
@@ -162,6 +163,33 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("channel_id") && (
+            <div>
+              <Label>YouTube channel</Label>
+              {discovery?.youtube_channel ? (
+                <button
+                  type="button"
+                  onClick={() => setParams({ ...params, channel_id: discovery.youtube_channel.channel_id })}
+                  className={
+                    "w-full text-left px-3 py-2 text-xs rounded-md border transition-colors " +
+                    (String(params.channel_id) === String(discovery.youtube_channel.channel_id)
+                      ? "border-[var(--ayci-accent)] bg-sky-50 text-[var(--ayci-accent)]"
+                      : "border-[var(--ayci-border)] hover:border-[var(--ayci-accent)]")
+                  }
+                >
+                  {discovery.youtube_channel.title}
+                  <span className="text-[var(--ayci-ink-muted)]"> — {discovery.youtube_channel.total_videos} videos</span>
+                </button>
+              ) : (
+                <Input
+                  value={params.channel_id || ""}
+                  onChange={(e) => setParams({ ...params, channel_id: e.target.value })}
+                  placeholder="UC... (channel ID)"
+                />
+              )}
             </div>
           )}
 

@@ -470,6 +470,119 @@ async def stripe_missed_payments_count(params: dict, start_iso: str, end_iso: st
     return float(len(failed))
 
 
+# ------------------------------------------------------------------ YouTube Data API v3
+YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
+
+
+def _yt_key() -> str:
+    return os.environ.get("YOUTUBE_API_KEY", "")
+
+
+async def youtube_resolve_channel(handle_or_url: str) -> dict:
+    """Handle like '@DrTessaRDavis' or full URL → channel id + uploads playlist id."""
+    handle = handle_or_url
+    if "youtube.com" in handle_or_url:
+        # extract the @handle or channel ID from URL
+        if "/channel/" in handle_or_url:
+            cid = handle_or_url.split("/channel/")[1].split("/")[0].split("?")[0]
+            return {"channel_id": cid, "_source": "url-channel"}
+        if "/@" in handle_or_url:
+            handle = "@" + handle_or_url.split("/@")[1].split("/")[0].split("?")[0]
+    if not handle.startswith("@"):
+        handle = "@" + handle
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        r = await c.get(
+            f"{YOUTUBE_API}/channels",
+            params={"part": "id,contentDetails,snippet,statistics", "forHandle": handle, "key": _yt_key()},
+        )
+        r.raise_for_status()
+        items = r.json().get("items", [])
+        if not items:
+            raise ValueError(f"YouTube channel not found for handle {handle}")
+        ch = items[0]
+        return {
+            "channel_id": ch["id"],
+            "title": ch["snippet"]["title"],
+            "uploads_playlist_id": ch["contentDetails"]["relatedPlaylists"]["uploads"],
+            "total_views": int(ch["statistics"].get("viewCount", 0)),
+            "total_videos": int(ch["statistics"].get("videoCount", 0)),
+        }
+
+
+async def youtube_weekly_views_on_new_videos(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"channel_id": "UC..."}  OR  {"uploads_playlist_id": "UU..."}
+    Returns the sum of current viewCount on videos uploaded within the window.
+    Rationale: YouTube Data API (API-key-only) does not expose time-sliced analytics;
+    Analytics API requires OAuth. For a weekly podcast, most views come in the first
+    48-72h after upload, so this is a close proxy for "views this week" tied to new
+    content. When channel has older evergreen videos, this is a conservative number.
+    """
+    uploads_playlist_id = params.get("uploads_playlist_id")
+    channel_id = params.get("channel_id")
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        if not uploads_playlist_id:
+            if not channel_id:
+                raise ValueError("YouTube connector needs channel_id or uploads_playlist_id")
+            r = await c.get(
+                f"{YOUTUBE_API}/channels",
+                params={"part": "contentDetails", "id": channel_id, "key": _yt_key()},
+            )
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            if not items:
+                raise ValueError(f"YouTube channel not found: {channel_id}")
+            uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        # Walk newest-first through uploads playlist until we pass the window
+        video_ids_in_window: list[str] = []
+        page_token: str | None = None
+        while True:
+            q = {
+                "part": "contentDetails,snippet",
+                "playlistId": uploads_playlist_id,
+                "maxResults": 50,
+                "key": _yt_key(),
+            }
+            if page_token:
+                q["pageToken"] = page_token
+            r = await c.get(f"{YOUTUBE_API}/playlistItems", params=q)
+            r.raise_for_status()
+            body = r.json()
+            oldest_on_page = None
+            for it in body.get("items", []):
+                pub = str(it.get("contentDetails", {}).get("videoPublishedAt", ""))
+                if not pub:
+                    pub = str(it.get("snippet", {}).get("publishedAt", ""))
+                if not pub:
+                    continue
+                oldest_on_page = pub
+                if start_iso <= pub <= end_iso:
+                    vid = it["contentDetails"]["videoId"]
+                    video_ids_in_window.append(vid)
+            page_token = body.get("nextPageToken")
+            # stop when we've paged past the window
+            if not page_token or (oldest_on_page and oldest_on_page < start_iso):
+                break
+
+        if not video_ids_in_window:
+            return 0.0
+
+        total_views = 0
+        # videos.list accepts up to 50 ids per call
+        for i in range(0, len(video_ids_in_window), 50):
+            chunk = video_ids_in_window[i : i + 50]
+            r = await c.get(
+                f"{YOUTUBE_API}/videos",
+                params={"part": "statistics", "id": ",".join(chunk), "key": _yt_key()},
+            )
+            r.raise_for_status()
+            for v in r.json().get("items", []):
+                total_views += int(v.get("statistics", {}).get("viewCount", 0))
+    return float(total_views)
+
+
 # ------------------------------------------------------------------ Registry
 ConnectorFn = Callable[[dict, str, str], Awaitable[float]]
 
@@ -491,12 +604,21 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "stripe_refunds_count": stripe_refunds_count,
     "stripe_refunds_amount": stripe_refunds_amount,
     "stripe_missed_payments_count": stripe_missed_payments_count,
+    # YouTube
+    "youtube_weekly_views_on_new_videos": youtube_weekly_views_on_new_videos,
 }
 
 
 async def discover() -> dict:
     """Return every list of picker options the admin needs to configure sources."""
-    out: dict = {"transistor_shows": [], "convertkit_tags": [], "circle_spaces": [], "monday_boards": [], "errors": {}}
+    out: dict = {
+        "transistor_shows": [],
+        "convertkit_tags": [],
+        "circle_spaces": [],
+        "monday_boards": [],
+        "youtube_channel": None,
+        "errors": {},
+    }
     try:
         out["transistor_shows"] = await transistor_list_shows()
     except Exception as e:
@@ -513,6 +635,12 @@ async def discover() -> dict:
         out["monday_boards"] = await monday_list_boards()
     except Exception as e:
         out["errors"]["monday"] = str(e)
+    yt_handle = os.environ.get("YOUTUBE_CHANNEL_HANDLE")
+    if yt_handle:
+        try:
+            out["youtube_channel"] = await youtube_resolve_channel(yt_handle)
+        except Exception as e:
+            out["errors"]["youtube"] = str(e)
     return out
 
 
