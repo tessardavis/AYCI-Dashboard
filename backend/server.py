@@ -18,6 +18,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 import connectors
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # --- MongoDB ----------------------------------------------------------------
 mongo_url = os.environ["MONGO_URL"]
@@ -725,6 +727,51 @@ async def _seed_admin():
         logger.info(f"Updated admin password: {admin_email}")
 
 
+# --- Scheduler (auto-sync Monday 06:00 Europe/London) -----------------------
+scheduler: Optional[AsyncIOScheduler] = None
+
+
+async def _scheduled_sync() -> None:
+    """Runs every Monday at 06:00 Europe/London. Syncs last week's values."""
+    try:
+        logger.info("[scheduler] Running weekly auto-sync")
+        # Last Monday (i.e. the week that just ended — 7 days ago)
+        today = datetime.now(timezone.utc).date()
+        this_monday = today - timedelta(days=today.weekday())
+        last_monday = (this_monday - timedelta(days=7)).isoformat()
+        start_dt = datetime.fromisoformat(last_monday + "T00:00:00+00:00")
+        end_dt = start_dt + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        start_iso = start_dt.isoformat().replace("+00:00", "Z")
+        end_iso = end_dt.isoformat().replace("+00:00", "Z")
+
+        metrics = await db.metrics.find({"source_type": {"$ne": None}}, {"_id": 0}).to_list(1000)
+        written = 0
+        errors: list[str] = []
+        for m in metrics:
+            source_type = m.get("source_type")
+            if not source_type:
+                continue
+            try:
+                value = await connectors.pull_value(source_type, m.get("source_params") or {}, start_iso, end_iso)
+                existing = await db.weekly_values.find_one({"metric_id": m["id"], "week_start": last_monday})
+                if existing:
+                    await db.weekly_values.update_one(
+                        {"metric_id": m["id"], "week_start": last_monday},
+                        {"$set": {"value": value}},
+                    )
+                else:
+                    await db.weekly_values.insert_one(
+                        WeeklyValue(metric_id=m["id"], week_start=last_monday, value=value).model_dump()
+                    )
+                written += 1
+            except Exception as e:
+                errors.append(f"{m.get('name')}: {e}")
+                logger.warning(f"[scheduler] Sync failed for {m.get('name')}: {e}")
+        logger.info(f"[scheduler] Wrote {written} values for w/c {last_monday}; {len(errors)} errors")
+    except Exception as e:
+        logger.exception(f"[scheduler] Weekly sync crashed: {e}")
+
+
 # --- Lifecycle --------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
@@ -739,9 +786,25 @@ async def on_startup():
     await _seed_rocks()
     await _seed_launches()
 
+    # Start weekly auto-sync (Monday 06:00 Europe/London)
+    global scheduler
+    tz = os.environ.get("SYNC_TIMEZONE", "Europe/London")
+    scheduler = AsyncIOScheduler(timezone=tz)
+    scheduler.add_job(
+        _scheduled_sync,
+        CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=tz),
+        id="weekly_sync",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info(f"[scheduler] Auto-sync scheduled: Mondays 06:00 {tz}")
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    global scheduler
+    if scheduler:
+        scheduler.shutdown(wait=False)
     client.close()
 
 

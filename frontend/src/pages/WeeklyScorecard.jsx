@@ -29,7 +29,7 @@ export default function WeeklyScorecard() {
   const [editingValue, setEditingValue] = useState("");
   const [syncing, setSyncing] = useState(false);
 
-  const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE), []);
+  const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE).slice().reverse(), []);
   const teamById = useMemo(() => {
     const m = {};
     team.forEach((t) => (m[t.id] = t));
@@ -81,7 +81,7 @@ export default function WeeklyScorecard() {
     return g;
   }, [filteredMetrics]);
 
-  const latestWeek = weeks[weeks.length - 1];
+  const latestWeek = weeks[0];
 
   // Summary: count of metrics on-track for latest week
   const summary = useMemo(() => {
@@ -233,7 +233,7 @@ export default function WeeklyScorecard() {
             <table className="min-w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-[var(--ayci-border)]">
-                  <th className="sticky left-0 z-10 bg-slate-50 text-left px-4 py-3 font-medium text-[var(--ayci-ink-muted)] min-w-[240px] border-r border-[var(--ayci-border)]">
+                  <th className="sticky left-0 z-20 bg-slate-50 text-left px-4 py-3 font-medium text-[var(--ayci-ink-muted)] min-w-[240px] border-r border-[var(--ayci-border)]">
                     Metric
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-[var(--ayci-ink-muted)] min-w-[120px]">Owner</th>
@@ -271,7 +271,7 @@ export default function WeeklyScorecard() {
                         const owners = (m.owner_ids || [])
                           .map((id) => teamById[id])
                           .filter(Boolean);
-                        const trendData = weeks.slice(-8).map((w) => {
+                        const trendData = weeks.slice(0, 8).reverse().map((w) => {
                           const v = valueMap[`${m.id}|${w}`];
                           return v === undefined ? null : Number(v);
                         });
@@ -279,10 +279,10 @@ export default function WeeklyScorecard() {
                         return (
                           <tr
                             key={m.id}
-                            className="border-b border-[var(--ayci-border)] hover:bg-slate-50/50"
+                            className="border-b border-[var(--ayci-border)] hover:bg-slate-50/50 group"
                             data-testid={`scorecard-row-${m.id}`}
                           >
-                            <td className="sticky left-0 bg-white hover:bg-slate-50/50 px-4 py-3 font-medium text-[var(--ayci-ink)] border-r border-[var(--ayci-border)]">
+                            <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 px-4 py-3 font-medium text-[var(--ayci-ink)] border-r border-[var(--ayci-border)]">
                               {m.name}
                             </td>
                             <td className="px-4 py-3">
