@@ -271,7 +271,8 @@ export default function WeeklyScorecard() {
                         const owners = (m.owner_ids || [])
                           .map((id) => teamById[id])
                           .filter(Boolean);
-                        const trendData = weeks.slice(0, 8).reverse().map((w) => {
+                        // Trend = last 8 complete weeks (excludes current partial week)
+                        const trendData = weeks.slice(1, 9).reverse().map((w) => {
                           const v = valueMap[`${m.id}|${w}`];
                           return v === undefined ? null : Number(v);
                         });

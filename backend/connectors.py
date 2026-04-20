@@ -114,7 +114,12 @@ async def convertkit_weekly_subscribers(params: dict, start_iso: str, end_iso: s
 
 
 async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_iso: str) -> float:
-    """params: {"tag_id": 12345} or {"tag_name": "..."} — count subscribers ADDED to tag in window."""
+    """
+    params: {"tag_id": 12345} or {"tag_name": "..."}
+    Count of subscribers NEWLY tagged in the window. Paginates newest-first and
+    stops once we've passed start_iso (v3 `from`/`to` params on this endpoint are
+    unreliable, so we filter client-side on each subscription's created_at).
+    """
     tag_id = params.get("tag_id")
     tag_name = params.get("tag_name")
     if not tag_id and tag_name:
@@ -126,28 +131,34 @@ async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_is
     if not tag_id:
         raise ValueError("ConvertKit tag connector needs tag_name or tag_id")
 
-    start = start_iso[:10]
-    end = end_iso[:10]
     count = 0
     page = 1
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         while True:
-            q = {
-                "api_secret": _ck_secret(),
-                "from": start,
-                "to": end,
-                "per_page": 1000,
-                "page": page,
-            }
-            r = await c.get(f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions", params=q)
+            r = await c.get(
+                f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions",
+                params={"api_secret": _ck_secret(), "page": page, "sort_order": "desc"},
+            )
             r.raise_for_status()
             body = r.json()
             subs = body.get("subscriptions", [])
-            count += len(subs)
+            if not subs:
+                break
+            oldest_on_page = None
+            for s in subs:
+                created = str(s.get("created_at") or "")
+                oldest_on_page = created
+                if start_iso <= created <= end_iso:
+                    count += 1
+            # Stop when page's oldest item predates the window
+            if oldest_on_page and oldest_on_page < start_iso:
+                break
             total_pages = body.get("total_pages", 1)
             if page >= total_pages:
                 break
             page += 1
+            if page > 200:  # safety guard
+                break
     return float(count)
 
 
