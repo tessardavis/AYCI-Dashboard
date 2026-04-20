@@ -35,7 +35,9 @@ const CONNECTORS = [
   { key: "stripe_refunds_amount", label: "Stripe — refund amount (£) this week", fields: [] },
   { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
   { key: "youtube_weekly_views_on_new_videos", label: "YouTube — views on new videos published this week", fields: ["channel_id"] },
-  { key: "tally_form_submissions_this_week", label: "Tally — form submissions this week", fields: ["form_id"] },
+  { key: "tally_form_submissions_this_week", label: "Tally — form submissions this week (optionally filtered by answer text)", fields: ["form_id", "answer_contains"] },
+  { key: "calendly_events_this_week", label: "Calendly — scheduled events of a type this week", fields: ["event_type_uuid"] },
+  { key: "calendly_hours_this_week", label: "Calendly — total hours of events across types this week", fields: ["event_type_uuids"] },
   { key: "circle_space_posts_this_week", label: "Circle — new posts in a space this week", fields: ["space_id"] },
 ];
 
@@ -165,6 +167,70 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("answer_contains") && (
+            <div>
+              <Label>Filter by answer text (optional)</Label>
+              <Input
+                value={params.answer_contains || ""}
+                onChange={(e) => setParams({ ...params, answer_contains: e.target.value })}
+                placeholder='e.g. "substantive job"'
+              />
+              <p className="text-[11px] text-[var(--ayci-ink-muted)] mt-1">
+                Case-insensitive substring match on any answer in the submission. Leave blank to count every submission.
+              </p>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("event_type_uuid") && (
+            <div>
+              <Label>Calendly event type</Label>
+              <Select
+                value={params.event_type_uuid || ""}
+                onValueChange={(v) => setParams({ ...params, event_type_uuid: v })}
+              >
+                <SelectTrigger data-testid="calendly-event-type"><SelectValue placeholder="Pick event type" /></SelectTrigger>
+                <SelectContent>
+                  {(discovery?.calendly_event_types || []).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("event_type_uuids") && (
+            <div>
+              <Label>Calendly event types (for "hours" total)</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {(discovery?.calendly_event_types || []).map((t) => {
+                  const selected = (params.event_type_uuids || []).includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setParams({
+                          ...params,
+                          event_type_uuids: selected
+                            ? (params.event_type_uuids || []).filter((u) => u !== t.id)
+                            : [...(params.event_type_uuids || []), t.id],
+                        })
+                      }
+                      className={
+                        "text-xs px-2.5 py-1 rounded-full border transition-colors " +
+                        (selected
+                          ? "bg-[var(--ayci-accent)] text-white border-[var(--ayci-accent)]"
+                          : "bg-white border-[var(--ayci-border)] text-[var(--ayci-ink-muted)]")
+                      }
+                    >
+                      {t.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

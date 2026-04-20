@@ -8,6 +8,7 @@ Each connector is: async def pull(params: dict, start_iso: str, end_iso: str) ->
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Awaitable
 
 import httpx
@@ -632,13 +633,18 @@ async def tally_list_forms() -> list[dict]:
 
 async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso: str) -> float:
     """
-    params: {"form_id": "nGyGj2"}
+    params: {
+      "form_id": "nGyGj2",
+      "answer_contains": "substantive job"   # optional: filter submissions by text present in any answer
+    }
     Counts submissions to a Tally form with submittedAt in window.
-    Paginates newest-first and stops when we pass start_iso.
+    If `answer_contains` is set, only counts submissions where any answer (stringified)
+    contains the given substring (case-insensitive).
     """
     form_id = params.get("form_id")
     if not form_id:
         raise ValueError("Tally connector needs form_id")
+    needle = (params.get("answer_contains") or "").strip().lower()
     count = 0
     page = 1
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
@@ -657,14 +663,130 @@ async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso
             for s in items:
                 ts = str(s.get("submittedAt") or s.get("createdAt") or "")
                 oldest = ts
-                if start_iso <= ts <= end_iso:
-                    count += 1
+                if not (start_iso <= ts <= end_iso):
+                    continue
+                if needle:
+                    all_text = " ".join(str(r.get("answer", "")) for r in s.get("responses", [])).lower()
+                    if needle not in all_text:
+                        continue
+                count += 1
             if oldest and oldest < start_iso:
                 break
             if len(items) < 100:
                 break
             page += 1
     return float(count)
+
+
+# ------------------------------------------------------------------ Calendly
+CALENDLY_BASE = "https://api.calendly.com"
+
+
+def _calendly_headers() -> dict:
+    return {"Authorization": f"Bearer {os.environ.get('CALENDLY_TOKEN', '')}"}
+
+
+async def calendly_list_event_types() -> list[dict]:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        me = await c.get(f"{CALENDLY_BASE}/users/me", headers=_calendly_headers())
+        me.raise_for_status()
+        user_uri = me.json().get("resource", {}).get("uri")
+        r = await c.get(
+            f"{CALENDLY_BASE}/event_types",
+            headers=_calendly_headers(),
+            params={"user": user_uri, "count": 100, "active": "true"},
+        )
+        r.raise_for_status()
+        out = []
+        for t in r.json().get("collection", []):
+            uri = t.get("uri", "")
+            out.append({"id": uri.rsplit("/", 1)[-1], "uri": uri, "name": t.get("name", "")})
+        return out
+
+
+async def calendly_events_this_week(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"event_type_uuid": "2b1cb9db-..."}  OR  {"event_type_uri": "https://.../event_types/..."}
+    Counts Calendly scheduled events of a given type that started within the window.
+    """
+    event_type_uri = params.get("event_type_uri")
+    if not event_type_uri:
+        uuid = params.get("event_type_uuid")
+        if not uuid:
+            raise ValueError("Calendly connector needs event_type_uuid or event_type_uri")
+        event_type_uri = f"{CALENDLY_BASE}/event_types/{uuid}"
+
+    count = 0
+    page_token: str | None = None
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        me = await c.get(f"{CALENDLY_BASE}/users/me", headers=_calendly_headers())
+        me.raise_for_status()
+        user_uri = me.json().get("resource", {}).get("uri")
+        while True:
+            q: dict[str, Any] = {
+                "user": user_uri,
+                "event_type": event_type_uri,
+                "min_start_time": start_iso,
+                "max_start_time": end_iso,
+                "status": "active",
+                "count": 100,
+            }
+            if page_token:
+                q["page_token"] = page_token
+            r = await c.get(f"{CALENDLY_BASE}/scheduled_events", headers=_calendly_headers(), params=q)
+            r.raise_for_status()
+            body = r.json()
+            count += len(body.get("collection", []))
+            page_token = (body.get("pagination") or {}).get("next_page_token")
+            if not page_token:
+                break
+    return float(count)
+
+
+async def calendly_events_hours_this_week(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    params: {"event_type_uuids": ["uuid1","uuid2"]}  OR  {"event_type_uris": [...]}
+    Returns total HOURS of scheduled Calendly events across given types in window.
+    """
+    uris: list[str] = params.get("event_type_uris") or []
+    if not uris:
+        uuids = params.get("event_type_uuids") or []
+        uris = [f"{CALENDLY_BASE}/event_types/{u}" for u in uuids]
+    if not uris:
+        raise ValueError("Calendly hours connector needs event_type_uris or event_type_uuids")
+
+    total_seconds = 0
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        me = await c.get(f"{CALENDLY_BASE}/users/me", headers=_calendly_headers())
+        me.raise_for_status()
+        user_uri = me.json().get("resource", {}).get("uri")
+        for uri in uris:
+            page_token: str | None = None
+            while True:
+                q: dict[str, Any] = {
+                    "user": user_uri,
+                    "event_type": uri,
+                    "min_start_time": start_iso,
+                    "max_start_time": end_iso,
+                    "status": "active",
+                    "count": 100,
+                }
+                if page_token:
+                    q["page_token"] = page_token
+                r = await c.get(f"{CALENDLY_BASE}/scheduled_events", headers=_calendly_headers(), params=q)
+                r.raise_for_status()
+                body = r.json()
+                for ev in body.get("collection", []):
+                    try:
+                        s = datetime.fromisoformat(str(ev.get("start_time", "")).replace("Z", "+00:00"))
+                        e = datetime.fromisoformat(str(ev.get("end_time", "")).replace("Z", "+00:00"))
+                        total_seconds += int((e - s).total_seconds())
+                    except Exception:
+                        continue
+                page_token = (body.get("pagination") or {}).get("next_page_token")
+                if not page_token:
+                    break
+    return round(total_seconds / 3600.0, 2)
 
 
 # ------------------------------------------------------------------ Circle — posts in a space
@@ -734,6 +856,9 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "youtube_weekly_views_on_new_videos": youtube_weekly_views_on_new_videos,
     # Tally
     "tally_form_submissions_this_week": tally_form_submissions_this_week,
+    # Calendly
+    "calendly_events_this_week": calendly_events_this_week,
+    "calendly_hours_this_week": calendly_events_hours_this_week,
     # Circle posts
     "circle_space_posts_this_week": circle_space_posts_this_week,
 }
@@ -747,6 +872,7 @@ async def discover() -> dict:
         "circle_spaces": [],
         "monday_boards": [],
         "tally_forms": [],
+        "calendly_event_types": [],
         "youtube_channel": None,
         "errors": {},
     }
@@ -770,6 +896,10 @@ async def discover() -> dict:
         out["tally_forms"] = await tally_list_forms()
     except Exception as e:
         out["errors"]["tally"] = str(e)
+    try:
+        out["calendly_event_types"] = await calendly_list_event_types()
+    except Exception as e:
+        out["errors"]["calendly"] = str(e)
     yt_handle = os.environ.get("YOUTUBE_CHANNEL_HANDLE")
     if yt_handle:
         try:
