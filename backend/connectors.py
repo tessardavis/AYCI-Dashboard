@@ -207,13 +207,11 @@ async def circle_list_spaces() -> list[dict]:
         return [{"id": s.get("id"), "name": s.get("name") or s.get("slug")} for s in records]
 
 
-async def _circle_fetch_all_members(client: httpx.AsyncClient, created_after: str | None = None) -> list[dict]:
+async def _circle_fetch_all_members(client: httpx.AsyncClient, sort: str = "created_at", order: str = "desc", max_pages: int = 100) -> list[dict]:
     out: list[dict] = []
     page = 1
-    while True:
-        params: dict[str, Any] = {"per_page": 100, "page": page}
-        if created_after:
-            params["created_after"] = created_after
+    while page <= max_pages:
+        params: dict[str, Any] = {"per_page": 100, "page": page, "sort": sort, "order": order}
         r = await client.get(f"{CIRCLE_BASE}/community_members", headers=_circle_headers(), params=params)
         r.raise_for_status()
         body = r.json()
@@ -222,51 +220,72 @@ async def _circle_fetch_all_members(client: httpx.AsyncClient, created_after: st
         if not records or len(records) < 100:
             break
         page += 1
-        if page > 50:  # safety
-            break
     return out
+
+
+def _has_tag(member: dict, tag_name: str) -> bool:
+    target = tag_name.strip().lower()
+    for t in member.get("member_tags") or []:
+        if str(t.get("name", "")).strip().lower() == target:
+            return True
+    return False
 
 
 async def circle_weekly_new_non_academy(params: dict, start_iso: str, end_iso: str) -> float:
     """
-    Count members created in window who are NOT in the Academy space.
-    params: {"academy_space_id": 12345}
+    New community members created in window who HAVE the `non_academy_tag` tag
+    (defaults to "Circle Member"). Paginates newest-first and stops once we
+    pass the window.
     """
-    academy_space_id = params.get("academy_space_id")
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        # API doesn't take a strict date-range filter; we fetch recent and filter client-side
-        members = await _circle_fetch_all_members(c, created_after=start_iso[:10])
+    tag_name = (params or {}).get("non_academy_tag", "Circle Member")
     count = 0
-    for m in members:
-        created = str(m.get("created_at", ""))
-        if start_iso <= created <= end_iso:
-            space_ids = m.get("space_ids") or []
-            if academy_space_id and int(academy_space_id) in [int(s) for s in space_ids]:
-                continue
-            count += 1
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 100:
+            q = {"per_page": 100, "page": page, "sort": "created_at", "order": "desc"}
+            r = await c.get(f"{CIRCLE_BASE}/community_members", headers=_circle_headers(), params=q)
+            r.raise_for_status()
+            body = r.json()
+            recs = body.get("records") or body.get("data") or []
+            if not recs:
+                break
+            oldest = None
+            for m in recs:
+                created = str(m.get("created_at") or "")
+                oldest = created
+                if start_iso <= created <= end_iso and _has_tag(m, tag_name):
+                    count += 1
+            if oldest and oldest < start_iso:
+                break
+            if len(recs) < 100:
+                break
+            page += 1
     return float(count)
 
 
 async def circle_active_academy_members(params: dict, start_iso: str, end_iso: str) -> float:
-    """Count current members of the Academy space."""
-    academy_space_id = params.get("academy_space_id")
-    if not academy_space_id:
-        raise ValueError("Circle academy connector needs academy_space_id")
+    """
+    Count members WITHOUT the `non_academy_tag` tag (defaults to "Circle Member")
+    whose last_seen_at is within the 7 days leading up to end_iso.
+    """
+    from datetime import datetime, timedelta as _td
+    tag_name = (params or {}).get("non_academy_tag", "Circle Member")
+    end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+    active_from = (end_dt - _td(days=7)).isoformat().replace("+00:00", "Z")
+    active_to = end_iso
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        r = await c.get(
-            f"{CIRCLE_BASE}/spaces/{academy_space_id}/space_members",
-            headers=_circle_headers(),
-            params={"per_page": 1},
-        )
-        if r.status_code == 200:
-            body = r.json()
-            total = body.get("meta", {}).get("total") or body.get("total") or body.get("count")
-            if isinstance(total, int):
-                return float(total)
-        # Fallback: fetch all community members and count those in the space
-        members = await _circle_fetch_all_members(c)
-    target = int(academy_space_id)
-    return float(sum(1 for m in members if target in [int(s) for s in (m.get("space_ids") or [])]))
+        members = await _circle_fetch_all_members(c, sort="last_seen_at", order="desc", max_pages=60)
+    count = 0
+    for m in members:
+        last_seen = str(m.get("last_seen_at") or "")
+        if not last_seen:
+            continue
+        if last_seen > active_to or last_seen < active_from:
+            continue
+        if not _has_tag(m, tag_name):
+            count += 1
+    return float(count)
 
 
 # ------------------------------------------------------------------ Monday.com

@@ -26,8 +26,8 @@ const CONNECTORS = [
   { key: "convertkit_new_subscribers", label: "ConvertKit — total new subscribers", fields: [] },
   { key: "convertkit_tag_new_subscribers", label: "ConvertKit — new subscribers added to a tag", fields: ["tag_id"] },
   { key: "convertkit_broadcast_ctr", label: "ConvertKit — avg broadcast click-through rate", fields: [] },
-  { key: "circle_new_non_academy_members", label: "Circle — new members NOT in Academy space", fields: ["academy_space_id"] },
-  { key: "circle_active_academy_members", label: "Circle — active members in Academy space", fields: ["academy_space_id"] },
+  { key: "circle_new_non_academy_members", label: "Circle — new community members (tagged 'Circle Member') this week", fields: ["non_academy_tag"] },
+  { key: "circle_active_academy_members", label: "Circle — active Academy members (no 'Circle Member' tag, active last 7 days)", fields: ["non_academy_tag"] },
   { key: "monday_items_created_this_week", label: "Monday.com — items on a board this week (by status)", fields: ["board_id", "status_column_title", "status_values"] },
   { key: "stripe_new_signup_revenue", label: "Stripe — new-signup revenue (£) this week", fields: [] },
   { key: "stripe_upgrade_revenue", label: "Stripe — upgrade revenue (£) this week", fields: [] },
@@ -163,6 +163,20 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {connectorDef?.fields?.includes("non_academy_tag") && (
+            <div>
+              <Label>Circle member-tag that marks "non-Academy community"</Label>
+              <Input
+                value={params.non_academy_tag ?? "Circle Member"}
+                onChange={(e) => setParams({ ...params, non_academy_tag: e.target.value })}
+                placeholder="Circle Member"
+              />
+              <p className="text-[11px] text-[var(--ayci-ink-muted)] mt-1">
+                Academy members are everyone <strong>without</strong> this tag. Defaults to "Circle Member".
+              </p>
             </div>
           )}
 
