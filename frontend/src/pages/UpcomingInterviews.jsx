@@ -1,0 +1,343 @@
+import { useEffect, useState } from "react";
+import { Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target } from "lucide-react";
+import { toast } from "sonner";
+
+import { apiClient, formatApiErrorDetail } from "@/lib/api";
+
+const fmtDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00Z");
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+};
+
+const daysUntil = (iso, todayIso) => {
+  const d = new Date(iso + "T00:00:00Z");
+  const today = new Date(todayIso + "T00:00:00Z");
+  const diff = Math.round((d - today) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return "today";
+  if (diff === 1) return "tomorrow";
+  return `in ${diff} days`;
+};
+
+export default function UpcomingInterviews() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [academyDays, setAcademyDays] = useState(7);
+  const [privateDays, setPrivateDays] = useState(14);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get(`/interviews/upcoming`, {
+        params: { academy_days: academyDays, private_days: privateDays },
+        timeout: 45000,
+      });
+      setData(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load upcoming interviews");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academyDays, privateDays]);
+
+  return (
+    <div className="p-8 space-y-6" data-testid="upcoming-interviews-page">
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
+            Who's up
+          </div>
+          <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
+            Upcoming Interviews
+          </h1>
+          <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
+            Pulled live from the Monday Academy Members board. Academy students shown for the next {academyDays} days;
+            private tier + Boost & Go shown for the next {privateDays} days with their call / video allowance usage.
+          </p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Selector
+            label="Academy window"
+            value={academyDays}
+            onChange={setAcademyDays}
+            options={[7, 14]}
+            testid="academy-window-selector"
+          />
+          <Selector
+            label="Private window"
+            value={privateDays}
+            onChange={setPrivateDays}
+            options={[7, 14, 30]}
+            testid="private-window-selector"
+          />
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
+          Loading upcoming interviews from Monday…
+        </div>
+      )}
+
+      {data && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Academy */}
+          <section data-testid="academy-section">
+            <SectionHeader
+              title="Academy students"
+              count={data.academy.length}
+              subtitle={`Next ${academyDays} days · until ${fmtDate(data.academy_window.end)}`}
+              accent="bg-sky-100 text-sky-700"
+            />
+            {data.academy.length === 0 ? (
+              <EmptyState text={`No Academy interviews in the next ${academyDays} days.`} />
+            ) : (
+              <ul className="space-y-2">
+                {data.academy.map((s) => (
+                  <AcademyRow key={s.id} student={s} today={data.today} />
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Private */}
+          <section data-testid="private-section">
+            <SectionHeader
+              title="Private tier · Boost & Go"
+              count={data.private.length}
+              subtitle={`Next ${privateDays} days · until ${fmtDate(data.private_window.end)}`}
+              accent="bg-violet-100 text-violet-700"
+            />
+            {data.private.length === 0 ? (
+              <EmptyState text={`No private-tier interviews in the next ${privateDays} days.`} />
+            ) : (
+              <ul className="space-y-3">
+                {data.private.map((s) => (
+                  <PrivateCard key={s.id} student={s} today={data.today} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Selector({ label, value, onChange, options, testid }) {
+  return (
+    <div className="flex items-center gap-2 bg-white border border-[var(--ayci-border)] rounded-lg px-3 py-1.5">
+      <span className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="text-sm bg-transparent border-none focus:outline-none font-medium text-[var(--ayci-ink)]"
+        data-testid={testid}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o} days
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SectionHeader({ title, count, subtitle, accent }) {
+  return (
+    <div className="flex items-end justify-between mb-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ayci-ink)]">{title}</h2>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${accent}`}>{count}</span>
+        </div>
+        <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <div className="bg-white border border-dashed border-[var(--ayci-border)] rounded-lg p-6 text-center text-[var(--ayci-ink-muted)] text-sm">
+      {text}
+    </div>
+  );
+}
+
+function AcademyRow({ student, today }) {
+  return (
+    <li
+      className="bg-white border border-[var(--ayci-border)] rounded-lg px-4 py-3 flex items-center justify-between gap-3 hover:shadow-sm transition-shadow"
+      data-testid={`academy-row-${student.id}`}
+    >
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <a
+            href={student.monday_url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
+          >
+            {student.name}
+          </a>
+        </div>
+        <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex flex-wrap gap-x-3">
+          <span>{student.speciality || "—"}</span>
+          {student.hospital && <span>· {student.hospital}</span>}
+        </div>
+      </div>
+      <div className="text-right">
+        <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>
+        <div className="text-xs text-[var(--ayci-teal)]">{daysUntil(student.interview_date, today)}</div>
+      </div>
+    </li>
+  );
+}
+
+function PrivateCard({ student, today }) {
+  const { calls_30min: calls, mock_interviews: mocks, bonus_calls: bonus, videos } = student;
+  return (
+    <li
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
+      data-testid={`private-card-${student.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href={student.monday_url}
+              target="_blank"
+              rel="noreferrer"
+              className="font-display font-semibold text-base text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
+            >
+              {student.name}
+            </a>
+            <span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] uppercase tracking-wider font-semibold">
+              {student.tier}
+            </span>
+          </div>
+          <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
+            {student.speciality || "—"}
+            {student.hospital && ` · ${student.hospital}`}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>
+          <div className="text-xs text-[var(--ayci-teal)]">{daysUntil(student.interview_date, today)}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+        <AllowanceStat icon={Phone} label="30-min calls" data={calls} tone="teal" />
+        <AllowanceStat icon={Target} label="Mock interviews" data={mocks} tone="rose" />
+        <AllowanceStat icon={Phone} label="Bonus" data={bonus} tone="amber" />
+        <VideoStat videos={videos} />
+      </div>
+
+      {calls.items.length + mocks.items.length + bonus.items.length > 0 && (
+        <details className="mt-3">
+          <summary className="text-xs text-[var(--ayci-ink-muted)] cursor-pointer hover:text-[var(--ayci-teal)]">
+            Show slot-by-slot status
+          </summary>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1.5">
+            {[...calls.items, ...mocks.items, ...bonus.items].map((s, i) => (
+              <SlotRow key={i} slot={s} />
+            ))}
+          </div>
+        </details>
+      )}
+
+      {student.private_chat_link && (
+        <a
+          href={student.private_chat_link}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-[var(--ayci-teal)] hover:underline"
+        >
+          <MessageSquare className="w-3 h-3" />
+          Private chat <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+    </li>
+  );
+}
+
+function AllowanceStat({ icon: Icon, label, data, tone }) {
+  const toneMap = {
+    teal: "bg-sky-50 border-sky-200 text-sky-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+    amber: "bg-amber-50 border-amber-200 text-amber-700",
+  };
+  const pct = data.total ? (data.used / data.total) * 100 : 0;
+  return (
+    <div className={`rounded-lg border p-2.5 ${toneMap[tone] || toneMap.teal}`}>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold opacity-80">
+        <Icon className="w-3 h-3" />
+        {label}
+      </div>
+      <div className="text-[var(--ayci-ink)] mt-1 font-display font-bold text-base">
+        {data.used}
+        <span className="text-xs font-normal text-[var(--ayci-ink-muted)]"> / {data.total}</span>
+      </div>
+      {data.total > 0 && (
+        <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-current opacity-70 rounded-full transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+      {data.total === 0 && <div className="text-[10px] mt-1 opacity-60">Not in tier</div>}
+    </div>
+  );
+}
+
+function VideoStat({ videos }) {
+  const pct = videos.allowance ? (videos.submitted / videos.allowance) * 100 : 0;
+  return (
+    <div className="rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-700 p-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold opacity-80">
+        <Video className="w-3 h-3" />
+        Videos
+      </div>
+      <div className="text-[var(--ayci-ink)] mt-1 font-display font-bold text-base">
+        {videos.submitted}
+        <span className="text-xs font-normal text-[var(--ayci-ink-muted)]"> / {videos.allowance}</span>
+      </div>
+      {videos.allowance > 0 && (
+        <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-current opacity-70 rounded-full"
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
+      )}
+      {videos.allowance === 0 && <div className="text-[10px] mt-1 opacity-60">Not in tier</div>}
+    </div>
+  );
+}
+
+function SlotRow({ slot }) {
+  const color =
+    slot.status === "used"
+      ? "bg-slate-100 text-slate-600"
+      : slot.status === "available"
+      ? "bg-emerald-50 text-emerald-700"
+      : "bg-amber-50 text-amber-700";
+  return (
+    <div className="flex items-center justify-between text-xs bg-slate-50 rounded px-2 py-1 border border-[var(--ayci-border)]">
+      <span className="font-medium text-[var(--ayci-ink)]">{slot.label}</span>
+      <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider ${color}`}>
+        {slot.text}
+      </span>
+    </div>
+  );
+}

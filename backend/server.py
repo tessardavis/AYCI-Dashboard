@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, EmailStr
 
 import connectors
 import student_lookup as lookup
+import upcoming_interviews as upcoming
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -952,6 +953,36 @@ async def circle_cache_refresh(user: dict = Depends(get_current_user)):
     await db.circle_members_cache.delete_one({"_id": "all"})
     members, source = await lookup._circle_get_cached_members(db)
     return {"refreshed": True, "source": source, "member_count": len(members)}
+
+
+# --- Upcoming Interviews ---------------------------------------------------
+@api.get("/interviews/upcoming")
+async def upcoming_interviews(
+    academy_days: int = 7,
+    private_days: int = 14,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Returns upcoming interviews grouped by Academy vs private tiers.
+
+    Academy students use the `academy_days` window (default 7). Private /
+    Boost & Go tiers use the wider `private_days` window (default 14).
+    """
+    # Fetch once over the wider window, then trim the academy list client-side.
+    wider = max(academy_days, private_days)
+    data = await upcoming.fetch_upcoming_interviews(days=wider)
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    today = _dt.now(_tz.utc).date()
+    academy_cutoff = (today + _td(days=academy_days)).isoformat()
+
+    academy = [s for s in data["academy"] if s["interview_date"] <= academy_cutoff]
+    return {
+        "academy_window": {"days": academy_days, "end": academy_cutoff},
+        "private_window": {"days": private_days, "end": data["window"]["end"]},
+        "today": today.isoformat(),
+        "academy": academy,
+        "private": data["private"],
+    }
 
 
 app.include_router(api)
