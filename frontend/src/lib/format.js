@@ -19,11 +19,15 @@ export function mondayOf(date) {
   return d.toISOString().slice(0, 10);
 }
 
+// Returns the last N *completed* week-start Mondays, oldest-first.
+// The current (in-progress) week is intentionally excluded — we only review
+// fully-finished weeks in the Monday scorecard meeting.
 export function lastNWeekStarts(n) {
   const out = [];
   const today = new Date();
   const thisMonday = new Date(mondayOf(today) + "T00:00:00Z");
-  for (let i = n - 1; i >= 0; i--) {
+  // Start from last Monday (thisMonday - 7 days)
+  for (let i = n; i >= 1; i--) {
     const d = new Date(thisMonday);
     d.setUTCDate(thisMonday.getUTCDate() - 7 * i);
     out.push(d.toISOString().slice(0, 10));

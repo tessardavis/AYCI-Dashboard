@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 2 — Full regression for the Student Lookup feature + Weekly Scorecard week-grid change + favicon/title. Backend: 7/7 new pytest cases in /app/backend/tests/test_student_lookup.py all PASS (missing-email 400, invalid-email 422, unauth 401, real email found=true on monday/stripe/convertkit/circle/calendly in 1.3s, fake email all found=false in 1.4s, Circle cache refresh returns refreshed=true with member_count=3832, /weekly-values returns 111 rows). Frontend (Playwright via REACT_APP_BACKEND_URL): page title is 'AYCI Dashboard', favicon link present, admin login works, sidebar 'Student Lookup' nav (data-testid=sidebar-nav-students) visible & navigates to /students. Real-email search renders Monday card with Tier=Academy + cohort dates + interview status, Stripe card shows £597 / 1 payment, Circle/ConvertKit/Calendly all in Found state. Fake-email search renders exactly 5 'Not found' platform cards. Weekly Scorecard leftmost column = 'W/C 13 Apr' (last completed Monday); the current Monday (2026-04-20) is NOT present as a cell testid anywhere in the grid — spec met. Summary ring reads '42% — 8 / 19 on track this week' based on last completed week.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Sparkline / Recharts ResponsiveContainer", "issue": "Console warning 'width(-1) and height(-1) of chart should be greater than 0' fires ~80x on Scorecard initial render (pre-existing from iteration 1, cosmetic only)", "selector": "Sparkline in WeeklyScorecard.jsx", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_student_lookup.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_student_lookup.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: silence Recharts width/height warnings by giving Sparkline parent a fixed minHeight/minWidth — purely cosmetic, no functional impact.",
+    "Optional: tighten CORS_ORIGINS (flagged in iteration 1) — still '*' + allow_credentials=True."
+  ],
+  "critical_code_review_comments": [
+    "lastNWeekStarts() in /app/frontend/src/lib/format.js correctly excludes the current in-progress Monday — verified in UI: leftmost column is 'W/C 13 Apr' when today is Thu 23 Apr 2026 (current Monday 20 Apr is absent).",
+    "/api/students/lookup runs all 5 connectors in parallel and completes in ~1.3s for both positive and negative cases — no Cloudflare 60s timeout risk.",
+    "Circle member cache returns 3832 entries on fresh refresh — matches the stated community size.",
+    "Backend correctly rejects missing/invalid email with 4xx and blocks unauthenticated access with 401.",
+    "Minor: /api/students/lookup without email returns 422 (FastAPI validation) rather than the 400 specified in the review request — functionally equivalent but spec said 400."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_student_lookup.py (new)",
+    "/app/test_reports/pytest/pytest_student_lookup.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (7/7 new + 18/18 from iter1)", "frontend": "100% — all review-request checks verified via Playwright"},
+  "test_credentials": "admin@ayci.com / Admin@2026",
+  "seed_data_creation": "None this iteration. Reused test_user_regression@ayci.com / UserPass@2026 from iteration 1.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Student Lookup backend + frontend verified end-to-end with real email andreea.gavrisan@gmail.com (all 5 platforms Found, <2s) and fake email nobody-random-test@example.com (all 5 Not Found, <2s). Weekly Scorecard week-grid correctly excludes current Monday. Run `REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_student_lookup.py -v` to re-verify. Sidebar testid is sidebar-nav-students. Student lookup email input testid is student-lookup-email-input. Platform card testids match pattern /platform-card-*/.",
+  "rca of the issue": "No bugs found this iteration. All review-request bullets pass."
+}

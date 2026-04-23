@@ -18,6 +18,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
 import connectors
+import student_lookup as lookup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -799,6 +800,19 @@ async def on_startup():
     scheduler.start()
     logger.info(f"[scheduler] Auto-sync scheduled: Mondays 06:00 {tz}")
 
+    # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
+    # Fire-and-forget so startup doesn't block.
+    import asyncio as _asyncio
+
+    async def _warm_circle_cache():
+        try:
+            members, source = await lookup._circle_get_cached_members(db)
+            logger.info(f"[startup] Circle cache ready: {len(members)} members ({source})")
+        except Exception as e:
+            logger.warning(f"[startup] Circle cache warm failed: {e}")
+
+    _asyncio.create_task(_warm_circle_cache())
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -835,7 +849,7 @@ async def sync_connectors(user: dict = Depends(get_current_user)):
 
 
 class SyncRequest(BaseModel):
-    week_start: Optional[str] = None  # YYYY-MM-DD (Monday); defaults to current week
+    week_start: Optional[str] = None  # YYYY-MM-DD (Monday); defaults to last completed week
     overwrite: bool = False           # if True, overwrite existing cell values
 
 
@@ -845,8 +859,10 @@ async def sync_run(req: SyncRequest, user: dict = Depends(get_current_user)):
     if req.week_start:
         week_start = _monday_of_date(req.week_start)
     else:
-        today = datetime.now(timezone.utc).date().isoformat()
-        week_start = _monday_of_date(today)
+        # Default: last completed week (this Monday - 7 days)
+        today = datetime.now(timezone.utc).date()
+        this_monday = today - timedelta(days=today.weekday())
+        week_start = (this_monday - timedelta(days=7)).isoformat()
     start_dt = datetime.fromisoformat(week_start + "T00:00:00+00:00")
     end_dt = start_dt + timedelta(days=6, hours=23, minutes=59, seconds=59)
     start_iso = start_dt.isoformat().replace("+00:00", "Z")
@@ -892,6 +908,50 @@ async def sync_run(req: SyncRequest, user: dict = Depends(get_current_user)):
         "total_metrics_with_source": len(metrics),
         "results": results,
     }
+
+
+# --- Student Lookup --------------------------------------------------------
+@api.get("/students/lookup")
+async def students_lookup(email: str, user: dict = Depends(get_current_user)):
+    """
+    Unified student lookup — fan out an email across Monday.com, Circle,
+    Stripe, ConvertKit, and Calendly in parallel. Each platform returns
+    independently so partial failures don't block the whole view.
+    """
+    import asyncio
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email required")
+    email = email.strip().lower()
+    monday_t, circle_t, stripe_t, ck_t, calendly_t = await asyncio.gather(
+        lookup.monday_lookup(email),
+        lookup.circle_lookup(db, email),
+        lookup.stripe_lookup(email),
+        lookup.convertkit_lookup(email),
+        lookup.calendly_lookup(email),
+        return_exceptions=True,
+    )
+
+    def _safe(result):
+        if isinstance(result, Exception):
+            return {"found": False, "data": None, "error": str(result)}
+        return result
+
+    return {
+        "email": email,
+        "monday": _safe(monday_t),
+        "circle": _safe(circle_t),
+        "stripe": _safe(stripe_t),
+        "convertkit": _safe(ck_t),
+        "calendly": _safe(calendly_t),
+    }
+
+
+@api.post("/students/circle-cache/refresh")
+async def circle_cache_refresh(user: dict = Depends(get_current_user)):
+    """Force-refresh the Circle members cache. Returns counts."""
+    await db.circle_members_cache.delete_one({"_id": "all"})
+    members, source = await lookup._circle_get_cached_members(db)
+    return {"refreshed": True, "source": source, "member_count": len(members)}
 
 
 app.include_router(api)

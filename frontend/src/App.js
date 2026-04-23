@@ -7,6 +7,7 @@ import AppShell from "@/components/AppShell";
 import WeeklyScorecard from "@/pages/WeeklyScorecard";
 import QuarterlyRocks from "@/pages/QuarterlyRocks";
 import LaunchDashboard from "@/pages/LaunchDashboard";
+import StudentLookup from "@/pages/StudentLookup";
 import Settings from "@/pages/Settings";
 
 function Protected() {
@@ -43,6 +44,7 @@ function App() {
                 <Route path="/" element={<WeeklyScorecard />} />
                 <Route path="/rocks" element={<QuarterlyRocks />} />
                 <Route path="/launches" element={<LaunchDashboard />} />
+                <Route path="/students" element={<StudentLookup />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>
