@@ -678,6 +678,79 @@ async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso
     return float(count)
 
 
+async def tally_interviews_by_answer_date(params: dict, start_iso: str, end_iso: str) -> float:
+    """
+    Count Tally submissions whose ANSWER to a specific date question falls in
+    the target week — regardless of when the submission was actually made.
+
+    params: {
+      "form_id": "nGyGj2",
+      "date_question_title": "Interview Date",   # or "date_question_id": "keP4W6"
+      "answer_contains": "yes."                  # optional substring filter on any answer
+    }
+    """
+    form_id = params.get("form_id")
+    if not form_id:
+        raise ValueError("Tally interview-date connector needs form_id")
+    date_qid = params.get("date_question_id")
+    date_qtitle = (params.get("date_question_title") or "").strip().lower()
+    needle = (params.get("answer_contains") or "").strip().lower()
+
+    # window in YYYY-MM-DD (date questions store 10-char ISO dates)
+    start_date = start_iso[:10]
+    end_date = end_iso[:10]
+
+    count = 0
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 50:  # cap at 5000 submissions (~1 year of form)
+            r = await c.get(
+                f"{TALLY_BASE}/forms/{form_id}/submissions",
+                headers=_tally_headers(),
+                params={"page": page, "limit": 100},
+            )
+            r.raise_for_status()
+            body = r.json()
+            items = body.get("submissions") or body.get("items") or body.get("data") or []
+            if not items:
+                break
+
+            # Resolve date question id from the first page's question schema (if needed)
+            if not date_qid and date_qtitle and page == 1:
+                for q in body.get("questions", []) or []:
+                    title = (q.get("title") or "").strip().lower()
+                    if title == date_qtitle and q.get("type") == "INPUT_DATE":
+                        date_qid = q.get("id")
+                        break
+                if not date_qid:
+                    raise ValueError(
+                        f"Tally question {date_qtitle!r} (INPUT_DATE) not found on form {form_id}"
+                    )
+
+            for s in items:
+                interview_date: str | None = None
+                all_text_parts: list[str] = []
+                for resp in s.get("responses") or []:
+                    ans = resp.get("answer")
+                    if resp.get("questionId") == date_qid and isinstance(ans, str):
+                        interview_date = ans[:10]  # YYYY-MM-DD
+                    all_text_parts.append(str(ans))
+                if not interview_date:
+                    continue
+                if not (start_date <= interview_date <= end_date):
+                    continue
+                if needle:
+                    joined = " ".join(all_text_parts).lower()
+                    if needle not in joined:
+                        continue
+                count += 1
+
+            if len(items) < 100:
+                break
+            page += 1
+    return float(count)
+
+
 async def tally_avg_rating_this_week(params: dict, start_iso: str, end_iso: str) -> float:
     """
     params: {"form_id": "68koZk"}
@@ -976,6 +1049,7 @@ CONNECTORS: dict[str, ConnectorFn] = {
     "youtube_weekly_views_on_new_videos": youtube_weekly_views_on_new_videos,
     # Tally
     "tally_form_submissions_this_week": tally_form_submissions_this_week,
+    "tally_interviews_by_answer_date": tally_interviews_by_answer_date,
     "tally_avg_rating_this_week": tally_avg_rating_this_week,
     # Stripe + ConvertKit combo
     "stripe_new_signups_from_waitlist": stripe_new_signups_from_waitlist,
