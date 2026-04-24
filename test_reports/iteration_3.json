@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 3 — Cohort Dashboard (Kit tags + Circle intros) + Private-tier Google Drive doc summaries. Backend: 4/4 pytest cases in /app/backend/tests/test_iteration3.py all PASS against REACT_APP_BACKEND_URL. GET /api/cohorts/summary?cohort=April%2026 → totals.new=124, totals.legacy=139, totals.source='convertkit', totals.students=126 (Monday), kit.new_tag_id=14407610, kit.legacy_tag_id=14407628; circle.intros={space_id:2529515, students_posted:3, students_total:126, coverage_percent:2.4, posts_total:10, error:null}. GET /api/students/drive-summary for anna.swalsh@btinternet.com / 'Anna Walsh' → 200 found=true, file.web_view_link present, error is the graceful share-hint ('Share ... with ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com'). Unknown name → found=false with candidates_scanned>0. Unauth → 401. Frontend (Playwright on public URL): admin login works; sidebar nav testids confirmed — sidebar-nav-cohort, sidebar-nav-students, sidebar-nav-interviews (plus scorecard/rocks/launches/settings). /cohort renders all 4 top stat cards (stat-total=126 'Kit says 263 total · new + legacy', stat-new=124 47%, stat-legacy=139 53%, stat-circle=49/126 38.9%) and the 'Introduced themselves on Circle' bar (3/126 = 2.4%, 10 posts total). /students: Anna Walsh (VIP) → PrivateDocCard renders, Load button works, shows the file title + the share-hint toast/banner; Andreea Gavrisan (pure Academy, Tier='Academy') → PrivateDocCard correctly hidden. All behaviour matches the review spec including the graceful shortcut-target hint.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Sparkline Recharts (Weekly Scorecard)", "issue": "Console warning 'The width(-1) and height(-1) of chart should be greater than 0' fires ~40 times on initial page load — pre-existing from iterations 1 & 2, cosmetic only, does not affect any iteration-3 feature.", "selector": "Sparkline.jsx", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: silence Recharts width/height warnings (carried over from prior iterations, cosmetic).",
+    "Optional: the 4 Bar rows under 'Tier split' only render the first ~4 tiers; if more tiers appear for future cohorts, verify overflow/wrapping."
+  ],
+  "critical_code_review_comments": [
+    "cohort.py _ck_tag_emails correctly paginates ConvertKit /tags/{id}/subscriptions — returned 124 new + 139 legacy emails that match the review-request expected values of ~124 / ~139.",
+    "cohort.py _circle_space_post_authors correctly pages Circle /posts and returns {emails, post_count}; endpoint returned 10 posts from 3 distinct cohort students.",
+    "google_drive.summarise_student_doc correctly (a) caches success payloads with 24h TTL, (b) does NOT cache error responses (so a subsequent doc-share immediately unlocks the summary), (c) handles shortcut targets not shared with the service account by returning found=true + file.web_view_link + a specific actionable share-hint message mentioning ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com. Verified live: Anna Walsh's doc is a shortcut whose target isn't shared, and the hint rendered exactly as designed.",
+    "StudentLookup.isPrivateTier uses result.monday.data.columns.Tier.text and excludes only the exact string 'academy' — verified: Andreea Gavrisan (Tier='Academy') correctly hides the PrivateDocCard; Anna Walsh (Tier='VIP') correctly shows it.",
+    "CohortDashboard 4-stat header + 'Introduced themselves on Circle' bar all wired to the new API fields — rendered values exactly match backend response (124 / 139 / 49 of 126 / 3 of 126).",
+    "Minor: /api/cohorts/summary ignores unknown query params silently; the documented query args (new_tag_id, legacy_tag_id, intros_space_id) default correctly for 'April 26' so the frontend doesn't need to pass them (and it doesn't).",
+    "Minor: totals.source logic returns 'convertkit' only when new+legacy>0, else 'monday' — reasonable fallback; verified 'convertkit' returned here."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3.py (new)",
+    "/app/test_reports/pytest/iteration3.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (4/4 new + all prior regressions still valid)", "frontend": "100% — every review-request checkpoint verified"},
+  "test_credentials": "admin@ayci.com / Admin@2026",
+  "seed_data_creation": "None. Reused existing Mongo state and live third-party data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `REACT_APP_BACKEND_URL=<public-url> pytest /app/backend/tests/test_iteration3.py -v -s`. Key testids: sidebar-nav-cohort, sidebar-nav-students, cohort-dashboard-page, stat-total, stat-new, stat-legacy, stat-circle, intros-detail, student-lookup-email-input, student-lookup-search-button, load-private-doc-btn, private-doc-summary. For manual UI verification use anna.swalsh@btinternet.com (VIP → PrivateDocCard visible, share-hint banner expected) and andreea.gavrisan@gmail.com (Academy → no PrivateDocCard). Cohort summary endpoint takes ~13s (Monday paginated + Kit tag subscribers); use timeout>=30s.",
+  "rca of the issue": "No bugs found. All iteration-3 review-request bullets verified live via pytest + Playwright on the public preview URL."
+}

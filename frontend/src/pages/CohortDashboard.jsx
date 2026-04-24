@@ -98,23 +98,28 @@ export default function CohortDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               icon={Users}
-              label="Total students"
+              label="Total (Monday board)"
               value={data.totals.students}
+              sub={
+                data.totals.new_plus_legacy
+                  ? `Kit says ${data.totals.new_plus_legacy} total · new + legacy`
+                  : "from Academy Members board"
+              }
               testid="stat-total"
             />
             <StatCard
               icon={Users}
-              label="New"
+              label="New (Kit)"
               value={data.totals.new}
-              sub={`${pct(data.totals.new, data.totals.students)} of cohort`}
+              sub={`${pct(data.totals.new, data.totals.new_plus_legacy)} of cohort`}
               tone="emerald"
               testid="stat-new"
             />
             <StatCard
               icon={Users}
-              label="Legacy"
+              label="Legacy (Kit)"
               value={data.totals.legacy}
-              sub={`${pct(data.totals.legacy, data.totals.students)} of cohort`}
+              sub={`${pct(data.totals.legacy, data.totals.new_plus_legacy)} of cohort`}
               tone="violet"
               testid="stat-legacy"
             />
@@ -216,33 +221,72 @@ export default function CohortDashboard() {
           </div>
 
           {/* Circle detail */}
-          <section
-            className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
-            data-testid="circle-detail"
-          >
-            <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-1">
-              Circle community join rate
-            </h2>
-            <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
-              Of the {data.circle.students_total} {cohort} students,{" "}
-              <span className="text-[var(--ayci-ink)] font-semibold">
-                {data.circle.students_on_circle}
-              </span>{" "}
-              have logged into Circle and been tagged "{data.circle.tag}". Circle itself has{" "}
-              <span className="text-[var(--ayci-ink)] font-semibold">
-                {data.circle.tag_total_in_circle}
-              </span>{" "}
-              members total with this tag (includes legacy/non-cohort folks).
-            </p>
-            <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[var(--ayci-teal)] to-sky-400 flex items-center justify-end pr-2 text-[10px] font-semibold text-white transition-all"
-                style={{ width: `${data.circle.coverage_percent}%` }}
-              >
-                {data.circle.coverage_percent > 15 ? `${data.circle.coverage_percent}%` : ""}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <section
+              className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+              data-testid="circle-detail"
+            >
+              <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-1">
+                Circle community join rate
+              </h2>
+              <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
+                Of the {data.circle.students_total} {cohort} students,{" "}
+                <span className="text-[var(--ayci-ink)] font-semibold">
+                  {data.circle.students_on_circle}
+                </span>{" "}
+                have the tag "{data.circle.tag}" on Circle. The tag has{" "}
+                <span className="text-[var(--ayci-ink)] font-semibold">
+                  {data.circle.tag_total_in_circle}
+                </span>{" "}
+                members total (includes legacy/non-cohort folks).
+              </p>
+              <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[var(--ayci-teal)] to-sky-400 flex items-center justify-end pr-2 text-[10px] font-semibold text-white transition-all"
+                  style={{ width: `${data.circle.coverage_percent}%` }}
+                >
+                  {data.circle.coverage_percent > 15 ? `${data.circle.coverage_percent}%` : ""}
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+
+            {/* Intros space */}
+            {data.circle.intros && (
+              <section
+                className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+                data-testid="intros-detail"
+              >
+                <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-1">
+                  Introduced themselves on Circle
+                </h2>
+                <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
+                  <span className="text-[var(--ayci-ink)] font-semibold">
+                    {data.circle.intros.students_posted}
+                  </span>{" "}
+                  of {data.circle.intros.students_total} students have posted in the
+                  "Introduce Yourself" space.{" "}
+                  <span className="opacity-80">
+                    ({data.circle.intros.posts_total} posts in the space total)
+                  </span>
+                </p>
+                <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-violet-500 to-pink-400 flex items-center justify-end pr-2 text-[10px] font-semibold text-white transition-all"
+                    style={{ width: `${data.circle.intros.coverage_percent}%` }}
+                  >
+                    {data.circle.intros.coverage_percent > 15
+                      ? `${data.circle.intros.coverage_percent}%`
+                      : ""}
+                  </div>
+                </div>
+                {data.circle.intros.error && (
+                  <div className="text-xs text-amber-700 mt-2">
+                    {data.circle.intros.error}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -21,6 +21,7 @@ import connectors
 import student_lookup as lookup
 import upcoming_interviews as upcoming
 import cohort as cohort_mod
+import google_drive as gdrive
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -956,6 +957,19 @@ async def circle_cache_refresh(user: dict = Depends(get_current_user)):
     return {"refreshed": True, "source": source, "member_count": len(members)}
 
 
+@api.get("/students/drive-summary")
+async def students_drive_summary(
+    email: str,
+    name: str,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Returns a Claude-generated summary of a student's private-tier Google Doc.
+    Cached for 24 h per student email.
+    """
+    return await gdrive.summarise_student_doc(db, name, email)
+
+
 # --- Upcoming Interviews ---------------------------------------------------
 @api.get("/interviews/upcoming")
 async def upcoming_interviews(
@@ -991,13 +1005,23 @@ async def upcoming_interviews(
 async def cohort_summary_endpoint(
     cohort: str = "April 26",
     circle_tag: Optional[str] = None,
+    new_tag_id: Optional[int] = None,
+    legacy_tag_id: Optional[int] = None,
+    intros_space_id: Optional[int] = None,
     user: dict = Depends(get_current_user),
 ):
     """
-    Aggregated cohort stats for the given cohort label (e.g. "April 26").
-    Cross-references Circle membership via the cached members list.
+    Aggregated cohort stats. New / Legacy counts come from ConvertKit tags
+    (authoritative). Circle cross-reference uses the cached members list.
     """
-    return await cohort_mod.cohort_summary(db, cohort, circle_tag)
+    return await cohort_mod.cohort_summary(
+        db,
+        cohort,
+        circle_tag=circle_tag,
+        new_tag_id=new_tag_id,
+        legacy_tag_id=legacy_tag_id,
+        intros_space_id=intros_space_id,
+    )
 
 
 app.include_router(api)

@@ -11,6 +11,7 @@ import StripeCard from "@/components/student/StripeCard";
 import ConvertKitCard from "@/components/student/ConvertKitCard";
 import CircleCard from "@/components/student/CircleCard";
 import CalendlyCard from "@/components/student/CalendlyCard";
+import PrivateDocCard from "@/components/student/PrivateDocCard";
 
 export default function StudentLookup() {
   const [email, setEmail] = useState("");
@@ -173,6 +174,14 @@ export default function StudentLookup() {
             <PlatformBadges result={result} />
           </div>
 
+          {/* Private-tier Google Doc summary (only for non-pure-Academy students) */}
+          {isPrivateTier(result.monday?.data) && (
+            <PrivateDocCard
+              email={result.email}
+              name={header?.name || result.monday?.data?.name || query}
+            />
+          )}
+
           {/* Platform cards grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <StudentPlatformCard
@@ -264,3 +273,14 @@ function PlatformBadges({ result }) {
 
 // Re-export to satisfy ExternalLink import (kept to keep bundler from tree-shaking)
 export { ExternalLink };
+
+function isPrivateTier(mondayData) {
+  if (!mondayData) return false;
+  const tier = mondayData?.columns?.Tier?.text || "";
+  const lower = tier.toLowerCase();
+  if (!lower) return false;
+  // Pure-Academy students don't get private-tier docs
+  if (lower === "academy") return false;
+  // Anything else is a private / boost / upgrade tier → show the card
+  return true;
+}
