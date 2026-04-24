@@ -11,6 +11,7 @@ export default function CohortDashboard() {
   const [cohort, setCohort] = useState(DEFAULT_COHORT);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [labels, setLabels] = useState([DEFAULT_COHORT]);
 
   const load = async (label = cohort) => {
     setLoading(true);
@@ -28,7 +29,18 @@ export default function CohortDashboard() {
   };
 
   useEffect(() => {
-    load(DEFAULT_COHORT);
+    // Fetch the live cohort label list from Monday, then load the default cohort.
+    (async () => {
+      try {
+        const { data } = await apiClient.get(`/cohorts/labels`, { timeout: 15000 });
+        if (Array.isArray(data) && data.length) {
+          setLabels(data.map((l) => l.name));
+        }
+      } catch {
+        // Fallback to the hardcoded default; non-fatal
+      }
+      load(DEFAULT_COHORT);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -56,14 +68,7 @@ export default function CohortDashboard() {
             className="bg-white border border-[var(--ayci-border)] rounded-lg px-3 py-2 text-sm font-medium text-[var(--ayci-ink)] focus:outline-none focus:border-[var(--ayci-teal)]"
             data-testid="cohort-selector"
           >
-            {[
-              "April 26",
-              "February 26",
-              "November 25",
-              "September 25",
-              "July 25",
-              "April 25",
-            ].map((c) => (
+            {labels.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>

@@ -790,7 +790,7 @@ async def on_startup():
     await _seed_rocks()
     await _seed_launches()
 
-    # Start weekly auto-sync (Monday 06:00 Europe/London)
+    # Start weekly auto-sync (Monday 06:00 Europe/London) + daily refreshers
     global scheduler
     tz = os.environ.get("SYNC_TIMEZONE", "Europe/London")
     scheduler = AsyncIOScheduler(timezone=tz)
@@ -800,8 +800,37 @@ async def on_startup():
         id="weekly_sync",
         replace_existing=True,
     )
+    # Daily: refresh Circle member cache at 05:00 (keeps it warm for morning lookups)
+    async def _daily_circle_refresh():
+        try:
+            await db.circle_members_cache.delete_one({"_id": "all"})
+            members, _src = await lookup._circle_get_cached_members(db)
+            logger.info(f"[daily] Circle cache refreshed: {len(members)} members")
+        except Exception as e:
+            logger.warning(f"[daily] Circle cache refresh failed: {e}")
+
+    # Daily: invalidate cohort summary cache so next page load re-fetches fresh
+    async def _daily_cohort_refresh():
+        try:
+            await db.cohort_summaries_cache.delete_many({})
+            logger.info("[daily] Cohort summary cache cleared")
+        except Exception as e:
+            logger.warning(f"[daily] Cohort cache clear failed: {e}")
+
+    scheduler.add_job(
+        _daily_circle_refresh,
+        CronTrigger(hour=5, minute=0, timezone=tz),
+        id="daily_circle_refresh",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _daily_cohort_refresh,
+        CronTrigger(hour=5, minute=5, timezone=tz),
+        id="daily_cohort_refresh",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info(f"[scheduler] Auto-sync scheduled: Mondays 06:00 {tz}")
+    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05) — {tz}")
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
     # Fire-and-forget so startup doesn't block.
@@ -1001,6 +1030,12 @@ async def upcoming_interviews(
 
 
 # --- Cohort --------------------------------------------------------------
+@api.get("/cohorts/labels")
+async def cohort_labels(user: dict = Depends(get_current_user)):
+    """Returns the list of cohort labels from Monday's 'Cohort Joined' dropdown."""
+    return await cohort_mod.fetch_cohort_labels()
+
+
 @api.get("/cohorts/summary")
 async def cohort_summary_endpoint(
     cohort: str = "April 26",

@@ -41,6 +41,32 @@ DEFAULT_LEGACY_TAG_ID = 14407628  # "[AYCI APR-26] Cohort - Legacy"
 DEFAULT_INTROS_SPACE_ID = 2529515  # "Introduce Yourself" (April 26)
 
 
+async def fetch_cohort_labels() -> list[dict]:
+    """
+    Returns the live list of cohort labels from Monday's 'Cohort Joined'
+    dropdown (id `dropdown_mkqxhw8p`). Newest first.
+    """
+    query = f"""
+    query {{ boards(ids: [{ACADEMY_MEMBERS_BOARD_ID}]) {{
+      columns(ids: ["{COL_COHORT_JOINED}"]) {{ settings_str }} }} }}
+    """
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        r = await c.post(
+            MONDAY_URL,
+            headers={**_monday_headers(), "Content-Type": "application/json"},
+            json={"query": query},
+        )
+        r.raise_for_status()
+        import json
+        settings = json.loads(
+            r.json()["data"]["boards"][0]["columns"][0]["settings_str"]
+        )
+        labels = settings.get("labels", [])
+    # Monday dropdown labels carry an incrementing id; higher id = more recent
+    sorted_labels = sorted(labels, key=lambda x: int(x.get("id", 0)), reverse=True)
+    return [{"id": int(x["id"]), "name": x["name"]} for x in sorted_labels]
+
+
 async def _fetch_cohort_items(cohort_label: str) -> list[dict]:
     """Fetch all board items whose Cohort Joined equals cohort_label."""
     # Discover dropdown id for the label
