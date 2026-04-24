@@ -48,6 +48,14 @@ A single-page view where the team searches a student by email and sees a unified
 - New frontend page `/students` with: search bar, identity header, 5 platform cards (primary/highlighted fields + "Show all fields" expander for Monday). Sidebar nav entry added.
 - End-to-end tested with real student `andreea.gavrisan@gmail.com` — all 5 platforms return Found in ~1.3 s. Fake email returns all Not Found in ~1.4 s.
 
+### 2026-04 — Cohort Dashboard + Google Drive doc summaries (Apr 24)
+- `/api/cohorts/summary?cohort=April 26` — new endpoint. New/Legacy split now from ConvertKit tags (authoritative). Circle "Introduce Yourself" space post count cross-referenced by email. Cohort data from Monday board.
+- New `/cohort` frontend page with tier split, milestone progress, top specialities, Circle join rate, Circle intros rate. Cohort dropdown selector.
+- `/api/students/drive-summary?email=&name=` — Google Drive (service account) + Claude Sonnet 4.5 summarisation of private-tier docs. 24 h Mongo cache. Graceful handling of shortcut-target 404s with hint to share with service account.
+- `PrivateDocCard` on Student Lookup — only renders for non-Academy (private-tier) students. On-demand "Load" button → AI summary + link to full doc.
+- Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
+- Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
+
 ## External integrations in use
 | Platform   | Env var              | Purpose                                                 |
 |------------|----------------------|---------------------------------------------------------|
