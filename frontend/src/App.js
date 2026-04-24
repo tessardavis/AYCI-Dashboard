@@ -9,6 +9,7 @@ import QuarterlyRocks from "@/pages/QuarterlyRocks";
 import LaunchDashboard from "@/pages/LaunchDashboard";
 import StudentLookup from "@/pages/StudentLookup";
 import UpcomingInterviews from "@/pages/UpcomingInterviews";
+import CohortDashboard from "@/pages/CohortDashboard";
 import Settings from "@/pages/Settings";
 
 function Protected() {
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/" element={<WeeklyScorecard />} />
                 <Route path="/rocks" element={<QuarterlyRocks />} />
                 <Route path="/launches" element={<LaunchDashboard />} />
+                <Route path="/cohort" element={<CohortDashboard />} />
                 <Route path="/students" element={<StudentLookup />} />
                 <Route path="/interviews" element={<UpcomingInterviews />} />
                 <Route path="/settings" element={<Settings />} />

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, EmailStr
 import connectors
 import student_lookup as lookup
 import upcoming_interviews as upcoming
+import cohort as cohort_mod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -983,6 +984,20 @@ async def upcoming_interviews(
         "academy": academy,
         "private": data["private"],
     }
+
+
+# --- Cohort --------------------------------------------------------------
+@api.get("/cohorts/summary")
+async def cohort_summary_endpoint(
+    cohort: str = "April 26",
+    circle_tag: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Aggregated cohort stats for the given cohort label (e.g. "April 26").
+    Cross-references Circle membership via the cached members list.
+    """
+    return await cohort_mod.cohort_summary(db, cohort, circle_tag)
 
 
 app.include_router(api)

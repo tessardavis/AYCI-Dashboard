@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV = [
   { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard" },
   { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks" },
   { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches" },
+  { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort" },
   { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews" },
   { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings" },
