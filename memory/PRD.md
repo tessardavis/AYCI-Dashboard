@@ -61,6 +61,15 @@ A single-page view where the team searches a student by email and sees a unified
 - **Mini forecast sparkline** added inline next to the £ forecast in `PaceTrackerWidget` (shown on Weekly Scorecard): faded grey curves for previous-launch cumulative sales overlaid with the current-launch amber curve, today dot, dashed projection line to forecast endpoint, and dashed best-target reference line.
 - **Bug fix**: Cleared stale `pace_cache` entries that lacked the new `current_cumul` / `prev_cumul` series so the sparkline data is now populated.
 
+### 2026-04 — Students at risk + cleanup (Apr 26)
+- **`GET /api/students/at-risk`**: high-spend Stripe customers (lifetime ≥ £1,000 over last 365 days) who are dormant on Circle (>30 days since last_seen_at, never logged in, or no Circle account at all). Aggregates Stripe charges by customer, joins against the Circle members cache by email, classifies each high-spender into a `risk_status` bucket. Cached 24h in `at_risk_cache`. Daily APScheduler job at 05:15 London + on-startup background warm. `?refresh=true` triggers async re-scan (Stripe scan takes ~3-5 min).
+- **`/at-risk` page**: 4 summary tiles, filter chips (all / dormant / never logged in / no account), search by name/email, sortable table (lifetime, last on Circle, name), avatars + risk badges, deep-link to Student Lookup via `/students?email=…`.
+- **Weekly Scorecard widget**: tile next to Pace tracker showing total at risk, dormant vs no/never split, and top 3 high-spenders. Clicks through to the full `/at-risk` page.
+- **Sidebar nav**: "Students at Risk" entry with AlertTriangle icon.
+- **Student Lookup**: now reads `?email=` query param and auto-runs the lookup so deep-links from the at-risk page land on a populated profile.
+- **Cleanup**: Recharts negative-width console warnings silenced (Sparkline now uses fixed dimensions instead of ResponsiveContainer). CORS tightened: dropped the `*` fallback so missing `CORS_ORIGINS` env var fails closed instead of allowing all origins.
+- **Backend tests**: 19/19 pytest cases pass against preview URL (auth, schema, sort, threshold, regression on existing endpoints).
+
 ### 2026-04 — Launch Dashboard 2.0 + Misc fixes (Apr 26)
 - **Launch model upgraded**: now has `code` (Kit tag prefix, e.g. APR-26) and `phases` (7 phases each with start/end datetimes: early_signups, flash_sale, webinar, open_cart, legacy_upgrades, close_cart, in_between). PATCH endpoint added.
 - **Live registrations from Kit**: `/api/launches/{id}/registrations` discovers per-source tags `[AYCI <CODE>] Webinar - Registered - <SOURCE>` and aggregates daily counts + by-source totals.
