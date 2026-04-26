@@ -4,6 +4,7 @@ import { formatValue, lastNWeekStarts, formatWeekLabel, isOnTrack } from "@/lib/
 import PageHeader from "@/components/PageHeader";
 import Sparkline from "@/components/Sparkline";
 import PaceTrackerWidget from "@/components/PaceTracker";
+import AtRiskWidget from "@/components/AtRiskWidget";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -198,9 +199,10 @@ export default function WeeklyScorecard() {
         }
       />
 
-      {/* Pace tracker widget — only renders when a launch is active */}
-      <div className="mb-5 max-w-md">
+      {/* Pace tracker + At-risk widgets */}
+      <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
         <PaceTrackerWidget />
+        <AtRiskWidget />
       </div>
 
       {/* Owner filter */}

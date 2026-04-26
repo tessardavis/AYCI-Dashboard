@@ -1,4 +1,7 @@
-import { LineChart, Line, YAxis, ResponsiveContainer } from "recharts";
+import { LineChart, Line, YAxis } from "recharts";
+
+const WIDTH = 80;
+const HEIGHT = 32;
 
 export default function Sparkline({ data, color = "#0EA5E9" }) {
   const series = (data || []).map((v, i) => ({ i, v: v ?? 0 }));
@@ -6,13 +9,18 @@ export default function Sparkline({ data, color = "#0EA5E9" }) {
     return <div className="text-[10px] text-[var(--ayci-ink-muted)]">—</div>;
   }
   return (
-    <div className="w-20 h-8">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={series}>
-          <YAxis hide domain={["dataMin", "dataMax"]} />
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div style={{ width: WIDTH, height: HEIGHT }}>
+      <LineChart width={WIDTH} height={HEIGHT} data={series}>
+        <YAxis hide domain={["dataMin", "dataMax"]} />
+        <Line
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
     </div>
   );
 }

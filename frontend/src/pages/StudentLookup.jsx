@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +24,17 @@ export default function StudentLookup() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchingNames, setSearchingNames] = useState(false);
   const debounceRef = useRef(null);
+  const [searchParams] = useSearchParams();
+
+  // Auto-run lookup when an `?email=` query param is provided (e.g. from at-risk page)
+  useEffect(() => {
+    const emailParam = searchParams.get("email");
+    if (emailParam && emailParam !== query) {
+      setSearch(emailParam);
+      runLookupForEmail(emailParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Debounced name autocomplete (only when input doesn't look like an email)
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV = [
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort" },
   { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews" },
   { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students" },
+  { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings" },
 ];
 

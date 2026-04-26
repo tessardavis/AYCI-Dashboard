@@ -23,6 +23,7 @@ import upcoming_interviews as upcoming
 import cohort as cohort_mod
 import google_drive as gdrive
 import launches as launches_mod
+import at_risk as at_risk_mod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -862,6 +863,16 @@ async def on_startup():
         except Exception as e:
             logger.warning(f"[daily] Cohort cache clear failed: {e}")
 
+    # Daily: refresh students-at-risk cache (Stripe scan takes a few minutes)
+    async def _daily_at_risk_refresh():
+        try:
+            payload = await at_risk_mod.warm_at_risk_cache(db, force=True)
+            logger.info(
+                f"[daily] At-risk cache refreshed: {payload.get('total_at_risk', 0)} students at risk"
+            )
+        except Exception as e:
+            logger.warning(f"[daily] At-risk cache refresh failed: {e}")
+
     scheduler.add_job(
         _daily_circle_refresh,
         CronTrigger(hour=5, minute=0, timezone=tz),
@@ -874,8 +885,14 @@ async def on_startup():
         id="daily_cohort_refresh",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _daily_at_risk_refresh,
+        CronTrigger(hour=5, minute=15, timezone=tz),
+        id="daily_at_risk_refresh",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05) — {tz}")
+    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15) — {tz}")
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
     # Fire-and-forget so startup doesn't block.
@@ -889,6 +906,21 @@ async def on_startup():
             logger.warning(f"[startup] Circle cache warm failed: {e}")
 
     _asyncio.create_task(_warm_circle_cache())
+
+    # Warm at-risk cache in background (depends on Circle cache + Stripe scan,
+    # ~3-5 min on first cold run). Skips if cache is fresh.
+    async def _warm_at_risk():
+        try:
+            # Wait a bit so Circle cache warmup gets a head start
+            await _asyncio.sleep(30)
+            payload = await at_risk_mod.warm_at_risk_cache(db, force=False)
+            logger.info(
+                f"[startup] At-risk cache ready: {payload.get('total_at_risk', 0)} students at risk"
+            )
+        except Exception as e:
+            logger.warning(f"[startup] At-risk cache warm failed: {e}")
+
+    _asyncio.create_task(_warm_at_risk())
 
 
 @app.on_event("shutdown")
@@ -1052,6 +1084,30 @@ async def students_drive_summary(
     Cached for 24 h per student email.
     """
     return await gdrive.summarise_student_doc(db, name, email)
+
+
+@api.get("/students/at-risk")
+async def students_at_risk(
+    refresh: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Returns high-spend Stripe customers (lifetime GBP >= 1000 over the last
+    365 days) who are dormant on Circle (>30 days since last_seen_at, or
+    never logged in). Cached for 24 h. Pass ?refresh=true to force-recompute
+    in the background.
+    """
+    import asyncio as _asyncio
+    if refresh:
+        _asyncio.create_task(at_risk_mod.warm_at_risk_cache(db, force=True))
+    payload = await at_risk_mod.get_at_risk_cached(db, force=False)
+    if payload.get("computing") or payload.get("stale"):
+        # Kick off a background warm if the cache is missing/stale and one
+        # isn't already running. Worst case the daily scheduler will catch up.
+        _asyncio.create_task(at_risk_mod.warm_at_risk_cache(db, force=False))
+    return payload
+
+
 
 
 # --- Upcoming Interviews ---------------------------------------------------
@@ -1336,10 +1392,17 @@ async def cohort_summary_endpoint(
 
 app.include_router(api)
 
+_cors_origins_raw = os.environ.get("CORS_ORIGINS", "").strip()
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+if not _cors_origins:
+    logger.warning(
+        "[cors] CORS_ORIGINS env var is empty — no cross-origin requests will be allowed."
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

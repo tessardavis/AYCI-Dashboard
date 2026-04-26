@@ -8,6 +8,7 @@ import WeeklyScorecard from "@/pages/WeeklyScorecard";
 import QuarterlyRocks from "@/pages/QuarterlyRocks";
 import LaunchDashboard from "@/pages/LaunchDashboard";
 import StudentLookup from "@/pages/StudentLookup";
+import StudentsAtRisk from "@/pages/StudentsAtRisk";
 import UpcomingInterviews from "@/pages/UpcomingInterviews";
 import CohortDashboard from "@/pages/CohortDashboard";
 import Settings from "@/pages/Settings";
@@ -48,6 +49,7 @@ function App() {
                 <Route path="/launches" element={<LaunchDashboard />} />
                 <Route path="/cohort" element={<CohortDashboard />} />
                 <Route path="/students" element={<StudentLookup />} />
+                <Route path="/at-risk" element={<StudentsAtRisk />} />
                 <Route path="/interviews" element={<UpcomingInterviews />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>

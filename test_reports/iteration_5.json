@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 5 — Students-at-Risk endpoint + CORS-tightening regression. Backend-only testing per request. 19/19 pytest cases PASS in /app/backend/tests/test_at_risk.py against the public preview URL. GET /api/students/at-risk returns 200 with full schema (total_at_risk=69, counts={dormant:62, never_logged_in:0, no_circle_account:7} — sums to total ✓). All 69 students have lifetime_gbp >= 1000 (top 3: £1997, £1897, £1833), all risk_status values are within {dormant, never_logged_in, no_circle_account}, dormant rows always have days_dormant > 30, students sorted desc by lifetime_gbp, no MongoDB _id leaks, students[].* contains all 10 required fields (stripe_customer_id, email, name, lifetime_gbp, charge_count, last_charge_at, circle_avatar_url, circle_last_seen_at, days_dormant, risk_status). ?refresh=true returns 200 in <1s (background warm task confirmed non-blocking). Auth-protection verified: 401 without cookie. Cache state at test time: cached=True, stale=None, computing=None — confirmed pre-warmed. Existing endpoints all 200 OK after CORS tightening: /launches, /launches/active/pace, /launches/year-overview, /students/lookup (Andreea full profile), /cohorts/labels, /interviews/upcoming. Functional CORS regression: credentialed login from preview Origin works end-to-end and access_token httpOnly cookie is set (so admin login flow is unaffected by dropping the '*' fallback in app code).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_at_risk.py",
+    "/app/test_reports/pytest/iteration5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "at_risk.py compute_at_risk: GBP-only / succeeded+paid / net-of-refunds aggregation is correct. Net is computed as amount - amount_refunded and rows where net<=0 are skipped — so a fully-refunded high-spender won't be wrongly flagged.",
+    "at_risk.py risk_status precedence: circle is None → no_circle_account, else last_seen_at missing → never_logged_in, else last_seen_dt < cutoff → dormant, else (active) skipped. Correct, matches the PRD AND-condition (>=£1000 spend AND (dormant OR never logged in OR no Circle)).",
+    "at_risk.py header docstring says 'cached for 1 hour' but CACHE_TTL_HOURS=24 — docstring is stale. LOW priority cosmetic; consider syncing the comment.",
+    "server.py /students/at-risk: ?refresh=true correctly fires asyncio.create_task(warm_at_risk_cache(force=True)) and returns the *current* cache immediately — verified <1s wall-clock in test. The fallback path on computing/stale also kicks a non-force background warm. Good — endpoint never blocks the request thread on the multi-minute Stripe scan.",
+    "server.py CORS middleware: now reads CORS_ORIGINS env (comma-separated), drops the '*' fallback, logs a warning if empty. Backend/.env correctly contains 'https://ayci-dashboard.preview.emergentagent.com,http://localhost:3000'. Note: at the public preview URL, Cloudflare/edge layer still injects access-control-allow-origin: * regardless — this is platform behavior outside the FastAPI app and does not represent a regression in our code. Functional check (credentialed login from preview origin → access_token cookie set, /auth/me returns admin user) PASSES.",
+    "server.py daily APScheduler job _daily_at_risk_refresh registered at 05:15 London with id='daily_at_risk_refresh'. Startup also kicks a non-force warm task on app boot. Both look correctly wired.",
+    "Endpoint correctly excludes _id from cache document on read (find_one(..., {'_id': 0})) — verified no Mongo _id leaks in any of the 69 student rows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_at_risk.py (new)",
+    "/app/test_reports/pytest/iteration5.xml (generated)"
+  ],
+  "success_rate": { "backend": "100% (19/19)", "frontend": "n/a — frontend testing was explicitly out-of-scope per review request" },
+  "test_credentials": "admin@ayci.com / Admin@2026",
+  "seed_data_creation": "None. Used the live pre-warmed at_risk_cache (cached=True at test time) seeded by the startup background warmer + real production Stripe + Circle data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_at_risk.py -v --junitxml=/app/test_reports/pytest/iteration5.xml`. The fixture has an 80s grace loop in case the at_risk cache is empty; in production it should always be pre-warmed by the startup task and the 05:15 daily job, so the suite finishes in ~6s. Do NOT call ?refresh=true repeatedly — it triggers the multi-minute Stripe scan in the background. CORS-at-the-edge note: Cloudflare injects access-control-allow-origin: * at the preview URL irrespective of app config, so OPTIONS-based preflight assertions are unreliable; assert credentialed login flow works instead (TestCORSFunctional in test_at_risk.py shows the pattern).",
+  "rca of the issue": "No bugs found. All 7 review-request bullets verified: (1) at-risk endpoint schema ✓, (2) ?refresh=true non-blocking ✓, (3) all 69 students lifetime_gbp >= 1000 ✓, (4) risk_status enum ✓, (5) auth 401 without cookie ✓, (6) all 6 listed existing endpoints still 200 ✓, (7) credentialed login from preview origin still works post-CORS-tightening ✓. Only doc-comment nit: at_risk.py file header still says 'cached for 1 hour' but CACHE_TTL_HOURS=24."
+}
