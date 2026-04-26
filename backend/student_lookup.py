@@ -35,6 +35,59 @@ CACHE_TTL_HOURS = 24
 ACADEMY_MEMBERS_BOARD_ID = "1956295952"
 
 
+def _normalise(s: str) -> str:
+    import re
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", s.lower())).strip()
+
+
+async def name_search(db, query: str, limit: int = 10) -> list[dict]:
+    """
+    Fuzzy search by name. Looks up Circle's slim member cache (which has
+    name+email for ~3.9K students). Returns up to `limit` candidates with
+    name, email, avatar so the user can pick the right one.
+    """
+    if not query or len(query.strip()) < 2:
+        return []
+    target = _normalise(query)
+    parts = target.split()
+
+    doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
+    if not doc:
+        return []
+    members = doc.get("members", [])
+
+    scored: list[tuple[int, dict]] = []
+    for m in members:
+        name = _normalise(m.get("name") or "")
+        email = (m.get("email") or "").lower()
+        score = 0
+        if not name and not email:
+            continue
+        if target == name:
+            score = 100
+        elif target in name:
+            score = 80
+        elif all(p in name.split() for p in parts):
+            score = 60
+        elif all(p in name for p in parts):
+            score = 40
+        elif target in email:
+            score = 30
+        if score:
+            scored.append((score, m))
+
+    scored.sort(key=lambda x: -x[0])
+    return [
+        {
+            "name": m.get("name"),
+            "email": m.get("email"),
+            "avatar_url": m.get("avatar_url"),
+            "match_score": s,
+        }
+        for s, m in scored[:limit]
+    ]
+
+
 # --------------------------------------------------------------------- Stripe
 async def stripe_lookup(email: str) -> dict:
     """Find Stripe customer by email + summarise charges and subscriptions."""

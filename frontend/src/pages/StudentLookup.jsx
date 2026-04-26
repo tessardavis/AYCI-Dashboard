@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Search, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,25 +14,50 @@ import CalendlyCard from "@/components/student/CalendlyCard";
 import PrivateDocCard from "@/components/student/PrivateDocCard";
 
 export default function StudentLookup() {
-  const [email, setEmail] = useState("");
-  const [query, setQuery] = useState(""); // the email we searched for (persists across typing)
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState(""); // email we searched for (persists across typing)
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [refreshingCache, setRefreshingCache] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchingNames, setSearchingNames] = useState(false);
+  const debounceRef = useRef(null);
 
-  const runLookup = async (e) => {
-    e?.preventDefault();
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed || !trimmed.includes("@")) {
-      toast.error("Please enter a valid email address");
+  // Debounced name autocomplete (only when input doesn't look like an email)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = search.trim();
+    if (trimmed.length < 2 || trimmed.includes("@")) {
+      setSuggestions([]);
       return;
     }
+    debounceRef.current = setTimeout(async () => {
+      setSearchingNames(true);
+      try {
+        const { data } = await apiClient.get(`/students/name-search`, {
+          params: { q: trimmed, limit: 8 },
+          timeout: 8000,
+        });
+        setSuggestions(data || []);
+        setShowSuggestions(true);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearchingNames(false);
+      }
+    }, 300);
+    return () => debounceRef.current && clearTimeout(debounceRef.current);
+  }, [search]);
+
+  const runLookupForEmail = async (email) => {
     setLoading(true);
     setResult(null);
-    setQuery(trimmed);
+    setQuery(email);
+    setShowSuggestions(false);
     try {
       const { data } = await apiClient.get(`/students/lookup`, {
-        params: { email: trimmed },
+        params: { email },
         timeout: 90000,
       });
       setResult(data);
@@ -49,6 +74,28 @@ export default function StudentLookup() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const runLookup = async (e) => {
+    e?.preventDefault();
+    const trimmed = search.trim().toLowerCase();
+    if (!trimmed) {
+      toast.error("Enter an email or name to search");
+      return;
+    }
+    if (trimmed.includes("@")) {
+      await runLookupForEmail(trimmed);
+    } else if (suggestions.length > 0) {
+      // Pick top match
+      await runLookupForEmail(suggestions[0].email);
+    } else {
+      toast.info("No matching student found by name");
+    }
+  };
+
+  const pickSuggestion = (s) => {
+    setSearch(s.name || s.email);
+    runLookupForEmail(s.email);
   };
 
   const refreshCircleCache = async () => {
@@ -88,7 +135,7 @@ export default function StudentLookup() {
           Student Lookup
         </h1>
         <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-xl">
-          Search any student by email to see a unified profile pulled live from Monday.com,
+          Search any student by <strong>email or name</strong> to see a unified profile pulled live from Monday.com,
           Circle, Stripe, ConvertKit and Calendly.
         </p>
       </div>
@@ -100,14 +147,49 @@ export default function StudentLookup() {
         <div className="relative flex-1 min-w-[320px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ayci-ink-muted)]" />
           <Input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="student@example.com"
-            type="email"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            placeholder="Email or name (e.g. anna.swalsh@btinternet.com or Anna Walsh)"
             className="pl-9 h-11"
-            data-testid="student-lookup-email-input"
+            data-testid="student-lookup-input"
             autoFocus
           />
+          {searchingNames && (
+            <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ayci-ink-muted)] animate-spin" />
+          )}
+          {showSuggestions && suggestions.length > 0 && (
+            <div
+              className="absolute top-full left-0 right-0 mt-1 bg-white border border-[var(--ayci-border)] rounded-lg shadow-lg z-10 max-h-72 overflow-y-auto"
+              data-testid="name-suggestions"
+            >
+              {suggestions.map((s) => (
+                <button
+                  key={s.email}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pickSuggestion(s)}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-[var(--ayci-border)] last:border-b-0 flex items-center gap-2"
+                  data-testid={`suggestion-${s.email}`}
+                >
+                  {s.avatar_url ? (
+                    <img src={s.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-semibold text-slate-500">
+                      {(s.name || s.email).slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-[var(--ayci-ink)] truncate">
+                      {s.name || "—"}
+                    </div>
+                    <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{s.email}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <Button
           type="submit"

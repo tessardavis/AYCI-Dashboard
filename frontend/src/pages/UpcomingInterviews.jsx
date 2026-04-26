@@ -22,6 +22,7 @@ const daysUntil = (iso, todayIso) => {
 export default function UpcomingInterviews() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("private"); // "private" | "all"
   const [academyDays, setAcademyDays] = useState(7);
   const [privateDays, setPrivateDays] = useState(14);
 
@@ -45,6 +46,8 @@ export default function UpcomingInterviews() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [academyDays, privateDays]);
 
+  const showAcademy = view === "all";
+
   return (
     <div className="p-8 space-y-6" data-testid="upcoming-interviews-page">
       <div className="flex items-start justify-between flex-wrap gap-4">
@@ -56,18 +59,54 @@ export default function UpcomingInterviews() {
             Upcoming Interviews
           </h1>
           <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
-            Pulled live from the Monday Academy Members board. Academy students shown for the next {academyDays} days;
-            private tier + Boost & Go shown for the next {privateDays} days with their call / video allowance usage.
+            Pulled live from the Monday Academy Members board.
+            {showAcademy ? (
+              <>
+                {" "}Academy students shown for the next {academyDays} days; private tier + Boost & Go shown for the next {privateDays} days with their call / video allowance usage.
+              </>
+            ) : (
+              <>
+                {" "}Showing private tier + Boost & Go for the next {privateDays} days with call / video allowance usage. Switch to "All tiers" to also see Academy students.
+              </>
+            )}
           </p>
         </div>
-        <div className="flex gap-2 items-center">
-          <Selector
-            label="Academy window"
-            value={academyDays}
-            onChange={setAcademyDays}
-            options={[7, 14]}
-            testid="academy-window-selector"
-          />
+        <div className="flex gap-2 items-center flex-wrap">
+          <div className="flex bg-white border border-[var(--ayci-border)] rounded-lg p-1" data-testid="view-toggle">
+            <button
+              onClick={() => setView("private")}
+              className={
+                "px-3 py-1.5 text-sm rounded-md font-medium transition-colors " +
+                (view === "private"
+                  ? "bg-[var(--ayci-teal)] text-white"
+                  : "text-[var(--ayci-ink-muted)] hover:bg-slate-50")
+              }
+              data-testid="view-private-only"
+            >
+              Private only
+            </button>
+            <button
+              onClick={() => setView("all")}
+              className={
+                "px-3 py-1.5 text-sm rounded-md font-medium transition-colors " +
+                (view === "all"
+                  ? "bg-[var(--ayci-teal)] text-white"
+                  : "text-[var(--ayci-ink-muted)] hover:bg-slate-50")
+              }
+              data-testid="view-all-tiers"
+            >
+              All tiers
+            </button>
+          </div>
+          {showAcademy && (
+            <Selector
+              label="Academy window"
+              value={academyDays}
+              onChange={setAcademyDays}
+              options={[7, 14]}
+              testid="academy-window-selector"
+            />
+          )}
           <Selector
             label="Private window"
             value={privateDays}
@@ -86,27 +125,8 @@ export default function UpcomingInterviews() {
       )}
 
       {data && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Academy */}
-          <section data-testid="academy-section">
-            <SectionHeader
-              title="Academy students"
-              count={data.academy.length}
-              subtitle={`Next ${academyDays} days · until ${fmtDate(data.academy_window.end)}`}
-              accent="bg-sky-100 text-sky-700"
-            />
-            {data.academy.length === 0 ? (
-              <EmptyState text={`No Academy interviews in the next ${academyDays} days.`} />
-            ) : (
-              <ul className="space-y-2">
-                {data.academy.map((s) => (
-                  <AcademyRow key={s.id} student={s} today={data.today} />
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Private */}
+        <div className={"grid grid-cols-1 gap-6 " + (showAcademy ? "xl:grid-cols-2" : "")}>
+          {/* Private — always shown */}
           <section data-testid="private-section">
             <SectionHeader
               title="Private tier · Boost & Go"
@@ -124,6 +144,27 @@ export default function UpcomingInterviews() {
               </ul>
             )}
           </section>
+
+          {/* Academy — only when 'All tiers' is selected */}
+          {showAcademy && (
+            <section data-testid="academy-section">
+              <SectionHeader
+                title="Academy students"
+                count={data.academy.length}
+                subtitle={`Next ${academyDays} days · until ${fmtDate(data.academy_window.end)}`}
+                accent="bg-sky-100 text-sky-700"
+              />
+              {data.academy.length === 0 ? (
+                <EmptyState text={`No Academy interviews in the next ${academyDays} days.`} />
+              ) : (
+                <ul className="space-y-2">
+                  {data.academy.map((s) => (
+                    <AcademyRow key={s.id} student={s} today={data.today} />
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
         </div>
       )}
     </div>

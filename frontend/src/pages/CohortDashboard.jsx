@@ -103,11 +103,11 @@ export default function CohortDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               icon={Users}
-              label="Total (Monday board)"
-              value={data.totals.students}
+              label="Total (Kit)"
+              value={data.totals.new_plus_legacy || data.totals.students}
               sub={
                 data.totals.new_plus_legacy
-                  ? `Kit says ${data.totals.new_plus_legacy} total · new + legacy`
+                  ? `New + legacy (Monday board has ${data.totals.students})`
                   : "from Academy Members board"
               }
               testid="stat-total"
@@ -247,8 +247,13 @@ export default function CohortDashboard() {
               </p>
               <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[var(--ayci-teal)] to-sky-400 flex items-center justify-end pr-2 text-[10px] font-semibold text-white transition-all"
-                  style={{ width: `${data.circle.coverage_percent}%` }}
+                  className="h-full flex items-center justify-end pr-2 text-[10px] font-semibold text-white"
+                  style={{
+                    width: `${Math.max(2, data.circle.coverage_percent)}%`,
+                    background: "linear-gradient(90deg, #0EA5E9 0%, #38bdf8 100%)",
+                    transition: "width 600ms ease-out",
+                  }}
+                  data-testid="circle-coverage-bar"
                 >
                   {data.circle.coverage_percent > 15 ? `${data.circle.coverage_percent}%` : ""}
                 </div>
@@ -276,8 +281,13 @@ export default function CohortDashboard() {
                 </p>
                 <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-violet-500 to-pink-400 flex items-center justify-end pr-2 text-[10px] font-semibold text-white transition-all"
-                    style={{ width: `${data.circle.intros.coverage_percent}%` }}
+                    className="h-full flex items-center justify-end pr-2 text-[10px] font-semibold text-white"
+                    style={{
+                      width: `${Math.max(2, data.circle.intros.coverage_percent)}%`,
+                      background: "linear-gradient(90deg, #8b5cf6 0%, #ec4899 100%)",
+                      transition: "width 600ms ease-out",
+                    }}
+                    data-testid="intros-coverage-bar"
                   >
                     {data.circle.intros.coverage_percent > 15
                       ? `${data.circle.intros.coverage_percent}%`

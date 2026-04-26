@@ -978,6 +978,16 @@ async def students_lookup(email: str, user: dict = Depends(get_current_user)):
     }
 
 
+@api.get("/students/name-search")
+async def students_name_search(
+    q: str,
+    limit: int = 10,
+    user: dict = Depends(get_current_user),
+):
+    """Return up to N candidate students matching the name query."""
+    return await lookup.name_search(db, q, limit=limit)
+
+
 @api.post("/students/circle-cache/refresh")
 async def circle_cache_refresh(user: dict = Depends(get_current_user)):
     """Force-refresh the Circle members cache. Returns counts."""
