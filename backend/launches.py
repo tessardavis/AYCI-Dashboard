@@ -262,7 +262,134 @@ def _classify_product(description: str) -> str:
     return description[:60] or "Other"
 
 
-# -------------------------------------------------------------- Comparison
+# -------------------------------------------------------------- Pace tracker
+async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> dict:
+    """
+    Forecast a launch's final revenue based on the cumulative sales curve of
+    previous launches at the same day_offset.
+    """
+    from datetime import datetime, timezone
+    import asyncio
+
+    if not current_launch.get("start_date"):
+        return {"error": "Launch has no start_date"}
+
+    start = datetime.fromisoformat(current_launch["start_date"]).date()
+    today = datetime.now(timezone.utc).date()
+    today_offset = (today - start).days
+    if today_offset < 0:
+        return {
+            "today_offset": today_offset,
+            "forecast": None,
+            "explanation": "Launch hasn't started yet.",
+            "confidence": "low",
+        }
+
+    end_date = datetime.fromisoformat(current_launch["end_date"]).date() if current_launch.get("end_date") else None
+    days_to_close = (end_date - today).days if end_date else None
+
+    # Fetch current launch sales + each previous launch in parallel
+    end_iso = today.isoformat() + "T23:59:59Z"
+    start_iso = current_launch["start_date"] + "T00:00:00Z"
+
+    async def _fetch_prev(prev: dict) -> tuple[dict, dict] | None:
+        if not prev.get("start_date") or not prev.get("end_date"):
+            return None
+        try:
+            res = await fetch_sales(
+                prev["start_date"] + "T00:00:00Z",
+                prev["end_date"] + "T23:59:59Z",
+            )
+        except Exception:
+            return None
+        return prev, res
+
+    results = await asyncio.gather(
+        fetch_sales(start_iso, end_iso),
+        *[_fetch_prev(p) for p in previous_launches],
+        return_exceptions=False,
+    )
+    current_sales = results[0]
+    prev_results = [r for r in results[1:] if r]
+    today_amount = current_sales.get("total_amount_gbp", 0.0)
+
+    ratios: list[dict] = []
+    for prev, prev_sales in prev_results:
+        prev_start = datetime.fromisoformat(prev["start_date"]).date()
+        amount_at_today = 0.0
+        final_amount = 0.0
+        for row in prev_sales.get("by_day", []):
+            try:
+                d = datetime.fromisoformat(row["date"]).date()
+            except ValueError:
+                continue
+            offset = (d - prev_start).days
+            final_amount += row["amount_gbp"]
+            if offset <= today_offset:
+                amount_at_today += row["amount_gbp"]
+        if amount_at_today > 0 and final_amount > 0:
+            ratios.append({
+                "id": prev["id"],
+                "name": prev["name"],
+                "amount_at_today": round(amount_at_today, 2),
+                "final": round(final_amount, 2),
+                "ratio": round(final_amount / amount_at_today, 3),
+            })
+
+    targets = {
+        "good": current_launch.get("target_good", 0),
+        "better": current_launch.get("target_better", 0),
+        "best": current_launch.get("target_best", 0),
+    }
+
+    if not ratios:
+        return {
+            "today_offset": today_offset,
+            "today_amount": today_amount,
+            "forecast": None,
+            "confidence": "low",
+            "ratios": [],
+            "targets": targets,
+            "explanation": "No previous launches have enough data at this day-offset yet.",
+            "days_to_close": days_to_close,
+        }
+
+    avg_ratio = sum(r["ratio"] for r in ratios) / len(ratios)
+    forecast = round(today_amount * avg_ratio, 2)
+
+    if today_offset < 5:
+        confidence = "low"
+    elif today_offset < 15:
+        confidence = "medium"
+    else:
+        if len(ratios) >= 2:
+            spread = (max(r["ratio"] for r in ratios) - min(r["ratio"] for r in ratios)) / avg_ratio
+            confidence = "high" if spread < 0.25 else "medium"
+        else:
+            confidence = "medium"
+
+    if forecast >= targets["best"]:
+        verdict = "On pace for Best"
+    elif forecast >= targets["better"]:
+        verdict = "On pace for Better"
+    elif forecast >= targets["good"]:
+        verdict = "On pace for Good"
+    else:
+        verdict = "Below Good"
+
+    return {
+        "today_offset": today_offset,
+        "today_amount": today_amount,
+        "forecast": forecast,
+        "avg_ratio": round(avg_ratio, 3),
+        "confidence": confidence,
+        "ratios": ratios,
+        "targets": targets,
+        "verdict": verdict,
+        "days_to_close": days_to_close,
+    }
+
+
 def align_by_day_offset(by_day: list[dict], start_iso: str) -> list[dict]:
     """
     Convert a series of {date: '2026-04-01', ...} into {day_offset: 0, ...}

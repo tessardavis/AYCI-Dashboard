@@ -22,6 +22,7 @@ import {
 } from "recharts";
 import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { PaceTrackerCard } from "@/components/PaceTracker";
 
 const PHASE_LABELS = {
   early_signups: "Early signups",
@@ -234,6 +235,9 @@ export default function LaunchDashboard() {
               )}
             </button>
           </div>
+
+          {/* Pace tracker — only when current launch is the active one */}
+          <PaceTrackerCard />
 
           {/* Webinar registrations chart */}
           {registrations && !registrations.error && (

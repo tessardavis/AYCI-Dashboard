@@ -1187,6 +1187,66 @@ async def launch_comparison(
     }
 
 
+@api.get("/launches/active/pace")
+async def active_launch_pace(user: dict = Depends(get_current_user)):
+    """
+    Returns the pace for the launch that's currently in progress (today is
+    between its start_date and end_date). Cached in Mongo for 1 hour to
+    keep the dashboard snappy (computation involves multiple Stripe pulls).
+    """
+    from datetime import datetime, timezone, timedelta
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    active = await db.launches.find_one(
+        {"start_date": {"$lte": today_iso}, "end_date": {"$gte": today_iso}}, {"_id": 0}
+    )
+    if not active:
+        return {"active": False, "message": "No active launch"}
+
+    cache_key = f"pace:{active['id']}:{today_iso}"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    cached = await db.pace_cache.find_one({"_id": cache_key}, {"_id": 0})
+    if cached and cached.get("cached_at") and (
+        cached["cached_at"].replace(tzinfo=timezone.utc) if cached["cached_at"].tzinfo is None else cached["cached_at"]
+    ) > cutoff:
+        return {**cached["payload"], "cached": True}
+
+    all_launches = await db.launches.find({}, {"_id": 0}).sort("start_date", -1).to_list(50)
+    previous = [
+        L for L in all_launches
+        if L["id"] != active["id"] and L.get("start_date", "") < active["start_date"]
+    ][:3]
+    pace = await launches_mod.compute_pace(active, previous)
+    pace["active"] = True
+    pace["launch_id"] = active["id"]
+    pace["launch_name"] = active["name"]
+    pace["webinar_date"] = active.get("webinar_date")
+
+    await db.pace_cache.update_one(
+        {"_id": cache_key},
+        {"$set": {"payload": pace, "cached_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {**pace, "cached": False}
+
+
+@api.get("/launches/{launch_id}/pace")
+async def launch_pace(launch_id: str, user: dict = Depends(get_current_user)):
+    """
+    Forecast where the launch will land by close, based on previous-launch ratios.
+    """
+    current = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not current:
+        raise HTTPException(404, "Launch not found")
+
+    all_launches = await db.launches.find({}, {"_id": 0}).sort("start_date", -1).to_list(50)
+    previous = [
+        L for L in all_launches
+        if L["id"] != launch_id and L.get("start_date", "") < current["start_date"]
+    ][:3]
+    return await launches_mod.compute_pace(current, previous)
+
+
 @api.get("/cohorts/summary")
 async def cohort_summary_endpoint(
     cohort: str = "April 26",
