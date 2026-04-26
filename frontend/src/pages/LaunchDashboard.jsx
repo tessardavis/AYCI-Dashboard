@@ -157,6 +157,9 @@ export default function LaunchDashboard() {
         </div>
       )}
 
+      {/* Year overview strip — always visible, click a launch to switch */}
+      <YearOverview onSelect={setLaunchId} selectedId={launchId} />
+
       {launch && (
         <>
           {/* Phase timeline */}

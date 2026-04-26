@@ -13,6 +13,124 @@ const VERDICT_TONE = {
   "Below Good": { bg: "bg-rose-50", text: "text-rose-700", bar: "#ef4444" },
 };
 
+function ForecastSparkline({
+  currentCumul = [],
+  prevCumul = [],
+  targets = {},
+  forecast = 0,
+  todayOffset = 0,
+  barColor = "#0ea5e9",
+  width = 110,
+  height = 44,
+}) {
+  // Build x range from min day_offset to max day_offset across all series
+  const allOffsets = [
+    ...currentCumul.map((p) => p.day_offset),
+    ...prevCumul.flatMap((s) => s.series?.map((p) => p.day_offset) || []),
+  ];
+  const allValues = [
+    ...currentCumul.map((p) => p.value),
+    ...prevCumul.flatMap((s) => s.series?.map((p) => p.value) || []),
+    targets.good || 0,
+    targets.better || 0,
+    targets.best || 0,
+    forecast || 0,
+  ];
+  if (allOffsets.length === 0 || allValues.length === 0) {
+    return <div className="w-[110px] h-[44px]" />;
+  }
+  const xMin = Math.min(...allOffsets, 0);
+  const xMax = Math.max(...allOffsets, todayOffset);
+  const yMax = Math.max(...allValues, 1);
+  const xRange = Math.max(xMax - xMin, 1);
+  const px = (x) => ((x - xMin) / xRange) * (width - 2) + 1;
+  const py = (y) => height - 2 - (y / yMax) * (height - 4);
+  const toPath = (series) =>
+    series.length === 0
+      ? ""
+      : series
+          .map((p, i) => `${i === 0 ? "M" : "L"} ${px(p.day_offset)} ${py(p.value)}`)
+          .join(" ");
+
+  // forecast endpoint at last day_offset of current launch (or today)
+  const lastCurrent = currentCumul[currentCumul.length - 1];
+  const forecastX = px(xMax);
+  const forecastY = py(forecast);
+  const todayPoint = lastCurrent
+    ? { x: px(lastCurrent.day_offset), y: py(lastCurrent.value) }
+    : null;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className="overflow-visible flex-shrink-0"
+      data-testid="pace-forecast-sparkline"
+    >
+      {/* Target reference line (best) */}
+      {targets.best > 0 && (
+        <line
+          x1={1}
+          x2={width - 1}
+          y1={py(targets.best)}
+          y2={py(targets.best)}
+          stroke="#7c3aed"
+          strokeWidth="1"
+          strokeDasharray="2 2"
+          opacity="0.4"
+        />
+      )}
+      {/* Previous launch curves (faded) */}
+      {prevCumul.map((s, i) => (
+        <path
+          key={s.id || i}
+          d={toPath(s.series || [])}
+          fill="none"
+          stroke="#94a3b8"
+          strokeWidth="1"
+          opacity="0.5"
+        />
+      ))}
+      {/* Current launch curve */}
+      <path
+        d={toPath(currentCumul)}
+        fill="none"
+        stroke={barColor}
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Forecast projection (dashed line from today → forecast) */}
+      {todayPoint && (
+        <line
+          x1={todayPoint.x}
+          y1={todayPoint.y}
+          x2={forecastX}
+          y2={forecastY}
+          stroke={barColor}
+          strokeWidth="1.25"
+          strokeDasharray="2 2"
+          opacity="0.7"
+        />
+      )}
+      {/* Today dot */}
+      {todayPoint && (
+        <circle cx={todayPoint.x} cy={todayPoint.y} r="2" fill={barColor} />
+      )}
+      {/* Forecast dot */}
+      <circle
+        cx={forecastX}
+        cy={forecastY}
+        r="2.5"
+        fill="white"
+        stroke={barColor}
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
 export default function PaceTrackerWidget() {
   const [pace, setPace] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -67,11 +185,23 @@ export default function PaceTrackerWidget() {
 
       {pace.forecast !== null ? (
         <>
-          <div className="font-display font-bold text-2xl text-[var(--ayci-ink)]">
-            {fmtGbp(pace.forecast)}
-          </div>
-          <div className={`inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${tone.bg} ${tone.text} font-semibold mt-1`}>
-            {pace.verdict}
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              <div className="font-display font-bold text-2xl text-[var(--ayci-ink)]">
+                {fmtGbp(pace.forecast)}
+              </div>
+              <div className={`inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${tone.bg} ${tone.text} font-semibold mt-1`}>
+                {pace.verdict}
+              </div>
+            </div>
+            <ForecastSparkline
+              currentCumul={pace.current_cumul}
+              prevCumul={pace.prev_cumul}
+              targets={targets}
+              forecast={pace.forecast}
+              todayOffset={pace.today_offset}
+              barColor={tone.bar}
+            />
           </div>
           <div className="mt-3 relative h-2 bg-slate-100 rounded-full">
             {/* Target markers */}
