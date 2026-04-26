@@ -99,7 +99,7 @@ export default function YearOverview({ onSelect, selectedId }) {
             const { left, width } = pctRange(L.start_date, L.end_date);
             const isSelected = L.id === selectedId;
             const tone = L.is_active
-              ? { bg: "#0EA5E9", border: "#0284c7" }
+              ? { bg: "#4457B6", border: "#182E87" }
               : L.is_future
               ? { bg: "#e2e8f0", border: "#cbd5e1" }
               : { bg: "#94a3b8", border: "#64748b" };
@@ -112,7 +112,7 @@ export default function YearOverview({ onSelect, selectedId }) {
                   width,
                   top: `${(idx % 2) * 30 + 8}px`,
                   backgroundColor: tone.bg,
-                  borderColor: isSelected ? "#0284c7" : tone.border,
+                  borderColor: isSelected ? "#182E87" : tone.border,
                   borderWidth: isSelected ? 2 : 1,
                   boxShadow: isSelected ? "0 0 0 3px rgba(14, 165, 233, 0.25)" : "none",
                 }}

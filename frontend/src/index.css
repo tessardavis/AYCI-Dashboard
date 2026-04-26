@@ -1,20 +1,32 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=tasa-orbiter@400,500,600,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-    --ayci-sidebar: #1a1f36;
-    --ayci-sidebar-muted: #94a3b8;
+    /* AYCI brand palette */
+    --ayci-brand-primary: #182E87;       /* deep navy — sidebar, dark backgrounds */
+    --ayci-brand-accent: #4457B6;        /* indigo — primary CTA, active states */
+    --ayci-brand-cyan: #01D9DC;          /* aqua — secondary highlight */
+    --ayci-brand-magenta: #AF41AC;       /* magenta — tertiary highlight */
+    --ayci-brand-warm: #FEB870;          /* warm amber — spotlight CTA, sparingly */
+    --ayci-brand-light: #F9F9F9;         /* off-white surface */
+
+    /* Semantic mapping */
+    --ayci-sidebar: #182E87;
+    --ayci-sidebar-muted: #a5b4d7;
     --ayci-sidebar-active: #ffffff;
-    --ayci-canvas: #f8fafc;
+    --ayci-canvas: #F9F9F9;
     --ayci-card: #ffffff;
-    --ayci-ink: #111827;
+    --ayci-ink: #0F1A4A;                 /* deep brand-tinted ink */
     --ayci-ink-muted: #6b7280;
     --ayci-border: #e2e8f0;
-    --ayci-accent: #0ea5e9;
-    --ayci-accent-hover: #0284c7;
+    --ayci-accent: #4457B6;
+    --ayci-accent-hover: #182E87;
+    --ayci-teal: #4457B6;                /* legacy alias — kept for inline refs */
+
     --ayci-success-bg: #e8f5e9;
     --ayci-success-ink: #166534;
     --ayci-danger-bg: #ffebee;
@@ -27,7 +39,8 @@
 
 body {
     margin: 0;
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: "TASA Orbiter", "TASA Orbiter Display", "Inter",
+        -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: var(--ayci-canvas);
@@ -35,12 +48,25 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6, .font-display {
-    font-family: "Manrope", "Inter", sans-serif;
+    font-family: "TASA Orbiter", "Manrope", "Inter", sans-serif;
     letter-spacing: -0.02em;
 }
 
+.font-subhead {
+    font-family: "Space Grotesk", "Syne", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.font-button {
+    font-family: "Syne", "TASA Orbiter", sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .metric-number {
-    font-family: "Manrope", sans-serif;
+    font-family: "TASA Orbiter", "Manrope", sans-serif;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
 }
@@ -58,7 +84,7 @@ code {
         --card-foreground: 222 47% 11%;
         --popover: 0 0% 100%;
         --popover-foreground: 222 47% 11%;
-        --primary: 199 89% 48%;
+        --primary: 228 47% 49%;
         --primary-foreground: 0 0% 100%;
         --secondary: 210 40% 96%;
         --secondary-foreground: 222 47% 11%;
@@ -70,8 +96,8 @@ code {
         --destructive-foreground: 0 0% 100%;
         --border: 214 32% 91%;
         --input: 214 32% 91%;
-        --ring: 199 89% 48%;
-        --chart-1: 199 89% 48%;
+        --ring: 228 47% 49%;
+        --chart-1: 228 47% 49%;
         --chart-2: 173 58% 39%;
         --chart-3: 27 87% 67%;
         --chart-4: 43 74% 66%;

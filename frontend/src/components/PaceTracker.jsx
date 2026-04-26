@@ -19,7 +19,7 @@ function ForecastSparkline({
   targets = {},
   forecast = 0,
   todayOffset = 0,
-  barColor = "#0ea5e9",
+  barColor = "#4457B6",
   width = 110,
   height = 44,
 }) {

@@ -3,7 +3,7 @@ import { LineChart, Line, YAxis } from "recharts";
 const WIDTH = 80;
 const HEIGHT = 32;
 
-export default function Sparkline({ data, color = "#0EA5E9" }) {
+export default function Sparkline({ data, color = "#4457B6" }) {
   const series = (data || []).map((v, i) => ({ i, v: v ?? 0 }));
   if (series.length === 0) {
     return <div className="text-[10px] text-[var(--ayci-ink-muted)]">—</div>;

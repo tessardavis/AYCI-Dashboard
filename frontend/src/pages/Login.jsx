@@ -32,10 +32,13 @@ export default function Login() {
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center font-display font-extrabold"
-            style={{ backgroundColor: "var(--ayci-accent)", color: "var(--ayci-sidebar)" }}
+            className="w-11 h-11 rounded-lg flex items-center justify-center bg-white/10 p-1.5"
           >
-            A
+            <img
+              src="/ayci-icon.png"
+              alt="AYCI"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="font-display font-bold text-xl">AYCI Academy</div>
         </div>

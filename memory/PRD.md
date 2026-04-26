@@ -56,6 +56,13 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Brand alignment (Apr 26)
+- Applied AYCI brand guidelines across the entire app:
+  - **Colors**: sidebar/dark backgrounds → `#182E87` (brand primary navy), accents/CTAs → `#4457B6` (brand indigo, matches the icon), warm spotlight → `#FEB870`, magenta/cyan available as `--ayci-brand-magenta` / `--ayci-brand-cyan`. All references to the legacy teal `#0EA5E9` swept through `LaunchDashboard`, `CohortDashboard`, `Sparkline`, `PaceTracker`, `YearOverview`, AppShell, and shadcn HSL primary/ring variables.
+  - **Typography**: switched from Manrope/Inter to **TASA Orbiter** (Fontshare) for headlines + body and **Syne** (Google Fonts) for buttons/display, matching the brand style guide. Added utility classes `.font-display`, `.font-subhead`, `.font-button`.
+  - **Logo**: AYCI icon (cross/diamond pattern from the brand kit) now used as the favicon (`/public/favicon.png`) and in the sidebar + login screen — replaced the old "A" letter tile.
+  - Brand variables exposed as CSS custom properties (`--ayci-brand-primary`, `--ayci-brand-accent`, `--ayci-brand-cyan`, `--ayci-brand-magenta`, `--ayci-brand-warm`, `--ayci-brand-light`) for any future component to consume.
+
 ### 2026-04 — Year overview + Pace sparkline (Apr 26)
 - **Year overview strip** added at the top of `/launches`: horizontal timeline with month ticks, click-to-switch launch bars (active highlighted in teal, future in slate, past in grey), today marker. Powered by `/api/launches/year-overview`.
 - **Mini forecast sparkline** added inline next to the £ forecast in `PaceTrackerWidget` (shown on Weekly Scorecard): faded grey curves for previous-launch cumulative sales overlaid with the current-launch amber curve, today dot, dashed projection line to forecast endpoint, and dashed best-target reference line.

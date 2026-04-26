@@ -32,15 +32,18 @@ export default function AppShell() {
         <div className="px-6 pt-8 pb-6">
           <div className="flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center font-display font-extrabold text-[var(--ayci-sidebar)]"
-              style={{ backgroundColor: "var(--ayci-accent)" }}
+              className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 p-1.5"
               aria-hidden="true"
             >
-              A
+              <img
+                src="/ayci-icon.png"
+                alt="AYCI"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="text-white font-display font-bold tracking-tight leading-tight">AYCI Academy</div>
-              <div className="text-[11px] uppercase tracking-widest text-[var(--ayci-sidebar-muted)]">Team Dashboard</div>
+              <div className="text-[11px] uppercase tracking-widest text-[var(--ayci-sidebar-muted)] font-subhead">Team Dashboard</div>
             </div>
           </div>
         </div>

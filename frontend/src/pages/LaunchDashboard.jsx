@@ -36,16 +36,16 @@ const PHASE_LABELS = {
 };
 
 const PHASE_COLORS = {
-  early_signups: "#0ea5e9",
+  early_signups: "#4457B6",
   flash_sale: "#dc2626",
   webinar: "#7c3aed",
   open_cart: "#10b981",
-  legacy_upgrades: "#a855f7",
-  close_cart: "#f59e0b",
+  legacy_upgrades: "#AF41AC",
+  close_cart: "#FEB870",
   in_between: "#64748b",
 };
 
-const SERIES_COLORS = ["#0ea5e9", "#94a3b8", "#cbd5e1"];
+const SERIES_COLORS = ["#4457B6", "#94a3b8", "#cbd5e1"];
 
 const fmtGbp = (v) =>
   `£${Number(v || 0).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
@@ -506,7 +506,7 @@ function SourceBreakdown({ registrations }) {
                   className="h-full rounded-full"
                   style={{
                     width: `${pct}%`,
-                    backgroundColor: "#0ea5e9",
+                    backgroundColor: "#4457B6",
                   }}
                 />
               </div>
@@ -674,7 +674,7 @@ function SalesByProduct({ sales }) {
               tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
             />
             <Tooltip formatter={(v) => fmtGbp(v)} />
-            <Bar dataKey="amount_gbp" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="amount_gbp" fill="#4457B6" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

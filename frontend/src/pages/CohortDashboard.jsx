@@ -250,7 +250,7 @@ export default function CohortDashboard() {
                   className="h-full flex items-center justify-end pr-2 text-[10px] font-semibold text-white"
                   style={{
                     width: `${Math.max(2, data.circle.coverage_percent)}%`,
-                    background: "linear-gradient(90deg, #0EA5E9 0%, #38bdf8 100%)",
+                    background: "linear-gradient(90deg, #4457B6 0%, #01D9DC 100%)",
                     transition: "width 600ms ease-out",
                   }}
                   data-testid="circle-coverage-bar"
@@ -362,10 +362,10 @@ function tierColor(tier) {
   const t = tier.toLowerCase();
   if (t.includes("academy private") || t === "academy 1:1") return "#7c3aed";
   if (t.includes("vip")) return "#dc2626";
-  if (t.includes("platinum")) return "#0ea5e9";
-  if (t.includes("gold")) return "#f59e0b";
+  if (t.includes("platinum")) return "#4457B6";
+  if (t.includes("gold")) return "#FEB870";
   if (t.includes("silver")) return "#64748b";
   if (t.includes("boost")) return "#10b981";
-  if (t === "academy") return "#0EA5E9";
-  return "#6366f1";
+  if (t === "academy") return "#4457B6";
+  return "#AF41AC";
 }
