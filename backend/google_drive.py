@@ -131,19 +131,88 @@ async def _list_docs() -> list[dict]:
     return out
 
 
-async def _fetch_doc_text(doc_id: str) -> str:
-    """Export a Google Doc as plain text. Handles shared-drive access."""
+async def _fetch_doc_text(file_id: str, mime: str) -> str:
+    """
+    Read the file as plain text. Handles:
+    - Google Docs (export to text/plain)
+    - .docx (export via Drive's auto-conversion)
+    - .html (download raw, strip tags)
+    - .txt / .md (download raw)
+    Anything else raises so the caller can show a friendly message.
+    """
     drive = _drive_service()
     try:
-        result = drive.files().export(
-            fileId=doc_id,
-            mimeType="text/plain",
-        ).execute()
+        if mime == "application/vnd.google-apps.document":
+            result = drive.files().export(
+                fileId=file_id, mimeType="text/plain",
+            ).execute()
+        elif mime in (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+        ):
+            # Drive can convert Word docs on the fly
+            result = drive.files().export_media(
+                fileId=file_id, mimeType="text/plain",
+            ).execute() if False else _docx_to_text(drive, file_id)
+        elif mime in ("text/html", "application/xhtml+xml"):
+            raw = drive.files().get_media(
+                fileId=file_id, supportsAllDrives=True,
+            ).execute()
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+            return _strip_html(text)
+        elif mime in ("text/plain", "text/markdown"):
+            raw = drive.files().get_media(
+                fileId=file_id, supportsAllDrives=True,
+            ).execute()
+            return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+        else:
+            raise RuntimeError(f"Unsupported mime type for summarisation: {mime}")
+
         if isinstance(result, bytes):
             return result.decode("utf-8", errors="replace")
         return str(result)
     except HttpError as e:
-        raise RuntimeError(f"Drive export failed: {e}") from e
+        raise RuntimeError(f"Drive read failed: {e}") from e
+
+
+def _docx_to_text(drive, file_id: str) -> str:
+    """Download a .docx and return its plain text using python-docx."""
+    raw = drive.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
+    if not isinstance(raw, bytes):
+        raw = bytes(raw)
+    try:
+        import io
+        from docx import Document  # python-docx
+        doc = Document(io.BytesIO(raw))
+        parts: list[str] = []
+        for p in doc.paragraphs:
+            if p.text.strip():
+                parts.append(p.text)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.text.strip():
+                        parts.append(cell.text)
+        return "\n".join(parts)
+    except ImportError:
+        raise RuntimeError("python-docx not installed — can't read .docx files")
+
+
+def _strip_html(html: str) -> str:
+    """Best-effort plaintext from an HTML blob."""
+    import re
+    # Remove script/style first
+    html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+    # Replace <br>, </p>, </div>, </li> with newlines for readability
+    html = re.sub(r"<\s*(br|/p|/div|/li|/h[1-6])\s*/?>", "\n", html, flags=re.I)
+    # Strip remaining tags
+    html = re.sub(r"<[^>]+>", " ", html)
+    # Decode common HTML entities
+    html = (html.replace("&nbsp;", " ").replace("&amp;", "&")
+                .replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&quot;", '"').replace("&#39;", "'"))
+    # Collapse whitespace but keep paragraph breaks
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in html.splitlines()]
+    return "\n".join([ln for ln in lines if ln])
 
 
 async def _summarise(doc_name: str, doc_text: str) -> str:
@@ -227,12 +296,19 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
         doc_id = match.get("target_id") or match["id"]
         target_mime = match.get("target_mime") or match["mimeType"]
         web_view_link = match.get("web_view_link")
-        # For shortcuts, the web_view_link may be missing — build one
         if not web_view_link and match.get("target_id"):
-            web_view_link = f"https://docs.google.com/document/d/{match['target_id']}/edit"
+            web_view_link = f"https://drive.google.com/file/d/{match['target_id']}/view"
 
-        if target_mime != "application/vnd.google-apps.document":
-            # Non-doc file (PDF, sheet, etc.) — just link it
+        SUPPORTED_MIMES = {
+            "application/vnd.google-apps.document",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/html",
+            "application/xhtml+xml",
+            "text/plain",
+            "text/markdown",
+        }
+
+        if target_mime not in SUPPORTED_MIMES:
             payload = {
                 "found": True,
                 "file": {
@@ -243,21 +319,19 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
                     "mime": target_mime,
                 },
                 "summary": None,
-                "error": "File is not a Google Doc — summary unavailable. Open the link to view.",
+                "error": f"File type ({target_mime.split('.')[-1]}) not summarisable yet — open the link to view.",
                 "candidates_scanned": len(files),
                 "cached": False,
             }
         else:
             try:
-                text = await _fetch_doc_text(doc_id)
+                text = await _fetch_doc_text(doc_id, target_mime)
             except RuntimeError as exc:
-                # Target doc isn't shared with our service account (common for
-                # shortcut-style layouts). Return the shortcut link + a hint.
                 msg = str(exc)
                 hint = (
                     "Couldn't read the doc — looks like the target file isn't "
-                    "shared with the service account. Share the doc (or its "
-                    "parent folder) with "
+                    "shared with the service account. Share it (or its parent "
+                    "folder) with "
                     "ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com "
                     "(Viewer access) to enable the summary."
                 ) if "notFound" in msg or "not found" in msg.lower() or "403" in msg else msg

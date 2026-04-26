@@ -112,8 +112,7 @@ export default function PrivateDocCard({ email, name }) {
         <div className="text-sm text-[var(--ayci-ink)]">
           <div
             className={
-              "whitespace-pre-wrap prose prose-sm max-w-none " +
-              (expanded ? "" : "line-clamp-[18]")
+              "space-y-1 " + (expanded ? "" : "max-h-96 overflow-hidden")
             }
           >
             {renderMarkdown(result.summary)}
@@ -121,7 +120,7 @@ export default function PrivateDocCard({ email, name }) {
           {result.summary.length > 400 && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="text-xs text-[var(--ayci-teal)] hover:underline mt-1"
+              className="text-xs text-[var(--ayci-teal)] hover:underline mt-2"
             >
               {expanded ? "Show less" : "Show more"}
             </button>
@@ -132,17 +131,35 @@ export default function PrivateDocCard({ email, name }) {
   );
 }
 
-// Super-light markdown renderer: **bold** → <strong>
+// Light markdown renderer: handles **bold**, # headers, - bullets, line breaks
 function renderMarkdown(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/);
-  return parts.map((p, i) => {
-    if (p.startsWith("**") && p.endsWith("**")) {
-      return (
-        <strong key={i} className="font-display font-semibold text-[var(--ayci-ink)]">
-          {p.slice(2, -2)}
-        </strong>
-      );
+  const lines = text.split("\n");
+  return lines.map((line, i) => {
+    let className = "";
+    let content = line;
+    if (/^#{1,3}\s/.test(line)) {
+      // Header — strip the # and bold it
+      content = line.replace(/^#{1,3}\s*/, "");
+      className = "font-display font-bold text-base text-[var(--ayci-ink)] mt-2 first:mt-0";
+    } else if (/^[-*]\s/.test(line)) {
+      content = line.replace(/^[-*]\s*/, "• ");
+      className = "ml-2";
     }
-    return <span key={i}>{p}</span>;
+    // Inline **bold**
+    const parts = content.split(/(\*\*[^*]+\*\*)/);
+    return (
+      <div key={i} className={className}>
+        {parts.map((p, j) => {
+          if (p.startsWith("**") && p.endsWith("**")) {
+            return (
+              <strong key={j} className="font-display font-semibold text-[var(--ayci-ink)]">
+                {p.slice(2, -2)}
+              </strong>
+            );
+          }
+          return <span key={j}>{p}</span>;
+        })}
+      </div>
+    );
   });
 }
