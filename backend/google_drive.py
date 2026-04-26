@@ -93,6 +93,8 @@ async def _list_docs() -> list[dict]:
     """
     Returns list of {id, name, mimeType, modifiedTime, web_view_link,
     target_id (if shortcut), target_mime}.
+
+    `supportsAllDrives` + `includeItemsFromAllDrives` enable Shared Drive folders.
     """
     drive = _drive_service()
     q = f"'{_folder_id()}' in parents and trashed=false"
@@ -104,6 +106,9 @@ async def _list_docs() -> list[dict]:
             pageSize=200,
             fields="nextPageToken, files(id,name,mimeType,modifiedTime,webViewLink,shortcutDetails)",
             pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            corpora="allDrives",
         ).execute()
         files.extend(res.get("files", []))
         page_token = res.get("nextPageToken")
