@@ -479,10 +479,21 @@ function RocksSection({ isAdmin }) {
 }
 
 // -------- Launches --------
+const PHASE_KEYS = [
+  ["early_signups", "Early signups"],
+  ["flash_sale", "Flash sale"],
+  ["webinar", "Webinar"],
+  ["open_cart", "Open cart"],
+  ["legacy_upgrades", "Legacy upgrades"],
+  ["close_cart", "Close cart"],
+  ["in_between", "In-between"],
+];
+
 function LaunchesSection({ isAdmin }) {
   const [launches, setLaunches] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", start_date: "", webinar_date: "", target_good: 140000, target_better: 160000, target_best: 200000 });
+  const [form, setForm] = useState({ name: "", code: "", start_date: "", end_date: "", webinar_date: "", target_good: 140000, target_better: 160000, target_best: 200000 });
+  const [editing, setEditing] = useState(null); // launch object being edited
 
   const load = useCallback(async () => {
     const { data } = await apiClient.get("/launches");
@@ -511,6 +522,37 @@ function LaunchesSection({ isAdmin }) {
     load();
   };
 
+  const saveEdit = async () => {
+    try {
+      await apiClient.patch(`/launches/${editing.id}`, {
+        name: editing.name,
+        code: editing.code,
+        start_date: editing.start_date,
+        end_date: editing.end_date,
+        webinar_date: editing.webinar_date,
+        target_good: Number(editing.target_good),
+        target_better: Number(editing.target_better),
+        target_best: Number(editing.target_best),
+        phases: editing.phases,
+      });
+      toast.success("Launch updated");
+      setEditing(null);
+      load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+
+  const setEditingPhase = (key, field, value) => {
+    setEditing((cur) => ({
+      ...cur,
+      phases: {
+        ...(cur.phases || {}),
+        [key]: { ...((cur.phases || {})[key] || {}), [field]: value },
+      },
+    }));
+  };
+
   return (
     <Panel
       title="Launches"
@@ -524,9 +566,11 @@ function LaunchesSection({ isAdmin }) {
           <DialogContent>
             <DialogHeader><DialogTitle>New launch</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Name</Label><Input placeholder="e.g. SEP-26" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="launch-form-name" /></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div><Label>Name</Label><Input placeholder="e.g. September 2026" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="launch-form-name" /></div>
+              <div><Label>Kit tag code</Label><Input placeholder="e.g. SEP-26 (matches '[AYCI SEP-26] Webinar - Registered - X' tags)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} data-testid="launch-form-code" /></div>
+              <div className="grid grid-cols-3 gap-3">
                 <div><Label>Start date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></div>
+                <div><Label>End date</Label><Input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} /></div>
                 <div><Label>Webinar date</Label><Input type="date" value={form.webinar_date} onChange={(e) => setForm({ ...form, webinar_date: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -534,6 +578,7 @@ function LaunchesSection({ isAdmin }) {
                 <div><Label>Better (£)</Label><Input type="number" value={form.target_better} onChange={(e) => setForm({ ...form, target_better: e.target.value })} /></div>
                 <div><Label>Best (£)</Label><Input type="number" value={form.target_best} onChange={(e) => setForm({ ...form, target_best: e.target.value })} /></div>
               </div>
+              <p className="text-xs text-[var(--ayci-ink-muted)]">Phase dates can be set after creating — click "Edit phases" on the launch row.</p>
             </div>
             <DialogFooter>
               <Button onClick={save} data-testid="launch-form-save" style={{ backgroundColor: "var(--ayci-accent)" }}>Save</Button>
@@ -545,19 +590,87 @@ function LaunchesSection({ isAdmin }) {
       <ul className="divide-y divide-[var(--ayci-border)]">
         {launches.map((l) => (
           <li key={l.id} className="px-6 py-3 flex items-center gap-4">
-            <div className="font-display font-bold text-[var(--ayci-ink)] w-28">{l.name}</div>
-            <div className="text-xs text-[var(--ayci-ink-muted)]">Webinar: {l.webinar_date}</div>
+            <div className="font-display font-bold text-[var(--ayci-ink)] w-40">{l.name}</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] w-24">{l.code || "—"}</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] w-44">Webinar: {l.webinar_date}</div>
             <div className="flex-1 text-xs text-[var(--ayci-ink-muted)]">
-              Good £{Number(l.target_good).toLocaleString()} · Better £{Number(l.target_better).toLocaleString()} · Best £{Number(l.target_best).toLocaleString()}
+              £{Number(l.target_good / 1000).toFixed(0)}k / £{Number(l.target_better / 1000).toFixed(0)}k / £{Number(l.target_best / 1000).toFixed(0)}k
             </div>
             {isAdmin && (
-              <Button variant="ghost" size="icon" onClick={() => remove(l.id)} data-testid={`launch-delete-${l.id}`}>
-                <Trash2 className="w-4 h-4 text-slate-500" />
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditing({ ...l, phases: l.phases || {} })} data-testid={`launch-edit-${l.id}`}>
+                  Edit
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => remove(l.id)} data-testid={`launch-delete-${l.id}`}>
+                  <Trash2 className="w-4 h-4 text-slate-500" />
+                </Button>
+              </>
             )}
           </li>
         ))}
       </ul>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit launch — {editing?.name}</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Name</Label><Input value={editing.name || ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
+                <div><Label>Kit tag code</Label><Input value={editing.code || ""} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} placeholder="e.g. APR-26" data-testid="launch-edit-code" /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>Start date</Label><Input type="date" value={editing.start_date || ""} onChange={(e) => setEditing({ ...editing, start_date: e.target.value })} /></div>
+                <div><Label>End date</Label><Input type="date" value={editing.end_date || ""} onChange={(e) => setEditing({ ...editing, end_date: e.target.value })} /></div>
+                <div><Label>Webinar date</Label><Input type="date" value={editing.webinar_date || ""} onChange={(e) => setEditing({ ...editing, webinar_date: e.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>Good (£)</Label><Input type="number" value={editing.target_good || 0} onChange={(e) => setEditing({ ...editing, target_good: e.target.value })} /></div>
+                <div><Label>Better (£)</Label><Input type="number" value={editing.target_better || 0} onChange={(e) => setEditing({ ...editing, target_better: e.target.value })} /></div>
+                <div><Label>Best (£)</Label><Input type="number" value={editing.target_best || 0} onChange={(e) => setEditing({ ...editing, target_best: e.target.value })} /></div>
+              </div>
+
+              <div className="border-t border-[var(--ayci-border)] pt-4">
+                <h3 className="font-display font-bold text-sm text-[var(--ayci-ink)] mb-2">Launch phases</h3>
+                <p className="text-xs text-[var(--ayci-ink-muted)] mb-3">
+                  Use date+time format (datetime-local). The phase timeline on the Launch Dashboard reads these.
+                </p>
+                <div className="space-y-2">
+                  {PHASE_KEYS.map(([key, label]) => {
+                    const ph = (editing.phases || {})[key] || {};
+                    const trim = (s) => (s ? s.replace("Z", "").slice(0, 16) : "");
+                    return (
+                      <div key={key} className="grid grid-cols-[140px_1fr_1fr] gap-2 items-center">
+                        <span className="text-sm font-medium">{label}</span>
+                        <Input
+                          type="datetime-local"
+                          value={trim(ph.start)}
+                          onChange={(e) => setEditingPhase(key, "start", e.target.value ? `${e.target.value}:00Z` : null)}
+                          data-testid={`phase-${key}-start`}
+                        />
+                        <Input
+                          type="datetime-local"
+                          value={trim(ph.end)}
+                          onChange={(e) => setEditingPhase(key, "end", e.target.value ? `${e.target.value}:00Z` : null)}
+                          data-testid={`phase-${key}-end`}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={saveEdit} data-testid="launch-edit-save" style={{ backgroundColor: "var(--ayci-accent)" }}>
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Panel>
   );
 }

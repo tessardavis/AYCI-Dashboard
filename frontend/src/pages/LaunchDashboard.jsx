@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
-import PageHeader from "@/components/PageHeader";
 import {
   Select,
   SelectContent,
@@ -8,7 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import {
   LineChart,
   Line,
@@ -18,503 +16,673 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  CartesianGrid,
   Legend,
+  CartesianGrid,
+  ReferenceLine,
 } from "recharts";
+import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { formatValue, formatDateShort } from "@/lib/format";
 
-const TIER_PRICES = {
-  academy: 597,
-  private_plus: 1188,
-  vip: 1782,
-  boost: 594,
-  upgrade: 591, // avg PP upgrade
-  upsell: 297, // avg upsell
+const PHASE_LABELS = {
+  early_signups: "Early signups",
+  flash_sale: "Flash sale",
+  webinar: "Webinar",
+  open_cart: "Open cart",
+  legacy_upgrades: "Legacy upgrades",
+  close_cart: "Close cart",
+  in_between: "In-between",
 };
+
+const PHASE_COLORS = {
+  early_signups: "#0ea5e9",
+  flash_sale: "#dc2626",
+  webinar: "#7c3aed",
+  open_cart: "#10b981",
+  legacy_upgrades: "#a855f7",
+  close_cart: "#f59e0b",
+  in_between: "#64748b",
+};
+
+const SERIES_COLORS = ["#0ea5e9", "#94a3b8", "#cbd5e1"];
+
+const fmtGbp = (v) =>
+  `£${Number(v || 0).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
+const fmtDate = (iso) =>
+  iso ? new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "—";
 
 export default function LaunchDashboard() {
   const [launches, setLaunches] = useState([]);
   const [launchId, setLaunchId] = useState(null);
-  const [launchData, setLaunchData] = useState(null);
-  const [daily, setDaily] = useState([]);
-  const [prevDaily, setPrevDaily] = useState([]);
-  const [allData, setAllData] = useState({}); // launch_id -> data
+  const [registrations, setRegistrations] = useState(null);
+  const [sales, setSales] = useState(null);
+  const [comparison, setComparison] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingComparison, setLoadingComparison] = useState(false);
 
-  const loadLaunches = useCallback(async () => {
-    try {
-      const { data } = await apiClient.get("/launches");
-      const sorted = [...data].sort((a, b) =>
-        (b.start_date || "").localeCompare(a.start_date || "")
-      );
-      setLaunches(sorted);
-      if (sorted.length > 0) setLaunchId((current) => current || sorted[0].id);
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLaunches();
-  }, [loadLaunches]);
-
-  const loadLaunchDetail = useCallback(async (activeId, currentLaunches) => {
-    if (!activeId || currentLaunches.length === 0) return;
-    const idx = currentLaunches.findIndex((l) => l.id === activeId);
-    const prev = idx >= 0 && idx + 1 < currentLaunches.length ? currentLaunches[idx + 1] : null;
-    setLoading(true);
-    try {
-      const calls = [
-        apiClient.get(`/launches/${activeId}/data`),
-        apiClient.get(`/launches/${activeId}/daily-registrations`),
-      ];
-      if (prev) {
-        calls.push(apiClient.get(`/launches/${prev.id}/daily-registrations`));
-      }
-      const results = await Promise.all(calls);
-      setLaunchData(results[0].data);
-      setDaily(results[1].data);
-      setPrevDaily(prev ? results[2].data : []);
-
-      // Fetch all launch data for comparison chart
-      const allDataResp = await Promise.all(
-        currentLaunches.map((l) =>
-          apiClient.get(`/launches/${l.id}/data`).then((r) => [l.id, r.data])
-        )
-      );
-      setAllData(Object.fromEntries(allDataResp));
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLaunchDetail(launchId, launches);
-  }, [launchId, launches, loadLaunchDetail]);
-
-  const activeLaunch = useMemo(
-    () => launches.find((l) => l.id === launchId) || null,
-    [launches, launchId]
+  const launch = useMemo(
+    () => launches.find((L) => L.id === launchId),
+    [launches, launchId],
   );
-  const prevLaunch = useMemo(() => {
-    const idx = launches.findIndex((l) => l.id === launchId);
-    return idx >= 0 && idx + 1 < launches.length ? launches[idx + 1] : null;
-  }, [launches, launchId]);
 
-  const sales = useMemo(() => {
-    if (!launchData) return { rows: [], totalCount: 0, totalRevenue: 0 };
-    const rows = [
-      { key: "academy", label: "Academy", price: 597, count: launchData.sales_academy_count || 0 },
-      { key: "private_plus", label: "Private Plus", price: 1188, count: launchData.sales_private_plus_count || 0 },
-      { key: "vip", label: "VIP", price: 1782, count: launchData.sales_vip_count || 0 },
-      { key: "boost", label: "Boost & Go", price: 594, count: launchData.sales_boost_count || 0 },
-      { key: "upgrade", label: "Upgrades (PP/VIP)", price: TIER_PRICES.upgrade, count: launchData.upgrade_count || 0 },
-      { key: "upsell", label: "Upsells (120 Q / 25 Q)", price: TIER_PRICES.upsell, count: launchData.upsell_count || 0 },
-    ].map((r) => ({ ...r, revenue: r.price * r.count }));
-    const totalCount = rows.reduce((s, r) => s + r.count, 0);
-    const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
-    return { rows, totalCount, totalRevenue };
-  }, [launchData]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await apiClient.get("/launches");
+        const sorted = [...data].sort((a, b) =>
+          (b.start_date || "").localeCompare(a.start_date || ""),
+        );
+        setLaunches(sorted);
+        if (sorted[0]) setLaunchId(sorted[0].id);
+      } catch (err) {
+        toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load launches");
+      }
+    })();
+  }, []);
 
-  const chartData = useMemo(() => {
-    // merge current + prev daily registrations on date (label = day offset relative to webinar)
-    const cur = [...(daily || [])].sort((a, b) => a.date.localeCompare(b.date));
-    const prev = [...(prevDaily || [])].sort((a, b) => a.date.localeCompare(b.date));
-    const curLen = cur.length;
-    const prevLen = prev.length;
+  useEffect(() => {
+    if (!launchId) return;
+    setLoading(true);
+    setRegistrations(null);
+    setSales(null);
+    setComparison(null);
+    Promise.all([
+      apiClient
+        .get(`/launches/${launchId}/registrations`, { timeout: 60000 })
+        .then((r) => r.data)
+        .catch((e) => ({ error: formatApiErrorDetail(e.response?.data?.detail) || e.message })),
+      apiClient
+        .get(`/launches/${launchId}/sales`, { timeout: 90000 })
+        .then((r) => r.data)
+        .catch((e) => ({ error: formatApiErrorDetail(e.response?.data?.detail) || e.message })),
+    ])
+      .then(([regs, sales]) => {
+        setRegistrations(regs);
+        setSales(sales);
+      })
+      .finally(() => setLoading(false));
+  }, [launchId]);
 
-    let cumCur = 0;
-    return cur.map((d, i) => {
-      cumCur += Number(d.count) || 0;
-      const prevItem = prev[prev.length - curLen + i]; // align by days-before-webinar
-      return {
-        date: formatDateShort(d.date),
-        daily: Number(d.count) || 0,
-        cumulative: cumCur,
-        prev: prevItem ? Number(prevItem.count) || 0 : null,
-      };
-    });
-  }, [daily, prevDaily]);
-
-  const comparison = useMemo(() => {
-    return launches
-      .slice()
-      .reverse()
-      .map((l) => {
-        const d = allData[l.id] || {};
-        const revenue =
-          (d.sales_academy_count || 0) * 597 +
-          (d.sales_private_plus_count || 0) * 1188 +
-          (d.sales_vip_count || 0) * 1782 +
-          (d.sales_boost_count || 0) * 594 +
-          (d.upgrade_count || 0) * TIER_PRICES.upgrade +
-          (d.upsell_count || 0) * TIER_PRICES.upsell;
-        const salesCount =
-          (d.sales_academy_count || 0) +
-          (d.sales_private_plus_count || 0) +
-          (d.sales_vip_count || 0) +
-          (d.sales_boost_count || 0);
-        return {
-          name: l.name,
-          regs: d.total_registrations || 0,
-          sales: salesCount,
-          revenue: Math.round(revenue),
-        };
-      });
-  }, [launches, allData]);
-
-  const updateField = async (field, value) => {
-    const num = Number(value);
-    const safe = Number.isNaN(num) ? 0 : num;
-    setLaunchData((s) => ({ ...s, [field]: safe }));
+  const loadComparison = async () => {
+    if (!launchId) return;
+    setLoadingComparison(true);
     try {
-      await apiClient.patch(`/launches/${launchId}/data`, { [field]: safe });
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+      const { data } = await apiClient.get(`/launches/${launchId}/comparison`, {
+        params: { n_previous: 2 },
+        timeout: 180000,
+      });
+      setComparison(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Comparison failed");
+    } finally {
+      setLoadingComparison(false);
     }
   };
 
-  if (!launches.length) {
-    return (
-      <div className="p-8">
-        <PageHeader eyebrow="Launches" title="Launch Dashboard" />
-        <div className="text-sm text-[var(--ayci-ink-muted)]">
-          No launches yet. Create one from Settings → Launches.
+  return (
+    <div className="p-8 space-y-6" data-testid="launch-dashboard-page">
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
+            Launch
+          </div>
+          <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
+            {launch?.name || "Launch Dashboard"}
+          </h1>
+          <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
+            Live webinar registrations from ConvertKit and revenue from Stripe — broken
+            down by source / product, with overlay against the previous two launches.
+          </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Select value={launchId || ""} onValueChange={setLaunchId}>
+            <SelectTrigger className="w-56 h-10" data-testid="launch-selector">
+              <SelectValue placeholder="Select launch" />
+            </SelectTrigger>
+            <SelectContent>
+              {launches.map((L) => (
+                <SelectItem key={L.id} value={L.id} data-testid={`launch-option-${L.code}`}>
+                  {L.name} {L.code ? `(${L.code})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {!launch && (
+        <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
+          Pick a launch to see details.
+        </div>
+      )}
+
+      {launch && (
+        <>
+          {/* Phase timeline */}
+          <PhaseTimeline launch={launch} />
+
+          {/* KPI summary */}
+          {loading && !registrations && !sales ? (
+            <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
+              Loading registrations + sales…
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Stat
+                icon={Users}
+                label="Webinar registrations"
+                value={registrations?.total ?? "—"}
+                sub={
+                  registrations?.unique
+                    ? `${registrations.unique} unique people`
+                    : registrations?.error
+                    ? registrations.error
+                    : "Pulled from Kit"
+                }
+                tone="sky"
+                testid="kpi-registrations"
+              />
+              <Stat
+                icon={ShoppingBag}
+                label="Sales"
+                value={sales?.total_count ?? "—"}
+                sub={
+                  sales?.error || `${sales?.by_product?.length || 0} product types`
+                }
+                tone="emerald"
+                testid="kpi-sales-count"
+              />
+              <Stat
+                icon={TrendingUp}
+                label="Revenue"
+                value={sales ? fmtGbp(sales.total_amount_gbp) : "—"}
+                sub={`Goal £${Math.round(launch.target_good / 1000)}k / £${Math.round(launch.target_better / 1000)}k / £${Math.round(launch.target_best / 1000)}k`}
+                tone="violet"
+                testid="kpi-revenue"
+              />
+              <Stat
+                icon={Calendar}
+                label="Conversion"
+                value={
+                  registrations?.unique && sales?.total_count
+                    ? `${((sales.total_count / registrations.unique) * 100).toFixed(1)}%`
+                    : "—"
+                }
+                sub="Sales / unique registrations"
+                tone="amber"
+                testid="kpi-conversion"
+              />
+            </div>
+          )}
+
+          {/* Compare button */}
+          <div className="flex justify-end">
+            <button
+              onClick={loadComparison}
+              disabled={loadingComparison || !launch.code}
+              className="text-sm bg-white border border-[var(--ayci-border)] rounded-lg px-4 py-2 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="load-comparison-btn"
+            >
+              {loadingComparison ? (
+                <>
+                  <Loader2 className="w-4 h-4 inline mr-2 animate-spin" /> Loading comparison…
+                </>
+              ) : comparison ? (
+                "Comparison loaded ✓"
+              ) : (
+                "Compare to previous 2 launches"
+              )}
+            </button>
+          </div>
+
+          {/* Webinar registrations chart */}
+          {registrations && !registrations.error && (
+            <RegistrationsChart
+              launch={launch}
+              registrations={registrations}
+              comparison={comparison}
+            />
+          )}
+
+          {/* UTM source breakdown */}
+          {registrations?.by_source && registrations.by_source.length > 0 && (
+            <SourceBreakdown registrations={registrations} />
+          )}
+
+          {/* Sales chart */}
+          {sales && !sales.error && (
+            <SalesChart launch={launch} sales={sales} comparison={comparison} />
+          )}
+
+          {/* Sales by product */}
+          {sales?.by_product && sales.by_product.length > 0 && (
+            <SalesByProduct sales={sales} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value, sub, tone = "slate", testid }) {
+  const toneMap = {
+    slate: "bg-slate-50 text-slate-700",
+    sky: "bg-sky-50 text-sky-700",
+    emerald: "bg-emerald-50 text-emerald-700",
+    violet: "bg-violet-50 text-violet-700",
+    amber: "bg-amber-50 text-amber-700",
+  };
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
+      data-testid={testid}
+    >
+      <div className={`inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${toneMap[tone]}`}>
+        <Icon className="w-3 h-3" />
+        {label}
+      </div>
+      <div className="mt-2 font-display font-bold text-3xl text-[var(--ayci-ink)]">
+        {value}
+      </div>
+      {sub && <div className="text-xs text-[var(--ayci-ink-muted)] mt-1 line-clamp-2">{sub}</div>}
+    </div>
+  );
+}
+
+function PhaseTimeline({ launch }) {
+  const phases = launch.phases || {};
+  const today = new Date().toISOString().split("T")[0];
+  const phaseList = Object.entries(PHASE_LABELS)
+    .map(([key, label]) => ({
+      key,
+      label,
+      start: phases[key]?.start?.split("T")[0],
+      end: phases[key]?.end?.split("T")[0],
+    }))
+    .filter((p) => p.start && p.end);
+
+  if (phaseList.length === 0) {
+    return (
+      <div className="bg-white border border-dashed border-[var(--ayci-border)] rounded-lg p-4 text-sm text-[var(--ayci-ink-muted)]">
+        No phase dates set for this launch yet. Set them in <strong>Settings → Launches</strong>.
       </div>
     );
   }
 
   return (
-    <div className="p-8 lg:p-12 ayci-fade-up">
-      <PageHeader
-        eyebrow="Launch Pacing"
-        title="Launch Dashboard"
-        description="Webinar-driven launch cycles. Track registrations, attendance, sales and revenue against Good/Better/Best targets."
-        right={
-          <Select value={launchId || ""} onValueChange={setLaunchId}>
-            <SelectTrigger className="w-[180px] bg-white" data-testid="launch-select">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {launches.map((l) => (
-                <SelectItem key={l.id} value={l.id} data-testid={`launch-option-${l.name}`}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
-      />
-
-      {loading || !launchData ? (
-        <div className="text-sm text-[var(--ayci-ink-muted)]">Loading…</div>
-      ) : (
-        <div className="space-y-8">
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-            <KPICard
-              label="Webinar Registrations"
-              value={launchData.total_registrations}
-              format="number"
-              editable
-              onChange={(v) => updateField("total_registrations", v)}
-              testid="kpi-regs"
-            />
-            <KPICard
-              label="Webinar Attendance Rate"
-              value={launchData.webinar_attendance_rate}
-              format="percentage"
-              editable
-              onChange={(v) => updateField("webinar_attendance_rate", v)}
-              testid="kpi-attendance"
-            />
-            <KPICard
-              label="Total Sales"
-              value={sales.totalCount}
-              format="number"
-              testid="kpi-sales"
-            />
-            <KPICard
-              label="Total Revenue"
-              value={sales.totalRevenue}
-              format="currency"
-              testid="kpi-revenue"
-            />
-          </div>
-
-          {/* Revenue vs Target stepped bar */}
-          {activeLaunch && (
-            <RevenueTargetBar
-              current={sales.totalRevenue}
-              good={activeLaunch.target_good}
-              better={activeLaunch.target_better}
-              best={activeLaunch.target_best}
-            />
-          )}
-
-          {/* Daily registrations chart */}
-          <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-6 lg:p-8 shadow-sm">
-            <div className="flex items-baseline justify-between mb-6">
-              <div>
-                <div className="font-display text-lg font-bold text-[var(--ayci-ink)]">
-                  Daily Registrations
-                </div>
-                <div className="text-xs text-[var(--ayci-ink-muted)] mt-1">
-                  {activeLaunch?.name} vs {prevLaunch ? prevLaunch.name : "—"} (aligned by days-to-webinar)
-                </div>
-              </div>
-              <Legend
-                payload={[
-                  { value: `${activeLaunch?.name} daily`, type: "line", color: "#0EA5E9" },
-                  { value: "Cumulative", type: "line", color: "#1A1F36" },
-                  ...(prevLaunch ? [{ value: `${prevLaunch.name} daily`, type: "line", color: "#CBD5E1" }] : []),
-                ]}
+    <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm">
+      <h2 className="font-display font-bold text-base text-[var(--ayci-ink)] mb-4">
+        Launch timeline
+      </h2>
+      <div className="space-y-2">
+        {phaseList.map((p) => {
+          const isCurrent = today >= p.start && today <= p.end;
+          const isPast = today > p.end;
+          return (
+            <div key={p.key} className="flex items-center gap-3">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor: isPast
+                    ? "#cbd5e1"
+                    : isCurrent
+                    ? PHASE_COLORS[p.key]
+                    : "#e2e8f0",
+                  boxShadow: isCurrent ? `0 0 0 4px ${PHASE_COLORS[p.key]}33` : "none",
+                }}
               />
-            </div>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="date" tick={{ fill: "#6B7280", fontSize: 11 }} />
-                  <YAxis yAxisId="left" tick={{ fill: "#6B7280", fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: "#6B7280", fontSize: 11 }} />
-                  <Tooltip />
-                  {prevLaunch && (
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="prev"
-                      stroke="#CBD5E1"
-                      strokeWidth={2}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      name={`${prevLaunch.name}`}
-                    />
+              <div className="flex-1 flex items-center justify-between text-sm">
+                <span
+                  className={
+                    "font-medium " +
+                    (isCurrent
+                      ? "text-[var(--ayci-ink)]"
+                      : "text-[var(--ayci-ink-muted)]")
+                  }
+                >
+                  {p.label}
+                  {isCurrent && (
+                    <span
+                      className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: `${PHASE_COLORS[p.key]}1a`,
+                        color: PHASE_COLORS[p.key],
+                      }}
+                    >
+                      Live now
+                    </span>
                   )}
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="daily"
-                    stroke="#0EA5E9"
-                    strokeWidth={2.5}
-                    dot={{ r: 3, fill: "#0EA5E9" }}
-                    name="Daily"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="cumulative"
-                    stroke="#1A1F36"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Cumulative"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Sales breakdown + Comparison */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-            <div className="xl:col-span-3 bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm overflow-hidden">
-              <div className="px-6 pt-6 pb-4 border-b border-[var(--ayci-border)]">
-                <div className="font-display text-lg font-bold text-[var(--ayci-ink)]">Sales Breakdown</div>
-                <div className="text-xs text-[var(--ayci-ink-muted)] mt-1">
-                  Enter unit counts — revenue calculated automatically.
-                </div>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-[var(--ayci-border)]">
-                    <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Tier</th>
-                    <th className="text-right px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Unit £</th>
-                    <th className="text-right px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Count</th>
-                    <th className="text-right px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sales.rows.map((r) => {
-                    const field =
-                      r.key === "academy"
-                        ? "sales_academy_count"
-                        : r.key === "private_plus"
-                        ? "sales_private_plus_count"
-                        : r.key === "vip"
-                        ? "sales_vip_count"
-                        : r.key === "boost"
-                        ? "sales_boost_count"
-                        : r.key === "upgrade"
-                        ? "upgrade_count"
-                        : "upsell_count";
-                    return (
-                      <tr key={r.key} className="border-b border-[var(--ayci-border)] last:border-0">
-                        <td className="px-6 py-3 font-medium text-[var(--ayci-ink)]">{r.label}</td>
-                        <td className="px-6 py-3 text-right text-[var(--ayci-ink-muted)] tabular-nums">
-                          £{r.price.toLocaleString("en-GB")}
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <Input
-                            type="number"
-                            value={r.count}
-                            onChange={(e) => updateField(field, e.target.value)}
-                            className="w-24 ml-auto text-right h-8 tabular-nums"
-                            data-testid={`sales-input-${r.key}`}
-                          />
-                        </td>
-                        <td className="px-6 py-3 text-right font-semibold metric-number text-[var(--ayci-ink)]">
-                          {formatValue(r.revenue, "currency")}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-slate-50">
-                    <td className="px-6 py-3 font-semibold">Total</td>
-                    <td />
-                    <td className="px-6 py-3 text-right font-semibold tabular-nums">{sales.totalCount}</td>
-                    <td className="px-6 py-3 text-right font-bold metric-number text-[var(--ayci-ink)]">
-                      {formatValue(sales.totalRevenue, "currency")}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="xl:col-span-2 bg-white border border-[var(--ayci-border)] rounded-lg p-6 lg:p-8 shadow-sm">
-              <div className="font-display text-lg font-bold text-[var(--ayci-ink)]">Launch-over-Launch</div>
-              <div className="text-xs text-[var(--ayci-ink-muted)] mt-1 mb-4">Total revenue comparison.</div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={comparison}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="name" tick={{ fill: "#6B7280", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(v, k) => (k === "revenue" ? [formatValue(v, "currency"), "Revenue"] : [v, k])}
-                    />
-                    <Bar dataKey="revenue" radius={[4, 4, 0, 0]} fill="#0EA5E9" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mt-4 text-center">
-                {comparison.map((c) => (
-                  <div key={c.name} className="bg-slate-50 rounded-md py-2">
-                    <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{c.name}</div>
-                    <div className="text-xs metric-number font-semibold mt-0.5">{c.regs} regs · {c.sales} sales</div>
-                  </div>
-                ))}
+                </span>
+                <span className="text-xs text-[var(--ayci-ink-muted)]">
+                  {fmtDate(p.start)} → {fmtDate(p.end)}
+                </span>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function KPICard({ label, value, format, editable, onChange, testid }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value ?? ""));
-  useEffect(() => setDraft(String(value ?? "")), [value]);
+function RegistrationsChart({ launch, registrations, comparison }) {
+  // Build dataset by day_offset (days from launch start) for overlay
+  const start = launch.start_date;
+  const startDate = new Date(start + "T00:00:00Z");
+  const offsetForDate = (d) =>
+    Math.round((new Date(d + "T00:00:00Z") - startDate) / (1000 * 60 * 60 * 24));
+
+  const currentByOffset = Object.fromEntries(
+    (registrations.by_day || []).map((row) => [offsetForDate(row.date), row.total]),
+  );
+
+  // Find max offset across current + previous
+  const allOffsets = [...Object.keys(currentByOffset).map(Number)];
+  if (comparison?.previous) {
+    comparison.previous.forEach((p) => {
+      (p.registrations_aligned || []).forEach((r) => allOffsets.push(r.day_offset));
+    });
+  }
+  const maxOffset = allOffsets.length ? Math.max(...allOffsets) : 0;
+  const minOffset = 0;
+
+  const data = [];
+  for (let o = minOffset; o <= maxOffset; o++) {
+    const row = { day_offset: o };
+    row[launch.name] = currentByOffset[o] || 0;
+    if (comparison?.previous) {
+      comparison.previous.forEach((p) => {
+        const map = Object.fromEntries(
+          (p.registrations_aligned || []).map((r) => [r.day_offset, r.total]),
+        );
+        row[p.name] = map[o] || 0;
+      });
+    }
+    data.push(row);
+  }
+
+  const series = [{ key: launch.name, color: SERIES_COLORS[0], strokeWidth: 3 }];
+  if (comparison?.previous) {
+    comparison.previous.forEach((p, i) => {
+      series.push({
+        key: p.name,
+        color: SERIES_COLORS[i + 1] || "#cbd5e1",
+        strokeWidth: 2,
+        strokeDasharray: "4 4",
+      });
+    });
+  }
 
   return (
-    <div
-      className="bg-white border border-[var(--ayci-border)] rounded-lg p-6 shadow-sm ayci-card-hover cursor-pointer"
-      onClick={() => editable && setEditing(true)}
-      data-testid={testid}
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+      data-testid="registrations-chart"
     >
-      <div className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-3">{label}</div>
-      {editing ? (
-        <Input
-          autoFocus
-          type="number"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            setEditing(false);
-            onChange(draft);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(false);
-              onChange(draft);
-            }
-            if (e.key === "Escape") setEditing(false);
-          }}
-          className="font-display text-3xl font-bold h-12 tabular-nums"
-        />
-      ) : (
-        <div className="font-display text-3xl font-bold metric-number text-[var(--ayci-ink)]">
-          {formatValue(value, format)}
-        </div>
-      )}
-      {editable && !editing && (
-        <div className="text-[10px] text-[var(--ayci-accent)] mt-2">Click to edit</div>
-      )}
-    </div>
-  );
-}
-
-function RevenueTargetBar({ current, good, better, best }) {
-  const max = best * 1.05;
-  const pct = Math.min(100, (current / max) * 100);
-  const goodPct = (good / max) * 100;
-  const betterPct = (better / max) * 100;
-  const bestPct = (best / max) * 100;
-
-  let tier = "Pre-Good";
-  let tierColor = "#64748B";
-  if (current >= best) { tier = "🏆 Best"; tierColor = "#D97706"; }
-  else if (current >= better) { tier = "Better"; tierColor = "#0EA5E9"; }
-  else if (current >= good) { tier = "Good"; tierColor = "#10B981"; }
-
-  return (
-    <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-6 lg:p-8 shadow-sm" data-testid="revenue-target-bar">
-      <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="font-display text-lg font-bold text-[var(--ayci-ink)]">Revenue vs Target</div>
-          <div className="text-xs text-[var(--ayci-ink-muted)] mt-1">
-            Current: <span className="metric-number font-semibold text-[var(--ayci-ink)]">{formatValue(current, "currency")}</span>
-            <span className="mx-2">·</span>
-            Tier: <span className="font-semibold" style={{ color: tierColor }}>{tier}</span>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Webinar registrations
+          </h2>
+          <div className="text-xs text-[var(--ayci-ink-muted)]">
+            By day from launch start (day 0 = {fmtDate(launch.start_date)})
           </div>
         </div>
-        <div className="text-xs text-[var(--ayci-ink-muted)] space-x-4">
-          <span>Good <span className="metric-number font-medium text-[var(--ayci-ink)]">{formatValue(good, "currency")}</span></span>
-          <span>Better <span className="metric-number font-medium text-[var(--ayci-ink)]">{formatValue(better, "currency")}</span></span>
-          <span>Best <span className="metric-number font-medium text-[var(--ayci-ink)]">{formatValue(best, "currency")}</span></span>
-        </div>
       </div>
-
-      <div className="relative h-8 bg-slate-100 rounded-md overflow-visible">
-        <div
-          className="absolute inset-y-0 left-0 rounded-md transition-all duration-500"
-          style={{
-            width: `${pct}%`,
-            background: "linear-gradient(90deg, #10B981 0%, #0EA5E9 50%, #F59E0B 100%)",
-          }}
-        />
-        <TierTick label="Good" pct={goodPct} color="#10B981" />
-        <TierTick label="Better" pct={betterPct} color="#0EA5E9" />
-        <TierTick label="Best ★" pct={bestPct} color="#D97706" />
+      <div className="h-72">
+        <ResponsiveContainer>
+          <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="day_offset"
+              tick={{ fontSize: 11, fill: "#64748b" }}
+              label={{
+                value: "Day from launch start",
+                position: "insideBottom",
+                offset: -5,
+                style: { fontSize: 10, fill: "#64748b" },
+              }}
+            />
+            <YAxis tick={{ fontSize: 11, fill: "#64748b" }} />
+            <Tooltip />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {series.map((s) => (
+              <Line
+                key={s.key}
+                type="monotone"
+                dataKey={s.key}
+                stroke={s.color}
+                strokeWidth={s.strokeWidth}
+                strokeDasharray={s.strokeDasharray}
+                dot={false}
+                activeDot={{ r: 5 }}
+              />
+            ))}
+            {launch.phases?.webinar?.start && (
+              <ReferenceLine
+                x={offsetForDate(launch.phases.webinar.start.split("T")[0])}
+                stroke="#7c3aed"
+                strokeDasharray="2 2"
+                label={{ value: "Webinar", fontSize: 10, fill: "#7c3aed" }}
+              />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
-    </div>
+    </section>
   );
 }
 
-function TierTick({ label, pct, color }) {
+function SourceBreakdown({ registrations }) {
+  const total = registrations.by_source.reduce((s, r) => s + r.count, 0);
   return (
-    <div className="absolute -top-1 -bottom-1" style={{ left: `${pct}%` }}>
-      <div className="w-0.5 h-full" style={{ backgroundColor: color }} />
-      <div
-        className="absolute top-full mt-1 text-[10px] font-semibold whitespace-nowrap -translate-x-1/2"
-        style={{ color }}
-      >
-        {label}
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+      data-testid="source-breakdown"
+    >
+      <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-4">
+        Registrations by source (UTM)
+      </h2>
+      <div className="space-y-2">
+        {registrations.by_source.map((row) => {
+          const pct = total ? (row.count / total) * 100 : 0;
+          return (
+            <div key={row.source}>
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="font-medium text-[var(--ayci-ink)]">{row.source}</span>
+                <span className="text-[var(--ayci-ink-muted)] text-xs">
+                  {row.count} · {pct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: "#0ea5e9",
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </div>
+    </section>
+  );
+}
+
+function SalesChart({ launch, sales, comparison }) {
+  const start = launch.start_date;
+  const startDate = new Date(start + "T00:00:00Z");
+  const offsetForDate = (d) =>
+    Math.round((new Date(d + "T00:00:00Z") - startDate) / (1000 * 60 * 60 * 24));
+
+  const currentByOffset = {};
+  let cumul = 0;
+  (sales.by_day || []).forEach((row) => {
+    cumul += row.amount_gbp;
+    currentByOffset[offsetForDate(row.date)] = { daily: row.amount_gbp, cumulative: cumul };
+  });
+
+  const allOffsets = [...Object.keys(currentByOffset).map(Number)];
+  if (comparison?.previous) {
+    comparison.previous.forEach((p) => {
+      (p.sales_aligned || []).forEach((r) => allOffsets.push(r.day_offset));
+    });
+  }
+  const maxOffset = allOffsets.length ? Math.max(...allOffsets) : 0;
+
+  const data = [];
+  const prevCumul = {};
+  if (comparison?.previous) {
+    comparison.previous.forEach((p) => {
+      prevCumul[p.name] = 0;
+    });
+  }
+  for (let o = 0; o <= maxOffset; o++) {
+    const row = { day_offset: o };
+    row[`${launch.name} cumulative`] = currentByOffset[o]?.cumulative || (
+      o > 0 ? data[o - 1]?.[`${launch.name} cumulative`] || 0 : 0
+    );
+    if (comparison?.previous) {
+      comparison.previous.forEach((p) => {
+        const map = Object.fromEntries(
+          (p.sales_aligned || []).map((r) => [r.day_offset, r.amount_gbp]),
+        );
+        if (map[o] !== undefined) prevCumul[p.name] += map[o];
+        row[`${p.name} cumulative`] = prevCumul[p.name];
+      });
+    }
+    data.push(row);
+  }
+
+  const series = [{ key: `${launch.name} cumulative`, color: SERIES_COLORS[0], strokeWidth: 3 }];
+  if (comparison?.previous) {
+    comparison.previous.forEach((p, i) => {
+      series.push({
+        key: `${p.name} cumulative`,
+        color: SERIES_COLORS[i + 1] || "#cbd5e1",
+        strokeWidth: 2,
+        strokeDasharray: "4 4",
+      });
+    });
+  }
+
+  return (
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+      data-testid="sales-chart"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Sales (cumulative revenue)
+          </h2>
+          <div className="text-xs text-[var(--ayci-ink-muted)]">
+            From Stripe — by day from launch start
+          </div>
+        </div>
+      </div>
+      <div className="h-72">
+        <ResponsiveContainer>
+          <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="day_offset"
+              tick={{ fontSize: 11, fill: "#64748b" }}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: "#64748b" }}
+              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
+            />
+            <Tooltip formatter={(v) => fmtGbp(v)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {series.map((s) => (
+              <Line
+                key={s.key}
+                type="monotone"
+                dataKey={s.key}
+                stroke={s.color}
+                strokeWidth={s.strokeWidth}
+                strokeDasharray={s.strokeDasharray}
+                dot={false}
+              />
+            ))}
+            <ReferenceLine
+              y={launch.target_good}
+              stroke="#10b981"
+              strokeDasharray="3 3"
+              label={{ value: "Good", fontSize: 10, fill: "#10b981", position: "right" }}
+            />
+            <ReferenceLine
+              y={launch.target_better}
+              stroke="#f59e0b"
+              strokeDasharray="3 3"
+              label={{ value: "Better", fontSize: 10, fill: "#f59e0b", position: "right" }}
+            />
+            <ReferenceLine
+              y={launch.target_best}
+              stroke="#7c3aed"
+              strokeDasharray="3 3"
+              label={{ value: "Best", fontSize: 10, fill: "#7c3aed", position: "right" }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  );
+}
+
+function SalesByProduct({ sales }) {
+  return (
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+      data-testid="sales-by-product"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+          Sales breakdown by product
+        </h2>
+        <a
+          href="https://dashboard.stripe.com"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-[var(--ayci-teal)] hover:underline inline-flex items-center gap-1"
+        >
+          Open Stripe <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+      <div className="h-64">
+        <ResponsiveContainer>
+          <BarChart data={sales.by_product} margin={{ top: 5, right: 20, left: 0, bottom: 30 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="product"
+              tick={{ fontSize: 10, fill: "#64748b" }}
+              angle={-25}
+              textAnchor="end"
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: "#64748b" }}
+              tickFormatter={(v) => `£${Math.round(v / 1000)}k`}
+            />
+            <Tooltip formatter={(v) => fmtGbp(v)} />
+            <Bar dataKey="amount_gbp" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 text-xs text-[var(--ayci-ink-muted)] grid grid-cols-2 md:grid-cols-4 gap-2">
+        {sales.by_product.map((p) => (
+          <div
+            key={p.product}
+            className="bg-slate-50 border border-[var(--ayci-border)] rounded p-2"
+          >
+            <div className="font-medium text-[var(--ayci-ink)]">{p.product}</div>
+            <div className="text-[var(--ayci-ink-muted)]">
+              {p.count} sales · {fmtGbp(p.amount_gbp)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

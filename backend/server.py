@@ -22,6 +22,7 @@ import student_lookup as lookup
 import upcoming_interviews as upcoming
 import cohort as cohort_mod
 import google_drive as gdrive
+import launches as launches_mod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -225,23 +226,56 @@ class RockUpdate(BaseModel):
     owner_id: Optional[str] = None
 
 
+class LaunchPhase(BaseModel):
+    start: Optional[str] = None  # YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ
+    end: Optional[str] = None
+
+
+class LaunchPhases(BaseModel):
+    early_signups: LaunchPhase = Field(default_factory=LaunchPhase)
+    flash_sale: LaunchPhase = Field(default_factory=LaunchPhase)
+    webinar: LaunchPhase = Field(default_factory=LaunchPhase)
+    open_cart: LaunchPhase = Field(default_factory=LaunchPhase)
+    legacy_upgrades: LaunchPhase = Field(default_factory=LaunchPhase)
+    close_cart: LaunchPhase = Field(default_factory=LaunchPhase)
+    in_between: LaunchPhase = Field(default_factory=LaunchPhase)
+
+
 class Launch(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str  # e.g. "APR-26"
-    start_date: str
+    name: str  # human-readable, e.g. "April 2026"
+    code: Optional[str] = None  # Kit tag prefix code, e.g. "APR-26"
+    start_date: str   # overall launch start (early signups start)
+    end_date: Optional[str] = None  # overall launch end
     webinar_date: str
     target_good: float
     target_better: float
     target_best: float
+    phases: Optional[LaunchPhases] = None
 
 
 class LaunchCreate(BaseModel):
     name: str
+    code: Optional[str] = None
     start_date: str
+    end_date: Optional[str] = None
     webinar_date: str
     target_good: float
     target_better: float
     target_best: float
+    phases: Optional[LaunchPhases] = None
+
+
+class LaunchUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    webinar_date: Optional[str] = None
+    target_good: Optional[float] = None
+    target_better: Optional[float] = None
+    target_best: Optional[float] = None
+    phases: Optional[LaunchPhases] = None
 
 
 class LaunchData(BaseModel):
@@ -469,6 +503,17 @@ async def delete_launch(launch_id: str, admin: dict = Depends(require_admin)):
     await db.launch_data.delete_many({"launch_id": launch_id})
     await db.daily_registrations.delete_many({"launch_id": launch_id})
     return {"ok": True}
+
+
+@api.patch("/launches/{launch_id}", response_model=Launch)
+async def update_launch(launch_id: str, data: LaunchUpdate, admin: dict = Depends(require_admin)):
+    updates = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
+    if updates:
+        await db.launches.update_one({"id": launch_id}, {"$set": updates})
+    launch = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not launch:
+        raise HTTPException(404, "Launch not found")
+    return launch
 
 
 @api.get("/launches/{launch_id}/data")
@@ -1044,6 +1089,102 @@ async def upcoming_interviews(
 async def cohort_labels(user: dict = Depends(get_current_user)):
     """Returns the list of cohort labels from Monday's 'Cohort Joined' dropdown."""
     return await cohort_mod.fetch_cohort_labels()
+
+
+# --- Launch analytics ----------------------------------------------------
+def _launch_window(launch: dict) -> tuple[str, str]:
+    start = launch.get("start_date")
+    end = launch.get("end_date") or launch.get("webinar_date")
+    # normalise to ISO datetime
+    def _iso(s: str) -> str:
+        if "T" in s:
+            return s if s.endswith("Z") else s + "Z" if "+" not in s else s
+        return f"{s}T00:00:00Z"
+    return _iso(start), _iso(end if "T" in end else end + "T23:59:59")
+
+
+@api.get("/launches/{launch_id}/registrations")
+async def launch_registrations(launch_id: str, user: dict = Depends(get_current_user)):
+    """Webinar registrations from Kit, by source + by day, for this launch."""
+    launch = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not launch:
+        raise HTTPException(404, "Launch not found")
+    code = launch.get("code")
+    if not code:
+        raise HTTPException(
+            400,
+            "Launch has no `code` set. Add the Kit tag prefix code (e.g. APR-26) "
+            "in Settings before loading registrations.",
+        )
+    start, end = _launch_window(launch)
+    return await launches_mod.fetch_registrations(code, start, end)
+
+
+@api.get("/launches/{launch_id}/sales")
+async def launch_sales(launch_id: str, user: dict = Depends(get_current_user)):
+    """Successful Stripe charges within the launch window, daily + by product."""
+    launch = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not launch:
+        raise HTTPException(404, "Launch not found")
+    start, end = _launch_window(launch)
+    return await launches_mod.fetch_sales(start, end)
+
+
+@api.get("/launches/{launch_id}/comparison")
+async def launch_comparison(
+    launch_id: str,
+    n_previous: int = 2,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Returns registration + sales series for this launch and the N most recent
+    previous launches, normalised to day-from-start so charts can overlay them.
+    """
+    current = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not current:
+        raise HTTPException(404, "Launch not found")
+
+    all_launches = await db.launches.find({}, {"_id": 0}).sort("start_date", -1).to_list(50)
+    # Drop current + only keep launches that started before current
+    others = [
+        L for L in all_launches
+        if L["id"] != launch_id and L.get("start_date", "") < current["start_date"]
+        and L.get("code")
+    ][:n_previous]
+
+    import asyncio
+
+    async def _series(L: dict) -> dict:
+        try:
+            start, end = _launch_window(L)
+            tasks = []
+            tasks.append(launches_mod.fetch_registrations(L["code"], start, end))
+            tasks.append(launches_mod.fetch_sales(start, end))
+            regs, sales = await asyncio.gather(*tasks, return_exceptions=True)
+            return {
+                "id": L["id"],
+                "name": L["name"],
+                "code": L.get("code"),
+                "start_date": L["start_date"],
+                "registrations": regs if not isinstance(regs, Exception) else None,
+                "sales": sales if not isinstance(sales, Exception) else None,
+                "registrations_aligned": (
+                    launches_mod.align_by_day_offset(regs.get("by_day", []), start)
+                    if not isinstance(regs, Exception) else []
+                ),
+                "sales_aligned": (
+                    launches_mod.align_by_day_offset(sales.get("by_day", []), start)
+                    if not isinstance(sales, Exception) else []
+                ),
+            }
+        except Exception as e:
+            return {"id": L["id"], "name": L["name"], "error": str(e)}
+
+    series = await asyncio.gather(*[_series(L) for L in [current] + others])
+    return {
+        "current": series[0],
+        "previous": series[1:],
+    }
 
 
 @api.get("/cohorts/summary")

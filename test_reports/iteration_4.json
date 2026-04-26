@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 4 — Launch Dashboard rebuild (code+phases, registrations/sales/comparison endpoints), name autocomplete in Student Lookup, Upcoming Interviews Private/All-tiers toggle, Cohort Dashboard total fix + gradient bar, Settings Edit Launch dialog with phase pickers. Backend: 9/9 pytest cases in /app/backend/tests/test_iteration4.py all PASS against the public REACT_APP_BACKEND_URL. Login / GET /api/auth/me OK; GET /api/students/name-search?q=anna&limit=5 returns ranked list with name/email/avatar_url/match_score (validated 'anna walsh' ranks Anna Walsh first); short query (<2 chars) returns []; unauth → 401. GET /api/launches confirms APR-26 has 7 phases (Early signups, Flash sale, Webinar, Open cart, Legacy upgrades, Close cart, In-between), each with start/end. /api/launches/<APR-26>/registrations → total>1000 with by_source + by_day populated. /api/launches/<APR-26>/sales → total_amount_gbp>0 with by_product + by_day populated. /api/launches/<APR-26>/comparison?n_previous=2 returned in ~22s with previous=[FEB-26, NOV-25] each having registrations_aligned + sales_aligned (rows include day_offset). Frontend (Playwright on public preview): admin login works; /interviews defaults to 'Private only' view, has 'Private only' / 'All tiers' toggle and clicking 'All tiers' reveals the Academy section; /cohort renders 'New + legacy' subtitle including 'Monday board has X', and circle community-join bar uses inline linear-gradient (verified 46.8% computed width via getComputedStyle); /students has data-testid='student-lookup-input', typing 'anna walsh' shows the [data-testid=name-suggestions] dropdown with [data-testid=suggestion-anna.swalsh@btinternet.com] (and Hannah Walsh as 2nd match) and clicking it loads the unified profile; typing andreea.gavrisan@gmail.com + clicking [data-testid=student-lookup-search-button] triggers the email-direct lookup and renders Andreea's full Monday/Stripe/CK/Circle profile; /launches shows 'LIVE NOW' with 'Open cart' and 'Legacy upgrades' currently live, 3 Recharts wrappers (registrations + sales + sales-by-product), 'Compare to previous 2 launches' button triggers /comparison and 'Comparison loaded' confirmation appears within 60s; /settings → Launches → Edit dialog opens correctly with Name, Kit tag code, Start/End/Webinar dates, Good/Better/Best price targets and 7 phase rows each with start+end datetime-local pickers (17 datetime inputs total).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "UpcomingInterviews.jsx — Selector / window-size dropdown",
+        "issue": "React hydration warning fires on /interviews: '<span> cannot be a child of <option>'. The {x-source-var}/{x-id} dev tooling is auto-injecting <span> elements into <option> children which the HTML spec disallows. Cosmetic in dev only — does not affect functionality — but it pollutes the console. Source: <option> tag in <select> in the Selector component (UpcomingInterviews.jsx ~line 185).",
+        "selector": "select option (UpcomingInterviews.jsx Selector ~L185)",
+        "priority": "LOW"
+      },
+      {
+        "component": "Sparkline (Weekly Scorecard) — pre-existing from iter 1-3",
+        "issue": "Recharts width(-1)/height(-1) console warnings on initial render. Carried over; cosmetic.",
+        "selector": "Sparkline.jsx",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4.py",
+    "/app/test_reports/pytest/iteration4.xml"
+  ],
+  "action_items": [
+    "Optional: in UpcomingInterviews.jsx, render plain text inside <option> (no wrapping <span>) to silence the hydration warning."
+  ],
+  "critical_code_review_comments": [
+    "launches.py _tag_source: regex correctly anchors '^[AYCI <CODE>] Webinar - Registered - <SOURCE>$' and skips aggregate 'All' / 'No sale' tags so by_source is clean. Per-tag subscription fetch is properly paginated (page<=200, total_pages termination) and parallelised via asyncio.gather with return_exceptions=True so one bad tag does not blow up the whole call.",
+    "launches.py fetch_sales: pagination via Stripe starting_after + has_more is correct; refunded charges are filtered (status=='succeeded' and not refunded) and amount_refunded is subtracted from amount before bucketing — so reported totals are net.",
+    "launches.py align_by_day_offset: computes day_offset as (row_date - launch_start).days. Verified rows in /comparison response include day_offset for both registrations_aligned and sales_aligned, enabling direct chart overlay across launches with different absolute dates.",
+    "server.py /launches/{id}/comparison: fan-out across N+1 launches uses asyncio.gather with return_exceptions per launch, but the outer loop iterates over previous launches *serially* (one _series at a time). Endpoint took ~22s in test — consider asyncio.gather across all _series tasks to roughly halve wall-clock for n_previous=2.",
+    "student_lookup.name_search: simple but effective scoring (100 exact / 80 substring / 60 all parts in tokens / 40 all parts in joined / 30 email substring) and dedup against the slim circle_members_cache. Validated end-to-end via UI — 'anna walsh' returns Anna Walsh first, Hannah Walsh second. Returns [] for queries <2 chars (good early-exit).",
+    "Frontend StudentLookup.jsx: input now accepts both name and email — branches on '@' presence — with a 300ms-debounced /name-search call. The [data-testid=name-suggestions] dropdown and per-row [data-testid=suggestion-<email>] testids are excellent for automation. Note for next iteration: the search input testid was renamed from 'student-lookup-email-input' (iter3) to 'student-lookup-input' — past tests need updating.",
+    "Frontend LaunchDashboard.jsx: PhaseTimeline correctly identifies the LIVE phase via Date.now() vs phase.start/end (verified 'Open cart' 22→28 Apr 2026 and 'Legacy upgrades' 1 Apr→29 May 2026 both flagged 'LIVE NOW' on 26 Apr). The Compare button correctly triggers /comparison and gates the loading→success transition.",
+    "Frontend Settings LaunchesSection: Edit dialog renders Name, Kit tag code, Start/End/Webinar dates (date input), Good/Better/Best (numeric), then 7 phase rows each with two datetime-local inputs — 17 datetime inputs total — exactly matching the Launch + LaunchPhases models. Save changes button present.",
+    "Frontend CohortDashboard: the broken Tailwind dynamic class for the gradient fill bar was correctly replaced with an inline linear-gradient style — verified via getComputedStyle that width is set (e.g. 46.8%) and background includes 'linear-gradient(90deg, rgb(14, 165, 233) ...)'. No more 0-width bars."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4.py (new)",
+    "/app/test_reports/pytest/iteration4.xml (generated)"
+  ],
+  "success_rate": { "backend": "100% (9/9)", "frontend": "100% — every iteration-4 review-request bullet verified live on the public preview URL" },
+  "test_credentials": "admin@ayci.com / Admin@2026",
+  "seed_data_creation": "None. Used existing Mongo state (April 2026 launch already seeded with code APR-26 and 7 phases) and live third-party data (ConvertKit tags, Stripe charges, Circle members cache).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_iteration4.py -v --junitxml=/app/test_reports/pytest/iteration4.xml`. The TestLaunchComparison case takes ~20-25s; everything else completes in <15s total. Key UI testids: student-lookup-input (renamed from student-lookup-email-input), student-lookup-search-button, name-suggestions, suggestion-<email>, upcoming-interviews-page, stat-total. April 2026 launch ID can be looked up at GET /api/launches by code 'APR-26' (don't hard-code). The LIVE NOW phase logic depends on env date — today is 26 Apr 2026 so 'Open cart' and 'Legacy upgrades' should be live.",
+  "rca of the issue": "No bugs found. All 14 review-request bullets verified live via pytest + Playwright. Only sole pre-existing dev-only console hydration warning ( <span> in <option> on /interviews ) noted as a LOW-priority cleanup item."
+}
