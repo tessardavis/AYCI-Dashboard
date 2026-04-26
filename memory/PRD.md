@@ -56,6 +56,14 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Launch phases v2 (Apr 26)
+- **All 4 launches now have the canonical AYCI phase structure**: NOV-25, FEB-26, APR-26, JUN-26 (newly added).
+- Phases per launch (7): in_between_start → early_access → flash_sale → webinar → open_cart → close_cart → in_between_end. All start/end times use the team's agreed cut-offs (08:00 flash sale, 20:00 webinar, 12:00 cart close).
+- `legacy_upgrades` field dropped; `early_signups` renamed to `early_access`; single `in_between` split into `in_between_start` (revenue tracking starts here, 20 days before webinar) and `in_between_end` (cart-close end → next launch).
+- Idempotent migration `_migrate_launches_v2()` runs on every startup — preserves launch IDs so pace/year-overview caches keep working.
+- Settings → Launches edit dialog now exposes 7 phase pickers in the new order.
+- Launch Dashboard auto-selects the **active** launch (today inside start/end), not the latest by start_date.
+
 ### 2026-04 — Launch Dashboard 2.1 + brand polish (Apr 26)
 - **Launch Dashboard rebuilt for the post-webinar revenue focus**:
   - Six KPI cards in priority order: Revenue, Signups, Webinar regs, Conversion, **EPL** (revenue / unique regs), **AOV** (revenue / signups).

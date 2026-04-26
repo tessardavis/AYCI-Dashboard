@@ -26,23 +26,23 @@ import { PaceTrackerCard } from "@/components/PaceTracker";
 import YearOverview from "@/components/YearOverview";
 
 const PHASE_LABELS = {
-  early_signups: "Early signups",
+  in_between_start: "In-between",
+  early_access: "Early access",
   flash_sale: "Flash sale",
   webinar: "Webinar",
   open_cart: "Open cart",
-  legacy_upgrades: "Legacy upgrades",
   close_cart: "Close cart",
-  in_between: "In-between",
+  in_between_end: "In-between",
 };
 
 const PHASE_COLORS = {
-  early_signups: "#4457B6",
+  in_between_start: "#94a3b8",
+  early_access: "#4457B6",
   flash_sale: "#dc2626",
   webinar: "#7c3aed",
   open_cart: "#10b981",
-  legacy_upgrades: "#AF41AC",
   close_cart: "#FEB870",
-  in_between: "#64748b",
+  in_between_end: "#94a3b8",
 };
 
 const SERIES_COLORS = ["#4457B6", "#94a3b8", "#cbd5e1"];
@@ -74,7 +74,16 @@ export default function LaunchDashboard() {
           (b.start_date || "").localeCompare(a.start_date || ""),
         );
         setLaunches(sorted);
-        if (sorted[0]) setLaunchId(sorted[0].id);
+        if (sorted.length > 0) {
+          // Prefer the active launch (today between start_date and end_date)
+          const today = new Date().toISOString().split("T")[0];
+          const active = sorted.find(
+            (L) =>
+              (L.start_date || "") <= today &&
+              today <= (L.end_date || "9999-12-31"),
+          );
+          setLaunchId((active || sorted[0]).id);
+        }
       } catch (err) {
         toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load launches");
       }

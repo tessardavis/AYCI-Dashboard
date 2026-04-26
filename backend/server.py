@@ -233,13 +233,18 @@ class LaunchPhase(BaseModel):
 
 
 class LaunchPhases(BaseModel):
-    early_signups: LaunchPhase = Field(default_factory=LaunchPhase)
+    in_between_start: LaunchPhase = Field(default_factory=LaunchPhase)
+    early_access: LaunchPhase = Field(default_factory=LaunchPhase)
     flash_sale: LaunchPhase = Field(default_factory=LaunchPhase)
     webinar: LaunchPhase = Field(default_factory=LaunchPhase)
     open_cart: LaunchPhase = Field(default_factory=LaunchPhase)
-    legacy_upgrades: LaunchPhase = Field(default_factory=LaunchPhase)
     close_cart: LaunchPhase = Field(default_factory=LaunchPhase)
-    in_between: LaunchPhase = Field(default_factory=LaunchPhase)
+    in_between_end: LaunchPhase = Field(default_factory=LaunchPhase)
+    # Legacy fields kept for backwards-compat reads from existing DB rows.
+    # New launches should use the keys above.
+    early_signups: Optional[LaunchPhase] = None
+    legacy_upgrades: Optional[LaunchPhase] = None
+    in_between: Optional[LaunchPhase] = None
 
 
 class Launch(BaseModel):
@@ -702,11 +707,118 @@ async def _seed_rocks():
         await db.rocks.insert_one(r.model_dump())
 
 
+async def _migrate_launches_v2():
+    """
+    Idempotent migration to AYCI launch phase model v2:
+      - 7 phases: in_between_start, early_access, flash_sale, webinar,
+        open_cart, close_cart, in_between_end
+      - Drops legacy_upgrades, splits in_between into start + end, renames
+        early_signups → early_access.
+      - Upserts the 4 known launches (NOV-25, FEB-26, APR-26, JUN-26) with
+        the canonical phase dates supplied by the team. Existing IDs preserved.
+    """
+    canonical = [
+        {
+            "name": "November 2025", "code": "NOV-25",
+            "start_date": "2025-10-23", "end_date": "2026-01-14",
+            "webinar_date": "2025-11-12",
+            "target_good": 120000, "target_better": 140000, "target_best": 170000,
+            "phases": {
+                "in_between_start": {"start": "2025-10-23T00:00:00Z", "end": "2025-10-30T23:59:59Z"},
+                "early_access":     {"start": "2025-10-31T00:00:00Z", "end": "2025-11-10T08:00:00Z"},
+                "flash_sale":       {"start": "2025-11-10T08:00:00Z", "end": "2025-11-12T20:00:00Z"},
+                "webinar":          {"start": "2025-11-12T20:00:00Z", "end": "2025-11-12T23:59:59Z"},
+                "open_cart":        {"start": "2025-11-13T00:00:00Z", "end": "2025-11-18T12:00:00Z"},
+                "close_cart":       {"start": "2025-11-18T12:00:00Z", "end": "2025-12-07T23:59:59Z"},
+                "in_between_end":   {"start": "2025-12-08T00:00:00Z", "end": "2026-01-14T23:59:59Z"},
+            },
+        },
+        {
+            "name": "February 2026", "code": "FEB-26",
+            "start_date": "2026-01-15", "end_date": "2026-03-31",
+            "webinar_date": "2026-02-04",
+            "target_good": 130000, "target_better": 150000, "target_best": 180000,
+            "phases": {
+                "in_between_start": {"start": "2026-01-15T00:00:00Z", "end": "2026-01-24T23:59:59Z"},
+                "early_access":     {"start": "2026-01-25T00:00:00Z", "end": "2026-02-02T08:00:00Z"},
+                "flash_sale":       {"start": "2026-02-02T08:00:00Z", "end": "2026-02-04T20:00:00Z"},
+                "webinar":          {"start": "2026-02-04T20:00:00Z", "end": "2026-02-04T23:59:59Z"},
+                "open_cart":        {"start": "2026-02-05T00:00:00Z", "end": "2026-02-10T12:00:00Z"},
+                "close_cart":       {"start": "2026-02-10T12:00:00Z", "end": "2026-03-01T23:59:59Z"},
+                "in_between_end":   {"start": "2026-03-02T00:00:00Z", "end": "2026-03-31T23:59:59Z"},
+            },
+        },
+        {
+            "name": "April 2026", "code": "APR-26",
+            "start_date": "2026-04-01", "end_date": "2026-05-19",
+            "webinar_date": "2026-04-22",
+            "target_good": 140000, "target_better": 160000, "target_best": 200000,
+            "phases": {
+                "in_between_start": {"start": "2026-04-01T00:00:00Z", "end": "2026-04-11T23:59:59Z"},
+                "early_access":     {"start": "2026-04-12T00:00:00Z", "end": "2026-04-20T08:00:00Z"},
+                "flash_sale":       {"start": "2026-04-20T08:00:00Z", "end": "2026-04-22T20:00:00Z"},
+                "webinar":          {"start": "2026-04-22T20:00:00Z", "end": "2026-04-22T23:59:59Z"},
+                "open_cart":        {"start": "2026-04-23T00:00:00Z", "end": "2026-04-28T12:00:00Z"},
+                "close_cart":       {"start": "2026-04-28T12:00:00Z", "end": "2026-05-10T23:59:59Z"},
+                "in_between_end":   {"start": "2026-05-11T00:00:00Z", "end": "2026-05-19T23:59:59Z"},
+            },
+        },
+        {
+            "name": "June 2026", "code": "JUN-26",
+            "start_date": "2026-05-20", "end_date": "2026-08-26",
+            "webinar_date": "2026-06-10",
+            "target_good": 150000, "target_better": 180000, "target_best": 220000,
+            "phases": {
+                "in_between_start": {"start": "2026-05-20T00:00:00Z", "end": "2026-05-30T23:59:59Z"},
+                "early_access":     {"start": "2026-05-31T00:00:00Z", "end": "2026-06-08T08:00:00Z"},
+                "flash_sale":       {"start": "2026-06-08T08:00:00Z", "end": "2026-06-10T20:00:00Z"},
+                "webinar":          {"start": "2026-06-10T20:00:00Z", "end": "2026-06-10T23:59:59Z"},
+                "open_cart":        {"start": "2026-06-11T00:00:00Z", "end": "2026-06-16T12:00:00Z"},
+                "close_cart":       {"start": "2026-06-16T12:00:00Z", "end": "2026-07-05T23:59:59Z"},
+                "in_between_end":   {"start": "2026-07-06T00:00:00Z", "end": "2026-08-26T23:59:59Z"},
+            },
+        },
+    ]
+
+    for L in canonical:
+        existing = await db.launches.find_one({"code": L["code"]}, {"_id": 0})
+        if existing:
+            # Replace phases entirely so legacy keys are dropped
+            await db.launches.update_one(
+                {"code": L["code"]},
+                {"$set": {
+                    "name": L["name"],
+                    "start_date": L["start_date"],
+                    "end_date": L["end_date"],
+                    "webinar_date": L["webinar_date"],
+                    "target_good": L["target_good"],
+                    "target_better": L["target_better"],
+                    "target_best": L["target_best"],
+                    "phases": L["phases"],
+                }},
+            )
+        else:
+            new_launch = Launch(
+                name=L["name"], code=L["code"],
+                start_date=L["start_date"], end_date=L["end_date"],
+                webinar_date=L["webinar_date"],
+                target_good=L["target_good"],
+                target_better=L["target_better"],
+                target_best=L["target_best"],
+                phases=LaunchPhases(**L["phases"]),
+            )
+            await db.launches.insert_one(new_launch.model_dump())
+
+    # Bust caches that depend on launch dates
+    await db.cache.delete_many({"_id": {"$regex": "^year-overview:"}})
+    await db.pace_cache.delete_many({})
+    logger.info("[migration] Launches v2 phases applied (4 launches)")
+
+
 async def _seed_launches():
     count = await db.launches.count_documents({})
     if count > 0:
         return
-
     launches_seed = [
         {"name": "NOV-25", "start_date": "2025-10-20", "webinar_date": "2025-11-05",
          "target_good": 120000, "target_better": 140000, "target_best": 170000,
@@ -835,6 +947,7 @@ async def on_startup():
     await _seed_weekly_values()
     await _seed_rocks()
     await _seed_launches()
+    await _migrate_launches_v2()
 
     # Start weekly auto-sync (Monday 06:00 Europe/London) + daily refreshers
     global scheduler

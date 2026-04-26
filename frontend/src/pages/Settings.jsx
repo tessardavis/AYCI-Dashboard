@@ -480,13 +480,13 @@ function RocksSection({ isAdmin }) {
 
 // -------- Launches --------
 const PHASE_KEYS = [
-  ["early_signups", "Early signups"],
+  ["in_between_start", "In-between (start)"],
+  ["early_access", "Early access"],
   ["flash_sale", "Flash sale"],
   ["webinar", "Webinar"],
   ["open_cart", "Open cart"],
-  ["legacy_upgrades", "Legacy upgrades"],
   ["close_cart", "Close cart"],
-  ["in_between", "In-between"],
+  ["in_between_end", "In-between (end)"],
 ];
 
 function LaunchesSection({ isAdmin }) {
