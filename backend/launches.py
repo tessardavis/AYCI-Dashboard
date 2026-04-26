@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -155,18 +156,25 @@ async def fetch_registrations(code: str, start_iso: str, end_iso: str) -> dict:
 # ---------------------------------------------------------------------- Sales
 async def fetch_sales(start_iso: str, end_iso: str) -> dict:
     """
-    Pull successful Stripe charges within the date window.
-    Returns daily totals + breakdown by product.
+    Pull successful Stripe charges within the launch window and classify each
+    one as a SIGNUP (first-ever paid charge by that customer) or UPGRADE
+    (existing customer paying ≥ STRIPE_UPGRADE_MIN_GBP, or charge description
+    mentions 'upgrade'). Anything else (small recurring renewals on existing
+    customers) is excluded so the dashboard reflects launch sales only.
+
+    Returns daily totals + breakdown by tier:
+      Academy / Private Plus / VIP / Boost & Go / Private Plus upgrade /
+      VIP upgrade / Other signup / Other upgrade.
     """
+    import os as _os
+    upgrade_min_pence = int(float(_os.environ.get("STRIPE_UPGRADE_MIN_GBP", "90")) * 100)
+
     start_ts = int(datetime.fromisoformat(start_iso.replace("Z", "+00:00")).timestamp())
     end_ts = int(datetime.fromisoformat(end_iso.replace("Z", "+00:00")).timestamp())
 
-    by_day: dict[str, dict] = {}
-    by_product: dict[str, dict] = {}
-    total_amount = 0
-    total_count = 0
+    # 1. Pull all succeeded GBP charges in window
+    raw_charges: list[dict] = []
     last_starting_after: Optional[str] = None
-
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         while True:
             params = {
@@ -176,39 +184,57 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
             }
             if last_starting_after:
                 params["starting_after"] = last_starting_after
-            r = await c.get(
-                f"{STRIPE_API}/charges",
-                auth=_stripe_auth(),
-                params=params,
-            )
+            r = await c.get(f"{STRIPE_API}/charges", auth=_stripe_auth(), params=params)
             r.raise_for_status()
             body = r.json()
-            charges = body.get("data", [])
-            for ch in charges:
+            for ch in body.get("data", []):
                 if ch.get("status") != "succeeded" or ch.get("refunded"):
                     continue
-                amount = int(ch.get("amount", 0))
-                # Subtract refunded amount if any
-                amount -= int(ch.get("amount_refunded", 0))
+                amount = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
                 if amount <= 0:
                     continue
-                day = datetime.fromtimestamp(ch.get("created", 0), tz=timezone.utc).date().isoformat()
-                desc = (ch.get("description") or "").strip()
-                product = _classify_product(desc)
-                by_day.setdefault(day, {"amount": 0, "count": 0, "by_product": defaultdict(int)})
-                by_day[day]["amount"] += amount
-                by_day[day]["count"] += 1
-                by_day[day]["by_product"][product] += 1
-                by_product.setdefault(product, {"amount": 0, "count": 0})
-                by_product[product]["amount"] += amount
-                by_product[product]["count"] += 1
-                total_amount += amount
-                total_count += 1
+                raw_charges.append(ch)
             if not body.get("has_more"):
                 break
-            last_starting_after = charges[-1]["id"] if charges else None
+            last_starting_after = body["data"][-1]["id"] if body.get("data") else None
             if not last_starting_after:
                 break
+
+        # 2. Parallel-check prior-paid status per unique customer
+        unique_customers = {ch["customer"] for ch in raw_charges if ch.get("customer")}
+        async def _check(cust_id: str) -> tuple[str, bool]:
+            try:
+                from connectors import _customer_has_prior_paid
+                return cust_id, await _customer_has_prior_paid(c, cust_id, start_ts)
+            except Exception:
+                return cust_id, False
+
+        prior_results = await asyncio.gather(*[_check(cid) for cid in unique_customers])
+        has_prior_map: dict[str, bool] = dict(prior_results)
+
+    # 3. Classify each charge into a tier (or skip as renewal)
+    by_day: dict[str, dict] = {}
+    by_tier: dict[str, dict] = {}
+    total_amount = 0
+    total_count = 0
+    for ch in raw_charges:
+        amount = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
+        cust = ch.get("customer")
+        has_prior = has_prior_map.get(cust, False) if cust else False
+        desc = (ch.get("description") or "").strip()
+        tier = _classify_tier(desc, has_prior, amount, upgrade_min_pence)
+        if tier is None:
+            continue  # renewal — exclude
+        day = datetime.fromtimestamp(ch.get("created", 0), tz=timezone.utc).date().isoformat()
+        by_day.setdefault(day, {"amount": 0, "count": 0, "by_tier": defaultdict(int)})
+        by_day[day]["amount"] += amount
+        by_day[day]["count"] += 1
+        by_day[day]["by_tier"][tier] += 1
+        by_tier.setdefault(tier, {"amount": 0, "count": 0})
+        by_tier[tier]["amount"] += amount
+        by_tier[tier]["count"] += 1
+        total_amount += amount
+        total_count += 1
 
     by_day_list = sorted(
         [
@@ -216,16 +242,16 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
                 "date": d,
                 "amount_gbp": round(v["amount"] / 100.0, 2),
                 "count": v["count"],
-                "by_product": {p: c for p, c in v["by_product"].items()},
+                "by_tier": {t: c for t, c in v["by_tier"].items()},
             }
             for d, v in by_day.items()
         ],
         key=lambda x: x["date"],
     )
-    by_product_list = sorted(
+    by_tier_list = sorted(
         [
-            {"product": p, "amount_gbp": round(v["amount"] / 100.0, 2), "count": v["count"]}
-            for p, v in by_product.items()
+            {"tier": t, "amount_gbp": round(v["amount"] / 100.0, 2), "count": v["count"]}
+            for t, v in by_tier.items()
         ],
         key=lambda x: -x["amount_gbp"],
     )
@@ -233,13 +259,64 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
     return {
         "total_amount_gbp": round(total_amount / 100.0, 2),
         "total_count": total_count,
-        "by_product": by_product_list,
+        "by_tier": by_tier_list,
         "by_day": by_day_list,
+        # Back-compat alias for any older callers
+        "by_product": by_tier_list,
     }
 
 
+def _classify_tier(
+    description: str,
+    has_prior: bool,
+    amount_pence: int,
+    upgrade_min_pence: int,
+) -> Optional[str]:
+    """
+    Classify a Stripe charge into a launch tier. Returns None for renewal
+    charges (existing customer + small amount + no 'upgrade' keyword) so they
+    are excluded from launch sales counts/revenue.
+    """
+    d = (description or "").lower()
+    is_upgrade_word = "upgrade" in d
+    has_pp = "private plus" in d
+    has_vip = "vip" in d
+    has_boost = "boost" in d and "go" in d
+    has_academy = (
+        "academy" in d
+        or "platinum" in d
+        or "gold" in d
+        or "silver" in d
+    )
+
+    if not has_prior:
+        # First-time paying customer = signup, classified by tier mentioned
+        if has_pp:
+            return "Private Plus"
+        if has_vip:
+            return "VIP"
+        if has_boost:
+            return "Boost & Go"
+        if has_academy:
+            return "Academy"
+        return "Other signup"
+
+    # Existing customer
+    if is_upgrade_word or amount_pence >= upgrade_min_pence:
+        if has_pp:
+            return "Private Plus upgrade"
+        if has_vip:
+            return "VIP upgrade"
+        return "Other upgrade"
+
+    # Small charge from existing customer = renewal/recurring → exclude
+    return None
+
+
 def _classify_product(description: str) -> str:
-    """Bucket Stripe charge descriptions into product tiers we know."""
+    """Legacy product classifier — kept for backward compatibility with older
+    callers that still expect a product label.
+    """
     d = (description or "").lower()
     if not d:
         return "Other"

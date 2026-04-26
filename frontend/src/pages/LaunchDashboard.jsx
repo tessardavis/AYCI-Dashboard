@@ -162,17 +162,34 @@ export default function LaunchDashboard() {
 
       {launch && (
         <>
-          {/* Phase timeline */}
-          <PhaseTimeline launch={launch} />
-
-          {/* KPI summary */}
+          {/* KPI summary — 6 cards: revenue, signups, regs, conversion, EPL, AOV */}
           {loading && !registrations && !sales ? (
             <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
               <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
               Loading registrations + sales…
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Stat
+                icon={TrendingUp}
+                label="Revenue"
+                value={sales ? fmtGbp(sales.total_amount_gbp) : "—"}
+                sub={`Goal £${Math.round(launch.target_good / 1000)}k / £${Math.round(launch.target_better / 1000)}k / £${Math.round(launch.target_best / 1000)}k`}
+                tone="violet"
+                testid="kpi-revenue"
+              />
+              <Stat
+                icon={ShoppingBag}
+                label="Signups"
+                value={sales?.total_count ?? "—"}
+                sub={
+                  sales?.error
+                    ? sales.error
+                    : "New signups + upgrades"
+                }
+                tone="emerald"
+                testid="kpi-sales-count"
+              />
               <Stat
                 icon={Users}
                 label="Webinar registrations"
@@ -188,24 +205,6 @@ export default function LaunchDashboard() {
                 testid="kpi-registrations"
               />
               <Stat
-                icon={ShoppingBag}
-                label="Sales"
-                value={sales?.total_count ?? "—"}
-                sub={
-                  sales?.error || `${sales?.by_product?.length || 0} product types`
-                }
-                tone="emerald"
-                testid="kpi-sales-count"
-              />
-              <Stat
-                icon={TrendingUp}
-                label="Revenue"
-                value={sales ? fmtGbp(sales.total_amount_gbp) : "—"}
-                sub={`Goal £${Math.round(launch.target_good / 1000)}k / £${Math.round(launch.target_better / 1000)}k / £${Math.round(launch.target_best / 1000)}k`}
-                tone="violet"
-                testid="kpi-revenue"
-              />
-              <Stat
                 icon={Calendar}
                 label="Conversion"
                 value={
@@ -213,12 +212,42 @@ export default function LaunchDashboard() {
                     ? `${((sales.total_count / registrations.unique) * 100).toFixed(1)}%`
                     : "—"
                 }
-                sub="Sales / unique registrations"
+                sub="Signups / unique regs"
                 tone="amber"
                 testid="kpi-conversion"
               />
+              <Stat
+                icon={TrendingUp}
+                label="EPL"
+                value={
+                  registrations?.unique && sales?.total_amount_gbp
+                    ? fmtGbp(sales.total_amount_gbp / registrations.unique)
+                    : "—"
+                }
+                sub="Earnings per lead"
+                tone="cyan"
+                testid="kpi-epl"
+              />
+              <Stat
+                icon={ShoppingBag}
+                label="AOV"
+                value={
+                  sales?.total_count && sales?.total_amount_gbp
+                    ? fmtGbp(sales.total_amount_gbp / sales.total_count)
+                    : "—"
+                }
+                sub="Avg order value"
+                tone="magenta"
+                testid="kpi-aov"
+              />
             </div>
           )}
+
+          {/* Pace tracker — only when current launch is the active one */}
+          <PaceTrackerCard />
+
+          {/* Compact phase timeline */}
+          <PhaseTimeline launch={launch} />
 
           {/* Compare button */}
           <div className="flex justify-end">
@@ -240,10 +269,17 @@ export default function LaunchDashboard() {
             </button>
           </div>
 
-          {/* Pace tracker — only when current launch is the active one */}
-          <PaceTrackerCard />
+          {/* Sales chart — primary focus post-webinar */}
+          {sales && !sales.error && (
+            <SalesChart launch={launch} sales={sales} comparison={comparison} />
+          )}
 
-          {/* Webinar registrations chart */}
+          {/* Sales by tier */}
+          {sales?.by_tier && sales.by_tier.length > 0 && (
+            <SalesByTier sales={sales} />
+          )}
+
+          {/* Webinar — moved to the bottom (lower priority post-webinar) */}
           {registrations && !registrations.error && (
             <RegistrationsChart
               launch={launch}
@@ -255,16 +291,6 @@ export default function LaunchDashboard() {
           {/* UTM source breakdown */}
           {registrations?.by_source && registrations.by_source.length > 0 && (
             <SourceBreakdown registrations={registrations} />
-          )}
-
-          {/* Sales chart */}
-          {sales && !sales.error && (
-            <SalesChart launch={launch} sales={sales} comparison={comparison} />
-          )}
-
-          {/* Sales by product */}
-          {sales?.by_product && sales.by_product.length > 0 && (
-            <SalesByProduct sales={sales} />
           )}
         </>
       )}
@@ -279,20 +305,22 @@ function Stat({ icon: Icon, label, value, sub, tone = "slate", testid }) {
     emerald: "bg-emerald-50 text-emerald-700",
     violet: "bg-violet-50 text-violet-700",
     amber: "bg-amber-50 text-amber-700",
+    cyan: "bg-cyan-50 text-cyan-700",
+    magenta: "bg-fuchsia-50 text-fuchsia-700",
   };
   return (
     <div
-      className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-3 shadow-sm"
       data-testid={testid}
     >
-      <div className={`inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${toneMap[tone]}`}>
+      <div className={`inline-flex items-center gap-1.5 text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full font-subhead ${toneMap[tone]}`}>
         <Icon className="w-3 h-3" />
         {label}
       </div>
-      <div className="mt-2 font-display font-bold text-3xl text-[var(--ayci-ink)]">
+      <div className="mt-1.5 font-display font-bold text-2xl lg:text-[1.65rem] text-[var(--ayci-ink)] leading-tight">
         {value}
       </div>
-      {sub && <div className="text-xs text-[var(--ayci-ink-muted)] mt-1 line-clamp-2">{sub}</div>}
+      {sub && <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-0.5 line-clamp-2">{sub}</div>}
     </div>
   );
 }
@@ -318,57 +346,56 @@ function PhaseTimeline({ launch }) {
   }
 
   return (
-    <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm">
-      <h2 className="font-display font-bold text-base text-[var(--ayci-ink)] mb-4">
-        Launch timeline
-      </h2>
-      <div className="space-y-2">
-        {phaseList.map((p) => {
-          const isCurrent = today >= p.start && today <= p.end;
-          const isPast = today > p.end;
-          return (
-            <div key={p.key} className="flex items-center gap-3">
-              <div
-                className="w-3 h-3 rounded-full"
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-lg px-4 py-2.5 shadow-sm flex flex-wrap items-center gap-x-4 gap-y-2"
+      data-testid="phase-timeline"
+    >
+      <span className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] font-subhead pr-2 border-r border-[var(--ayci-border)]">
+        Timeline
+      </span>
+      {phaseList.map((p) => {
+        const isCurrent = today >= p.start && today <= p.end;
+        const isPast = today > p.end;
+        return (
+          <div
+            key={p.key}
+            className="flex items-center gap-1.5 text-xs whitespace-nowrap"
+            title={`${fmtDate(p.start)} → ${fmtDate(p.end)}`}
+          >
+            <span
+              className="w-2 h-2 rounded-full inline-block"
+              style={{
+                backgroundColor: isPast
+                  ? "#cbd5e1"
+                  : isCurrent
+                  ? PHASE_COLORS[p.key]
+                  : "#e2e8f0",
+                boxShadow: isCurrent ? `0 0 0 3px ${PHASE_COLORS[p.key]}33` : "none",
+              }}
+            />
+            <span
+              className={
+                isCurrent
+                  ? "font-medium text-[var(--ayci-ink)]"
+                  : "text-[var(--ayci-ink-muted)]"
+              }
+            >
+              {p.label}
+            </span>
+            {isCurrent && (
+              <span
+                className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-subhead"
                 style={{
-                  backgroundColor: isPast
-                    ? "#cbd5e1"
-                    : isCurrent
-                    ? PHASE_COLORS[p.key]
-                    : "#e2e8f0",
-                  boxShadow: isCurrent ? `0 0 0 4px ${PHASE_COLORS[p.key]}33` : "none",
+                  backgroundColor: `${PHASE_COLORS[p.key]}1a`,
+                  color: PHASE_COLORS[p.key],
                 }}
-              />
-              <div className="flex-1 flex items-center justify-between text-sm">
-                <span
-                  className={
-                    "font-medium " +
-                    (isCurrent
-                      ? "text-[var(--ayci-ink)]"
-                      : "text-[var(--ayci-ink-muted)]")
-                  }
-                >
-                  {p.label}
-                  {isCurrent && (
-                    <span
-                      className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                      style={{
-                        backgroundColor: `${PHASE_COLORS[p.key]}1a`,
-                        color: PHASE_COLORS[p.key],
-                      }}
-                    >
-                      Live now
-                    </span>
-                  )}
-                </span>
-                <span className="text-xs text-[var(--ayci-ink-muted)]">
-                  {fmtDate(p.start)} → {fmtDate(p.end)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              >
+                Live
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -640,15 +667,15 @@ function SalesChart({ launch, sales, comparison }) {
   );
 }
 
-function SalesByProduct({ sales }) {
+function SalesByTier({ sales }) {
   return (
     <section
       className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
-      data-testid="sales-by-product"
+      data-testid="sales-by-tier"
     >
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
-          Sales breakdown by product
+          Sales breakdown by tier
         </h2>
         <a
           href="https://dashboard.stripe.com"
@@ -661,10 +688,10 @@ function SalesByProduct({ sales }) {
       </div>
       <div className="h-64">
         <ResponsiveContainer>
-          <BarChart data={sales.by_product} margin={{ top: 5, right: 20, left: 0, bottom: 30 }}>
+          <BarChart data={sales.by_tier} margin={{ top: 5, right: 20, left: 0, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
             <XAxis
-              dataKey="product"
+              dataKey="tier"
               tick={{ fontSize: 10, fill: "#64748b" }}
               angle={-25}
               textAnchor="end"
@@ -679,12 +706,12 @@ function SalesByProduct({ sales }) {
         </ResponsiveContainer>
       </div>
       <div className="mt-3 text-xs text-[var(--ayci-ink-muted)] grid grid-cols-2 md:grid-cols-4 gap-2">
-        {sales.by_product.map((p) => (
+        {sales.by_tier.map((p) => (
           <div
-            key={p.product}
+            key={p.tier}
             className="bg-slate-50 border border-[var(--ayci-border)] rounded p-2"
           >
-            <div className="font-medium text-[var(--ayci-ink)]">{p.product}</div>
+            <div className="font-medium text-[var(--ayci-ink)]">{p.tier}</div>
             <div className="text-[var(--ayci-ink-muted)]">
               {p.count} sales · {fmtGbp(p.amount_gbp)}
             </div>

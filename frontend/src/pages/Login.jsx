@@ -38,6 +38,7 @@ export default function Login() {
               src="/ayci-icon.png"
               alt="AYCI"
               className="w-full h-full object-contain"
+              style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>
           <div className="font-display font-bold text-xl">AYCI Academy</div>

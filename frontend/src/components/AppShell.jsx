@@ -39,6 +39,7 @@ export default function AppShell() {
                 src="/ayci-icon.png"
                 alt="AYCI"
                 className="w-full h-full object-contain"
+                style={{ filter: "brightness(0) invert(1)" }}
               />
             </div>
             <div>
