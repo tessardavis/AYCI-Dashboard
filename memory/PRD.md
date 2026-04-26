@@ -56,6 +56,15 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Launch Dashboard 2.0 + Misc fixes (Apr 26)
+- **Launch model upgraded**: now has `code` (Kit tag prefix, e.g. APR-26) and `phases` (7 phases each with start/end datetimes: early_signups, flash_sale, webinar, open_cart, legacy_upgrades, close_cart, in_between). PATCH endpoint added.
+- **Live registrations from Kit**: `/api/launches/{id}/registrations` discovers per-source tags `[AYCI <CODE>] Webinar - Registered - <SOURCE>` and aggregates daily counts + by-source totals.
+- **Live sales from Stripe**: `/api/launches/{id}/sales` filters charges by launch window, classifies into product tiers (Academy / VIP / Private Plus / Boost & Go etc.), returns daily + by-product breakdown.
+- **Comparison vs previous launches**: `/api/launches/{id}/comparison?n_previous=2` returns the same series for the 2 most recent prior launches, all aligned by `day_offset` for chart overlay.
+- **Frontend rewrite**: Phase timeline header (current phase highlighted), 4 KPI cards (registrations / sales count / revenue with goal markers / conversion rate), webinar registrations line chart with previous-launch overlays, UTM source breakdown, sales chart with Good/Better/Best reference lines, sales-by-product bar chart. Manual sales editor removed.
+- **Settings → Launches → Edit dialog**: code field + 7 phase pickers (datetime-local), all edits via PATCH.
+- **Quick fixes**: Upcoming Interviews defaults to Private only with toggle to "All tiers". Cohort total = new+legacy from Kit. Circle bar gradient now uses inline linear-gradient (was broken Tailwind syntax). Student Lookup accepts name search with autocomplete dropdown (`/api/students/name-search`).
+
 ## External integrations in use
 | Platform   | Env var              | Purpose                                                 |
 |------------|----------------------|---------------------------------------------------------|
