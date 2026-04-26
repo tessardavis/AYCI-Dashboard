@@ -314,16 +314,33 @@ async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> d
     today_amount = current_sales.get("total_amount_gbp", 0.0)
 
     ratios: list[dict] = []
+    # Cumulative series for sparkline overlay
+    current_cumul: list[dict] = []
+    cum = 0.0
+    current_start = datetime.fromisoformat(current_launch["start_date"]).date()
+    for row in current_sales.get("by_day", []):
+        try:
+            d = datetime.fromisoformat(row["date"]).date()
+        except ValueError:
+            continue
+        cum += row["amount_gbp"]
+        current_cumul.append({"day_offset": (d - current_start).days, "value": round(cum, 2)})
+
+    prev_cumul: list[dict] = []  # one entry per prior launch
     for prev, prev_sales in prev_results:
         prev_start = datetime.fromisoformat(prev["start_date"]).date()
         amount_at_today = 0.0
         final_amount = 0.0
+        series = []
+        cum_p = 0.0
         for row in prev_sales.get("by_day", []):
             try:
                 d = datetime.fromisoformat(row["date"]).date()
             except ValueError:
                 continue
             offset = (d - prev_start).days
+            cum_p += row["amount_gbp"]
+            series.append({"day_offset": offset, "value": round(cum_p, 2)})
             final_amount += row["amount_gbp"]
             if offset <= today_offset:
                 amount_at_today += row["amount_gbp"]
@@ -335,6 +352,7 @@ async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> d
                 "final": round(final_amount, 2),
                 "ratio": round(final_amount / amount_at_today, 3),
             })
+            prev_cumul.append({"id": prev["id"], "name": prev["name"], "series": series})
 
     targets = {
         "good": current_launch.get("target_good", 0),
@@ -387,6 +405,8 @@ async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> d
         "targets": targets,
         "verdict": verdict,
         "days_to_close": days_to_close,
+        "current_cumul": current_cumul,
+        "prev_cumul": prev_cumul,
     }
 
 

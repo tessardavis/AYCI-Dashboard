@@ -23,6 +23,7 @@ import {
 import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { PaceTrackerCard } from "@/components/PaceTracker";
+import YearOverview from "@/components/YearOverview";
 
 const PHASE_LABELS = {
   early_signups: "Early signups",

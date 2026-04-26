@@ -1187,6 +1187,70 @@ async def launch_comparison(
     }
 
 
+@api.get("/launches/year-overview")
+async def launches_year_overview(user: dict = Depends(get_current_user)):
+    """
+    Returns all launches with their date ranges + total Stripe revenue,
+    plus a 'today' marker. Cached for 1 hour. Used to render the year-strip
+    timeline at the top of the Launch Dashboard.
+    """
+    from datetime import datetime, timezone, timedelta
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    cache_key = f"year-overview:{today_iso}"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    cached = await db.pace_cache.find_one({"_id": cache_key}, {"_id": 0})
+    if cached and cached.get("cached_at"):
+        c_at = cached["cached_at"]
+        if c_at.tzinfo is None:
+            c_at = c_at.replace(tzinfo=timezone.utc)
+        if c_at > cutoff:
+            return {**cached["payload"], "cached": True}
+
+    all_launches = await db.launches.find({}, {"_id": 0}).sort("start_date", 1).to_list(50)
+    import asyncio
+
+    async def _enrich(L: dict) -> dict:
+        if not L.get("start_date") or not L.get("end_date"):
+            return {**L, "revenue_gbp": 0, "sales_count": 0, "is_active": False, "is_future": False}
+        try:
+            sales = await launches_mod.fetch_sales(
+                L["start_date"] + "T00:00:00Z",
+                L["end_date"] + "T23:59:59Z",
+            )
+            revenue = sales.get("total_amount_gbp", 0)
+            count = sales.get("total_count", 0)
+        except Exception:
+            revenue, count = 0, 0
+        is_active = L["start_date"] <= today_iso <= L["end_date"]
+        is_future = L["start_date"] > today_iso
+        is_past = L["end_date"] < today_iso
+        return {
+            "id": L["id"],
+            "name": L["name"],
+            "code": L.get("code"),
+            "start_date": L["start_date"],
+            "end_date": L["end_date"],
+            "webinar_date": L.get("webinar_date"),
+            "target_good": L.get("target_good"),
+            "target_better": L.get("target_better"),
+            "target_best": L.get("target_best"),
+            "revenue_gbp": revenue,
+            "sales_count": count,
+            "is_active": is_active,
+            "is_future": is_future,
+            "is_past": is_past,
+        }
+
+    enriched = await asyncio.gather(*[_enrich(L) for L in all_launches])
+    payload = {"today": today_iso, "launches": enriched}
+    await db.pace_cache.update_one(
+        {"_id": cache_key},
+        {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {**payload, "cached": False}
+
+
 @api.get("/launches/active/pace")
 async def active_launch_pace(user: dict = Depends(get_current_user)):
     """
