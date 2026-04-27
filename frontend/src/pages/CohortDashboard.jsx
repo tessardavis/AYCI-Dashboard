@@ -46,7 +46,7 @@ export default function CohortDashboard() {
   }, []);
 
   return (
-    <div className="p-8 space-y-6" data-testid="cohort-dashboard-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="cohort-dashboard-page">
       <HeroBanner
         {...HERO_PRESETS.cohort}
         eyebrow="Current cohort"

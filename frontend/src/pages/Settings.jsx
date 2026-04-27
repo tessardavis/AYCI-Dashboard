@@ -40,7 +40,7 @@ export default function Settings() {
   const isAdmin = user?.role === "admin";
 
   return (
-    <div className="p-8 lg:p-12 ayci-fade-up">
+    <div className="p-4 sm:p-6 lg:p-12 ayci-fade-up">
       <PageHeader
         eyebrow="Workspace"
         title="Settings"

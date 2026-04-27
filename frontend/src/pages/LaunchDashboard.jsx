@@ -124,7 +124,7 @@ export default function LaunchDashboard() {
   }, [launchId]);
 
   return (
-    <div className="p-8 space-y-6" data-testid="launch-dashboard-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="launch-dashboard-page">
       <HeroBanner
         {...HERO_PRESETS.launch}
         eyebrow="Launch"

@@ -118,7 +118,7 @@ export default function UpcomingInterviews() {
   const showAcademy = view === "all";
 
   return (
-    <div className="p-8 space-y-6" data-testid="upcoming-interviews-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="upcoming-interviews-page">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">

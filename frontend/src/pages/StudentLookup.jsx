@@ -111,6 +111,23 @@ export default function StudentLookup() {
     runLookupForEmail(s.email);
   };
 
+  // Hover-prefetch: warm the unified-lookup endpoint for the hovered
+  // suggestion so that clicking it returns instantly. Session-scoped dedupe
+  // so we don't re-fire for the same email.
+  const prefetchedRef = useRef(new Set());
+  const prefetchHoverRef = useRef(null);
+  const prefetchSuggestion = (email) => {
+    clearTimeout(prefetchHoverRef.current);
+    if (!email || prefetchedRef.current.has(email)) return;
+    prefetchHoverRef.current = setTimeout(() => {
+      prefetchedRef.current.add(email);
+      apiClient
+        .get(`/students/lookup`, { params: { email }, timeout: 30000 })
+        .catch(() => prefetchedRef.current.delete(email));
+    }, 200);
+  };
+  const cancelPrefetch = () => clearTimeout(prefetchHoverRef.current);
+
   const refreshCircleCache = async () => {
     setRefreshingCache(true);
     try {
@@ -139,7 +156,7 @@ export default function StudentLookup() {
   })();
 
   return (
-    <div className="p-8 space-y-6" data-testid="student-lookup-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="student-lookup-page">
       <div>
         <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
           Unified view
@@ -183,6 +200,9 @@ export default function StudentLookup() {
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pickSuggestion(s)}
+                  onMouseEnter={() => prefetchSuggestion(s.email)}
+                  onMouseLeave={cancelPrefetch}
+                  onFocus={() => prefetchSuggestion(s.email)}
                   className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-[var(--ayci-border)] last:border-b-0 flex items-center gap-2"
                   data-testid={`suggestion-${s.email}`}
                 >

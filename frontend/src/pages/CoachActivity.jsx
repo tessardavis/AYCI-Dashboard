@@ -40,7 +40,7 @@ export default function CoachActivity() {
   useEffect(() => { load(false); }, []);
 
   return (
-    <div className="p-8 space-y-6" data-testid="coach-activity-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="coach-activity-page">
       <HeroBanner
         gradient="linear-gradient(135deg, #0F766E 0%, #0EA5A4 55%, #14B8A6 100%)"
         accentDot="rgba(165,243,252,0.30)"

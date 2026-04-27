@@ -175,7 +175,7 @@ export default function WeeklyScorecard() {
   };
 
   return (
-    <div className="p-8 lg:p-12 ayci-fade-up">
+    <div className="p-4 sm:p-6 lg:p-12 ayci-fade-up">
       <PageHeader
         eyebrow="Monday Scorecard"
         title="Weekly Scorecard"

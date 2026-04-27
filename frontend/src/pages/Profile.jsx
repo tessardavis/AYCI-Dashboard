@@ -50,7 +50,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="p-8 max-w-2xl mx-auto" data-testid="profile-page">
+    <div className="p-4 sm:p-8 max-w-2xl mx-auto" data-testid="profile-page">
       <Link
         to="/"
         className="inline-flex items-center gap-1.5 text-sm text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-teal)] mb-4"

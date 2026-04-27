@@ -121,7 +121,7 @@ export default function StudentsAtRisk() {
 
   if (loading) {
     return (
-      <div className="p-8" data-testid="at-risk-page">
+      <div className="p-4 sm:p-6 lg:p-8" data-testid="at-risk-page">
         <div className="flex items-center gap-2 text-[var(--ayci-ink-muted)]">
           <Loader2 className="w-5 h-5 animate-spin" /> Loading at-risk list…
         </div>
@@ -130,7 +130,7 @@ export default function StudentsAtRisk() {
   }
 
   return (
-    <div className="p-8 space-y-6" data-testid="at-risk-page">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="at-risk-page">
       <HeroBanner
         {...HERO_PRESETS.at_risk}
         eyebrow="Retention"

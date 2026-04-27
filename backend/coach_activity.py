@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone, timedelta, date
+from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
@@ -28,54 +29,86 @@ import httpx
 from connectors import CIRCLE_BASE, _circle_headers, MONDAY_URL, _monday_headers, TIMEOUT
 
 
-# Circle space IDs for the April 26 cohort
-RECORDED_ANSWER_SPACE_ID = 2529508          # /c/recorded-answer-review-apr-26/
-INTERVIEW_SUPPORT_SPACE_ID = 2529509        # /c/specific-interview-support-apr-26/
-PRIVATE_VIDEOS_BOARD_ID = 5083952249        # AYCI - Private video responses
+# Circle space IDs — note: the cohort is using the older "March/April" space
+# (id=2513456) for actual recorded answer activity even though the cohort
+# is named "April 26". The newer "apr-26" space (2529508) was provisioned
+# but unused. Update if the team migrates to the apr-26 space.
+RECORDED_ANSWER_SPACE_ID = 2513456           # /c/recorded-answer-review-march/
+INTERVIEW_SUPPORT_SPACE_ID = 2529509         # /c/specific-interview-support-apr-26/
+PRIVATE_VIDEOS_BOARD_ID = 5083952249         # AYCI - Private video responses
 
 # Day 1 cut-offs (cohort April 26)
 RECORDED_ANSWERS_START = date(2026, 4, 4)   # Mon 4 Apr — recorded answer review
 INTERVIEW_SUPPORT_START = date(2026, 4, 23) # Thu 23 Apr — interview support
 
-# Coach roster — names must match Circle community_member display names exactly.
-COACHES = [
-    "Zinnirah Zainodin",
-    "Anne Beh",
-    "Charlotte Wyeth",
-    "Anoop Chidambaram",
-    "Kat Priddis",
-    "Tessa Davis",
-    "Becky Platt",
+# Coach roster — `(canonical_name, [emails], [name_aliases_or_partial_matches])`.
+# Aliases are useful when Circle stores a coach under their full real name (e.g.
+# "Anoopkishore Chidambaram") but the team refers to them differently. Match is
+# attempted against email first, then exact lowercase, then alias contains, then
+# fuzzy SequenceMatcher (0.82 threshold).
+COACH_ROSTER: list[tuple[str, list[str], list[str]]] = [
+    ("Zinnirah Zainodin",   [],                          []),
+    ("Anne Beh",            [],                          []),
+    ("Charlotte Wyeth",     [],                          ["charlotte w"]),
+    ("Anoop Chidambaram",   ["anoop.chidam@gmail.com"],  ["anoopkishore", "anoop kishore"]),
+    ("Kat Priddis",         [],                          []),
+    ("Tessa Davis",         [],                          []),
+    ("Becky Platt",         [],                          []),
 ]
-# Lowercased lookup so we can do tolerant matches against Circle's user_name.
-COACHES_LC = {c.lower(): c for c in COACHES}
+COACHES: list[str] = [c[0] for c in COACH_ROSTER]
+_EMAIL_TO_COACH: dict[str, str] = {
+    e.lower(): name for name, emails, _ in COACH_ROSTER for e in emails
+}
+_NAME_TO_COACH: dict[str, str] = {
+    name.lower(): name for name, _, _ in COACH_ROSTER
+}
+# Pre-compute lowercase aliases so we can do contains-style match
+_ALIAS_TO_COACH: list[tuple[str, str]] = [
+    (alias.lower(), name)
+    for name, _, aliases in COACH_ROSTER
+    for alias in aliases
+]
 
 NO_REPLY_SLA_HOURS = 48
 WEEKLY_VIDEO_LIMIT = 3
+COACH_FUZZY_THRESHOLD = 0.82
 
 
-def _is_coach(name: str | None) -> bool:
-    if not name:
-        return False
-    n = name.strip().lower()
-    if n in COACHES_LC:
-        return True
-    # Tolerant: drop whitespace
-    n2 = n.replace(" ", "")
-    return any(c.lower().replace(" ", "") == n2 for c in COACHES)
-
-
-def _coach_canonical(name: str | None) -> str | None:
+def _coach_canonical(name: str | None, email: str | None = None) -> str | None:
+    """
+    Resolve any Circle / Monday name+email to a canonical roster name.
+    Match priority: exact email → exact lowercase name → alias contains →
+    SequenceMatcher ratio ≥ 0.82.
+    """
+    if email:
+        e = email.strip().lower()
+        if e in _EMAIL_TO_COACH:
+            return _EMAIL_TO_COACH[e]
     if not name:
         return None
     n = name.strip().lower()
-    if n in COACHES_LC:
-        return COACHES_LC[n]
-    n2 = n.replace(" ", "")
-    for c in COACHES:
-        if c.lower().replace(" ", "") == n2:
-            return c
+    if n in _NAME_TO_COACH:
+        return _NAME_TO_COACH[n]
+    for alias, canon in _ALIAS_TO_COACH:
+        if alias in n:
+            return canon
+    # Fuzzy fall-through — last-name token must match exactly to avoid pulling
+    # unrelated people with similar first names.
+    name_tokens = n.split()
+    for canon in COACHES:
+        canon_tokens = canon.lower().split()
+        if not canon_tokens:
+            continue
+        if canon_tokens[-1] not in name_tokens:
+            continue
+        ratio = SequenceMatcher(None, n, canon.lower()).ratio()
+        if ratio >= COACH_FUZZY_THRESHOLD:
+            return canon
     return None
+
+
+def _is_coach(name: str | None, email: str | None = None) -> bool:
+    return _coach_canonical(name, email) is not None
 
 
 # ---------- Circle helpers ----------------------------------------------------
@@ -127,10 +160,20 @@ def _post_author_name(post: dict) -> str | None:
             or (post.get("user") or {}).get("name"))
 
 
+def _post_author_email(post: dict) -> str | None:
+    return (post.get("user_email")
+            or (post.get("user") or {}).get("email"))
+
+
 def _comment_author_name(comment: dict) -> str | None:
     return (comment.get("user_name")
             or (comment.get("community_member") or {}).get("name")
             or (comment.get("user") or {}).get("name"))
+
+
+def _comment_author_email(comment: dict) -> str | None:
+    return ((comment.get("user") or {}).get("email")
+            or (comment.get("community_member") or {}).get("email"))
 
 
 def _post_url(post: dict) -> str | None:
@@ -208,7 +251,7 @@ async def analyse_circle_space(
     answered_post_ids: set[int] = set()
     for pid, cs in comments_by_post.items():
         for cm in cs:
-            canon = _coach_canonical(_comment_author_name(cm))
+            canon = _coach_canonical(_comment_author_name(cm), _comment_author_email(cm))
             if canon:
                 posts_replied_by_coach[canon].add(pid)
                 answered_post_ids.add(pid)
@@ -244,7 +287,8 @@ async def analyse_circle_space(
     by_author_week: dict[tuple[str, str], list[int]] = {}
     for p in in_window:
         author = _post_author_name(p) or "Unknown"
-        if _is_coach(author):
+        author_email = _post_author_email(p)
+        if _is_coach(author, author_email):
             continue  # don't flag coach pinned posts
         try:
             created = datetime.fromisoformat((p.get("created_at") or "").replace("Z", "+00:00"))
@@ -269,7 +313,7 @@ async def analyse_circle_space(
     rate_limited.sort(key=lambda x: (x["count"], x["week_start"]), reverse=True)
 
     # Distinct authors (students)
-    student_authors = {(_post_author_name(p) or "Unknown") for p in in_window if not _is_coach(_post_author_name(p))}
+    student_authors = {(_post_author_name(p) or "Unknown") for p in in_window if not _is_coach(_post_author_name(p), _post_author_email(p))}
 
     return {
         "label": label,

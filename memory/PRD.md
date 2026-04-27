@@ -24,7 +24,15 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
-### 2026-04 — Coach Activity dashboard (Apr 27)
+### 2026-04 — Launch metric fixes + Coach name resolution + Mobile nav (Apr 27)
+- **Webinar registrations** now use the canonical `[AYCI <CODE>] Webinar - Registered - All` tag for the headline `total` count instead of summing per-source tags. The per-source list still drives the breakdown chart but no longer inflates the total when subscribers are tagged on multiple source tags. APR-26: 1479 (was 1534).
+- **Phase breakdown** rebuilt to assign each calendar day to **exactly one** phase (the latest phase whose start is on or before that day, capped by the final phase's end date). Eliminates the double-counting that occurred on shared boundary days like 20 Apr (which used to count toward both `early_access` and `flash_sale`).
+- **Coach name resolution** for `/coach-activity`: real Circle accounts (e.g. "Anoopkishore Chidambaram") now resolve to their roster name via email match → exact lowercase → alias contains → SequenceMatcher ratio ≥ 0.82 with last-name token guard. Anoop now correctly shows 14 / 14 replies on Recorded Answer Review.
+- **Recorded Answer Review** space ID switched from `2529508` (provisioned but empty) to `2513456` (where the cohort is actually posting — 14 active videos from 6 students).
+- **Student Lookup autocomplete prefetch**: hovering a name suggestion for 200 ms warms the unified-lookup endpoint for that email, so the click is sub-100 ms. Session-deduped to avoid re-firing.
+- **Mobile-friendly nav**: `<lg` viewports now show a sticky brand top-bar with a hamburger that opens a slide-in drawer (with backdrop). Drawer auto-closes on route change. Heroes and page padding scale down at `sm:` and below; the existing scorecard table already had horizontal scroll.
+
+
 - New `/coach-activity` board (`coach_activity` permission key) for the coaching team. 30-min SWR cached. Sidebar entry with `MessageCircle` icon. Granted to all 5 provisioned team users + the test coach account.
 - **Recorded Answer Review section** (Circle space `2529508`, since 4 Apr 2026): per-day post bar chart, replies-per-coach bar list, two flag panels — "Awaiting coach reply > 48 h" and "Posting > 3 / week".
 - **Specific Interview Support section** (Circle space `2529509`, since 23 Apr 2026): same shape; Tessa is currently doing all 5 of 5 replies.

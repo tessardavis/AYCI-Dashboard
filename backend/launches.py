@@ -110,14 +110,17 @@ def _tag_source(tag_name: str, code: str) -> Optional[str]:
     Given a tag name and a launch code, return the source label or None
     if the tag is not a webinar-registration tag for this launch.
     Example: "[AYCI APR-26] Webinar - Registered - Homepage" → "Homepage"
+    The aggregate "All" tag is returned with the special marker "__ALL__"
+    so callers can distinguish it from real source tags.
     """
     pattern = rf"^\[AYCI {re.escape(code)}\] Webinar - Registered - (.+)$"
     m = re.match(pattern, tag_name, re.IGNORECASE)
     if not m:
         return None
     src = m.group(1).strip()
-    # Skip aggregate "All" tag - we'll synthesise All from sums
-    if src.lower() in ("all", "no sale"):
+    if src.lower() == "all":
+        return "__ALL__"
+    if src.lower() == "no sale":
         return None
     return src
 
@@ -182,11 +185,15 @@ async def fetch_registrations(code: str, start_iso: str, end_iso: str) -> dict:
     by_day: dict[str, dict] = {}
 
     seen_emails: set[str] = set()  # for dedup global total
+    all_tag_total = 0
+    all_tag_emails: set[str] = set()
+    all_tag_by_day: dict[str, int] = {}
 
     for (tid, src), subs in zip(relevant, tag_results):
         if isinstance(subs, Exception):
             logger.warning(f"Kit tag {tid} ({src}) failed: {subs}")
             continue
+        is_all = src == "__ALL__"
         for sub in subs:
             try:
                 ca = datetime.fromisoformat(sub["created_at"].replace("Z", "+00:00"))
@@ -195,27 +202,49 @@ async def fetch_registrations(code: str, start_iso: str, end_iso: str) -> dict:
             if ca < start or ca > end:
                 continue
             day = ca.date().isoformat()
-            by_source_count[src] += 1
-            day_bucket = by_day.setdefault(day, {"total": 0, "by_source": defaultdict(int)})
-            day_bucket["total"] += 1
-            day_bucket["by_source"][src] += 1
-            seen_emails.add(sub["email"])
+            if is_all:
+                # Authoritative "All" tag — used for total + per-day total
+                all_tag_total += 1
+                all_tag_emails.add(sub["email"])
+                all_tag_by_day[day] = all_tag_by_day.get(day, 0) + 1
+            else:
+                by_source_count[src] += 1
+                day_bucket = by_day.setdefault(day, {"total": 0, "by_source": defaultdict(int)})
+                day_bucket["by_source"][src] += 1
+                seen_emails.add(sub["email"])
 
     by_source = sorted(
         [{"source": s, "count": n} for s, n in by_source_count.items()],
         key=lambda x: -x["count"],
     )
-    by_day_list = sorted(
-        [
-            {"date": d, "total": v["total"], "by_source": dict(v["by_source"])}
-            for d, v in by_day.items()
-        ],
-        key=lambda x: x["date"],
-    )
+
+    # Merge the All-tag day counts into by_day as the authoritative `total`.
+    # If a day has source breakdown but no All-tag entry, we fall back to the
+    # sum of sources for that day so charts don't get gaps.
+    all_days = set(by_day.keys()) | set(all_tag_by_day.keys())
+    by_day_list = []
+    for d in sorted(all_days):
+        bucket = by_day.get(d, {"by_source": defaultdict(int)})
+        all_for_day = all_tag_by_day.get(d)
+        total = all_for_day if all_for_day is not None else sum(bucket["by_source"].values())
+        by_day_list.append({
+            "date": d,
+            "total": total,
+            "by_source": dict(bucket["by_source"]),
+        })
+
+    # Use the "All" tag count as the authoritative total when available
+    # (since per-source tags can overlap when a subscriber is tagged multiple times).
+    if all_tag_total > 0:
+        total_count = all_tag_total
+        unique_count = len(all_tag_emails)
+    else:
+        total_count = sum(by_source_count.values())
+        unique_count = len(seen_emails)
 
     return {
-        "total": sum(by_source_count.values()),
-        "unique": len(seen_emails),
+        "total": total_count,
+        "unique": unique_count,
         "by_source": by_source,
         "by_day": by_day_list,
     }
@@ -638,8 +667,14 @@ def _bucket_into_phases(
     """
     Given a list of {date, count, amount_gbp} and {date, total} day-buckets,
     aggregate them by phase using launch.phases start/end timestamps.
+
+    Each calendar day is assigned to EXACTLY ONE phase: the latest phase whose
+    `start.date()` is on or before that day. This avoids the double-counting
+    that occurs when two phases share a boundary day (e.g. early_access ends
+    19 Apr 07:59 and flash_sale starts 19 Apr 08:00 — the day 19 Apr would
+    have been counted in both phases under the old date-range overlap check).
     """
-    # Pre-parse phase windows
+    # Pre-parse phase windows, sorted by start
     phase_windows: list[tuple[str, datetime, datetime]] = []
     for key in PHASE_ORDER:
         ph = phases.get(key) or {}
@@ -653,38 +688,61 @@ def _bucket_into_phases(
         except ValueError:
             continue
         phase_windows.append((key, sd, ed))
+    sorted_phases = sorted(phase_windows, key=lambda x: x[1])
+
+    def phase_for_day(d_date) -> Optional[str]:
+        """Latest phase whose start date is on or before the given calendar day,
+        treating the final phase's end date as the launch's hard upper bound."""
+        chosen: Optional[str] = None
+        for key, sd, _ed in sorted_phases:
+            if sd.date() <= d_date:
+                chosen = key
+            else:
+                break
+        if chosen and sorted_phases and d_date > sorted_phases[-1][2].date():
+            return None
+        return chosen
+
+    totals: dict[str, dict] = {
+        key: {"signups": 0, "revenue": 0.0, "regs": 0}
+        for key, _, _ in sorted_phases
+    }
+
+    for row in sales_by_day:
+        try:
+            d = datetime.fromisoformat(row["date"]).date()
+        except ValueError:
+            continue
+        p = phase_for_day(d)
+        if p is None:
+            continue
+        totals[p]["signups"] += int(row.get("count", 0))
+        totals[p]["revenue"] += float(row.get("amount_gbp", 0))
+
+    for row in regs_by_day:
+        try:
+            d = datetime.fromisoformat(row["date"]).date()
+        except ValueError:
+            continue
+        p = phase_for_day(d)
+        if p is None:
+            continue
+        totals[p]["regs"] += int(row.get("total", 0))
 
     out: list[dict] = []
-    for key, sd, ed in phase_windows:
-        signups = 0
-        revenue = 0.0
-        regs = 0
-        for row in sales_by_day:
-            try:
-                d = datetime.fromisoformat(row["date"]).replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-            # Phase boundaries are aligned to dates here (one whole day belongs to one phase).
-            # Use phase start date as inclusive lower bound, end date as inclusive upper.
-            if sd.date() <= d.date() <= ed.date():
-                signups += int(row.get("count", 0))
-                revenue += float(row.get("amount_gbp", 0))
-        for row in regs_by_day:
-            try:
-                d = datetime.fromisoformat(row["date"]).replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-            if sd.date() <= d.date() <= ed.date():
-                regs += int(row.get("total", 0))
+    for key, sd, ed in sorted_phases:
+        t = totals[key]
         out.append({
             "phase": key,
             "start": sd.isoformat(),
             "end": ed.isoformat(),
-            "signups": signups,
-            "revenue_gbp": round(revenue, 2),
-            "registrations": regs,
+            "signups": t["signups"],
+            "revenue_gbp": round(t["revenue"], 2),
+            "registrations": t["regs"],
         })
-    return out
+    # Restore canonical PHASE_ORDER for output
+    by_key = {row["phase"]: row for row in out}
+    return [by_key[k] for k in PHASE_ORDER if k in by_key]
 
 
 async def compute_phase_breakdown(launches_collection, current_launch: dict) -> dict:

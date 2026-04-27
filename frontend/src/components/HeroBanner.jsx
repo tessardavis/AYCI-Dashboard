@@ -20,7 +20,7 @@ export default function HeroBanner({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl px-8 py-10 shadow-sm border border-[var(--ayci-border)]"
+      className="relative overflow-hidden rounded-2xl px-5 py-7 sm:px-8 sm:py-10 shadow-sm border border-[var(--ayci-border)]"
       style={{ background: gradient }}
       data-testid={testid}
     >
@@ -28,7 +28,7 @@ export default function HeroBanner({
         src="/ayci-icon.png"
         alt=""
         aria-hidden="true"
-        className="absolute -top-16 -right-16 w-[420px] h-[420px] pointer-events-none select-none"
+        className="absolute -top-16 -right-16 w-[280px] h-[280px] sm:w-[420px] sm:h-[420px] pointer-events-none select-none"
         style={{
           filter: "brightness(0) invert(1)",
           opacity: 0.07,
@@ -40,10 +40,10 @@ export default function HeroBanner({
         style={{ background: `radial-gradient(closest-side, ${accentDot}, transparent)` }}
       />
       <div className="relative flex items-start justify-between flex-wrap gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           {eyebrow && (
             <div
-              className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase"
+              className="text-[10px] sm:text-[11px] font-display font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase"
               style={{ color: eyebrowColor }}
               data-testid={`${testid}-eyebrow`}
             >
@@ -51,16 +51,16 @@ export default function HeroBanner({
             </div>
           )}
           <h1
-            className="text-4xl font-display font-bold text-white mt-1"
+            className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-white mt-1"
             data-testid={`${testid}-title`}
           >
             {title}
           </h1>
           {subtitle && (
-            <p className="text-white/75 text-sm mt-1 max-w-2xl">{subtitle}</p>
+            <p className="text-white/75 text-xs sm:text-sm mt-1 max-w-2xl">{subtitle}</p>
           )}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
       </div>
     </div>
   );

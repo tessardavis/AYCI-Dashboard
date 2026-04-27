@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 
@@ -24,6 +25,12 @@ export function userCanAccess(user, board) {
 export default function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close drawer whenever the route changes (e.g. user taps a nav link)
+  const closeDrawer = () => setMobileOpen(false);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -31,12 +38,57 @@ export default function AppShell() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[var(--ayci-canvas)]">
+    <div className="min-h-screen lg:flex bg-[var(--ayci-canvas)]">
+      {/* Mobile top bar — visible below lg */}
+      <header
+        className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 h-14 border-b border-[var(--ayci-border)]"
+        style={{ backgroundColor: "var(--ayci-sidebar)" }}
+        data-testid="mobile-topbar"
+      >
+        <div className="flex items-center gap-2 text-white">
+          <img src="/ayci-icon.png" alt="AYCI" className="w-7 h-7" style={{ filter: "brightness(0) invert(1)" }} />
+          <span className="font-display font-bold text-sm">AYCI Academy</span>
+        </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="text-white p-2 hover:bg-white/10 rounded-md"
+          aria-label="Open menu"
+          data-testid="mobile-menu-button"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      </header>
+
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={closeDrawer}
+          data-testid="mobile-backdrop"
+        />
+      )}
+
       <aside
-        className="w-64 shrink-0 flex flex-col sticky top-0 h-screen"
+        className={[
+          "shrink-0 flex flex-col",
+          // Desktop: sticky 256px column
+          "lg:w-64 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          // Mobile: fixed slide-in drawer
+          "fixed lg:static top-0 left-0 h-screen w-64 z-50 transition-transform duration-200",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        ].join(" ")}
         style={{ backgroundColor: "var(--ayci-sidebar)" }}
         data-testid="app-sidebar"
       >
+        {/* Close button — mobile only */}
+        <button
+          onClick={closeDrawer}
+          className="lg:hidden absolute top-3 right-3 p-2 text-white/70 hover:text-white"
+          aria-label="Close menu"
+          data-testid="mobile-close-button"
+        >
+          <X className="w-5 h-5" />
+        </button>
         <div className="px-6 pt-8 pb-6">
           <div className="flex items-center gap-3">
             <div
