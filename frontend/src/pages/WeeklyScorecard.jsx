@@ -7,6 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Filter, X, RefreshCw } from "lucide-react";
+import MobileScorecard from "@/components/MobileScorecard";
 
 const CATEGORY_ORDER = [
   "GROWTH + INTEREST",
@@ -197,8 +198,8 @@ export default function WeeklyScorecard() {
         }
       />
 
-      {/* Owner filter */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
+      {/* Owner filter — desktop chip row (hidden on mobile, replaced by dropdown) */}
+      <div className="hidden sm:flex items-center gap-2 mb-5 flex-wrap">
         <span className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-1.5">
           <Filter className="w-3.5 h-3.5" /> Filter by owner:
         </span>
@@ -228,7 +229,7 @@ export default function WeeklyScorecard() {
       {loading ? (
         <div className="text-sm text-[var(--ayci-ink-muted)]">Loading…</div>
       ) : (
-        <div className="bg-white rounded-lg border border-[var(--ayci-border)] shadow-sm overflow-hidden">
+        <div className="hidden sm:block bg-white rounded-lg border border-[var(--ayci-border)] shadow-sm overflow-hidden">
           <div className="overflow-x-auto ayci-scroll" data-testid="scorecard-table-wrapper">
             <table className="min-w-full text-sm border-collapse">
               <thead>
@@ -370,6 +371,25 @@ export default function WeeklyScorecard() {
           </div>
         </div>
       )}
+
+      {/* Mobile-only card view (hidden on sm and up) */}
+      <MobileScorecard
+        grouped={grouped}
+        weeks={weeks}
+        valueMap={valueMap}
+        teamById={teamById}
+        team={team}
+        filterOwnerId={filterOwnerId}
+        setFilterOwnerId={setFilterOwnerId}
+        startEdit={startEdit}
+        editingCell={editingCell}
+        editingValue={editingValue}
+        setEditingValue={setEditingValue}
+        commitEdit={commitEdit}
+        onCellKey={onCellKey}
+        loading={loading}
+        CATEGORY_ORDER={CATEGORY_ORDER}
+      />
     </div>
   );
 }

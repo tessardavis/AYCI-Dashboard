@@ -24,7 +24,13 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
-### 2026-04 — Launch metric fixes + Coach name resolution + Mobile nav (Apr 27)
+### 2026-04 — Mobile Weekly Scorecard card view (Apr 27)
+- New `<MobileScorecard />` component shown only on `<sm` (≤ 640 px) viewports; desktop table is hidden via `sm:hidden`/`hidden sm:block`. Cards group by category (Growth → Conversion → Revenue → Social Proof → Delivery) matching the desktop sort order.
+- Each card: owner avatars · metric name + goal · this-week's value (colour-coded on-track / off-track) · sparkline of the visible weeks. Tap to expand → full week-by-week list with the same in-place edit (reuses `startEdit` / `commitEdit` / `onCellKey` so behaviour matches desktop exactly).
+- Owner filter on mobile is a "Filter by owner" dropdown disclosure (option 4b — saves vertical space) instead of the wide chip row used on desktop.
+- All editing capabilities preserved on mobile (option 2a). 20/20 metric cards verified rendering at 390 × 844 viewport; lint clean.
+
+ + Coach name resolution + Mobile nav (Apr 27)
 - **Webinar registrations** now use the canonical `[AYCI <CODE>] Webinar - Registered - All` tag for the headline `total` count instead of summing per-source tags. The per-source list still drives the breakdown chart but no longer inflates the total when subscribers are tagged on multiple source tags. APR-26: 1479 (was 1534).
 - **Phase breakdown** rebuilt to assign each calendar day to **exactly one** phase (the latest phase whose start is on or before that day, capped by the final phase's end date). Eliminates the double-counting that occurred on shared boundary days like 20 Apr (which used to count toward both `early_access` and `flash_sale`).
 - **Coach name resolution** for `/coach-activity`: real Circle accounts (e.g. "Anoopkishore Chidambaram") now resolve to their roster name via email match → exact lowercase → alias contains → SequenceMatcher ratio ≥ 0.82 with last-name token guard. Anoop now correctly shows 14 / 14 replies on Recorded Answer Review.
