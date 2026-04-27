@@ -24,7 +24,17 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
-### 2026-04 — Team accounts provisioned (Apr 27)
+### 2026-04 — Self-serve change-password + brand heroes + past-coaches + hover prefetch (Apr 27)
+- **Self-serve change password**: `POST /api/auth/change-password` (current + new). Min 8 chars, must differ. New `/profile` page with form + role/email summary card. New "My profile" button in sidebar. Tested: wrong/short/identical/valid all return correct status; old login fails after change. (12/12 backend pytest cases PASS.)
+- **Reusable HeroBanner** (`/components/HeroBanner.jsx`) with three brand presets:
+  - `launch` — navy → indigo, cyan accent (existing).
+  - `cohort` — magenta → purple (`#7B1FA2 → #C2185B`), pink accent.
+  - `at_risk` — amber → orange (`#B45309 → #F59E0B`), peach accent.
+  All three pages refactored to use it; rotated AYCI watermark + radial glow consistent across boards.
+- **Upcoming Interviews — past coaches per student**: each card now shows "SPOKE WITH · Tessa Davis · Becky Platt ×3" pills surfacing prior Calendly hosts. New `fetch_past_coaches_bulk(db, emails)` helper in `upcoming_interviews.py` — concurrent (semaphore=6) Calendly lookups with 24 h per-email cache (`cache.calendly_past_hosts:{email}`), bounded to 200 events / 365 days lookback per student. Cold call ~3 s for 27 students; warm <500 ms.
+- **Hover prefetch**: new `<PrefetchNavLink>` wraps `NavLink`. Sidebar nav links debounce-fire (200 ms) the destination's primary GET on `mouseenter`/`focus`. Session-level dedupe so one hover per nav per session. Endpoints prefetched: `/launches`, `/interviews/upcoming`, `/students/at-risk`, `/cohorts/labels`, `/scorecard`. Result: clicked dashboards feel instant because the SWR cache is already warm.
+
+
 - 5 real team members created via `/api/auth/register` as `user` role with explicit `board_access`:
   - **Full access (7 boards)**: Arub Yousuf, Oksana Demchenko.
   - **All except `launches`**: Coralie Fairon, Becky Platt, Anoop Chidambaram.
