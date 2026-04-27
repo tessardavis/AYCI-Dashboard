@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -18,6 +18,35 @@ const daysUntil = (iso, todayIso) => {
   if (diff === 1) return "tomorrow";
   return `in ${diff} days`;
 };
+
+function InterviewTypeBadge({ type }) {
+  const isLocum = (type || "").toLowerCase().includes("locum");
+  const cls = isLocum
+    ? "bg-amber-50 text-amber-700 border-amber-200"
+    : "bg-sky-50 text-sky-700 border-sky-200";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] uppercase tracking-wider font-semibold ${cls}`}
+      data-testid="interview-type-badge"
+    >
+      <Briefcase className="w-3 h-3" />
+      {type}
+    </span>
+  );
+}
+
+function HistoryBadge({ count }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] uppercase tracking-wider font-semibold"
+      title="Previous Tally interview submissions for this student"
+      data-testid="tally-history-badge"
+    >
+      <History className="w-3 h-3" />
+      {count} prior{count > 1 ? " interviews" : ""}
+    </span>
+  );
+}
 
 export default function UpcomingInterviews() {
   const [data, setData] = useState(null);
@@ -220,7 +249,7 @@ function AcademyRow({ student, today }) {
       data-testid={`academy-row-${student.id}`}
     >
       <div className="flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <a
             href={student.monday_url}
             target="_blank"
@@ -229,6 +258,12 @@ function AcademyRow({ student, today }) {
           >
             {student.name}
           </a>
+          {student.interview_type && (
+            <InterviewTypeBadge type={student.interview_type} />
+          )}
+          {student.tally_history_count > 0 && (
+            <HistoryBadge count={student.tally_history_count} />
+          )}
         </div>
         <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex flex-wrap gap-x-3">
           <span>{student.speciality || "—"}</span>
@@ -264,6 +299,12 @@ function PrivateCard({ student, today }) {
             <span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] uppercase tracking-wider font-semibold">
               {student.tier}
             </span>
+            {student.interview_type && (
+              <InterviewTypeBadge type={student.interview_type} />
+            )}
+            {student.tally_history_count > 0 && (
+              <HistoryBadge count={student.tally_history_count} />
+            )}
           </div>
           <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
             {student.speciality || "—"}

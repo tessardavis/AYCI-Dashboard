@@ -429,14 +429,21 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID) ->
 
         item = items[0]
         cols: dict[str, Any] = {}
+        cols_by_id: dict[str, dict] = {}
         for col in item.get("column_values") or []:
+            cid = col.get("id")
             title = (col.get("column") or {}).get("title")
-            if not title:
-                continue
-            cols[title] = {
+            entry = {
                 "text": col.get("text"),
                 "type": col.get("type"),
             }
+            if title:
+                cols[title] = entry
+            if cid:
+                cols_by_id[cid] = {**entry, "title": title}
+
+        # Compute coach-friendly allowance summary (calls, mocks, bonus, videos)
+        allowances = _compute_allowances(cols_by_id)
 
         return {
             "found": True,
@@ -446,11 +453,50 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID) ->
                 "url": item.get("url"),
                 "created_at": item.get("created_at"),
                 "columns": cols,
+                "allowances": allowances,
             },
             "error": None,
         }
     except Exception as e:
         return {"found": False, "data": None, "error": str(e)}
+
+
+def _compute_allowances(cols_by_id: dict[str, dict]) -> dict:
+    """Reuse upcoming_interviews allowance logic for the Student Lookup card."""
+    try:
+        from upcoming_interviews import (
+            CALL_COLS, MOCK_COLS, BONUS_COLS,
+            COL_VIDEO_ALLOWANCE, COL_VIDEOS_SUBMITTED,
+            _allowance,
+        )
+    except Exception:
+        return {}
+
+    calls = _allowance(cols_by_id, CALL_COLS)
+    mocks = _allowance(cols_by_id, MOCK_COLS)
+    bonus = _allowance(cols_by_id, BONUS_COLS)
+
+    video_allowance_raw = (cols_by_id.get(COL_VIDEO_ALLOWANCE) or {}).get("text") or ""
+    video_used_raw = (cols_by_id.get(COL_VIDEOS_SUBMITTED) or {}).get("text") or ""
+    try:
+        video_allowance = int(float(video_allowance_raw)) if video_allowance_raw else 0
+    except ValueError:
+        video_allowance = 0
+    try:
+        video_used = int(float(video_used_raw)) if video_used_raw else 0
+    except ValueError:
+        video_used = 0
+
+    return {
+        "calls_30min": calls,
+        "mock_interviews": mocks,
+        "bonus_calls": bonus,
+        "videos": {
+            "submitted": video_used,
+            "allowance": video_allowance,
+            "remaining": max(0, video_allowance - video_used),
+        },
+    }
 
 
 # ------------------------------------------------------------------ Calendly

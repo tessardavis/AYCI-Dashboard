@@ -56,6 +56,13 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Coach view + Tally interview history (Apr 27)
+- **Student Lookup → Coach view tile** (new): tier badge, calls remaining, videos remaining, mocks left, last call date. Pulled live from Monday allowance columns (`numeric_mkxfvz1k` total videos, `numeric_mkxfq65c` videos used, plus the 4 call / 3 mock / 6 bonus colour columns). Shown right under the identity header so coaches see what matters in one glance.
+- **Tally interview history (form `nGyGj2`)**: new connector `tally_lookup.py` that pulls all submissions every 30 min into `cache` and serves single + bulk lookups in-memory. Auto-discovered question IDs: Email `A2XYDB`, Interview Type `BdRYD7`, Date `keP4W6`, Hospital `VPGQ4y`, Speciality `gqDzY1`, Outcome `G9W5N2`, Questions `qGLl7O`.
+  - Returned per student: `{type: "Locum"|"Substantive", history_count, history: [...]}`.
+- **Student Lookup**: new "Tally — Past interviews" card listing every prior submission (date, type badge, hospital, speciality, outcome).
+- **Upcoming Interviews**: each student card now shows a **Locum / Substantive** badge + a "**N PRIOR**" history pill. Bulk Tally lookup so the page stays under 2 s.
+
 ### 2026-04 — Launch phases v2 (Apr 26)
 - **All 4 launches now have the canonical AYCI phase structure**: NOV-25, FEB-26, APR-26, JUN-26 (newly added).
 - Phases per launch (7): in_between_start → early_access → flash_sale → webinar → open_cart → close_cart → in_between_end. All start/end times use the team's agreed cut-offs (08:00 flash sale, 20:00 webinar, 12:00 cart close).

@@ -1141,15 +1141,17 @@ async def students_lookup(email: str, user: dict = Depends(get_current_user)):
     independently so partial failures don't block the whole view.
     """
     import asyncio
+    import tally_lookup as tally
     if not email or "@" not in email:
         raise HTTPException(400, "Valid email required")
     email = email.strip().lower()
-    monday_t, circle_t, stripe_t, ck_t, calendly_t = await asyncio.gather(
+    monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
         lookup.monday_lookup(email),
         lookup.circle_lookup(db, email),
         lookup.stripe_lookup(email),
         lookup.convertkit_lookup(email),
         lookup.calendly_lookup(email),
+        tally.lookup_student(db, email),
         return_exceptions=True,
     )
 
@@ -1165,6 +1167,7 @@ async def students_lookup(email: str, user: dict = Depends(get_current_user)):
         "stripe": _safe(stripe_t),
         "convertkit": _safe(ck_t),
         "calendly": _safe(calendly_t),
+        "tally": _safe(tally_t),
     }
 
 
@@ -1238,7 +1241,7 @@ async def upcoming_interviews(
     """
     # Fetch once over the wider window, then trim the academy list client-side.
     wider = max(academy_days, private_days)
-    data = await upcoming.fetch_upcoming_interviews(days=wider)
+    data = await upcoming.fetch_upcoming_interviews(db=db, days=wider)
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     today = _dt.now(_tz.utc).date()
     academy_cutoff = (today + _td(days=academy_days)).isoformat()

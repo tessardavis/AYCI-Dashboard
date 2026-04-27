@@ -91,7 +91,7 @@ def _allowance(cols_by_id: dict[str, dict], specs: list[tuple[str, str]]) -> dic
     }
 
 
-async def fetch_upcoming_interviews(days: int = 14) -> dict:
+async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
     """
     Returns:
       {
@@ -222,6 +222,24 @@ async def fetch_upcoming_interviews(days: int = 14) -> dict:
 
     academy.sort(key=lambda x: x["interview_date"])
     private.sort(key=lambda x: x["interview_date"])
+
+    # Enrich with Tally interview type + history count (best-effort, never blocks)
+    if db is not None:
+        try:
+            from tally_lookup import lookup_emails_bulk
+            all_emails = [s["email"] for s in academy + private if s.get("email")]
+            tally_by_email = await lookup_emails_bulk(db, all_emails)
+            for s in academy + private:
+                em = (s.get("email") or "").lower().strip()
+                t = tally_by_email.get(em) or {}
+                s["interview_type"] = t.get("type")
+                s["tally_history_count"] = t.get("history_count", 0)
+                s["tally_last_interview"] = (
+                    (t.get("history") or [{}])[0] if t.get("history") else None
+                )
+        except Exception:
+            # Tally enrichment is optional — silently skip on error
+            pass
 
     return {
         "window": {"start": start_str, "end": end_str, "days": days},

@@ -12,7 +12,9 @@ import StripeCard from "@/components/student/StripeCard";
 import ConvertKitCard from "@/components/student/ConvertKitCard";
 import CircleCard from "@/components/student/CircleCard";
 import CalendlyCard from "@/components/student/CalendlyCard";
+import TallyCard from "@/components/student/TallyCard";
 import PrivateDocCard from "@/components/student/PrivateDocCard";
+import CoachSummary from "@/components/student/CoachSummary";
 
 export default function StudentLookup() {
   const [search, setSearch] = useState("");
@@ -268,6 +270,9 @@ export default function StudentLookup() {
             <PlatformBadges result={result} />
           </div>
 
+          {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
+          <CoachSummary result={result} />
+
           {/* Private-tier Google Doc summary (only for non-pure-Academy students) */}
           {isPrivateTier(result.monday?.data) && (
             <PrivateDocCard
@@ -322,6 +327,19 @@ export default function StudentLookup() {
             >
               <CalendlyCard data={result.calendly?.data} />
             </StudentPlatformCard>
+
+            <StudentPlatformCard
+              title="Tally — Past interviews"
+              platform="tally"
+              state={{
+                found: (result.tally?.history_count || 0) > 0,
+                data: result.tally,
+                error: null,
+              }}
+              accent="#FF7A1A"
+            >
+              <TallyCard data={result.tally} />
+            </StudentPlatformCard>
           </div>
         </>
       )}
@@ -336,12 +354,17 @@ function PlatformBadges({ result }) {
     { key: "convertkit", label: "ConvertKit" },
     { key: "circle", label: "Circle" },
     { key: "calendly", label: "Calendly" },
+    { key: "tally", label: "Tally" },
   ];
   return (
     <div className="flex flex-wrap gap-1.5">
       {platforms.map((p) => {
         const r = result[p.key];
-        const found = r?.found;
+        // Tally has no `found` flag — derive from history_count
+        const found =
+          p.key === "tally"
+            ? (r?.history_count || 0) > 0
+            : !!r?.found;
         const errored = !!r?.error;
         return (
           <span
