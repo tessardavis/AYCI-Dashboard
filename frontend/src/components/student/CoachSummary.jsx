@@ -23,7 +23,7 @@ export default function CoachSummary({ result }) {
   const videos = allowances.videos;
 
   const calendly = result?.calendly?.data || {};
-  const lastCall = (calendly?.events || [])[0];
+  const lastCall = (calendly?.past || calendly?.events || [])[0];
   const tallyType = result?.tally?.type;
   const tallyCount = result?.tally?.history_count || 0;
 

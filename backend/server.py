@@ -1406,14 +1406,26 @@ async def students_lookup(email: str, user: dict = Depends(require_board("studen
             return {"found": False, "data": None, "error": str(result)}
         return result
 
+    monday_safe = _safe(monday_t)
+    # Best-effort Drive doc link (only if Monday found a name) — runs in parallel
+    # with this final block; uses 24h cache so subsequent calls are sub-50 ms.
+    drive_link = None
+    student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
+    if student_name:
+        try:
+            drive_link = await gdrive.find_student_doc_link(db, student_name)
+        except Exception as e:
+            drive_link = {"found": False, "error": str(e)}
+
     return {
         "email": email,
-        "monday": _safe(monday_t),
+        "monday": monday_safe,
         "circle": _safe(circle_t),
         "stripe": _safe(stripe_t),
         "convertkit": _safe(ck_t),
         "calendly": _safe(calendly_t),
         "tally": _safe(tally_t),
+        "drive": drive_link,
     }
 
 

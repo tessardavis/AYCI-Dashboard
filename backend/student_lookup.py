@@ -113,6 +113,7 @@ async def stripe_lookup(email: str) -> dict:
             subs_active: list[dict] = []
             subs_past: list[dict] = []
             customer_links: list[dict] = []
+            all_charges: list[dict] = []
 
             for cust in customers:
                 cid = cust["id"]
@@ -131,12 +132,26 @@ async def stripe_lookup(email: str) -> dict:
                 )
                 if cr.status_code == 200:
                     for ch in cr.json().get("data", []):
-                        if ch.get("status") == "succeeded" and not ch.get("refunded"):
+                        net = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
+                        if ch.get("status") == "succeeded" and not ch.get("refunded") and net > 0:
                             total_spent += int(ch.get("amount", 0))
                             charge_count += 1
                             ct = ch.get("created")
                             if ct and (last_charge_at is None or ct > last_charge_at):
                                 last_charge_at = ct
+                            all_charges.append({
+                                "id": ch.get("id"),
+                                "created": (
+                                    datetime.fromtimestamp(ch["created"], tz=timezone.utc).isoformat()
+                                    if ch.get("created") else None
+                                ),
+                                "amount": net,
+                                "currency": (ch.get("currency") or "gbp").upper(),
+                                "description": ch.get("description"),
+                                "status": ch.get("status"),
+                                "receipt_url": ch.get("receipt_url"),
+                                "customer_id": cid,
+                            })
                         total_refunded += int(ch.get("amount_refunded", 0))
 
                 # Subscriptions
@@ -170,6 +185,7 @@ async def stripe_lookup(email: str) -> dict:
             "found": True,
             "data": {
                 "customers": customer_links,
+                "charges": all_charges,
                 "total_spent_gbp": round(total_spent / 100.0, 2),
                 "total_refunded_gbp": round(total_refunded / 100.0, 2),
                 "charge_count": charge_count,
@@ -501,7 +517,7 @@ def _compute_allowances(cols_by_id: dict[str, dict]) -> dict:
 
 # ------------------------------------------------------------------ Calendly
 async def calendly_lookup(email: str) -> dict:
-    """Return past scheduled events for this email."""
+    """Return past + upcoming scheduled events for this email, with host info."""
     try:
         target = email.strip().lower()
         async with httpx.AsyncClient(timeout=TIMEOUT) as c:
@@ -511,7 +527,6 @@ async def calendly_lookup(email: str) -> dict:
             if not org:
                 return {"found": False, "data": None, "error": "No Calendly organization"}
 
-            # Calendly: list invitees by email across the organization
             events: list[dict] = []
             page_token: Optional[str] = None
             while True:
@@ -519,7 +534,6 @@ async def calendly_lookup(email: str) -> dict:
                     "organization": org,
                     "invitee_email": target,
                     "count": 50,
-                    "status": "active",
                     "sort": "start_time:desc",
                 }
                 if page_token:
@@ -529,12 +543,21 @@ async def calendly_lookup(email: str) -> dict:
                     break
                 body = r.json()
                 for ev in body.get("collection", []):
+                    # Pull host name from event_memberships (host is the AYCI side).
+                    membs = ev.get("event_memberships") or []
+                    host_name = None
+                    host_email = None
+                    if membs:
+                        host_name = membs[0].get("user_name") or membs[0].get("user")
+                        host_email = membs[0].get("user_email")
                     events.append({
                         "uri": ev.get("uri"),
                         "name": ev.get("name"),
                         "start_time": ev.get("start_time"),
                         "end_time": ev.get("end_time"),
                         "status": ev.get("status"),
+                        "host_name": host_name,
+                        "host_email": host_email,
                         "location": (ev.get("location") or {}).get("join_url") or (ev.get("location") or {}).get("location"),
                     })
                 page_token = (body.get("pagination") or {}).get("next_page_token")
@@ -543,6 +566,23 @@ async def calendly_lookup(email: str) -> dict:
 
         if not events:
             return {"found": False, "data": None, "error": None}
-        return {"found": True, "data": {"events": events, "total": len(events)}, "error": None}
+
+        # Split into past + upcoming relative to now (UTC)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        past = [e for e in events if (e.get("start_time") or "") < now_iso and e.get("status") == "active"]
+        upcoming = [e for e in events if (e.get("start_time") or "") >= now_iso and e.get("status") == "active"]
+        cancelled = [e for e in events if e.get("status") != "active"]
+
+        return {
+            "found": True,
+            "data": {
+                "past": past,
+                "upcoming": upcoming,
+                "cancelled": cancelled,
+                "events": events,  # full chronological list (kept for back-compat)
+                "total": len(events),
+            },
+            "error": None,
+        }
     except Exception as e:
         return {"found": False, "data": None, "error": str(e)}

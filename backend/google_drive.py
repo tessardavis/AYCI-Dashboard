@@ -131,6 +131,46 @@ async def _list_docs() -> list[dict]:
     return out
 
 
+async def find_student_doc_link(db, student_name: str) -> dict:
+    """
+    Lightweight: returns just the Drive web view link for the matched private-tier
+    doc (no AI summary, no body fetch). Cached for 24h per student name.
+    Returns {found, web_view_link, name, match_reason}.
+    """
+    from datetime import datetime, timezone, timedelta
+    if not student_name:
+        return {"found": False, "web_view_link": None}
+    key = f"drive_link:{_normalise(student_name)}"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cached = await db.cache.find_one({"_id": key}, {"_id": 0})
+    if cached and cached.get("cached_at"):
+        ca = cached["cached_at"]
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        if ca > cutoff:
+            return cached["payload"]
+    try:
+        files = await _list_docs()
+        match = _find_best_match(student_name, files)
+        if not match:
+            payload = {"found": False, "web_view_link": None, "name": None}
+        else:
+            payload = {
+                "found": True,
+                "web_view_link": match.get("webViewLink"),
+                "name": match.get("name"),
+                "match_reason": match.get("match_reason"),
+            }
+    except Exception as e:
+        payload = {"found": False, "web_view_link": None, "error": str(e)}
+    await db.cache.update_one(
+        {"_id": key},
+        {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return payload
+
+
 async def _fetch_doc_text(file_id: str, mime: str) -> str:
     """
     Read the file as plain text. Handles:

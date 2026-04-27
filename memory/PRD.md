@@ -56,6 +56,18 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Student Lookup coach revamp + blank-tier audit (Apr 27)
+- **Cards removed**: ConvertKit, Monday Members, Stripe Payments — were redundant with the new coach-focused panels.
+- **Calendly card rewrite**: now shows **Upcoming** + **Past** sections, each event displays the host's name (e.g. "with Tessa Davis"). Backend `calendly_lookup` now fetches both past and future events (status=active) and pulls host info from `event_memberships`.
+- **NEW Signup history & cohorts card**: Stripe payment dates + amounts + descriptions (the dates the student signed up / upgraded), plus their Circle cohort tags.
+  - Backend: `stripe_lookup` now also returns a flat `charges[]` list (id, created ISO, amount in pence, currency, description, receipt_url).
+- **NEW Quick links bar**: chips linking to **Private chat** (Monday `text_mky9xzew`), **Google Doc** (resolved via fast `find_student_doc_link` — 24 h cache, no LLM call), and **Monday record**. Drive link added to `/api/students/lookup` payload as `drive: {found, web_view_link, name}`.
+- **Tally Past Interviews** card unchanged (already shipped earlier).
+
+### 2026-04 — Blank-tier audit (Apr 27)
+- 2010 students on the AYCI Members Monday board; **221 (~11%) have a blank Tier dropdown**.
+- Only **1 blank-tier student** has an upcoming interview in the next 30 days (Yealin Chung, 2026-04-29). After the earlier "blank → Academy" fallback fix she is correctly bucketed in Academy, so no other team-facing impact.
+
 ### 2026-04 — Tier blank → Academy fallback (Apr 27)
 - **Bug fix on Upcoming Interviews bucketing**: students whose Monday Tier dropdown was blank were falling through to the Private list (e.g. Yealin Chung). The classifier `is_pure_academy` now treats an empty tier as plain Academy — matches the team's mental model where the dropdown is often unset for vanilla Academy students.
 - After the fix: 19 Academy / 6 Private (was 18 / 7).

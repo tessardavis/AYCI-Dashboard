@@ -7,14 +7,13 @@ import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import StudentPlatformCard from "@/components/StudentPlatformCard";
-import MondayCard from "@/components/student/MondayCard";
-import StripeCard from "@/components/student/StripeCard";
-import ConvertKitCard from "@/components/student/ConvertKitCard";
 import CircleCard from "@/components/student/CircleCard";
 import CalendlyCard from "@/components/student/CalendlyCard";
 import TallyCard from "@/components/student/TallyCard";
 import PrivateDocCard from "@/components/student/PrivateDocCard";
 import CoachSummary from "@/components/student/CoachSummary";
+import QuickLinks from "@/components/student/QuickLinks";
+import SignupHistoryCard from "@/components/student/SignupHistoryCard";
 
 export default function StudentLookup() {
   const [search, setSearch] = useState("");
@@ -273,6 +272,9 @@ export default function StudentLookup() {
           {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
           <CoachSummary result={result} />
 
+          {/* Quick links — private chat + Google Doc */}
+          <QuickLinks result={result} />
+
           {/* Private-tier Google Doc summary (only for non-pure-Academy students) */}
           {isPrivateTier(result.monday?.data) && (
             <PrivateDocCard
@@ -284,43 +286,7 @@ export default function StudentLookup() {
           {/* Platform cards grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <StudentPlatformCard
-              title="Monday.com — Academy Members"
-              platform="monday"
-              state={result.monday}
-              accent="#ff3d57"
-            >
-              <MondayCard data={result.monday?.data} />
-            </StudentPlatformCard>
-
-            <StudentPlatformCard
-              title="Stripe — Payments"
-              platform="stripe"
-              state={result.stripe}
-              accent="#635bff"
-            >
-              <StripeCard data={result.stripe?.data} />
-            </StudentPlatformCard>
-
-            <StudentPlatformCard
-              title="ConvertKit — Email"
-              platform="convertkit"
-              state={result.convertkit}
-              accent="#fb6970"
-            >
-              <ConvertKitCard data={result.convertkit?.data} />
-            </StudentPlatformCard>
-
-            <StudentPlatformCard
-              title="Circle — Community"
-              platform="circle"
-              state={result.circle}
-              accent="#7c3aed"
-            >
-              <CircleCard data={result.circle?.data} />
-            </StudentPlatformCard>
-
-            <StudentPlatformCard
-              title="Calendly — Past calls"
+              title="Calendly — Calls"
               platform="calendly"
               state={result.calendly}
               accent="#006bff"
@@ -340,6 +306,32 @@ export default function StudentLookup() {
             >
               <TallyCard data={result.tally} />
             </StudentPlatformCard>
+
+            <StudentPlatformCard
+              title="Signup history & cohorts"
+              platform="stripe"
+              state={{
+                found: (result.stripe?.data?.charges?.length || 0) > 0
+                  || (result.circle?.data?.member_tags?.length || 0) > 0,
+                data: result,
+                error: null,
+              }}
+              accent="#635bff"
+            >
+              <SignupHistoryCard
+                stripe={result.stripe?.data}
+                circle={result.circle?.data}
+              />
+            </StudentPlatformCard>
+
+            <StudentPlatformCard
+              title="Circle — Community"
+              platform="circle"
+              state={result.circle}
+              accent="#7c3aed"
+            >
+              <CircleCard data={result.circle?.data} />
+            </StudentPlatformCard>
           </div>
         </>
       )}
@@ -351,7 +343,6 @@ function PlatformBadges({ result }) {
   const platforms = [
     { key: "monday", label: "Monday" },
     { key: "stripe", label: "Stripe" },
-    { key: "convertkit", label: "ConvertKit" },
     { key: "circle", label: "Circle" },
     { key: "calendly", label: "Calendly" },
     { key: "tally", label: "Tally" },
