@@ -56,6 +56,11 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Launch Dashboard hero + brand watermark (Apr 27)
+- New full-width hero on `/launches`: brand navy → indigo gradient (`#182E87 → #4457B6`) with the giant rotated AYCI icon ghosted at ~7% opacity in the top-right corner and a soft cyan radial glow bottom-left.
+- White "April 2026" headline + cyan "LAUNCH" eyebrow + launch picker dropdown on white card sit cleanly on the gradient.
+- Lifts the dashboard from "themed correctly" to "feels like the AYCI marketing site".
+
 ### 2026-04 — Student Lookup coach revamp + blank-tier audit (Apr 27)
 - **Cards removed**: ConvertKit, Monday Members, Stripe Payments — were redundant with the new coach-focused panels.
 - **Calendly card rewrite**: now shows **Upcoming** + **Past** sections, each event displays the host's name (e.g. "with Tessa Davis"). Backend `calendly_lookup` now fetches both past and future events (status=active) and pulls host info from `event_memberships`.

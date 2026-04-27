@@ -124,32 +124,65 @@ export default function LaunchDashboard() {
 
   return (
     <div className="p-8 space-y-6" data-testid="launch-dashboard-page">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
-            Launch
+      {/* Hero — brand navy gradient with giant rotated icon watermark */}
+      <div
+        className="relative overflow-hidden rounded-2xl px-8 py-10 shadow-sm border border-[var(--ayci-border)]"
+        style={{
+          background:
+            "linear-gradient(135deg, #182E87 0%, #4457B6 60%, #5b6dc7 100%)",
+        }}
+        data-testid="launch-hero"
+      >
+        {/* Watermark — giant brand icon, rotated, faded into the corner */}
+        <img
+          src="/ayci-icon.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute -top-16 -right-16 w-[420px] h-[420px] pointer-events-none select-none"
+          style={{
+            filter: "brightness(0) invert(1)",
+            opacity: 0.07,
+            transform: "rotate(18deg)",
+          }}
+        />
+        {/* Subtle bottom-left accent dot */}
+        <div
+          className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(1,217,220,0.25), transparent)",
+          }}
+        />
+        <div className="relative flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[#01D9DC]">
+              Launch
+            </div>
+            <h1 className="text-4xl font-display font-bold text-white mt-1">
+              {launch?.name || "Launch Dashboard"}
+            </h1>
+            <p className="text-white/70 text-sm mt-1 max-w-2xl">
+              Live webinar registrations from ConvertKit and revenue from Stripe — broken
+              down by source / product, with overlay against the previous two launches.
+            </p>
           </div>
-          <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
-            {launch?.name || "Launch Dashboard"}
-          </h1>
-          <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
-            Live webinar registrations from ConvertKit and revenue from Stripe — broken
-            down by source / product, with overlay against the previous two launches.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={launchId || ""} onValueChange={setLaunchId}>
-            <SelectTrigger className="w-56 h-10" data-testid="launch-selector">
-              <SelectValue placeholder="Select launch" />
-            </SelectTrigger>
-            <SelectContent>
-              {launches.map((L) => (
-                <SelectItem key={L.id} value={L.id} data-testid={`launch-option-${L.code}`}>
-                  {L.name} {L.code ? `(${L.code})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={launchId || ""} onValueChange={setLaunchId}>
+              <SelectTrigger
+                className="w-56 h-10 bg-white/95 border-white/20 text-[var(--ayci-ink)]"
+                data-testid="launch-selector"
+              >
+                <SelectValue placeholder="Select launch" />
+              </SelectTrigger>
+              <SelectContent>
+                {launches.map((L) => (
+                  <SelectItem key={L.id} value={L.id} data-testid={`launch-option-${L.code}`}>
+                    {L.name} {L.code ? `(${L.code})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
