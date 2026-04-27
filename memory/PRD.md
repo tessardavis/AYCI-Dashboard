@@ -56,6 +56,11 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Tally cache TTL bump + Kajabi dropped (Apr 27)
+- Tally interview-form cache bumped from 30 min → **24 h** (interview submissions trickle in slowly; no need for sub-hour freshness).
+- New daily APScheduler job `daily_tally_refresh` at 05:20 London — refreshes the Tally cache every morning before the team's first lookup.
+- **Kajabi dropped from backlog**: Stripe is the source of truth for payments; trial-access bugs are rare and not worth a separate connector.
+
 ### 2026-04 — Coach view + Tally interview history (Apr 27)
 - **Student Lookup → Coach view tile** (new): tier badge, calls remaining, videos remaining, mocks left, last call date. Pulled live from Monday allowance columns (`numeric_mkxfvz1k` total videos, `numeric_mkxfq65c` videos used, plus the 4 call / 3 mock / 6 bonus colour columns). Shown right under the identity header so coaches see what matters in one glance.
 - **Tally interview history (form `nGyGj2`)**: new connector `tally_lookup.py` that pulls all submissions every 30 min into `cache` and serves single + bulk lookups in-memory. Auto-discovered question IDs: Email `A2XYDB`, Interview Type `BdRYD7`, Date `keP4W6`, Hospital `VPGQ4y`, Speciality `gqDzY1`, Outcome `G9W5N2`, Questions `qGLl7O`.

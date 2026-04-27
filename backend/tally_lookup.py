@@ -37,7 +37,7 @@ Q_QUESTIONS = "qGLl7O"       # What questions did you get?
 Q_RESCHEDULED = "VQgDJy"
 Q_FULLNAME = "bjJMre"
 
-CACHE_TTL_MIN = 30
+CACHE_TTL_MIN = 24 * 60  # 24 hours — interview submissions trickle in, no need to refresh more often
 
 
 def _tally_headers() -> dict:

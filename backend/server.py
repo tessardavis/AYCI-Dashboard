@@ -986,6 +986,16 @@ async def on_startup():
         except Exception as e:
             logger.warning(f"[daily] At-risk cache refresh failed: {e}")
 
+    # Daily: refresh Tally interview-form cache so coach views are fresh each morning
+    async def _daily_tally_refresh():
+        try:
+            import tally_lookup as tally_mod
+            await db.cache.delete_one({"_id": "tally_interviews:nGyGj2"})
+            submissions = await tally_mod.get_cached_submissions(db)
+            logger.info(f"[daily] Tally interview cache refreshed: {len(submissions)} submissions")
+        except Exception as e:
+            logger.warning(f"[daily] Tally cache refresh failed: {e}")
+
     scheduler.add_job(
         _daily_circle_refresh,
         CronTrigger(hour=5, minute=0, timezone=tz),
@@ -1004,8 +1014,14 @@ async def on_startup():
         id="daily_at_risk_refresh",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _daily_tally_refresh,
+        CronTrigger(hour=5, minute=20, timezone=tz),
+        id="daily_tally_refresh",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15) — {tz}")
+    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20) — {tz}")
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
     # Fire-and-forget so startup doesn't block.
