@@ -215,15 +215,19 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
     # 3. Classify each charge into a tier (or skip as renewal)
     # Boost & Go is excluded from launch metrics per team request.
     EXCLUDED_TIERS = {"Boost & Go"}
-    NEW_SIGNUP_TIERS = {"Academy", "Private Plus", "VIP", "Other signup"}
 
     by_day: dict[str, dict] = {}
     by_tier: dict[str, dict] = {}
     total_amount = 0
     total_count = 0
-    new_signup_count = 0
-    legacy_count = 0
-    counted_customers: set[str] = set()
+    # Per-customer dedup: each unique customer counted exactly once,
+    # classified by whether they had prior paid charges before launch start.
+    customers_new: set[str] = set()
+    customers_legacy: set[str] = set()
+    # Per-tier unique customer dedup — each customer counted once per tier
+    # they bought into during the launch (so a customer who bought Academy
+    # AND Private Plus upgrade contributes to both tiers, but only once each).
+    tier_customers: dict[str, set[str]] = {}
     for ch in raw_charges:
         amount = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
         cust = ch.get("customer")
@@ -239,17 +243,17 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         by_day[day]["amount"] += amount
         by_day[day]["count"] += 1
         by_day[day]["by_tier"][tier] += 1
-        by_tier.setdefault(tier, {"amount": 0, "count": 0})
+        by_tier.setdefault(tier, {"amount": 0, "count_charges": 0})
         by_tier[tier]["amount"] += amount
-        by_tier[tier]["count"] += 1
+        by_tier[tier]["count_charges"] += 1
         total_amount += amount
         total_count += 1
         if cust:
-            counted_customers.add(cust)
-        if tier in NEW_SIGNUP_TIERS:
-            new_signup_count += 1
-        else:
-            legacy_count += 1
+            tier_customers.setdefault(tier, set()).add(cust)
+            if has_prior:
+                customers_legacy.add(cust)
+            else:
+                customers_new.add(cust)
 
     by_day_list = sorted(
         [
@@ -263,14 +267,15 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         ],
         key=lambda x: x["date"],
     )
-    # Tier breakdown with % of revenue
+    # Tier breakdown with unique-customer count + % of revenue
     total_revenue = sum(v["amount"] for v in by_tier.values()) or 1
     by_tier_list = sorted(
         [
             {
                 "tier": t,
                 "amount_gbp": round(v["amount"] / 100.0, 2),
-                "count": v["count"],
+                "count": len(tier_customers.get(t, set())),  # unique customers in this tier
+                "charges": v["count_charges"],                # raw charge count for transparency
                 "pct_of_revenue": round(v["amount"] * 100 / total_revenue, 1),
             }
             for t, v in by_tier.items()
@@ -278,18 +283,25 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         key=lambda x: -x["amount_gbp"],
     )
 
-    unique_customers = len(counted_customers)
+    # Unique-customer signup numbers (one person counted once)
+    unique_new_signups = len(customers_new)
+    unique_legacy_signups = len(customers_legacy)
+    unique_total_signups = unique_new_signups + unique_legacy_signups
+
     aov_per_user = (
-        round((total_amount / 100.0) / unique_customers, 2)
-        if unique_customers else 0
+        round((total_amount / 100.0) / unique_total_signups, 2)
+        if unique_total_signups else 0
     )
 
     return {
         "total_amount_gbp": round(total_amount / 100.0, 2),
-        "total_count": total_count,
-        "new_signup_count": new_signup_count,
-        "legacy_count": legacy_count,
-        "unique_customers": unique_customers,
+        # Charge-based total kept for any historical caller (chart by_day uses it)
+        "total_charge_count": total_count,
+        # Unique-customer signup numbers (the team-facing source of truth)
+        "total_count": unique_total_signups,
+        "new_signup_count": unique_new_signups,
+        "legacy_count": unique_legacy_signups,
+        "unique_customers": unique_total_signups,
         "aov_per_user_gbp": aov_per_user,
         "by_tier": by_tier_list,
         "by_day": by_day_list,

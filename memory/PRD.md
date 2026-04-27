@@ -56,6 +56,13 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Signups deduped per person (Apr 27)
+- **Signups now count unique people, not charges**. Anyone who signed up + upgraded in the same launch window is now counted **once**, not twice.
+- APR-26 numbers post-fix: **170 unique signups** = 162 new + 8 legacy (was 250 / 240 / 10 charge-based).
+- Conversion rate jumps to ~78% (170 unique signups / 218 unique webinar regs) — was 56% under charge-based count.
+- `by_tier.count` is now also unique customers per tier; raw charge count surfaced as `charges` for transparency.
+- Phase-breakdown cache invalidated and will repopulate within 2-3 min on the next dashboard load.
+
 ### 2026-04 — Launch Dashboard 2.2: Boost-excluded sales + phase comparison (Apr 27)
 - **Boost & Go excluded** from launch revenue / signups / by_tier breakdown — the team no longer counts it as a launch product.
 - **AOV recalculated** as revenue per UNIQUE customer (was per-charge): £636 (was £437 in v2.1).
