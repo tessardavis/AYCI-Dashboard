@@ -1,0 +1,28 @@
+{
+  "short_name": "AYCI",
+  "name": "AYCI Team Dashboard",
+  "description": "AYCI Academy team performance dashboard — scorecard, launches, cohorts and student lookup.",
+  "icons": [
+    {
+      "src": "ayci-icon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "ayci-icon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0F172A",
+  "background_color": "#F1F5F9",
+  "categories": ["productivity", "business"],
+  "lang": "en-GB"
+}

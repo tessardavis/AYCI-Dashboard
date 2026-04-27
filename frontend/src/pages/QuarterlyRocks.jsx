@@ -52,6 +52,10 @@ export default function QuarterlyRocks() {
   const [quarters, setQuarters] = useState(["Q2 2026"]);
   const [expandedNotes, setExpandedNotes] = useState({});
   const [notesDraft, setNotesDraft] = useState({});
+  // On mobile, owner cards collapse by default (showing just a chevron + counts).
+  // We default them to OPEN on initial render so first-time mobile users see the
+  // rocks immediately; they can collapse the ones they don't care about.
+  const [collapsedOwners, setCollapsedOwners] = useState({});
 
   const loadData = useCallback(async (q) => {
     try {
@@ -137,15 +141,20 @@ export default function QuarterlyRocks() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
         {byOwner.map(({ member, rocks: owned }) => (
           <div
             key={member.id}
             className="bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm overflow-hidden ayci-card-hover"
             data-testid={`rocks-owner-card-${member.id}`}
           >
-            <div className="px-5 pt-5 pb-4 border-b border-[var(--ayci-border)] flex items-center gap-3">
-              <Avatar className="w-10 h-10">
+            <button
+              type="button"
+              onClick={() => setCollapsedOwners((s) => ({ ...s, [member.id]: !s[member.id] }))}
+              className="w-full px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b border-[var(--ayci-border)] flex items-center gap-3 text-left lg:cursor-default"
+              data-testid={`rocks-owner-toggle-${member.id}`}
+            >
+              <Avatar className="w-9 h-9 sm:w-10 sm:h-10">
                 {member.avatar_url && <AvatarImage src={member.avatar_url} alt={member.name} />}
                 <AvatarFallback className="bg-slate-100 text-slate-700 font-medium">
                   {(member.name || "??")
@@ -155,22 +164,30 @@ export default function QuarterlyRocks() {
                     .join("")}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <div className="font-display font-bold text-[var(--ayci-ink)] leading-tight">{member.name}</div>
-                <div className="text-xs text-[var(--ayci-ink-muted)]">{member.role_title || "—"}</div>
+              <div className="min-w-0 flex-1">
+                <div className="font-display font-bold text-[var(--ayci-ink)] leading-tight truncate">{member.name}</div>
+                <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{member.role_title || "—"}</div>
               </div>
-              <div className="ml-auto text-xs text-[var(--ayci-ink-muted)]">
-                {owned.length} {owned.length === 1 ? "rock" : "rocks"}
+              <div className="flex items-center gap-2 ml-auto shrink-0">
+                <OwnerStatusDots rocks={owned} />
+                <div className="text-xs text-[var(--ayci-ink-muted)] tabular-nums">
+                  {owned.length}
+                </div>
+                {/* Chevron — only visible on mobile (controls collapse) */}
+                <ChevronDown
+                  className={`w-4 h-4 text-[var(--ayci-ink-muted)] lg:hidden transition-transform ${collapsedOwners[member.id] ? "" : "rotate-180"}`}
+                />
               </div>
-            </div>
+            </button>
 
-            <ul className="divide-y divide-[var(--ayci-border)]">
+            {/* Rocks list — hidden on mobile when collapsed; always shown on lg+ */}
+            <ul className={`divide-y divide-[var(--ayci-border)] ${collapsedOwners[member.id] ? "hidden lg:block" : ""}`}>
               {owned.map((rock) => {
                 const meta = STATUS_META[rock.status];
                 const expanded = expandedNotes[rock.id];
                 const draft = notesDraft[rock.id] ?? rock.notes ?? "";
                 return (
-                  <li key={rock.id} className="px-5 py-4" data-testid={`rock-${rock.id}`}>
+                  <li key={rock.id} className="px-4 py-3 sm:px-5 sm:py-4" data-testid={`rock-${rock.id}`}>
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-[var(--ayci-ink)] leading-snug">{rock.title}</div>
@@ -182,8 +199,8 @@ export default function QuarterlyRocks() {
                         onClick={() => cycleStatus(rock)}
                         data-testid={`rock-status-${rock.id}`}
                         className={[
-                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium",
-                          "ring-1 transition-transform hover:scale-105",
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-full text-[11px] font-medium shrink-0",
+                          "ring-1 transition-transform active:scale-95 hover:scale-105",
                           meta.bg,
                           meta.text,
                           meta.ring,
@@ -236,6 +253,36 @@ export default function QuarterlyRocks() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function OwnerStatusDots({ rocks }) {
+  if (!rocks || rocks.length === 0) {
+    return (
+      <span className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] font-display font-semibold">
+        no rocks
+      </span>
+    );
+  }
+  const counts = { on_track: 0, off_track: 0, done: 0 };
+  for (const r of rocks) {
+    const k = r.status in counts ? r.status : "on_track";
+    counts[k] += 1;
+  }
+  const items = [
+    { key: "off_track", color: "bg-amber-500", title: "Off track" },
+    { key: "on_track", color: "bg-emerald-500", title: "On track" },
+    { key: "done", color: "bg-sky-500", title: "Done" },
+  ].filter((it) => counts[it.key] > 0);
+  return (
+    <div className="flex items-center gap-1" aria-label="Owner status summary">
+      {items.map((it) => (
+        <span key={it.key} className="inline-flex items-center gap-0.5" title={`${counts[it.key]} ${it.title}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${it.color}`} />
+          <span className="text-[10px] tabular-nums text-[var(--ayci-ink-muted)]">{counts[it.key]}</span>
+        </span>
+      ))}
     </div>
   );
 }

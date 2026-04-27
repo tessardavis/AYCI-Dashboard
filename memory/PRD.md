@@ -24,7 +24,11 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
-### 2026-04 — Mobile Weekly Scorecard card view (Apr 27)
+### 2026-04 — Mobile Quarterly Rocks + PWA installable (Apr 27)
+- **Quarterly Rocks mobile-friendly**: each owner card is now collapsible on phones (tap header to toggle, chevron rotates, lg+ stays always-open). Owner header gained a 3-dot status summary (off-track / on-track / done counts) so coaches can see a member's whole quarter in one glance without expanding. Card padding tightened on `<sm` (`px-4 py-3` vs `px-5 py-4`). Status pills get a slightly larger tap target on mobile.
+- **PWA installable**: new `/public/manifest.json` (standalone display, AYCI icon, navy theme, portrait-primary, 192×192 + 512×512 icons), `/public/sw.js` (no-op pass-through service worker that satisfies Chrome's installability criteria without caching stale dashboard data), Apple iOS meta tags (`apple-mobile-web-app-capable`, status bar style, AYCI title), and SW registration in `src/index.js`. Verified live: manifest serves 200, SW reaches `activated` state. Coaches can now "Add to Home Screen" on iOS or use Chrome's install prompt to launch the dashboard full-screen with the AYCI icon.
+
+
 - New `<MobileScorecard />` component shown only on `<sm` (≤ 640 px) viewports; desktop table is hidden via `sm:hidden`/`hidden sm:block`. Cards group by category (Growth → Conversion → Revenue → Social Proof → Delivery) matching the desktop sort order.
 - Each card: owner avatars · metric name + goal · this-week's value (colour-coded on-track / off-track) · sparkline of the visible weeks. Tap to expand → full week-by-week list with the same in-place edit (reuses `startEdit` / `commitEdit` / `onCellKey` so behaviour matches desktop exactly).
 - Owner filter on mobile is a "Filter by owner" dropdown disclosure (option 4b — saves vertical space) instead of the wide chip row used on desktop.
