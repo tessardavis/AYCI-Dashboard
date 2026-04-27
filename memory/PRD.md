@@ -56,6 +56,19 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Launch Dashboard 2.2: Boost-excluded sales + phase comparison (Apr 27)
+- **Boost & Go excluded** from launch revenue / signups / by_tier breakdown — the team no longer counts it as a launch product.
+- **AOV recalculated** as revenue per UNIQUE customer (was per-charge): £636 (was £437 in v2.1).
+- **Signups split into new vs legacy**: backend now returns `new_signup_count` + `legacy_count` + `total_count`. KPI tile shows all three.
+- **Sales breakdown by tier** now includes `pct_of_revenue` per tier; UI shows the % chip in each tier card under the chart.
+- **Year Overview strip removed** from /launches.
+- **Comparison auto-loads** on launch switch (no more "Compare to previous 2 launches" button).
+- **Sales cumulative chart**: current launch line is now 4 px solid brand indigo with dots at each data point; previous launches are 1.5 px dashed grey/slate so the difference is unmistakable.
+- **NEW Phase breakdown table**: side-by-side comparison of revenue + signups + webinar regs for each phase (in_between_start / early_access / flash_sale / webinar / open_cart / close_cart / in_between_end) across the current launch + previous 2.
+  - Backend: `GET /api/launches/{id}/phase-breakdown` — cached 24h in `cache` collection. Pre-warmed on startup (60 s after boot) + daily APScheduler job at **05:25 London**.
+  - Returns `computing: true` placeholder if cache is empty + triggers background warm; the response is sub-200 ms once cached.
+- **Pace forecast** more prominent — sits directly under the KPI grid (was already there but the previous user could not see it; layout reorder makes it obvious).
+
 ### 2026-04 — Tally cache TTL bump + Kajabi dropped (Apr 27)
 - Tally interview-form cache bumped from 30 min → **24 h** (interview submissions trickle in slowly; no need for sub-hour freshness).
 - New daily APScheduler job `daily_tally_refresh` at 05:20 London — refreshes the Tally cache every morning before the team's first lookup.

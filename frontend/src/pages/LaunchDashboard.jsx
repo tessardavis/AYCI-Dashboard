@@ -23,7 +23,6 @@ import {
 import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { PaceTrackerCard } from "@/components/PaceTracker";
-import YearOverview from "@/components/YearOverview";
 
 const PHASE_LABELS = {
   in_between_start: "In-between",
@@ -58,8 +57,8 @@ export default function LaunchDashboard() {
   const [registrations, setRegistrations] = useState(null);
   const [sales, setSales] = useState(null);
   const [comparison, setComparison] = useState(null);
+  const [phaseBreakdown, setPhaseBreakdown] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadingComparison, setLoadingComparison] = useState(false);
 
   const launch = useMemo(
     () => launches.find((L) => L.id === launchId),
@@ -96,6 +95,7 @@ export default function LaunchDashboard() {
     setRegistrations(null);
     setSales(null);
     setComparison(null);
+    setPhaseBreakdown(null);
     Promise.all([
       apiClient
         .get(`/launches/${launchId}/registrations`, { timeout: 60000 })
@@ -111,23 +111,16 @@ export default function LaunchDashboard() {
         setSales(sales);
       })
       .finally(() => setLoading(false));
+    // Auto-load comparison + phase breakdown in background
+    apiClient
+      .get(`/launches/${launchId}/comparison`, { params: { n_previous: 2 }, timeout: 180000 })
+      .then((r) => setComparison(r.data))
+      .catch(() => setComparison(null));
+    apiClient
+      .get(`/launches/${launchId}/phase-breakdown`, { timeout: 30000 })
+      .then((r) => setPhaseBreakdown(r.data))
+      .catch(() => setPhaseBreakdown(null));
   }, [launchId]);
-
-  const loadComparison = async () => {
-    if (!launchId) return;
-    setLoadingComparison(true);
-    try {
-      const { data } = await apiClient.get(`/launches/${launchId}/comparison`, {
-        params: { n_previous: 2 },
-        timeout: 180000,
-      });
-      setComparison(data);
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Comparison failed");
-    } finally {
-      setLoadingComparison(false);
-    }
-  };
 
   return (
     <div className="p-8 space-y-6" data-testid="launch-dashboard-page">
@@ -166,12 +159,9 @@ export default function LaunchDashboard() {
         </div>
       )}
 
-      {/* Year overview strip — always visible, click a launch to switch */}
-      <YearOverview onSelect={setLaunchId} selectedId={launchId} />
-
       {launch && (
         <>
-          {/* KPI summary — 6 cards: revenue, signups, regs, conversion, EPL, AOV */}
+          {/* KPI summary — 6 cards: revenue, signups (new/legacy/total), conversion, EPL, AOV/user, webinar regs (right) */}
           {loading && !registrations && !sales ? (
             <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
               <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
@@ -187,32 +177,7 @@ export default function LaunchDashboard() {
                 tone="violet"
                 testid="kpi-revenue"
               />
-              <Stat
-                icon={ShoppingBag}
-                label="Signups"
-                value={sales?.total_count ?? "—"}
-                sub={
-                  sales?.error
-                    ? sales.error
-                    : "New signups + upgrades"
-                }
-                tone="emerald"
-                testid="kpi-sales-count"
-              />
-              <Stat
-                icon={Users}
-                label="Webinar registrations"
-                value={registrations?.total ?? "—"}
-                sub={
-                  registrations?.unique
-                    ? `${registrations.unique} unique people`
-                    : registrations?.error
-                    ? registrations.error
-                    : "Pulled from Kit"
-                }
-                tone="sky"
-                testid="kpi-registrations"
-              />
+              <SignupsTile sales={sales} />
               <Stat
                 icon={Calendar}
                 label="Conversion"
@@ -240,48 +205,45 @@ export default function LaunchDashboard() {
               <Stat
                 icon={ShoppingBag}
                 label="AOV"
-                value={
-                  sales?.total_count && sales?.total_amount_gbp
-                    ? fmtGbp(sales.total_amount_gbp / sales.total_count)
-                    : "—"
+                value={sales?.aov_per_user_gbp ? fmtGbp(sales.aov_per_user_gbp) : "—"}
+                sub={
+                  sales?.unique_customers
+                    ? `Avg per user · ${sales.unique_customers} unique`
+                    : "Avg per unique customer"
                 }
-                sub="Avg order value"
                 tone="magenta"
                 testid="kpi-aov"
+              />
+              <Stat
+                icon={Users}
+                label="Webinar regs"
+                value={registrations?.total ?? "—"}
+                sub={
+                  registrations?.unique
+                    ? `${registrations.unique} unique`
+                    : registrations?.error
+                    ? registrations.error
+                    : "Pulled from Kit"
+                }
+                tone="sky"
+                testid="kpi-registrations"
               />
             </div>
           )}
 
-          {/* Pace tracker — only when current launch is the active one */}
+          {/* Pace forecast — primary prediction, always visible for the active launch */}
           <PaceTrackerCard />
 
           {/* Compact phase timeline */}
           <PhaseTimeline launch={launch} />
 
-          {/* Compare button */}
-          <div className="flex justify-end">
-            <button
-              onClick={loadComparison}
-              disabled={loadingComparison || !launch.code}
-              className="text-sm bg-white border border-[var(--ayci-border)] rounded-lg px-4 py-2 hover:bg-slate-50 disabled:opacity-50"
-              data-testid="load-comparison-btn"
-            >
-              {loadingComparison ? (
-                <>
-                  <Loader2 className="w-4 h-4 inline mr-2 animate-spin" /> Loading comparison…
-                </>
-              ) : comparison ? (
-                "Comparison loaded ✓"
-              ) : (
-                "Compare to previous 2 launches"
-              )}
-            </button>
-          </div>
-
-          {/* Sales chart — primary focus post-webinar */}
+          {/* Sales chart (cumulative + comparison auto-loaded) */}
           {sales && !sales.error && (
             <SalesChart launch={launch} sales={sales} comparison={comparison} />
           )}
+
+          {/* Phase breakdown — compare each phase against previous 2 launches */}
+          <PhaseBreakdown data={phaseBreakdown} launch={launch} />
 
           {/* Sales by tier */}
           {sales?.by_tier && sales.by_tier.length > 0 && (
@@ -599,14 +561,20 @@ function SalesChart({ launch, sales, comparison }) {
     data.push(row);
   }
 
-  const series = [{ key: `${launch.name} cumulative`, color: SERIES_COLORS[0], strokeWidth: 3 }];
+  const series = [{
+    key: `${launch.name} cumulative`,
+    color: "#4457B6",
+    strokeWidth: 4,
+    isCurrent: true,
+  }];
   if (comparison?.previous) {
     comparison.previous.forEach((p, i) => {
       series.push({
         key: `${p.name} cumulative`,
-        color: SERIES_COLORS[i + 1] || "#cbd5e1",
-        strokeWidth: 2,
-        strokeDasharray: "4 4",
+        color: i === 0 ? "#94a3b8" : "#cbd5e1",
+        strokeWidth: 1.5,
+        strokeDasharray: "5 4",
+        isCurrent: false,
       });
     });
   }
@@ -648,7 +616,8 @@ function SalesChart({ launch, sales, comparison }) {
                 stroke={s.color}
                 strokeWidth={s.strokeWidth}
                 strokeDasharray={s.strokeDasharray}
-                dot={false}
+                dot={s.isCurrent ? { r: 3, fill: s.color, stroke: "white", strokeWidth: 1 } : false}
+                activeDot={s.isCurrent ? { r: 5 } : { r: 4 }}
               />
             ))}
             <ReferenceLine
@@ -720,12 +689,196 @@ function SalesByTier({ sales }) {
             key={p.tier}
             className="bg-slate-50 border border-[var(--ayci-border)] rounded p-2"
           >
-            <div className="font-medium text-[var(--ayci-ink)]">{p.tier}</div>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="font-medium text-[var(--ayci-ink)] truncate">{p.tier}</div>
+              <div className="text-[10px] font-semibold text-[var(--ayci-accent)] flex-shrink-0">
+                {p.pct_of_revenue}%
+              </div>
+            </div>
             <div className="text-[var(--ayci-ink-muted)]">
               {p.count} sales · {fmtGbp(p.amount_gbp)}
             </div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+
+function SignupsTile({ sales }) {
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-3 shadow-sm"
+      data-testid="kpi-sales-count"
+    >
+      <div className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full font-subhead bg-emerald-50 text-emerald-700">
+        <ShoppingBag className="w-3 h-3" />
+        Signups
+      </div>
+      <div className="mt-1.5 flex items-baseline gap-2">
+        <span className="font-display font-bold text-2xl text-[var(--ayci-ink)] leading-none">
+          {sales?.total_count ?? "—"}
+        </span>
+        <span className="text-[10px] text-[var(--ayci-ink-muted)] uppercase tracking-wider">
+          total
+        </span>
+      </div>
+      <div className="mt-1 flex items-center gap-3 text-[10px] text-[var(--ayci-ink-muted)]">
+        <span>
+          <span className="font-semibold text-emerald-700">
+            {sales?.new_signup_count ?? 0}
+          </span>{" "}
+          new
+        </span>
+        <span>
+          <span className="font-semibold text-violet-700">
+            {sales?.legacy_count ?? 0}
+          </span>{" "}
+          legacy
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const PHASE_BREAKDOWN_LABELS = {
+  in_between_start: "In-between (start)",
+  early_access: "Early access",
+  flash_sale: "Flash sale",
+  webinar: "Webinar",
+  open_cart: "Open cart",
+  close_cart: "Close cart",
+  in_between_end: "In-between (end)",
+};
+
+function PhaseBreakdown({ data, launch }) {
+  if (!data) {
+    return (
+      <section
+        className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+        data-testid="phase-breakdown-loading"
+      >
+        <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-2">
+          Phase breakdown vs previous launches
+        </h2>
+        <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading per-phase comparison…
+        </div>
+      </section>
+    );
+  }
+
+  if (data.computing) {
+    return (
+      <section
+        className="bg-sky-50 border border-sky-200 rounded-lg p-4 text-sm text-sky-800"
+        data-testid="phase-breakdown-computing"
+      >
+        <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+        First-time scan running across the active + 2 previous launches.
+        Refresh in 2-3 minutes.
+      </section>
+    );
+  }
+
+  const current = data.current || {};
+  const previous = data.previous || [];
+  const currentPhases = current.phases || [];
+  // All series share the same phase order; map by phase key
+  const allLaunches = [
+    { code: launch.code, name: launch.name || current.code, phases: currentPhases, isCurrent: true },
+    ...previous.map((p) => ({
+      code: p.code,
+      name: p.name || p.code,
+      phases: p.phases || [],
+      isCurrent: false,
+    })),
+  ];
+
+  const phaseRows = currentPhases.map((p) => {
+    const row = { phase: p.phase };
+    for (const L of allLaunches) {
+      const match = (L.phases || []).find((x) => x.phase === p.phase) || {};
+      row[L.code] = {
+        signups: match.signups || 0,
+        revenue: match.revenue_gbp || 0,
+        regs: match.registrations || 0,
+      };
+    }
+    return row;
+  });
+
+  return (
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm overflow-hidden"
+      data-testid="phase-breakdown"
+    >
+      <div className="p-5 border-b border-[var(--ayci-border)]">
+        <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+          Phase breakdown vs previous launches
+        </h2>
+        <div className="text-xs text-[var(--ayci-ink-muted)]">
+          Signups · Revenue · Webinar regs per phase. Boost & Go excluded from sales.
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-[var(--ayci-border)]">
+            <tr className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">
+              <th className="text-left p-3">Phase</th>
+              {allLaunches.map((L) => (
+                <th
+                  key={L.code}
+                  className={
+                    "text-right p-3 " +
+                    (L.isCurrent ? "text-[var(--ayci-accent)] font-bold" : "")
+                  }
+                >
+                  {L.name}
+                  {L.isCurrent && (
+                    <span className="ml-1 inline-block text-[9px] px-1.5 py-0.5 bg-[var(--ayci-accent)]/10 text-[var(--ayci-accent)] rounded-full">
+                      Current
+                    </span>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {phaseRows.map((row) => (
+              <tr
+                key={row.phase}
+                className="border-b border-[var(--ayci-border)] last:border-b-0 hover:bg-slate-50 transition-colors"
+              >
+                <td className="p-3 font-medium text-[var(--ayci-ink)] text-xs">
+                  {PHASE_BREAKDOWN_LABELS[row.phase] || row.phase}
+                </td>
+                {allLaunches.map((L) => {
+                  const c = row[L.code] || {};
+                  return (
+                    <td
+                      key={L.code}
+                      className={
+                        "p-3 text-right text-xs " +
+                        (L.isCurrent ? "font-semibold" : "text-[var(--ayci-ink-muted)]")
+                      }
+                    >
+                      <div className="text-[var(--ayci-ink)]">
+                        {fmtGbp(c.revenue || 0)}
+                      </div>
+                      <div className="text-[10px] text-[var(--ayci-ink-muted)]">
+                        {c.signups} signup{c.signups === 1 ? "" : "s"}
+                        {c.regs > 0 && ` · ${c.regs} regs`}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

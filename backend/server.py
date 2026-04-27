@@ -996,6 +996,27 @@ async def on_startup():
         except Exception as e:
             logger.warning(f"[daily] Tally cache refresh failed: {e}")
 
+    # Daily: refresh phase-breakdown cache for the active launch
+    async def _daily_phase_breakdown_refresh():
+        try:
+            today = datetime.now(timezone.utc).date().isoformat()
+            launch = await db.launches.find_one({
+                "start_date": {"$lte": today},
+                "end_date": {"$gte": today},
+            }, {"_id": 0})
+            if not launch:
+                logger.info("[daily] No active launch — phase-breakdown skip")
+                return
+            payload = await launches_mod.compute_phase_breakdown(db.launches, launch)
+            await db.cache.update_one(
+                {"_id": f"phase-breakdown:{launch['id']}"},
+                {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            logger.info(f"[daily] Phase-breakdown refreshed for {launch['code']}")
+        except Exception as e:
+            logger.warning(f"[daily] Phase-breakdown refresh failed: {e}")
+
     scheduler.add_job(
         _daily_circle_refresh,
         CronTrigger(hour=5, minute=0, timezone=tz),
@@ -1020,8 +1041,14 @@ async def on_startup():
         id="daily_tally_refresh",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _daily_phase_breakdown_refresh,
+        CronTrigger(hour=5, minute=25, timezone=tz),
+        id="daily_phase_breakdown_refresh",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20) — {tz}")
+    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20), daily_phase_breakdown_refresh (05:25) — {tz}")
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
     # Fire-and-forget so startup doesn't block.
@@ -1050,6 +1077,38 @@ async def on_startup():
             logger.warning(f"[startup] At-risk cache warm failed: {e}")
 
     _asyncio.create_task(_warm_at_risk())
+
+    # Warm phase-breakdown cache for active launch (slow ~5 min cold scan)
+    async def _warm_phase_breakdown():
+        try:
+            await _asyncio.sleep(60)  # let other warmers start first
+            today = datetime.now(timezone.utc).date().isoformat()
+            launch = await db.launches.find_one({
+                "start_date": {"$lte": today},
+                "end_date": {"$gte": today},
+            }, {"_id": 0})
+            if not launch:
+                return
+            cache_key = f"phase-breakdown:{launch['id']}"
+            cached = await db.cache.find_one({"_id": cache_key}, {"_id": 0})
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            if cached and cached.get("cached_at"):
+                cached_at = cached["cached_at"]
+                if cached_at.tzinfo is None:
+                    cached_at = cached_at.replace(tzinfo=timezone.utc)
+                if cached_at > cutoff:
+                    return  # already fresh
+            payload = await launches_mod.compute_phase_breakdown(db.launches, launch)
+            await db.cache.update_one(
+                {"_id": cache_key},
+                {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            logger.info(f"[startup] Phase-breakdown ready for {launch['code']}")
+        except Exception as e:
+            logger.warning(f"[startup] Phase-breakdown warm failed: {e}")
+
+    _asyncio.create_task(_warm_phase_breakdown())
 
 
 @app.on_event("shutdown")
@@ -1316,6 +1375,59 @@ async def launch_sales(launch_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(404, "Launch not found")
     start, end = _launch_window(launch)
     return await launches_mod.fetch_sales(start, end)
+
+
+@api.get("/launches/{launch_id}/phase-breakdown")
+async def launch_phase_breakdown(
+    launch_id: str,
+    refresh: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    """Per-phase signups + revenue + registrations for this launch and the
+    previous 2 launches. The underlying Stripe scans are slow (3 launches × 1-3 min
+    each), so the result is cached in Mongo for 24h and pre-warmed daily at 05:25
+    London. Returns `computing: true` while the first warm is in progress.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    import asyncio as _asyncio
+    launch = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not launch:
+        raise HTTPException(404, "Launch not found")
+
+    cache_key = f"phase-breakdown:{launch_id}"
+    cutoff = _dt.now(_tz.utc) - _td(hours=24)
+    cached = await db.cache.find_one({"_id": cache_key}, {"_id": 0})
+    fresh = False
+    if cached and cached.get("cached_at"):
+        cached_at = cached["cached_at"]
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=_tz.utc)
+        fresh = cached_at > cutoff
+
+    async def _warm():
+        try:
+            payload = await launches_mod.compute_phase_breakdown(db.launches, launch)
+            await db.cache.update_one(
+                {"_id": cache_key},
+                {"$set": {"payload": payload, "cached_at": _dt.now(_tz.utc)}},
+                upsert=True,
+            )
+        except Exception as e:
+            logger.warning(f"[phase-breakdown] Warm failed for {launch_id}: {e}")
+
+    if refresh or not fresh:
+        _asyncio.create_task(_warm())
+
+    if cached:
+        return {**cached["payload"], "cached": True, "stale": not fresh}
+
+    return {
+        "computing": True,
+        "current": {"id": launch_id, "code": launch.get("code"),
+                    "name": launch.get("name"), "phases": []},
+        "previous": [],
+        "message": "First-time scan running in the background — refresh in 2-3 minutes.",
+    }
 
 
 @api.get("/launches/{launch_id}/comparison")

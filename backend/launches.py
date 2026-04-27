@@ -213,10 +213,17 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         has_prior_map: dict[str, bool] = dict(prior_results)
 
     # 3. Classify each charge into a tier (or skip as renewal)
+    # Boost & Go is excluded from launch metrics per team request.
+    EXCLUDED_TIERS = {"Boost & Go"}
+    NEW_SIGNUP_TIERS = {"Academy", "Private Plus", "VIP", "Other signup"}
+
     by_day: dict[str, dict] = {}
     by_tier: dict[str, dict] = {}
     total_amount = 0
     total_count = 0
+    new_signup_count = 0
+    legacy_count = 0
+    counted_customers: set[str] = set()
     for ch in raw_charges:
         amount = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
         cust = ch.get("customer")
@@ -225,6 +232,8 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         tier = _classify_tier(desc, has_prior, amount, upgrade_min_pence)
         if tier is None:
             continue  # renewal — exclude
+        if tier in EXCLUDED_TIERS:
+            continue  # Boost & Go excluded from launch revenue/sales metrics
         day = datetime.fromtimestamp(ch.get("created", 0), tz=timezone.utc).date().isoformat()
         by_day.setdefault(day, {"amount": 0, "count": 0, "by_tier": defaultdict(int)})
         by_day[day]["amount"] += amount
@@ -235,6 +244,12 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         by_tier[tier]["count"] += 1
         total_amount += amount
         total_count += 1
+        if cust:
+            counted_customers.add(cust)
+        if tier in NEW_SIGNUP_TIERS:
+            new_signup_count += 1
+        else:
+            legacy_count += 1
 
     by_day_list = sorted(
         [
@@ -248,17 +263,34 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         ],
         key=lambda x: x["date"],
     )
+    # Tier breakdown with % of revenue
+    total_revenue = sum(v["amount"] for v in by_tier.values()) or 1
     by_tier_list = sorted(
         [
-            {"tier": t, "amount_gbp": round(v["amount"] / 100.0, 2), "count": v["count"]}
+            {
+                "tier": t,
+                "amount_gbp": round(v["amount"] / 100.0, 2),
+                "count": v["count"],
+                "pct_of_revenue": round(v["amount"] * 100 / total_revenue, 1),
+            }
             for t, v in by_tier.items()
         ],
         key=lambda x: -x["amount_gbp"],
     )
 
+    unique_customers = len(counted_customers)
+    aov_per_user = (
+        round((total_amount / 100.0) / unique_customers, 2)
+        if unique_customers else 0
+    )
+
     return {
         "total_amount_gbp": round(total_amount / 100.0, 2),
         "total_count": total_count,
+        "new_signup_count": new_signup_count,
+        "legacy_count": legacy_count,
+        "unique_customers": unique_customers,
+        "aov_per_user_gbp": aov_per_user,
         "by_tier": by_tier_list,
         "by_day": by_day_list,
         # Back-compat alias for any older callers
@@ -502,3 +534,121 @@ def align_by_day_offset(by_day: list[dict], start_iso: str) -> list[dict]:
         offset = (d - start).days
         out.append({**row, "day_offset": offset})
     return out
+
+
+# ----------------------------------------------------------- Phase breakdown
+PHASE_ORDER = [
+    "in_between_start",
+    "early_access",
+    "flash_sale",
+    "webinar",
+    "open_cart",
+    "close_cart",
+    "in_between_end",
+]
+
+
+def _bucket_into_phases(
+    sales_by_day: list[dict],
+    regs_by_day: list[dict],
+    phases: dict,
+) -> list[dict]:
+    """
+    Given a list of {date, count, amount_gbp} and {date, total} day-buckets,
+    aggregate them by phase using launch.phases start/end timestamps.
+    """
+    # Pre-parse phase windows
+    phase_windows: list[tuple[str, datetime, datetime]] = []
+    for key in PHASE_ORDER:
+        ph = phases.get(key) or {}
+        s = ph.get("start")
+        e = ph.get("end")
+        if not s or not e:
+            continue
+        try:
+            sd = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            ed = datetime.fromisoformat(e.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        phase_windows.append((key, sd, ed))
+
+    out: list[dict] = []
+    for key, sd, ed in phase_windows:
+        signups = 0
+        revenue = 0.0
+        regs = 0
+        for row in sales_by_day:
+            try:
+                d = datetime.fromisoformat(row["date"]).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            # Phase boundaries are aligned to dates here (one whole day belongs to one phase).
+            # Use phase start date as inclusive lower bound, end date as inclusive upper.
+            if sd.date() <= d.date() <= ed.date():
+                signups += int(row.get("count", 0))
+                revenue += float(row.get("amount_gbp", 0))
+        for row in regs_by_day:
+            try:
+                d = datetime.fromisoformat(row["date"]).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if sd.date() <= d.date() <= ed.date():
+                regs += int(row.get("total", 0))
+        out.append({
+            "phase": key,
+            "start": sd.isoformat(),
+            "end": ed.isoformat(),
+            "signups": signups,
+            "revenue_gbp": round(revenue, 2),
+            "registrations": regs,
+        })
+    return out
+
+
+async def compute_phase_breakdown(launches_collection, current_launch: dict) -> dict:
+    """
+    Returns per-phase signups + revenue + registrations for the current
+    launch and the previous 2 launches, so the team can compare phase-to-phase.
+    Runs the 3 launches in parallel (each pulls Stripe charges + Kit tags).
+    """
+    cur_start = current_launch["start_date"]
+    prev_cursor = launches_collection.find(
+        {"start_date": {"$lt": cur_start}}, {"_id": 0}
+    ).sort("start_date", -1).limit(2)
+    prev_launches: list[dict] = []
+    async for L in prev_cursor:
+        prev_launches.append(L)
+
+    async def _bucket_for(launch: dict) -> dict:
+        sales_t, regs_t = await asyncio.gather(
+            fetch_sales(launch["start_date"], launch["end_date"]),
+            fetch_registrations(launch["code"], launch["start_date"], launch["end_date"]),
+            return_exceptions=True,
+        )
+        if isinstance(sales_t, Exception):
+            sales_t = {"by_day": []}
+        if isinstance(regs_t, Exception):
+            regs_t = {"by_day": []}
+        phases = launch.get("phases") or {}
+        breakdown = _bucket_into_phases(
+            sales_t.get("by_day") or [], regs_t.get("by_day") or [], phases
+        )
+        return {
+            "id": launch["id"],
+            "code": launch["code"],
+            "name": launch["name"],
+            "phases": breakdown,
+        }
+
+    results = await asyncio.gather(
+        _bucket_for(current_launch),
+        *[_bucket_for(L) for L in prev_launches],
+        return_exceptions=True,
+    )
+    current = results[0] if not isinstance(results[0], Exception) else {
+        "id": current_launch["id"], "code": current_launch["code"],
+        "name": current_launch["name"], "phases": [],
+    }
+    previous = [r for r in results[1:] if not isinstance(r, Exception)]
+    return {"current": current, "previous": previous}
+
