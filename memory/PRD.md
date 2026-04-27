@@ -24,6 +24,12 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
+### 2026-04 — Team accounts provisioned (Apr 27)
+- 5 real team members created via `/api/auth/register` as `user` role with explicit `board_access`:
+  - **Full access (7 boards)**: Arub Yousuf, Oksana Demchenko.
+  - **All except `launches`**: Coralie Fairon, Becky Platt, Anoop Chidambaram.
+- Temporary password for all 5: `Welcome@AYCI2026`. Login verified for each (HTTP 200, board lists round-trip correctly via `/api/auth/me`). See `/app/memory/test_credentials.md`.
+
 ### 2026-02 — MVP + auto-sync
 - JWT auth with bcrypt + httpOnly cookies (access_token 24 h + refresh_token 7 d).
 - Admin auto-seeded on startup (`admin@ayci.com` / `Admin@2026`).
