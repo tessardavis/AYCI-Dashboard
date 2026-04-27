@@ -164,16 +164,53 @@ function TeamSection({ isAdmin }) {
 }
 
 // -------- Users (login accounts) --------
-function UsersSection({ isAdmin }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" });
-  const [busy, setBusy] = useState(false);
+const BOARD_LABELS = {
+  weekly_scorecard: "Weekly Scorecard",
+  quarterly_rocks: "Quarterly Rocks",
+  launches: "Launch Dashboard",
+  cohort: "Cohort Dashboard",
+  interviews: "Upcoming Interviews",
+  students: "Student Lookup",
+  at_risk: "Students at Risk",
+};
 
-  const save = async () => {
+function UsersSection({ isAdmin }) {
+  const [users, setUsers] = useState([]);
+  const [allBoards, setAllBoards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "user",
+    board_access: [],
+  });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/users");
+      setUsers(data.users || []);
+      setAllBoards(data.all_boards || []);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) load();
+  }, [isAdmin]);
+
+  const create = async () => {
     setBusy(true);
     try {
       await apiClient.post("/auth/register", form);
-      toast.success("User created");
-      setForm({ name: "", email: "", password: "", role: "user" });
+      toast.success(`Invited ${form.email}`);
+      setForm({ name: "", email: "", password: "", role: "user", board_access: [] });
+      await load();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally {
@@ -181,31 +218,198 @@ function UsersSection({ isAdmin }) {
     }
   };
 
-  if (!isAdmin) return <div className="text-sm text-[var(--ayci-ink-muted)]">Admin only.</div>;
+  const updateUser = async (userId, patch) => {
+    try {
+      await apiClient.patch(`/admin/users/${userId}`, patch);
+      toast.success("Saved");
+      await load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+
+  const deleteUser = async (userId, email) => {
+    if (!window.confirm(`Delete user ${email}? This cannot be undone.`)) return;
+    try {
+      await apiClient.delete(`/admin/users/${userId}`);
+      toast.success("User deleted");
+      await load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+
+  const toggleBoard = (user, board) => {
+    if (user.role === "admin") return; // admins always have everything
+    const has = (user.board_access || []).includes(board);
+    const next = has
+      ? (user.board_access || []).filter((b) => b !== board)
+      : [...(user.board_access || []), board];
+    updateUser(user.id, { board_access: next });
+  };
+
+  if (!isAdmin) {
+    return <div className="text-sm text-[var(--ayci-ink-muted)]">Admin only.</div>;
+  }
 
   return (
-    <Panel title="Create login account">
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
-        <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="user-form-name" /></div>
-        <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} data-testid="user-form-email" /></div>
-        <div><Label>Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="user-form-password" /></div>
-        <div>
-          <Label>Role</Label>
-          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-            <SelectTrigger data-testid="user-form-role"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="user">User</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-            </SelectContent>
-          </Select>
+    <div className="space-y-6">
+      <Panel title="Invite a new user">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+          <div>
+            <Label>Name</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              data-testid="user-form-name"
+            />
+          </div>
+          <div>
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              data-testid="user-form-email"
+            />
+          </div>
+          <div>
+            <Label>Temporary password</Label>
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              data-testid="user-form-password"
+            />
+          </div>
+          <div>
+            <Label>Role</Label>
+            <Select
+              value={form.role}
+              onValueChange={(v) => setForm({ ...form, role: v })}
+            >
+              <SelectTrigger data-testid="user-form-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="admin">Admin (full access)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {form.role === "user" && (
+            <div className="md:col-span-2">
+              <Label>Board access</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
+                {allBoards.map((b) => (
+                  <label
+                    key={b}
+                    className="flex items-center gap-2 text-xs bg-slate-50 border border-[var(--ayci-border)] rounded px-3 py-2 cursor-pointer hover:border-[var(--ayci-accent)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.board_access.includes(b)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...form.board_access, b]
+                          : form.board_access.filter((x) => x !== b);
+                        setForm({ ...form, board_access: next });
+                      }}
+                      data-testid={`user-form-board-${b}`}
+                    />
+                    {BOARD_LABELS[b] || b}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="md:col-span-2">
+            <Button
+              onClick={create}
+              disabled={busy || !form.email || !form.password || !form.name}
+              data-testid="user-form-save"
+              style={{ backgroundColor: "var(--ayci-accent)" }}
+            >
+              {busy ? "Inviting…" : "Invite user"}
+            </Button>
+          </div>
         </div>
-        <div className="md:col-span-2">
-          <Button onClick={save} disabled={busy} data-testid="user-form-save" style={{ backgroundColor: "var(--ayci-accent)" }}>
-            {busy ? "Creating…" : "Create user"}
-          </Button>
-        </div>
-      </div>
-    </Panel>
+      </Panel>
+
+      <Panel title={`Existing users (${users.length})`}>
+        {loading ? (
+          <div className="p-6 text-sm text-[var(--ayci-ink-muted)]">Loading…</div>
+        ) : (
+          <div className="divide-y divide-[var(--ayci-border)]">
+            {users.map((u) => (
+              <div key={u.id} className="p-4" data-testid={`user-row-${u.id}`}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="font-semibold text-[var(--ayci-ink)]">
+                      {u.name}{" "}
+                      <span className="text-xs font-normal text-[var(--ayci-ink-muted)]">
+                        ({u.email})
+                      </span>
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-0.5">
+                      {u.role === "admin" ? "Admin · full access" : "User"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={u.role}
+                      onValueChange={(v) => updateUser(u.id, { role: v })}
+                    >
+                      <SelectTrigger
+                        className="h-8 text-xs"
+                        data-testid={`user-row-role-${u.id}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteUser(u.id, u.email)}
+                      data-testid={`user-row-delete-${u.id}`}
+                      className="text-rose-600 hover:bg-rose-50"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+                {u.role === "user" && (
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                    {allBoards.map((b) => {
+                      const has = (u.board_access || []).includes(b);
+                      return (
+                        <button
+                          key={b}
+                          onClick={() => toggleBoard(u, b)}
+                          data-testid={`user-row-board-${u.id}-${b}`}
+                          className={
+                            "text-[11px] px-2 py-1 rounded border transition-colors " +
+                            (has
+                              ? "bg-[var(--ayci-accent)]/10 border-[var(--ayci-accent)] text-[var(--ayci-accent)] font-semibold"
+                              : "bg-white border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:border-[var(--ayci-accent)]")
+                          }
+                        >
+                          {has ? "✓" : "+"} {BOARD_LABELS[b] || b}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 

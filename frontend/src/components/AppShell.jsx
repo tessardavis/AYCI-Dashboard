@@ -3,15 +3,21 @@ import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, 
 import { useAuth } from "@/context/AuthContext";
 
 const NAV = [
-  { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard" },
-  { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks" },
-  { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches" },
-  { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort" },
-  { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews" },
-  { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students" },
-  { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk" },
-  { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings" },
+  { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard" },
+  { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks", board: "quarterly_rocks" },
+  { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
+  { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort", board: "cohort" },
+  { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews", board: "interviews" },
+  { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
+  { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
+  { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings", board: "settings" },
 ];
+
+export function userCanAccess(user, board) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return (user.board_access || []).includes(board);
+}
 
 export default function AppShell() {
   const { user, logout } = useAuth();
@@ -50,7 +56,7 @@ export default function AppShell() {
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
-          {NAV.map(({ to, label, icon: Icon, testid }) => (
+          {NAV.filter((item) => userCanAccess(user, item.board)).map(({ to, label, icon: Icon, testid }) => (
             <NavLink
               key={to}
               to={to}

@@ -56,6 +56,24 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Per-user board access (Apr 27)
+- **Granular board access per user**. Admins have everything; "user" role gets explicit access only to the boards an admin grants them.
+- **Boards**: `weekly_scorecard`, `quarterly_rocks`, `launches`, `cohort`, `interviews`, `students`, `at_risk`. `settings` is admin-only and never grantable.
+- **Backend**:
+  - `User` schema gained `board_access: List[str]`.
+  - New `require_board(name)` dependency factory + `user_has_board(user, board)` helper.
+  - Sensitive endpoints (`/students/*`, `/students/at-risk`, `/cohorts/*`, `/interviews/upcoming`) now return **403** if the caller doesn't have the matching board.
+  - New admin endpoints: `GET /api/admin/users`, `PATCH /api/admin/users/{id}`, `DELETE /api/admin/users/{id}`.
+  - `/api/auth/register` (admin-only) now accepts `board_access` array.
+  - `/api/auth/me` returns the user's effective board list (admins get the full list including `settings`).
+  - Last-admin safety: backend rejects demoting/deleting the only remaining admin.
+  - Migration: existing users backfilled with empty `board_access`.
+- **Frontend**:
+  - `AppShell` now filters sidebar nav entries by `userCanAccess(user, board)`.
+  - New `BoardGuard` route wrapper in `App.js` shows a polite "Access not granted" page (`/pages/NotAuthorized.jsx`) with a fallback link to the user's first allowed board.
+  - Settings → Users tab rebuilt as a full management screen: invite form (with role + board checkbox grid), existing users list with role selector, per-board toggle chips, delete button.
+- **Test coach account** (`coach@ayci.com` / `Coach@2026`) seeded for permission testing — has Weekly Scorecard + Interviews + Students only; should see 403 on at-risk/cohorts.
+
 ### 2026-04 — Stale-while-revalidate caching (Apr 27)
 - **All slow endpoints now cached in Mongo with stale-while-revalidate semantics**: if cache is fresh (<60 min) the response is sub-100 ms; if stale, the cached payload is returned immediately and a background task refreshes silently. Cold cache only hits the user once per launch.
 - Endpoints affected:

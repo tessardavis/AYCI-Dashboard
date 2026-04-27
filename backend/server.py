@@ -111,6 +111,37 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+# All boards in the app. Admin-only boards (settings) are not in DEFAULT_BOARDS.
+ALL_BOARDS = [
+    "weekly_scorecard",
+    "quarterly_rocks",
+    "launches",
+    "cohort",
+    "interviews",
+    "students",
+    "at_risk",
+]
+ADMIN_ONLY_BOARDS = ["settings"]
+
+
+def user_has_board(user: dict, board: str) -> bool:
+    """Admins always pass. Members must have the board in their board_access list."""
+    if user.get("role") == "admin":
+        return True
+    if board in ADMIN_ONLY_BOARDS:
+        return False
+    return board in (user.get("board_access") or [])
+
+
+def require_board(board: str):
+    """FastAPI dependency factory: ensures the current user can access `board`."""
+    async def _check(user: dict = Depends(get_current_user)) -> dict:
+        if not user_has_board(user, board):
+            raise HTTPException(status_code=403, detail=f"Access to '{board}' board is not granted")
+        return user
+    return _check
+
+
 # --- Models -----------------------------------------------------------------
 class LoginInput(BaseModel):
     email: EmailStr
@@ -122,6 +153,7 @@ class RegisterInput(BaseModel):
     password: str
     name: str
     role: Literal["admin", "user"] = "user"
+    board_access: List[str] = Field(default_factory=list)
 
 
 class UserOut(BaseModel):
@@ -129,6 +161,14 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     role: str
+    board_access: List[str] = Field(default_factory=list)
+
+
+class UserPatch(BaseModel):
+    name: Optional[str] = None
+    role: Optional[Literal["admin", "user"]] = None
+    board_access: Optional[List[str]] = None
+    password: Optional[str] = None  # set new password
 
 
 class TeamMember(BaseModel):
@@ -332,7 +372,13 @@ async def login(data: LoginInput, response: Response):
     access = create_access_token(user["id"], user["email"], user.get("role", "user"))
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
-    return {"id": user["id"], "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "name": user["name"],
+        "role": user.get("role", "user"),
+        "board_access": user.get("board_access") or [],
+    }
 
 
 @api.post("/auth/register")
@@ -341,21 +387,114 @@ async def register(data: RegisterInput, response: Response, admin: dict = Depend
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    invalid = [b for b in (data.board_access or []) if b not in ALL_BOARDS]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Unknown boards: {invalid}")
     user_doc = {
         "id": str(uuid.uuid4()),
         "email": email,
         "name": data.name,
         "role": data.role,
+        # Admins implicitly have all boards; for "user" we honour what was passed.
+        "board_access": list(data.board_access or []),
         "password_hash": hash_password(data.password),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user_doc)
-    return {"id": user_doc["id"], "email": email, "name": data.name, "role": data.role}
+    return {
+        "id": user_doc["id"],
+        "email": email,
+        "name": data.name,
+        "role": data.role,
+        "board_access": user_doc["board_access"],
+    }
 
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
-    return user
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "name": user.get("name"),
+        "role": user.get("role", "user"),
+        "board_access": (
+            ALL_BOARDS + ADMIN_ONLY_BOARDS
+            if user.get("role") == "admin"
+            else (user.get("board_access") or [])
+        ),
+    }
+
+
+# --- User admin (admin-only) -----------------------------------------------
+@api.get("/admin/users")
+async def admin_list_users(admin: dict = Depends(require_admin)):
+    users = await db.users.find(
+        {}, {"_id": 0, "password_hash": 0}
+    ).sort("created_at", 1).to_list(500)
+    # Normalise older docs that don't have board_access
+    for u in users:
+        u["board_access"] = u.get("board_access") or []
+    return {"users": users, "all_boards": ALL_BOARDS}
+
+
+@api.patch("/admin/users/{user_id}")
+async def admin_update_user(
+    user_id: str, data: UserPatch, admin: dict = Depends(require_admin)
+):
+    update: dict = {}
+    if data.name is not None:
+        update["name"] = data.name
+    if data.role is not None:
+        update["role"] = data.role
+    if data.board_access is not None:
+        invalid = [b for b in data.board_access if b not in ALL_BOARDS]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Unknown boards: {invalid}")
+        update["board_access"] = data.board_access
+    if data.password:
+        update["password_hash"] = hash_password(data.password)
+    if not update:
+        raise HTTPException(status_code=400, detail="No changes")
+
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Safety: never let an admin demote themselves while being the only admin
+    if (
+        data.role == "user"
+        and target.get("role") == "admin"
+        and target.get("id") == admin.get("id")
+    ):
+        admin_count = await db.users.count_documents({"role": "admin"})
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Can't demote the last admin. Promote another user first.",
+            )
+
+    await db.users.update_one({"id": user_id}, {"$set": update})
+    fresh = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    fresh["board_access"] = fresh.get("board_access") or []
+    return fresh
+
+
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    if user_id == admin.get("id"):
+        raise HTTPException(status_code=400, detail="You can't delete yourself.")
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin":
+        admin_count = await db.users.count_documents({"role": "admin"})
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Can't delete the last admin.",
+            )
+    await db.users.delete_one({"id": user_id})
+    return {"ok": True}
 
 
 @api.post("/auth/logout")
@@ -879,6 +1018,7 @@ async def _seed_admin():
             "email": admin_email,
             "name": "AYCI Admin",
             "role": "admin",
+            "board_access": list(ALL_BOARDS),
             "password_hash": hash_password(admin_password),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -887,6 +1027,12 @@ async def _seed_admin():
     elif not verify_password(admin_password, existing.get("password_hash", "")):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
         logger.info(f"Updated admin password: {admin_email}")
+
+    # Backfill: ensure every existing user has a board_access field
+    await db.users.update_many(
+        {"board_access": {"$exists": False}},
+        {"$set": {"board_access": []}},
+    )
 
 
 # --- Scheduler (auto-sync Monday 06:00 Europe/London) -----------------------
@@ -1234,7 +1380,7 @@ async def sync_run(req: SyncRequest, user: dict = Depends(get_current_user)):
 
 # --- Student Lookup --------------------------------------------------------
 @api.get("/students/lookup")
-async def students_lookup(email: str, user: dict = Depends(get_current_user)):
+async def students_lookup(email: str, user: dict = Depends(require_board("students"))):
     """
     Unified student lookup — fan out an email across Monday.com, Circle,
     Stripe, ConvertKit, and Calendly in parallel. Each platform returns
@@ -1275,14 +1421,14 @@ async def students_lookup(email: str, user: dict = Depends(get_current_user)):
 async def students_name_search(
     q: str,
     limit: int = 10,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_board("students")),
 ):
     """Return up to N candidate students matching the name query."""
     return await lookup.name_search(db, q, limit=limit)
 
 
 @api.post("/students/circle-cache/refresh")
-async def circle_cache_refresh(user: dict = Depends(get_current_user)):
+async def circle_cache_refresh(user: dict = Depends(require_board("students"))):
     """Force-refresh the Circle members cache. Returns counts."""
     await db.circle_members_cache.delete_one({"_id": "all"})
     members, source = await lookup._circle_get_cached_members(db)
@@ -1293,7 +1439,7 @@ async def circle_cache_refresh(user: dict = Depends(get_current_user)):
 async def students_drive_summary(
     email: str,
     name: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_board("students")),
 ):
     """
     Returns a Claude-generated summary of a student's private-tier Google Doc.
@@ -1305,7 +1451,7 @@ async def students_drive_summary(
 @api.get("/students/at-risk")
 async def students_at_risk(
     refresh: bool = False,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_board("at_risk")),
 ):
     """
     Returns high-spend Stripe customers (lifetime GBP >= 1000 over the last
@@ -1331,7 +1477,7 @@ async def students_at_risk(
 async def upcoming_interviews(
     academy_days: int = 7,
     private_days: int = 14,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_board("interviews")),
 ):
     """
     Returns upcoming interviews grouped by Academy vs private tiers.
@@ -1364,7 +1510,7 @@ async def upcoming_interviews(
 
 # --- Cohort --------------------------------------------------------------
 @api.get("/cohorts/labels")
-async def cohort_labels(user: dict = Depends(get_current_user)):
+async def cohort_labels(user: dict = Depends(require_board("cohort"))):
     """Returns the list of cohort labels from Monday's 'Cohort Joined' dropdown."""
     return await cohort_mod.fetch_cohort_labels()
 
@@ -1650,7 +1796,7 @@ async def cohort_summary_endpoint(
     new_tag_id: Optional[int] = None,
     legacy_tag_id: Optional[int] = None,
     intros_space_id: Optional[int] = None,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_board("cohort")),
 ):
     """
     Aggregated cohort stats. New / Legacy counts come from ConvertKit tags
