@@ -56,6 +56,10 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Tier blank → Academy fallback (Apr 27)
+- **Bug fix on Upcoming Interviews bucketing**: students whose Monday Tier dropdown was blank were falling through to the Private list (e.g. Yealin Chung). The classifier `is_pure_academy` now treats an empty tier as plain Academy — matches the team's mental model where the dropdown is often unset for vanilla Academy students.
+- After the fix: 19 Academy / 6 Private (was 18 / 7).
+
 ### 2026-04 — Per-user board access (Apr 27)
 - **Granular board access per user**. Admins have everything; "user" role gets explicit access only to the boards an admin grants them.
 - **Boards**: `weekly_scorecard`, `quarterly_rocks`, `launches`, `cohort`, `interviews`, `students`, `at_risk`. `settings` is admin-only and never grantable.

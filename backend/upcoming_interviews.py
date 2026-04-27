@@ -186,8 +186,10 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # Is this an Academy-only student? Tier dropdown can list multiple values
         # (e.g. "Academy, Boost & Go Plus") — if ANYTHING other than plain "Academy"
         # is listed, route them to private.
+        # An empty Tier dropdown is treated as plain Academy (team's default — many
+        # Academy students never have the dropdown explicitly set).
         tier_parts = [t.strip().lower() for t in tier.split(",") if t.strip()]
-        is_pure_academy = tier_parts == ["academy"]
+        is_pure_academy = (not tier_parts) or tier_parts == ["academy"]
 
         if is_pure_academy:
             academy.append(base)
