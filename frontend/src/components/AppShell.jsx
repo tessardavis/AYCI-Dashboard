@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2 } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
   { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort", board: "cohort" },
   { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews", board: "interviews" },
+  { to: "/coach-activity", label: "Coach Activity", icon: MessageCircle, testid: "sidebar-nav-coach-activity", board: "coach_activity" },
   { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
   { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings", board: "settings" },

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, EmailStr
 import connectors
 import student_lookup as lookup
 import upcoming_interviews as upcoming
+import coach_activity as coach_act
 import cohort as cohort_mod
 import google_drive as gdrive
 import launches as launches_mod
@@ -120,6 +121,7 @@ ALL_BOARDS = [
     "interviews",
     "students",
     "at_risk",
+    "coach_activity",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]
 
@@ -1545,6 +1547,29 @@ async def upcoming_interviews(
         "academy": academy,
         "private": data["private"],
     }
+
+
+# --- Coach Activity ------------------------------------------------------
+@api.get("/coach-activity/summary")
+async def coach_activity_summary(
+    refresh: bool = False,
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """
+    Aggregated coaching engagement across:
+      - Circle space "Recorded Answer Review" (since 4 Apr 2026)
+      - Circle space "Specific Interview Support" (since 23 Apr 2026)
+      - Monday board "AYCI - Private video responses"
+    Cached 30 min via stale-while-revalidate.
+    """
+    if refresh:
+        await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
+    return await launches_mod._stale_while_revalidate(
+        db,
+        "coach_activity:summary",
+        ttl_min=30,
+        compute_fn=coach_act.fetch_coach_activity_summary,
+    )
 
 
 # --- Cohort --------------------------------------------------------------

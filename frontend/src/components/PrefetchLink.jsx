@@ -17,6 +17,7 @@ const PREFETCH_MAP = {
   "/interviews": ["/interviews/upcoming?academy_days=7&private_days=14"],
   "/at-risk": ["/students/at-risk"],
   "/cohort": ["/cohorts/labels"],
+  "/coach-activity": ["/coach-activity/summary"],
   "/": ["/scorecard"],
 };
 

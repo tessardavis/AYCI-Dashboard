@@ -24,6 +24,15 @@ A single-page view where the team searches a student by email and sees a unified
 6. Auth: JWT cookie login, admin-only register endpoint, logout.
 
 ## Implemented
+### 2026-04 — Coach Activity dashboard (Apr 27)
+- New `/coach-activity` board (`coach_activity` permission key) for the coaching team. 30-min SWR cached. Sidebar entry with `MessageCircle` icon. Granted to all 5 provisioned team users + the test coach account.
+- **Recorded Answer Review section** (Circle space `2529508`, since 4 Apr 2026): per-day post bar chart, replies-per-coach bar list, two flag panels — "Awaiting coach reply > 48 h" and "Posting > 3 / week".
+- **Specific Interview Support section** (Circle space `2529509`, since 23 Apr 2026): same shape; Tessa is currently doing all 5 of 5 replies.
+- **Private tier video submissions section** (Monday board `5083952249`): 4 KPI tiles — total submitted / replied / new / unassigned — plus assignments-per-coach via the Monday "Assigned to" people column. Resolves person IDs to names via a single `users(ids:[])` query.
+- **Coach roster** (canonical names, lowercased lookup with whitespace-tolerant fallback): Zinnirah Zainodin, Anne Beh, Charlotte Wyeth, Anoop Chidambaram, Kat Priddis, Tessa Davis, Becky Platt.
+- New backend module `/app/backend/coach_activity.py`. `analyse_circle_space(space_id, start_date, label)` paginates posts and fans out comment lookups concurrently (semaphore=8). Counts UNIQUE posts each coach has replied to, not raw comment count.
+- Endpoint: `GET /api/coach-activity/summary?refresh=true` — returns `{coaches, recorded_answers, interview_support, private_videos}`. Each Circle section has `{label, space_id, window, total_posts, total_unique_authors, per_day, per_coach, unanswered, rate_limited, last_refreshed}`.
+
 ### 2026-04 — Self-serve change-password + brand heroes + past-coaches + hover prefetch (Apr 27)
 - **Self-serve change password**: `POST /api/auth/change-password` (current + new). Min 8 chars, must differ. New `/profile` page with form + role/email summary card. New "My profile" button in sidebar. Tested: wrong/short/identical/valid all return correct status; old login fails after change. (12/12 backend pytest cases PASS.)
 - **Reusable HeroBanner** (`/components/HeroBanner.jsx`) with three brand presets:

@@ -11,6 +11,7 @@ import StudentLookup from "@/pages/StudentLookup";
 import StudentsAtRisk from "@/pages/StudentsAtRisk";
 import UpcomingInterviews from "@/pages/UpcomingInterviews";
 import CohortDashboard from "@/pages/CohortDashboard";
+import CoachActivity from "@/pages/CoachActivity";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import NotAuthorized from "@/pages/NotAuthorized";
@@ -61,6 +62,7 @@ function App() {
                 <Route path="/students" element={<BoardGuard board="students"><StudentLookup /></BoardGuard>} />
                 <Route path="/at-risk" element={<BoardGuard board="at_risk"><StudentsAtRisk /></BoardGuard>} />
                 <Route path="/interviews" element={<BoardGuard board="interviews"><UpcomingInterviews /></BoardGuard>} />
+                <Route path="/coach-activity" element={<BoardGuard board="coach_activity"><CoachActivity /></BoardGuard>} />
                 <Route path="/settings" element={<BoardGuard board="settings"><Settings /></BoardGuard>} />
                 <Route path="/profile" element={<Profile />} />
               </Route>
