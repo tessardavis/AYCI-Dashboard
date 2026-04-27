@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, MessageSquare } from "lucide-react";
+import { ExternalLink, FileText, MessageSquare, AlertTriangle } from "lucide-react";
 
 const PRIVATE_CHAT_COLUMN = "Private Chat Link";
 
@@ -19,12 +19,18 @@ export default function QuickLinks({ result }) {
     });
   }
   if (result?.drive?.found && result?.drive?.web_view_link) {
+    const fuzzy = result.drive.needs_verification;
     links.push({
       key: "drive-doc",
-      label: "Google Doc",
+      label: fuzzy ? "Google Doc · verify" : "Google Doc",
       url: result.drive.web_view_link,
-      icon: FileText,
-      tone: "bg-amber-50 text-amber-700 border-amber-200",
+      icon: fuzzy ? AlertTriangle : FileText,
+      tone: fuzzy
+        ? "bg-amber-50 text-amber-800 border-amber-300 ring-1 ring-amber-200"
+        : "bg-amber-50 text-amber-700 border-amber-200",
+      title: fuzzy
+        ? `Closest match: "${result.drive.name}"${result.drive.match_score ? ` (${Math.round(result.drive.match_score * 100)}%)` : ""} — please verify`
+        : result.drive.name,
     });
   }
   if (mondayUrl) {
@@ -53,6 +59,7 @@ export default function QuickLinks({ result }) {
           href={L.url}
           target="_blank"
           rel="noreferrer"
+          title={L.title}
           className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 border rounded-full hover:shadow-sm transition-shadow ${L.tone}`}
           data-testid={`quick-link-${L.key}`}
         >

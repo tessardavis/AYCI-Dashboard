@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, FileText, ExternalLink, Sparkles } from "lucide-react";
+import { Loader2, FileText, ExternalLink, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -101,6 +101,46 @@ export default function PrivateDocCard({ email, name }) {
           </a>
         )}
       </div>
+
+      {result.match?.needs_verification && (
+        <div
+          className="text-xs bg-amber-50 border border-amber-200 text-amber-900 rounded p-2.5 mb-3 flex items-start gap-2"
+          data-testid="fuzzy-match-warning"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-display font-semibold">
+              Possible match — please verify before using
+            </div>
+            <div className="mt-0.5 text-amber-800">
+              Looking for{" "}
+              <strong className="font-display">
+                "{result.match.searched_name}"
+              </strong>{" "}
+              but the closest doc is{" "}
+              <strong className="font-display">
+                "{result.file.name}"
+              </strong>
+              {result.match.score && (
+                <span className="opacity-70">
+                  {" "}
+                  ({Math.round(result.match.score * 100)}% similar
+                  {result.match.reason === "lastname" ? ", surname only" : ""})
+                </span>
+              )}
+              . Open the doc to confirm it's the right student.
+            </div>
+            {result.match.other_candidates?.length > 0 && (
+              <div className="mt-1.5 text-[11px] text-amber-700">
+                Other near-matches:{" "}
+                {result.match.other_candidates
+                  .map((c) => `"${c.name}" (${Math.round(c.score * 100)}%)`)
+                  .join(", ")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {result.error && (
         <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">

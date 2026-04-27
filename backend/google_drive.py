@@ -15,6 +15,7 @@ import os
 import re
 import logging
 from datetime import datetime, timezone, timedelta
+from difflib import SequenceMatcher
 from typing import Optional
 
 from google.oauth2 import service_account
@@ -30,6 +31,15 @@ SCOPES = [
 
 SUMMARY_TTL_HOURS = 24
 MAX_DOC_CHARS = 12000  # Truncate input to the LLM
+
+# Fuzzy-match thresholds tuned for typo tolerance (e.g. "Jevdovic" ↔ "Jedovic")
+# without grabbing unrelated names. Anything ≥ FUZZY_MIN is surfaced with a
+# verification flag for the coach.
+FUZZY_MIN_WHOLE = 0.82
+FUZZY_MIN_TOKEN = 0.78
+# Below this, two name tokens are considered different people — a 5-char token
+# pair under 0.55 is almost certainly unrelated.
+FUZZY_HARD_FLOOR = 0.55
 
 
 def _drive_service():
@@ -53,38 +63,112 @@ def _normalise(name: str) -> str:
     return re.sub(r"\s+", " ", n).strip()
 
 
+def _ratio(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def _strip_extension(filename: str) -> str:
+    """Strip a trailing .docx/.pdf/.doc/.gdoc/.txt/.md so it doesn't poison fuzzy ratio."""
+    return re.sub(r"\.(docx?|pdf|gdoc|txt|md|rtf|odt)$", "", filename, flags=re.I)
+
+
+def _token_match_score(target_tokens: list[str], file_tokens: list[str]) -> tuple[float, list[float]]:
+    """
+    For each target token, find its best fuzzy match against any file token.
+    Returns (mean_score, per_token_scores). Tokens shorter than 3 chars
+    (initials, middle name "M") are skipped — they shouldn't drive the score.
+    """
+    scores: list[float] = []
+    for t in target_tokens:
+        if len(t) < 3:
+            continue
+        best = 0.0
+        for f in file_tokens:
+            if len(f) < 3:
+                continue
+            r = _ratio(t, f)
+            if r > best:
+                best = r
+        scores.append(best)
+    if not scores:
+        return 0.0, []
+    return sum(scores) / len(scores), scores
+
+
 def _find_best_match(student_name: str, files: list[dict]) -> Optional[dict]:
     """
     Match strategy (first win):
-    1. Filename contains the full normalised student name
-    2. Filename starts with first_name + last_name tokens in any order
-    3. All name tokens appear somewhere in filename
+    1. Filename contains the full normalised student name (exact)
+    2. All target tokens (>=3 chars) appear verbatim in filename (tokens)
+    3. Fuzzy: highest SequenceMatcher ratio across whole-string OR per-token
+       average — with a warning so the coach can verify
+    4. Last-name verbatim fallback (lastname)
 
-    Returns the matched file dict with optional `match_reason`.
+    Returns the matched file dict augmented with:
+      - match_reason: "exact" | "tokens" | "fuzzy" | "lastname"
+      - match_score: float (1.0 for strict matches, 0..1 for fuzzy)
+      - needs_verification: True if match wasn't strict
+      - other_candidates: top fuzzy near-misses for transparency (only for fuzzy)
     """
     target = _normalise(student_name)
     if not target:
         return None
-    parts = target.split()
+    parts = [p for p in target.split() if p]
 
+    # 1) exact substring
     for f in files:
-        fname = _normalise(f["name"])
+        fname = _normalise(_strip_extension(f["name"]))
         if target in fname:
-            return {**f, "match_reason": "exact"}
+            return {**f, "match_reason": "exact", "match_score": 1.0, "needs_verification": False}
 
-    # all tokens present (in any order)
+    # 2) all tokens present verbatim
     for f in files:
-        fname = _normalise(f["name"])
-        if all(p in fname for p in parts):
-            return {**f, "match_reason": "tokens"}
+        fname = _normalise(_strip_extension(f["name"]))
+        if all(p in fname for p in parts if len(p) >= 3):
+            return {**f, "match_reason": "tokens", "match_score": 1.0, "needs_verification": False}
 
-    # fallback: last-name only if unusual (len>3)
+    # 3) fuzzy — score every file by whole-string AND per-token, take the max
+    scored: list[tuple[float, str, dict, float, float]] = []
+    for f in files:
+        fname = _normalise(_strip_extension(f["name"]))
+        whole = _ratio(target, fname)
+        token_avg, _ = _token_match_score(parts, fname.split())
+        score = max(whole, token_avg)
+        scored.append((score, fname, f, whole, token_avg))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    if scored:
+        best_score, _, best_file, whole, tok = scored[0]
+        # Only return as fuzzy if either the whole-string ratio OR the token
+        # average crosses its threshold AND doesn't look like a totally different
+        # name (token avg shouldn't be in the floor zone).
+        passes = (whole >= FUZZY_MIN_WHOLE) or (tok >= FUZZY_MIN_TOKEN)
+        if passes and tok >= FUZZY_HARD_FLOOR:
+            others = [
+                {"name": s[2]["name"], "score": round(s[0], 3)}
+                for s in scored[1:4]
+                if s[0] >= 0.65
+            ]
+            return {
+                **best_file,
+                "match_reason": "fuzzy",
+                "match_score": round(best_score, 3),
+                "needs_verification": True,
+                "other_candidates": others,
+            }
+
+    # 4) fallback: last-name verbatim if it's an unusual surname
     if len(parts) >= 2 and len(parts[-1]) > 3:
         last = parts[-1]
         for f in files:
-            fname = _normalise(f["name"])
+            fname = _normalise(_strip_extension(f["name"]))
             if last in fname.split():
-                return {**f, "match_reason": "lastname"}
+                return {
+                    **f,
+                    "match_reason": "lastname",
+                    "match_score": 1.0,
+                    "needs_verification": True,
+                }
 
     return None
 
@@ -160,6 +244,9 @@ async def find_student_doc_link(db, student_name: str) -> dict:
                 "web_view_link": match.get("webViewLink"),
                 "name": match.get("name"),
                 "match_reason": match.get("match_reason"),
+                "match_score": match.get("match_score"),
+                "needs_verification": match.get("needs_verification", False),
+                "other_candidates": match.get("other_candidates", []),
             }
     except Exception as e:
         payload = {"found": False, "web_view_link": None, "error": str(e)}
@@ -388,6 +475,13 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
                     "error": hint,
                     "candidates_scanned": len(files),
                     "cached": False,
+                    "match": {
+                        "reason": match.get("match_reason"),
+                        "score": match.get("match_score"),
+                        "needs_verification": match.get("needs_verification", False),
+                        "other_candidates": match.get("other_candidates", []),
+                        "searched_name": student_name,
+                    },
                 }
             if not text.strip():
                 summary = "Document is empty."
@@ -409,6 +503,14 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
             }
 
         # Store in cache
+        # Stitch on match metadata so the UI can flag fuzzy matches.
+        payload["match"] = {
+            "reason": match.get("match_reason"),
+            "score": match.get("match_score"),
+            "needs_verification": match.get("needs_verification", False),
+            "other_candidates": match.get("other_candidates", []),
+            "searched_name": student_name,
+        }
         await db.drive_doc_summaries.update_one(
             {"_id": cache_key},
             {"$set": {**payload, "cached_at": datetime.now(timezone.utc)}},
