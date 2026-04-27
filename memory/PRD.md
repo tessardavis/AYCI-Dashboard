@@ -56,6 +56,19 @@ A single-page view where the team searches a student by email and sees a unified
 - Google service account email for folder sharing: `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
 - Env vars added: `GOOGLE_SERVICE_ACCOUNT_FILE`, `GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID`, `EMERGENT_LLM_KEY`.
 
+### 2026-04 — Stale-while-revalidate caching (Apr 27)
+- **All slow endpoints now cached in Mongo with stale-while-revalidate semantics**: if cache is fresh (<60 min) the response is sub-100 ms; if stale, the cached payload is returned immediately and a background task refreshes silently. Cold cache only hits the user once per launch.
+- Endpoints affected:
+  - `/api/launches/{id}/sales` — 12 s → **0.1 s**
+  - `/api/launches/{id}/registrations` — 1.9 s → **0.1 s**
+  - `/api/launches/{id}/comparison` — 50 s → **0.1 s** (warm)
+  - `/api/launches/active/pace` — uses `cached_fetch_sales` under the hood
+  - `/api/interviews/upcoming` — 3.6 s → **0.1 s**
+- New helper `_stale_while_revalidate(db, key, ttl_min, fn)` in `launches.py` — re-usable for any future expensive endpoint.
+- New `cached_fetch_sales` and `cached_fetch_registrations` keyed by `(start, end)` so all 5+ callers (sales endpoint, comparison, pace, phase-breakdown, year-overview) share the same cache.
+- Pre-warm on startup: 15 s after boot, the active launch's sales + regs are computed and cached so the first dashboard visitor sees instant responses.
+- Background refresh tasks deduped by cache key — multiple stale hits don't trigger duplicate Stripe scans.
+
 ### 2026-04 — Signups deduped per person (Apr 27)
 - **Signups now count unique people, not charges**. Anyone who signed up + upgraded in the same launch window is now counted **once**, not twice.
 - APR-26 numbers post-fix: **170 unique signups** = 162 new + 8 legacy (was 250 / 240 / 10 charge-based).

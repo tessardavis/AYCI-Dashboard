@@ -1110,6 +1110,31 @@ async def on_startup():
 
     _asyncio.create_task(_warm_phase_breakdown())
 
+    # Warm cached_fetch_sales + cached_fetch_registrations for the active launch
+    # so the first dashboard load is instant.
+    async def _warm_active_launch_data():
+        try:
+            await _asyncio.sleep(15)  # let other warmers start first
+            today = datetime.now(timezone.utc).date().isoformat()
+            launch = await db.launches.find_one({
+                "start_date": {"$lte": today},
+                "end_date": {"$gte": today},
+            }, {"_id": 0})
+            if not launch:
+                return
+            start_iso = launch["start_date"] + "T00:00:00Z"
+            end_iso = launch["end_date"] + "T23:59:59Z"
+            await _asyncio.gather(
+                launches_mod.cached_fetch_sales(db, start_iso, end_iso),
+                launches_mod.cached_fetch_registrations(db, launch["code"], start_iso, end_iso),
+                return_exceptions=True,
+            )
+            logger.info(f"[startup] Active launch sales+regs cache warmed for {launch['code']}")
+        except Exception as e:
+            logger.warning(f"[startup] Active launch warm failed: {e}")
+
+    _asyncio.create_task(_warm_active_launch_data())
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -1316,7 +1341,13 @@ async def upcoming_interviews(
     """
     # Fetch once over the wider window, then trim the academy list client-side.
     wider = max(academy_days, private_days)
-    data = await upcoming.fetch_upcoming_interviews(db=db, days=wider)
+    # Cached SWR — first call ~3-4s; subsequent within 30 min are sub-100ms.
+    data = await launches_mod._stale_while_revalidate(
+        db,
+        f"upcoming_interviews:{wider}",
+        ttl_min=30,
+        compute_fn=lambda: upcoming.fetch_upcoming_interviews(db=db, days=wider),
+    )
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     today = _dt.now(_tz.utc).date()
     academy_cutoff = (today + _td(days=academy_days)).isoformat()
@@ -1364,7 +1395,7 @@ async def launch_registrations(launch_id: str, user: dict = Depends(get_current_
             "in Settings before loading registrations.",
         )
     start, end = _launch_window(launch)
-    return await launches_mod.fetch_registrations(code, start, end)
+    return await launches_mod.cached_fetch_registrations(db, code, start, end)
 
 
 @api.get("/launches/{launch_id}/sales")
@@ -1374,7 +1405,7 @@ async def launch_sales(launch_id: str, user: dict = Depends(get_current_user)):
     if not launch:
         raise HTTPException(404, "Launch not found")
     start, end = _launch_window(launch)
-    return await launches_mod.fetch_sales(start, end)
+    return await launches_mod.cached_fetch_sales(db, start, end)
 
 
 @api.get("/launches/{launch_id}/phase-breakdown")
@@ -1458,8 +1489,8 @@ async def launch_comparison(
         try:
             start, end = _launch_window(L)
             tasks = []
-            tasks.append(launches_mod.fetch_registrations(L["code"], start, end))
-            tasks.append(launches_mod.fetch_sales(start, end))
+            tasks.append(launches_mod.cached_fetch_registrations(db, L["code"], start, end))
+            tasks.append(launches_mod.cached_fetch_sales(db, start, end))
             regs, sales = await asyncio.gather(*tasks, return_exceptions=True)
             return {
                 "id": L["id"],
@@ -1513,7 +1544,8 @@ async def launches_year_overview(user: dict = Depends(get_current_user)):
         if not L.get("start_date") or not L.get("end_date"):
             return {**L, "revenue_gbp": 0, "sales_count": 0, "is_active": False, "is_future": False}
         try:
-            sales = await launches_mod.fetch_sales(
+            sales = await launches_mod.cached_fetch_sales(
+                db,
                 L["start_date"] + "T00:00:00Z",
                 L["end_date"] + "T23:59:59Z",
             )
@@ -1580,7 +1612,7 @@ async def active_launch_pace(user: dict = Depends(get_current_user)):
         L for L in all_launches
         if L["id"] != active["id"] and L.get("start_date", "") < active["start_date"]
     ][:3]
-    pace = await launches_mod.compute_pace(active, previous)
+    pace = await launches_mod.compute_pace(db, active, previous)
     pace["active"] = True
     pace["launch_id"] = active["id"]
     pace["launch_name"] = active["name"]
@@ -1608,7 +1640,7 @@ async def launch_pace(launch_id: str, user: dict = Depends(get_current_user)):
         L for L in all_launches
         if L["id"] != launch_id and L.get("start_date", "") < current["start_date"]
     ][:3]
-    return await launches_mod.compute_pace(current, previous)
+    return await launches_mod.compute_pace(db, current, previous)
 
 
 @api.get("/cohorts/summary")

@@ -30,6 +30,74 @@ from connectors import (
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------- Caching
+# Stale-while-revalidate wrappers around fetch_sales / fetch_registrations.
+# - First call: compute + cache + return.
+# - Subsequent fresh hit (< ttl_min): return cached payload (sub-50 ms).
+# - Subsequent stale hit (>= ttl_min): return STALE cached payload immediately
+#   AND fire off a background refresh so the next caller sees fresh data.
+# This gives the team near-instant dashboard loads regardless of cache state,
+# while ensuring data eventually catches up to reality.
+
+_FN_CACHE = "fn_cache"
+_BG_TASKS: dict[str, asyncio.Task] = {}
+
+
+async def _stale_while_revalidate(
+    db, key: str, ttl_min: int, compute_fn,
+):
+    cached = await db[_FN_CACHE].find_one({"_id": key}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    fresh_cutoff = now - timedelta(minutes=ttl_min)
+
+    is_fresh = False
+    if cached and cached.get("cached_at"):
+        ca = cached["cached_at"]
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        is_fresh = ca > fresh_cutoff
+
+    async def _refresh():
+        try:
+            payload = await compute_fn()
+            await db[_FN_CACHE].update_one(
+                {"_id": key},
+                {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            return payload
+        finally:
+            _BG_TASKS.pop(key, None)
+
+    if cached and is_fresh:
+        return cached["payload"]
+
+    if cached and not is_fresh:
+        # Stale — return cached, kick off a background refresh (deduped by key)
+        if key not in _BG_TASKS:
+            _BG_TASKS[key] = asyncio.create_task(_refresh())
+        return cached["payload"]
+
+    # No cache — must compute synchronously
+    return await _refresh()
+
+
+async def cached_fetch_sales(db, start_iso: str, end_iso: str, *, ttl_min: int = 60) -> dict:
+    """Stale-while-revalidate cache around fetch_sales(start, end)."""
+    key = f"fn_sales:{start_iso}:{end_iso}"
+    return await _stale_while_revalidate(
+        db, key, ttl_min, lambda: fetch_sales(start_iso, end_iso)
+    )
+
+
+async def cached_fetch_registrations(db, code: str, start_iso: str, end_iso: str, *, ttl_min: int = 60) -> dict:
+    """Stale-while-revalidate cache around fetch_registrations(code, start, end)."""
+    key = f"fn_regs:{code}:{start_iso}:{end_iso}"
+    return await _stale_while_revalidate(
+        db, key, ttl_min, lambda: fetch_registrations(code, start_iso, end_iso)
+    )
+
+
 # -------------------------------------------------------- Webinar registrations
 async def _list_kit_tags(c: httpx.AsyncClient) -> list[dict]:
     r = await c.get(f"{CONVERTKIT_V3}/tags", params={"api_secret": _ck_secret()})
@@ -384,10 +452,11 @@ def _classify_product(description: str) -> str:
 
 
 # -------------------------------------------------------------- Pace tracker
-async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> dict:
+async def compute_pace(db, current_launch: dict, previous_launches: list[dict]) -> dict:
     """
     Forecast a launch's final revenue based on the cumulative sales curve of
-    previous launches at the same day_offset.
+    previous launches at the same day_offset. Uses cached_fetch_sales so
+    repeat calls within 60 min are sub-50 ms.
     """
     from datetime import datetime, timezone
     import asyncio
@@ -417,7 +486,8 @@ async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> d
         if not prev.get("start_date") or not prev.get("end_date"):
             return None
         try:
-            res = await fetch_sales(
+            res = await cached_fetch_sales(
+                db,
                 prev["start_date"] + "T00:00:00Z",
                 prev["end_date"] + "T23:59:59Z",
             )
@@ -426,7 +496,7 @@ async def compute_pace(current_launch: dict, previous_launches: list[dict]) -> d
         return prev, res
 
     results = await asyncio.gather(
-        fetch_sales(start_iso, end_iso),
+        cached_fetch_sales(db, start_iso, end_iso),
         *[_fetch_prev(p) for p in previous_launches],
         return_exceptions=False,
     )
@@ -621,7 +691,7 @@ async def compute_phase_breakdown(launches_collection, current_launch: dict) -> 
     """
     Returns per-phase signups + revenue + registrations for the current
     launch and the previous 2 launches, so the team can compare phase-to-phase.
-    Runs the 3 launches in parallel (each pulls Stripe charges + Kit tags).
+    Runs the 3 launches in parallel (cached fetch_sales + fetch_registrations).
     """
     cur_start = current_launch["start_date"]
     prev_cursor = launches_collection.find(
@@ -631,10 +701,12 @@ async def compute_phase_breakdown(launches_collection, current_launch: dict) -> 
     async for L in prev_cursor:
         prev_launches.append(L)
 
+    db = launches_collection.database
+
     async def _bucket_for(launch: dict) -> dict:
         sales_t, regs_t = await asyncio.gather(
-            fetch_sales(launch["start_date"], launch["end_date"]),
-            fetch_registrations(launch["code"], launch["start_date"], launch["end_date"]),
+            cached_fetch_sales(db, launch["start_date"], launch["end_date"]),
+            cached_fetch_registrations(db, launch["code"], launch["start_date"], launch["end_date"]),
             return_exceptions=True,
         )
         if isinstance(sales_t, Exception):
