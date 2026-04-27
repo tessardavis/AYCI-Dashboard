@@ -171,6 +171,11 @@ class UserPatch(BaseModel):
     password: Optional[str] = None  # set new password
 
 
+class ChangePasswordInput(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class TeamMember(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
@@ -501,6 +506,28 @@ async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
+    return {"ok": True}
+
+
+@api.post("/auth/change-password")
+async def change_password(
+    data: ChangePasswordInput,
+    user: dict = Depends(get_current_user),
+):
+    """Self-serve password change for the logged-in user."""
+    new_pw = (data.new_password or "").strip()
+    if len(new_pw) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    if new_pw == data.current_password:
+        raise HTTPException(status_code=400, detail="New password must differ from current")
+    # Re-fetch with password_hash (get_current_user strips it)
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(data.current_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(new_pw)}},
+    )
     return {"ok": True}
 
 

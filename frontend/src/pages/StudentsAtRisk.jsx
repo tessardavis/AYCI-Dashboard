@@ -3,6 +3,7 @@ import { Loader2, AlertTriangle, RefreshCw, Search, ArrowUpDown, ExternalLink } 
 import { Link } from "react-router-dom";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { toast } from "sonner";
+import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 
 const fmtGbp = (v) =>
   `£${Number(v || 0).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
@@ -130,34 +131,28 @@ export default function StudentsAtRisk() {
 
   return (
     <div className="p-8 space-y-6" data-testid="at-risk-page">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
-            <AlertTriangle className="w-3 h-3 inline mr-1" /> Retention
-          </div>
-          <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
-            Students at risk
-          </h1>
-          <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
-            High-spend students (lifetime spend ≥ {fmtGbp(data?.min_spend_gbp || 1000)}{" "}
-            over the last 365 days) who haven't been on Circle in the last{" "}
-            {data?.dormant_days || 30} days, or never logged in.
-          </p>
-        </div>
-        <button
-          onClick={() => fetchData(true)}
-          disabled={refreshing}
-          className="text-sm bg-white border border-[var(--ayci-border)] rounded-lg px-4 py-2 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2"
-          data-testid="at-risk-refresh-btn"
-        >
-          {refreshing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          Refresh
-        </button>
-      </div>
+      <HeroBanner
+        {...HERO_PRESETS.at_risk}
+        eyebrow="Retention"
+        title="Students at risk"
+        subtitle={`High-spend students (lifetime spend ≥ ${fmtGbp(data?.min_spend_gbp || 1000)} over the last 365 days) who haven't been on Circle in the last ${data?.dormant_days || 30} days, or never logged in.`}
+        testid="at-risk-hero"
+        actions={
+          <button
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+            className="text-sm bg-white/95 border border-white/20 rounded-lg px-4 py-2 hover:bg-white disabled:opacity-50 flex items-center gap-2 h-10 text-[var(--ayci-ink)]"
+            data-testid="at-risk-refresh-btn"
+          >
+            {refreshing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Refresh
+          </button>
+        }
+      />
 
       {data?.computing && (
         <div

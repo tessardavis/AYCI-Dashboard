@@ -10,13 +10,14 @@ Upgrade Private Plus, Silver, Gold, Platinum, VIP, Boost & Go, Boost & Go Plus, 
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone, timedelta, date
 from typing import Any
 
 import httpx
 
-from connectors import MONDAY_URL, _monday_headers, TIMEOUT
+from connectors import MONDAY_URL, _monday_headers, TIMEOUT, CALENDLY_BASE, _calendly_headers
 
 ACADEMY_MEMBERS_BOARD_ID = 1956295952
 
@@ -243,8 +244,141 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
             # Tally enrichment is optional — silently skip on error
             pass
 
+    # Enrich with Calendly past coaches (who has the student spoken to before?)
+    if db is not None:
+        try:
+            all_emails = [s["email"] for s in academy + private if s.get("email")]
+            past_by_email = await fetch_past_coaches_bulk(db, all_emails)
+            for s in academy + private:
+                em = (s.get("email") or "").lower().strip()
+                s["past_coaches"] = past_by_email.get(em, [])
+        except Exception:
+            for s in academy + private:
+                s.setdefault("past_coaches", [])
+
     return {
         "window": {"start": start_str, "end": end_str, "days": days},
         "academy": academy,
         "private": private,
     }
+
+
+# ---- Calendly past-coaches enrichment -------------------------------------
+# Per-email, 24h-cached lookup of which coaches the student has had calls with.
+PAST_COACHES_TTL_HOURS = 24
+PAST_COACHES_LOOKBACK_DAYS = 365
+PAST_COACHES_CONCURRENCY = 6
+
+
+async def _fetch_past_coaches_one(client: httpx.AsyncClient, org: str, email: str) -> list[dict]:
+    """Calendly: list this invitee's past *active* events, group by host."""
+    target = email.strip().lower()
+    if not target:
+        return []
+    min_start = (datetime.now(timezone.utc) - timedelta(days=PAST_COACHES_LOOKBACK_DAYS)).isoformat().replace("+00:00", "Z")
+    max_start = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    by_host: dict[str, dict] = {}
+    page_token: str | None = None
+    pages = 0
+    while pages < 4:  # cap at 200 events per student — plenty
+        q: dict[str, Any] = {
+            "organization": org,
+            "invitee_email": target,
+            "count": 50,
+            "sort": "start_time:desc",
+            "status": "active",
+            "min_start_time": min_start,
+            "max_start_time": max_start,
+        }
+        if page_token:
+            q["page_token"] = page_token
+        try:
+            r = await client.get(f"{CALENDLY_BASE}/scheduled_events", headers=_calendly_headers(), params=q)
+        except Exception:
+            break
+        if r.status_code != 200:
+            break
+        body = r.json()
+        for ev in body.get("collection", []):
+            membs = ev.get("event_memberships") or []
+            if not membs:
+                continue
+            host = membs[0].get("user_name") or membs[0].get("user_email") or "Unknown"
+            start = ev.get("start_time") or ""
+            entry = by_host.get(host)
+            if entry is None:
+                by_host[host] = {"name": host, "count": 1, "last_at": start}
+            else:
+                entry["count"] += 1
+                if start > (entry.get("last_at") or ""):
+                    entry["last_at"] = start
+        page_token = (body.get("pagination") or {}).get("next_page_token")
+        pages += 1
+        if not page_token:
+            break
+    return sorted(by_host.values(), key=lambda x: x.get("last_at") or "", reverse=True)
+
+
+async def fetch_past_coaches_bulk(db, emails: list[str]) -> dict[str, list[dict]]:
+    """
+    Returns {email_lower: [{name, count, last_at}]} for each email.
+    Cached per-email in `cache` collection for 24 h. Missing entries are
+    fetched concurrently with bounded concurrency to stay polite to Calendly.
+    """
+    if not emails:
+        return {}
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=PAST_COACHES_TTL_HOURS)).isoformat()
+    out: dict[str, list[dict]] = {}
+    needed: list[str] = []
+    seen: set[str] = set()
+    for raw in emails:
+        em = (raw or "").strip().lower()
+        if not em or em in seen:
+            continue
+        seen.add(em)
+        doc = await db.cache.find_one({"key": f"calendly_past_hosts:{em}"})
+        if doc and doc.get("computed_at", "") >= cutoff and isinstance(doc.get("value"), list):
+            out[em] = doc["value"]
+        else:
+            needed.append(em)
+    if not needed:
+        return out
+
+    if not os.environ.get("CALENDLY_TOKEN"):
+        return out
+
+    sem = asyncio.Semaphore(PAST_COACHES_CONCURRENCY)
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        try:
+            me = await c.get(f"{CALENDLY_BASE}/users/me", headers=_calendly_headers())
+            me.raise_for_status()
+            org = me.json().get("resource", {}).get("current_organization")
+        except Exception:
+            return out
+        if not org:
+            return out
+
+        async def run(em: str) -> tuple[str, list[dict]]:
+            async with sem:
+                try:
+                    hosts = await _fetch_past_coaches_one(c, org, em)
+                except Exception:
+                    hosts = []
+                return em, hosts
+
+        results = await asyncio.gather(*(run(em) for em in needed))
+
+    now_iso = now.isoformat()
+    for em, hosts in results:
+        out[em] = hosts
+        await db.cache.update_one(
+            {"key": f"calendly_past_hosts:{em}"},
+            {"$set": {
+                "key": f"calendly_past_hosts:{em}",
+                "value": hosts,
+                "computed_at": now_iso,
+            }},
+            upsert=True,
+        )
+    return out

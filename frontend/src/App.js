@@ -12,6 +12,7 @@ import StudentsAtRisk from "@/pages/StudentsAtRisk";
 import UpcomingInterviews from "@/pages/UpcomingInterviews";
 import CohortDashboard from "@/pages/CohortDashboard";
 import Settings from "@/pages/Settings";
+import Profile from "@/pages/Profile";
 import NotAuthorized from "@/pages/NotAuthorized";
 
 function Protected() {
@@ -61,6 +62,7 @@ function App() {
                 <Route path="/at-risk" element={<BoardGuard board="at_risk"><StudentsAtRisk /></BoardGuard>} />
                 <Route path="/interviews" element={<BoardGuard board="interviews"><UpcomingInterviews /></BoardGuard>} />
                 <Route path="/settings" element={<BoardGuard board="settings"><Settings /></BoardGuard>} />
+                <Route path="/profile" element={<Profile />} />
               </Route>
             </Route>
           </Routes>

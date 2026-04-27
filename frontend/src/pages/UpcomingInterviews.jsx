@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -45,6 +45,46 @@ function HistoryBadge({ count }) {
       <History className="w-3 h-3" />
       {count} prior{count > 1 ? " interviews" : ""}
     </span>
+  );
+}
+
+// Strips trailing email-like fragments from Calendly host names so we get
+// "Tessa Davis" instead of "Tessa Davis (tessa@…)".
+function cleanCoachName(name) {
+  if (!name) return "Unknown";
+  return String(name).replace(/\s*\(.*?\)\s*$/, "").trim() || name;
+}
+
+function PastCoaches({ coaches }) {
+  if (!coaches || coaches.length === 0) return null;
+  // Show top 3 by recency, summarise the rest
+  const top = coaches.slice(0, 3);
+  const extra = coaches.length - top.length;
+  return (
+    <div
+      className="mt-2 flex items-center gap-1.5 flex-wrap text-[11px] text-[var(--ayci-ink-muted)]"
+      data-testid="past-coaches"
+    >
+      <Users2 className="w-3 h-3 text-[var(--ayci-teal)]" />
+      <span className="uppercase tracking-wider font-semibold text-[10px]">
+        Spoke with
+      </span>
+      {top.map((c) => (
+        <span
+          key={c.name}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full font-medium"
+          title={`${c.count} call${c.count > 1 ? "s" : ""}${c.last_at ? ` — last ${new Date(c.last_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`}
+        >
+          {cleanCoachName(c.name)}
+          {c.count > 1 && (
+            <span className="text-[9px] opacity-70">×{c.count}</span>
+          )}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="text-[10px] opacity-70">+{extra} more</span>
+      )}
+    </div>
   );
 }
 
@@ -269,6 +309,7 @@ function AcademyRow({ student, today }) {
           <span>{student.speciality || "—"}</span>
           {student.hospital && <span>· {student.hospital}</span>}
         </div>
+        <PastCoaches coaches={student.past_coaches} />
       </div>
       <div className="text-right">
         <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>
@@ -310,6 +351,7 @@ function PrivateCard({ student, today }) {
             {student.speciality || "—"}
             {student.hospital && ` · ${student.hospital}`}
           </div>
+          <PastCoaches coaches={student.past_coaches} />
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>

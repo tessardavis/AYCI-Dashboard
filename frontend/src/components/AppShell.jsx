@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { PrefetchNavLink } from "@/components/PrefetchLink";
 
 const NAV = [
   { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard" },
@@ -57,7 +58,7 @@ export default function AppShell() {
 
         <nav className="flex-1 px-3 space-y-1">
           {NAV.filter((item) => userCanAccess(user, item.board)).map(({ to, label, icon: Icon, testid }) => (
-            <NavLink
+            <PrefetchNavLink
               key={to}
               to={to}
               end={to === "/"}
@@ -81,7 +82,7 @@ export default function AppShell() {
                   <span>{label}</span>
                 </>
               )}
-            </NavLink>
+            </PrefetchNavLink>
           ))}
         </nav>
 
@@ -92,6 +93,14 @@ export default function AppShell() {
             </div>
             <div className="text-[var(--ayci-sidebar-muted)] text-xs capitalize">{user?.role || ""}</div>
           </div>
+          <button
+            onClick={() => navigate("/profile")}
+            data-testid="sidebar-profile-btn"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
+          >
+            <UserCircle2 className="w-4 h-4" />
+            My profile
+          </button>
           <button
             onClick={handleLogout}
             data-testid="sidebar-logout-btn"

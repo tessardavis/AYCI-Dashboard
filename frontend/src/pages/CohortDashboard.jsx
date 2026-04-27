@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 
 const DEFAULT_COHORT = "April 26";
 
@@ -46,49 +47,46 @@ export default function CohortDashboard() {
 
   return (
     <div className="p-8 space-y-6" data-testid="cohort-dashboard-page">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
-            Current cohort
-          </div>
-          <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
-            {cohort} Cohort
-          </h1>
-          <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
-            Live from Monday.com Academy Members board, cross-referenced with Circle membership.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={cohort}
-            onChange={(e) => {
-              setCohort(e.target.value);
-              load(e.target.value);
-            }}
-            className="bg-white border border-[var(--ayci-border)] rounded-lg px-3 py-2 text-sm font-medium text-[var(--ayci-ink)] focus:outline-none focus:border-[var(--ayci-teal)]"
-            data-testid="cohort-selector"
-          >
-            {labels.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <Button
-            variant="outline"
-            onClick={() => load()}
-            disabled={loading}
-            data-testid="cohort-refresh"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            Refresh
-          </Button>
-        </div>
-      </div>
+      <HeroBanner
+        {...HERO_PRESETS.cohort}
+        eyebrow="Current cohort"
+        title={`${cohort} Cohort`}
+        subtitle="Live from Monday.com Academy Members board, cross-referenced with Circle membership."
+        testid="cohort-hero"
+        actions={
+          <>
+            <select
+              value={cohort}
+              onChange={(e) => {
+                setCohort(e.target.value);
+                load(e.target.value);
+              }}
+              className="bg-white/95 border border-white/20 rounded-lg px-3 py-2 text-sm font-medium text-[var(--ayci-ink)] focus:outline-none focus:border-[var(--ayci-teal)] h-10"
+              data-testid="cohort-selector"
+            >
+              {labels.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => load()}
+              disabled={loading}
+              data-testid="cohort-refresh"
+              className="bg-white/95 border-white/20 text-[var(--ayci-ink)] hover:bg-white"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       {loading && !data && (
         <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">

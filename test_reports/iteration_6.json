@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 6 — Full regression of 4-feature batch (change-password, brand hero watermarks on cohort/at-risk, past_coaches on interviews, hover prefetch). Backend: 12/12 pytest cases PASS in /app/backend/tests/test_iteration6.py. Frontend: all 7 review bullets verified via Playwright against the public preview URL. Admin + becky passwords RESET back to originals at the end of each test. No critical bugs.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/interviews Upcoming Interviews → Private window selector",
+        "issues": [
+          "React hydration warning: <span> placed as direct child of <option> inside the Selector dropdown (UpcomingInterviews.jsx ~line 254). Browser renders fine but console logs 'In HTML, <span> cannot be a child of <option>. This will cause a hydration error.' LOW priority cosmetic — likely from a wrapping span in the Selector component's <option> label; fix by rendering just the string child inside <option>."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6.py",
+    "/app/test_reports/pytest/iteration6.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Remove the <span> wrapper inside <option> in UpcomingInterviews.jsx Selector (~line 254) to silence React hydration warning in the console. Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.py /auth/change-password: order of checks is (1) new_pw length >= 8, (2) new_pw != current_password, (3) verify_password(current). This means if a user submits a too-short new_pw with a wrong current, they get the length error first — acceptable behaviour and matches the review's expected error messages exactly. Good: re-fetches the user document with password_hash before verifying (get_current_user strips it).",
+    "server.py /auth/change-password: strips whitespace from new_pw but NOT from current_password before the verify call. Minor UX nit — a user pasting their current password with a trailing space would see 'Current password is incorrect'. Low priority.",
+    "server.py /auth/change-password does NOT rotate the JWT after password change, so the user's active access_token cookie still grants access until natural expiry. This is probably intentional ('Your session stays active afterwards.' is literally the helper text on the form) but worth noting if we ever add 'log out other sessions' UX.",
+    "upcoming_interviews.fetch_past_coaches_bulk: 24h cache keyed per email, top-3 by recency over last 365 days — confirmed data shape {name, count, last_at}. Endpoint warm SLA: 2nd call ~500ms, well under 5s target. 7/27 students enriched in this run (Tessa Davis, Charlotte, etc.) — matches main agent's cold-call finding.",
+    "HeroBanner refactor on /launches did NOT break the launch-selector (APR-26, FEB-26, NOV-25 all switch), KPI cards render (6 cards visible: REVENUE, SIGNUPS, CONVERSION, EPL, AOV, WEBINAR REGS), pace forecast + sales chart all intact.",
+    "Gradient match: cohort-hero computed background is linear-gradient(135deg, rgb(123,31,162) 0%, rgb(166,37,143) 55%, rgb(194,24,91) 100%) = #7B1FA2 → #A6258F → #C2185B ✓. at-risk-hero is linear-gradient(135deg, rgb(180,83,9) 0%, rgb(217,119,6) 55%, rgb(245,158,11) 100%) = #B45309 → #D97706 → #F59E0B ✓. Both match the stated brand presets.",
+    "Hover prefetch: hovering /launches triggers GET /api/launches exactly as designed. (Secondary dedupe probe was cut short by a stale selector — functional prefetch confirmed.)",
+    "Permissions: coach@ayci.com still 403s on /students/at-risk and /cohorts/labels. The 5 provisioned users all log in with Welcome@AYCI2026; arub/oksana have all 7 boards, coralie/becky/anoop have 6 boards (no 'launches'). Matches test_credentials.md spec exactly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration6.py (new, 12 test cases)",
+    "/app/test_reports/pytest/iteration6.xml (generated)"
+  ],
+  "success_rate": { "backend": "100% (12/12)", "frontend": "100% of review bullets verified" },
+  "test_credentials": "admin@ayci.com / Admin@2026; becky@medicalinterviewprep.com / Welcome@AYCI2026 — both RESET back to original at test end.",
+  "seed_data_creation": "None. Live preview data used.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_iteration6.py -v --junitxml=/app/test_reports/pytest/iteration6.xml` (~7s warm). The test_full_flow_for_becky case briefly changes becky's password to 'Brand-New-Pass-2026!' and then PATCHes it back to Welcome@AYCI2026 via admin — if a run is interrupted mid-test, manually reset via `curl -X PATCH /api/admin/users/{beckyId} -d '{\"password\":\"Welcome@AYCI2026\"}'` as admin. The past_coaches test depends on live Calendly data (cold ~seconds, warm <1s); test performs a warm-up call before asserting the <5s SLA.",
+  "rca of the issue": "No bugs. All 11 review-request bullets pass. Only cosmetic finding is a React hydration warning from a <span> inside <option> in the Private window selector on /interviews — render is unaffected, reported as minor."
+}
