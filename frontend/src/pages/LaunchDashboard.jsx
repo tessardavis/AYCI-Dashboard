@@ -20,7 +20,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink } from "lucide-react";
+import { Loader2, Calendar, TrendingUp, ShoppingBag, Users, ExternalLink, AlertTriangle, RefreshCw, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 import { PaceTrackerCard } from "@/components/PaceTracker";
@@ -59,6 +59,7 @@ export default function LaunchDashboard() {
   const [sales, setSales] = useState(null);
   const [comparison, setComparison] = useState(null);
   const [phaseBreakdown, setPhaseBreakdown] = useState(null);
+  const [onboardingGap, setOnboardingGap] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const launch = useMemo(
@@ -97,6 +98,7 @@ export default function LaunchDashboard() {
     setSales(null);
     setComparison(null);
     setPhaseBreakdown(null);
+    setOnboardingGap(null);
     Promise.all([
       apiClient
         .get(`/launches/${launchId}/registrations`, { timeout: 60000 })
@@ -121,6 +123,10 @@ export default function LaunchDashboard() {
       .get(`/launches/${launchId}/phase-breakdown`, { timeout: 30000 })
       .then((r) => setPhaseBreakdown(r.data))
       .catch(() => setPhaseBreakdown(null));
+    apiClient
+      .get(`/launches/${launchId}/onboarding-gap`, { timeout: 60000 })
+      .then((r) => setOnboardingGap(r.data))
+      .catch(() => setOnboardingGap(null));
   }, [launchId]);
 
   return (
@@ -241,6 +247,9 @@ export default function LaunchDashboard() {
 
           {/* Phase breakdown — compare each phase against previous 2 launches */}
           <PhaseBreakdown data={phaseBreakdown} launch={launch} />
+
+          {/* Onboarding gap — students who paid but aren't in Circle cohort yet */}
+          <OnboardingGap data={onboardingGap} launchId={launchId} onRefresh={(d) => setOnboardingGap(d)} />
 
           {/* Sales by tier */}
           {sales?.by_tier && sales.by_tier.length > 0 && (
@@ -878,5 +887,211 @@ function PhaseBreakdown({ data, launch }) {
         </table>
       </div>
     </section>
+  );
+}
+
+// ---- Onboarding gap: paid but not in Circle cohort yet --------------------
+function OnboardingGap({ data, launchId, onRefresh }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [tab, setTab] = useState("gap"); // "gap" | "unmatched"
+
+  if (!data) {
+    return (
+      <section className="bg-white border border-[var(--ayci-border)] rounded-2xl p-5 shadow-sm" data-testid="onboarding-gap-section">
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading onboarding gap…
+        </div>
+      </section>
+    );
+  }
+  if (data.error) {
+    return (
+      <section className="bg-white border border-rose-200 rounded-2xl p-5 shadow-sm">
+        <div className="text-sm text-rose-700">Couldn't load onboarding gap: {data.error}</div>
+      </section>
+    );
+  }
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const { data: fresh } = await apiClient.get(
+        `/launches/${launchId}/onboarding-gap`,
+        { params: { refresh: true }, timeout: 90000 },
+      );
+      onRefresh(fresh);
+      toast.success("Refreshed");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't refresh");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const total = data.new_signups_total || 0;
+  const inCohort = data.in_cohort_count || 0;
+  const inCohortPct = total ? Math.round((inCohort / total) * 100) : 0;
+  const rows = tab === "gap" ? (data.gap || []) : (data.unmatched || []);
+  const visible = showAll ? rows : rows.slice(0, 10);
+
+  return (
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-2xl p-5 sm:p-6 shadow-sm"
+      data-testid="onboarding-gap-section"
+    >
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <h2 className="font-display font-bold text-xl text-[var(--ayci-ink)]">
+              Onboarding gap
+            </h2>
+          </div>
+          <p className="text-xs text-[var(--ayci-ink-muted)] mt-1 max-w-2xl">
+            New signups in this launch's window who aren't yet in the cohort's
+            Circle spaces. Cross-references Stripe new-signup customers with
+            Monday's "On Circle" status (looks for{" "}
+            <strong>{data.expected_circle_label || "the cohort label"}</strong>).
+          </p>
+        </div>
+        <button
+          onClick={refresh}
+          disabled={refreshing}
+          className="text-sm bg-white border border-[var(--ayci-border)] rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"
+          data-testid="onboarding-gap-refresh"
+        >
+          {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <GapStat label="New signups" value={total} />
+        <GapStat label="In cohort" value={inCohort} hint={`${inCohortPct}%`} tone="emerald" />
+        <GapStat label="Onboarding gap" value={data.gap_count || 0} tone={(data.gap_count || 0) > 0 ? "amber" : "slate"} />
+        <GapStat label="Not on Monday" value={data.unmatched_count || 0} tone={(data.unmatched_count || 0) > 0 ? "rose" : "slate"} />
+      </div>
+
+      {/* Tab switcher */}
+      <div className="flex items-center gap-2 mb-3">
+        <TabButton active={tab === "gap"} onClick={() => { setTab("gap"); setShowAll(false); }} data-testid="onboarding-gap-tab-gap">
+          Gap ({data.gap_count || 0})
+        </TabButton>
+        <TabButton active={tab === "unmatched"} onClick={() => { setTab("unmatched"); setShowAll(false); }} data-testid="onboarding-gap-tab-unmatched">
+          Not on Monday ({data.unmatched_count || 0})
+        </TabButton>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {tab === "gap"
+            ? "Every paying customer is already in the cohort spaces. Nice work."
+            : "Every paying customer has been added to the Monday Academy Members board."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto -mx-1 px-1 border border-[var(--ayci-border)] rounded-lg">
+          <table className="min-w-full text-sm" data-testid="onboarding-gap-table">
+            <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] font-display font-semibold">
+              <tr>
+                <th className="text-left px-3 py-2">Signed up</th>
+                <th className="text-left px-3 py-2">Email</th>
+                <th className="text-left px-3 py-2">Tier</th>
+                <th className="text-left px-3 py-2">Reason</th>
+                {tab === "gap" && <th className="text-left px-3 py-2">Monday</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((r, i) => (
+                <tr key={`${r.email || r.customer_id}-${i}`} className="border-t border-[var(--ayci-border)]">
+                  <td className="px-3 py-2 text-xs text-[var(--ayci-ink-muted)] whitespace-nowrap tabular-nums">
+                    {r.signup_date}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-[var(--ayci-ink)]">{r.name || r.monday_name || "—"}</div>
+                    <div className="text-xs text-[var(--ayci-ink-muted)] break-all">{r.email || "(no email)"}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-semibold">
+                      {r.tier_hint || "—"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-[var(--ayci-ink)]">
+                    {r.reason}
+                    {r.circle_join_followup && (
+                      <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-0.5">
+                        Follow-up: <strong>{r.circle_join_followup}</strong>
+                      </div>
+                    )}
+                  </td>
+                  {tab === "gap" && (
+                    <td className="px-3 py-2 text-xs">
+                      {r.monday_url ? (
+                        <a
+                          href={r.monday_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--ayci-teal)] hover:underline inline-flex items-center gap-1"
+                        >
+                          Open <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-[var(--ayci-ink-muted)]">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rows.length > 10 && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-3 text-xs text-[var(--ayci-teal)] hover:underline font-display font-semibold"
+          data-testid="onboarding-gap-toggle"
+        >
+          {showAll ? `Show top 10` : `Show all ${rows.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function TabButton({ active, onClick, children, ...rest }) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        "text-xs font-display font-semibold px-3 py-1.5 rounded-full border transition-colors",
+        active
+          ? "bg-[var(--ayci-teal)] text-white border-[var(--ayci-teal)]"
+          : "bg-white text-[var(--ayci-ink-muted)] border-[var(--ayci-border)] hover:bg-slate-50",
+      ].join(" ")}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GapStat({ label, value, hint, tone = "slate" }) {
+  const tones = {
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    amber: "bg-amber-50 border-amber-200 text-amber-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+  };
+  return (
+    <div className={`rounded-lg border p-2.5 ${tones[tone]}`}>
+      <div className="text-[10px] uppercase tracking-wider font-display font-semibold opacity-80">
+        {label}
+      </div>
+      <div className="font-display font-bold text-2xl text-[var(--ayci-ink)] mt-0.5 tabular-nums">{value}</div>
+      {hint && <div className="text-[10px] opacity-70">{hint}</div>}
+    </div>
   );
 }

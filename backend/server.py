@@ -21,6 +21,7 @@ import connectors
 import student_lookup as lookup
 import upcoming_interviews as upcoming
 import coach_activity as coach_act
+import onboarding_gap as ob_gap
 import cohort as cohort_mod
 import google_drive as gdrive
 import launches as launches_mod
@@ -1616,6 +1617,32 @@ async def launch_sales(launch_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(404, "Launch not found")
     start, end = _launch_window(launch)
     return await launches_mod.cached_fetch_sales(db, start, end)
+
+
+@api.get("/launches/{launch_id}/onboarding-gap")
+async def launch_onboarding_gap(
+    launch_id: str,
+    refresh: bool = False,
+    user: dict = Depends(require_board("launches")),
+):
+    """
+    List of new-signup customers for this launch who are NOT yet in the
+    cohort's Circle spaces (per the Monday "On Circle" status). Cached 30 min.
+    """
+    launch = await db.launches.find_one({"id": launch_id}, {"_id": 0})
+    if not launch:
+        raise HTTPException(404, "Launch not found")
+
+    cache_key = f"onboarding_gap:{launch_id}"
+    if refresh:
+        await db["fn_cache"].delete_one({"_id": cache_key})
+
+    async def _compute():
+        return await ob_gap.fetch_onboarding_gap(launch)
+
+    return await launches_mod._stale_while_revalidate(
+        db, cache_key, ttl_min=30, compute_fn=_compute,
+    )
 
 
 @api.get("/launches/{launch_id}/phase-breakdown")
