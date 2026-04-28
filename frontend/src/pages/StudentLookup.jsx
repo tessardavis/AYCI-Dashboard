@@ -142,7 +142,7 @@ export default function StudentLookup() {
     }
   };
 
-  // Derive a "student header" from any platform that has a name
+  // Derive a "student header" from any platform that has a name + key facts
   const header = (() => {
     if (!result) return null;
     const name =
@@ -152,7 +152,44 @@ export default function StudentLookup() {
       result.monday?.data?.name ||
       null;
     const avatar = result.circle?.data?.avatar_url;
-    return { name, avatar, email: result.email };
+
+    // Pull interview details with sensible fallbacks across platforms.
+    const mondayCols = result.monday?.data?.columns || {};
+    const tally = result.tally || {};
+    const tallyHist = (tally.history && tally.history[0]) || {};
+
+    const interviewDate =
+      (mondayCols["Interview Date"]?.text || "").trim() ||
+      tallyHist.date ||
+      null;
+    const kajabiDate = (mondayCols["Kajabi Interview Date"]?.text || "").trim();
+    const interviewType =
+      (mondayCols["Interview Type"]?.text || "").trim() ||
+      tally.type ||
+      tallyHist.type ||
+      null;
+    const speciality =
+      (mondayCols["Speciality"]?.text || "").trim() ||
+      (mondayCols["Specialty"]?.text || "").trim() ||
+      tallyHist.speciality ||
+      null;
+    const hospital =
+      (mondayCols["Hospital"]?.text || "").trim() ||
+      tallyHist.hospital ||
+      null;
+    const tier = (mondayCols["Tier"]?.text || "").trim();
+
+    return {
+      name,
+      avatar,
+      email: result.email,
+      interviewDate,
+      kajabiDate,
+      interviewType,
+      speciality,
+      hospital,
+      tier,
+    };
   })();
 
   return (
@@ -268,26 +305,7 @@ export default function StudentLookup() {
       {result && (
         <>
           {/* Identity header */}
-          <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm flex items-center gap-4">
-            {header?.avatar ? (
-              <img
-                src={header.avatar}
-                alt={header.name || "Avatar"}
-                className="w-14 h-14 rounded-full object-cover border border-[var(--ayci-border)]"
-              />
-            ) : (
-              <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-display font-bold">
-                {(header?.name || query).slice(0, 2).toUpperCase()}
-              </div>
-            )}
-            <div className="flex-1">
-              <div className="font-display font-bold text-xl text-[var(--ayci-ink)]">
-                {header?.name || "Unknown student"}
-              </div>
-              <div className="text-sm text-[var(--ayci-ink-muted)]">{query}</div>
-            </div>
-            <PlatformBadges result={result} />
-          </div>
+          <StudentHeaderCard header={header} query={query} result={result} />
 
           {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
           <CoachSummary result={result} />
@@ -355,6 +373,165 @@ export default function StudentLookup() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function StudentHeaderCard({ header, query, result }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Derive interview-date status
+  let interviewBlock = null;
+  if (header?.interviewDate) {
+    const d = new Date(header.interviewDate);
+    const isValid = !isNaN(d.getTime());
+    if (isValid) {
+      d.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((d - today) / 86400000);
+      const past = diffDays < 0;
+      const tone = past
+        ? "bg-slate-100 border-slate-200 text-slate-700"
+        : diffDays <= 7
+        ? "bg-rose-50 border-rose-300 text-rose-900"
+        : diffDays <= 21
+        ? "bg-amber-50 border-amber-300 text-amber-900"
+        : "bg-emerald-50 border-emerald-300 text-emerald-800";
+      const niceDate = d.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+      const subtitle = past
+        ? `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"} ago`
+        : diffDays === 0
+        ? "Today"
+        : diffDays === 1
+        ? "Tomorrow"
+        : `In ${diffDays} days`;
+      interviewBlock = { tone, niceDate, subtitle, past, diffDays };
+    }
+  }
+
+  const interviewType = header?.interviewType
+    ? header.interviewType.charAt(0).toUpperCase() + header.interviewType.slice(1).toLowerCase()
+    : null;
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm space-y-4"
+      data-testid="student-header-card"
+    >
+      <div className="flex items-center gap-4 flex-wrap">
+        {header?.avatar ? (
+          <img
+            src={header.avatar}
+            alt={header.name || "Avatar"}
+            className="w-14 h-14 rounded-full object-cover border border-[var(--ayci-border)] shrink-0"
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-display font-bold shrink-0">
+            {(header?.name || query).slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="font-display font-bold text-xl text-[var(--ayci-ink)]">
+            {header?.name || "Unknown student"}
+          </div>
+          <div className="text-sm text-[var(--ayci-ink-muted)] flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span>{query}</span>
+            {header?.tier && (
+              <>
+                <span className="text-[var(--ayci-ink-muted)] opacity-60">·</span>
+                <span className="font-display font-semibold text-[var(--ayci-teal)]">
+                  {header.tier}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <PlatformBadges result={result} />
+      </div>
+
+      {/* Big & clear interview / specialty banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="student-interview-summary">
+        {/* Interview date */}
+        {interviewBlock ? (
+          <div
+            className={`rounded-lg border px-4 py-3 ${interviewBlock.tone}`}
+            data-testid="student-interview-date"
+          >
+            <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
+              Interview
+            </div>
+            <div className="font-display font-bold text-lg leading-tight mt-0.5">
+              {interviewBlock.niceDate}
+            </div>
+            <div className="text-xs mt-0.5 font-semibold">{interviewBlock.subtitle}</div>
+          </div>
+        ) : header?.kajabiDate ? (
+          <div
+            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-700 px-4 py-3"
+            data-testid="student-interview-date"
+          >
+            <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
+              Interview (rough)
+            </div>
+            <div className="font-display font-bold text-lg leading-tight mt-0.5">
+              {header.kajabiDate}
+            </div>
+            <div className="text-xs mt-0.5 italic opacity-70">No exact date set yet</div>
+          </div>
+        ) : (
+          <div
+            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-500 px-4 py-3"
+            data-testid="student-interview-date"
+          >
+            <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
+              Interview
+            </div>
+            <div className="text-sm mt-0.5 italic">No date set</div>
+          </div>
+        )}
+
+        {/* Interview type — Substantive / Locum */}
+        <div
+          className={`rounded-lg border px-4 py-3 ${
+            interviewType
+              ? "bg-sky-50 border-sky-200 text-sky-900"
+              : "bg-slate-50 border-slate-200 text-slate-500"
+          }`}
+          data-testid="student-interview-type"
+        >
+          <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
+            Interview type
+          </div>
+          <div className="font-display font-bold text-lg leading-tight mt-0.5">
+            {interviewType || "Not specified"}
+          </div>
+        </div>
+
+        {/* Speciality */}
+        <div
+          className={`rounded-lg border px-4 py-3 ${
+            header?.speciality
+              ? "bg-violet-50 border-violet-200 text-violet-900"
+              : "bg-slate-50 border-slate-200 text-slate-500"
+          }`}
+          data-testid="student-speciality"
+        >
+          <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
+            Speciality
+          </div>
+          <div className="font-display font-bold text-lg leading-tight mt-0.5">
+            {header?.speciality || "Not specified"}
+          </div>
+          {header?.hospital && (
+            <div className="text-xs mt-0.5 opacity-80 truncate">{header.hospital}</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
