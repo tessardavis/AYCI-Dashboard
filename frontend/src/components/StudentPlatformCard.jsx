@@ -11,13 +11,13 @@ export default function StudentPlatformCard({ title, platform, state, accent, ch
       data-testid={`platform-card-${platform}`}
     >
       <div
-        className="flex items-center justify-between px-5 py-3 border-b border-[var(--ayci-border)]"
+        className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-[var(--ayci-border)] gap-2"
         style={{ borderTopColor: accent, borderTopWidth: 3 }}
       >
-        <div className="font-display font-semibold text-[var(--ayci-ink)]">{title}</div>
+        <div className="font-display font-semibold text-[var(--ayci-ink)] text-sm sm:text-base truncate">{title}</div>
         <span
           className={
-            "text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full " +
+            "text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full shrink-0 " +
             (found
               ? "bg-emerald-100 text-emerald-700"
               : errored
@@ -29,7 +29,7 @@ export default function StudentPlatformCard({ title, platform, state, accent, ch
         </span>
       </div>
 
-      <div className="p-5 text-sm">
+      <div className="p-4 sm:p-5 text-sm">
         {errored && (
           <div className="flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 text-xs">
             <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />

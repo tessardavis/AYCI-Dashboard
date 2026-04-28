@@ -195,13 +195,13 @@ export default function StudentLookup() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="student-lookup-page">
       <div>
-        <div className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
+        <div className="text-[10px] sm:text-[11px] font-display font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
           Unified view
         </div>
-        <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
           Student Lookup
         </h1>
-        <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-xl">
+        <p className="text-[var(--ayci-ink-muted)] text-xs sm:text-sm mt-1 max-w-xl">
           Search any student by <strong>email or name</strong> to see a unified profile pulled live from Monday.com,
           Circle, Stripe, ConvertKit and Calendly.
         </p>
@@ -209,16 +209,16 @@ export default function StudentLookup() {
 
       <form
         onSubmit={runLookup}
-        className="flex flex-wrap items-center gap-3 bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
+        className="flex flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 bg-white border border-[var(--ayci-border)] rounded-lg p-3 sm:p-4 shadow-sm"
       >
-        <div className="relative flex-1 min-w-[320px]">
+        <div className="relative flex-1 w-full sm:min-w-[320px] sm:w-auto">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ayci-ink-muted)]" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder="Email or name (e.g. anna.swalsh@btinternet.com or Anna Walsh)"
+            placeholder="Email or name…"
             className="pl-9 h-11"
             data-testid="student-lookup-input"
             autoFocus
@@ -264,7 +264,7 @@ export default function StudentLookup() {
         <Button
           type="submit"
           disabled={loading}
-          className="bg-[var(--ayci-teal)] hover:bg-[var(--ayci-teal-dark)] text-white h-11 px-5"
+          className="bg-[var(--ayci-teal)] hover:bg-[var(--ayci-teal-dark)] text-white h-11 px-5 flex-1 sm:flex-none"
           data-testid="student-lookup-search-button"
         >
           {loading ? (
@@ -282,7 +282,7 @@ export default function StudentLookup() {
           variant="outline"
           onClick={refreshCircleCache}
           disabled={refreshingCache}
-          className="h-11"
+          className="h-11 hidden sm:inline-flex"
           title="Refresh cached Circle members list (runs daily automatically)"
           data-testid="student-lookup-refresh-cache"
         >
@@ -322,7 +322,7 @@ export default function StudentLookup() {
           )}
 
           {/* Platform cards grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
             <StudentPlatformCard
               title="Calendly — Calls"
               platform="calendly"
@@ -420,30 +420,30 @@ function StudentHeaderCard({ header, query, result }) {
 
   return (
     <div
-      className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm space-y-4"
+      className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 sm:p-5 shadow-sm space-y-4"
       data-testid="student-header-card"
     >
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
         {header?.avatar ? (
           <img
             src={header.avatar}
             alt={header.name || "Avatar"}
-            className="w-14 h-14 rounded-full object-cover border border-[var(--ayci-border)] shrink-0"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover border border-[var(--ayci-border)] shrink-0"
           />
         ) : (
-          <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-display font-bold shrink-0">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-display font-bold shrink-0">
             {(header?.name || query).slice(0, 2).toUpperCase()}
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-xl text-[var(--ayci-ink)]">
+          <div className="font-display font-bold text-lg sm:text-xl text-[var(--ayci-ink)] truncate">
             {header?.name || "Unknown student"}
           </div>
-          <div className="text-sm text-[var(--ayci-ink-muted)] flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span>{query}</span>
+          <div className="text-xs sm:text-sm text-[var(--ayci-ink-muted)] flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="break-all">{query}</span>
             {header?.tier && (
               <>
-                <span className="text-[var(--ayci-ink-muted)] opacity-60">·</span>
+                <span className="text-[var(--ayci-ink-muted)] opacity-60 hidden sm:inline">·</span>
                 <span className="font-display font-semibold text-[var(--ayci-teal)]">
                   {header.tier}
                 </span>
@@ -451,7 +451,9 @@ function StudentHeaderCard({ header, query, result }) {
             )}
           </div>
         </div>
-        <PlatformBadges result={result} />
+        <div className="w-full sm:w-auto">
+          <PlatformBadges result={result} />
+        </div>
       </div>
 
       {/* Big & clear interview / specialty banner */}
