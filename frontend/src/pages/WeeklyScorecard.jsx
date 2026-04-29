@@ -30,7 +30,9 @@ export default function WeeklyScorecard() {
   const [editingValue, setEditingValue] = useState("");
   const [syncing, setSyncing] = useState(false);
 
-  const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE).slice().reverse(), []);
+  // Weeks oldest → newest (left to right) — newest is right-most
+  const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE), []);
+  const latestWeek = weeks[weeks.length - 1];
   const teamById = useMemo(() => {
     const m = {};
     team.forEach((t) => (m[t.id] = t));
@@ -68,8 +70,12 @@ export default function WeeklyScorecard() {
   }, []);
 
   const filteredMetrics = useMemo(() => {
-    if (!filterOwnerId) return metrics;
-    return metrics.filter((m) => (m.owner_ids || []).includes(filterOwnerId));
+    // Hide cohort-only metrics from the weekly view
+    let xs = metrics.filter((m) => !m.cohort_only);
+    if (filterOwnerId) {
+      xs = xs.filter((m) => (m.owner_ids || []).includes(filterOwnerId));
+    }
+    return xs;
   }, [metrics, filterOwnerId]);
 
   const grouped = useMemo(() => {
@@ -81,8 +87,6 @@ export default function WeeklyScorecard() {
     });
     return g;
   }, [filteredMetrics]);
-
-  const latestWeek = weeks[0];
 
   // Summary: count of metrics on-track for latest week
   const summary = useMemo(() => {
@@ -152,6 +156,46 @@ export default function WeeklyScorecard() {
 
   const onTrackPct = summary.withValue === 0 ? 0 : Math.round((summary.onTrack / summary.withValue) * 100);
 
+  const [autoFilling, setAutoFilling] = useState(false);
+  const runAutoFill = async () => {
+    setAutoFilling(true);
+    try {
+      const { data } = await apiClient.get(`/scorecard/auto-compute?week_start=${latestWeek}`, { timeout: 90000 });
+      const computeMap = data.metrics || {};
+      // Map from name → metric id
+      const byName = {};
+      metrics.forEach((m) => {
+        byName[m.name.toLowerCase()] = m;
+      });
+      let written = 0;
+      const errors = [];
+      // Write each computed value if metric exists and value is numeric
+      const writes = [];
+      for (const [name, payload] of Object.entries(computeMap)) {
+        const metric = byName[name];
+        if (!metric || payload.value == null || payload.error) continue;
+        writes.push(
+          apiClient
+            .post(`/weekly-values`, {
+              metric_id: metric.id,
+              week_start: latestWeek,
+              value: Number(payload.value),
+            })
+            .then(() => { written += 1; })
+            .catch((err) => errors.push({ name, msg: err?.response?.data?.detail || err.message })),
+        );
+      }
+      await Promise.all(writes);
+      await loadAll();
+      if (written > 0) toast.success(`Auto-filled ${written} metric${written === 1 ? "" : "s"} for week of ${latestWeek}`);
+      if (errors.length > 0) toast.error(`${errors.length} failed`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setAutoFilling(false);
+    }
+  };
+
   const runSync = async (overwrite = false) => {
     setSyncing(true);
     try {
@@ -182,13 +226,23 @@ export default function WeeklyScorecard() {
         title="Weekly Scorecard"
         description="The numbers your team reviews every Monday. Click a cell to enter this week's values."
         right={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <button
+              onClick={runAutoFill}
+              disabled={autoFilling || loading}
+              data-testid="scorecard-autofill-btn"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-[var(--ayci-border)] bg-white text-sm font-medium hover:border-[var(--ayci-accent)] hover:text-[var(--ayci-accent)] transition-colors disabled:opacity-50"
+              title="Auto-compute the 6 supported metrics from Calendly, Circle, Tally and Monday for the current week"
+            >
+              <RefreshCw className={"w-4 h-4 " + (autoFilling ? "animate-spin" : "")} />
+              {autoFilling ? "Computing…" : "Auto-fill week"}
+            </button>
             <button
               onClick={() => runSync(false)}
               disabled={syncing}
               data-testid="scorecard-sync-btn"
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-[var(--ayci-border)] bg-white text-sm font-medium hover:border-[var(--ayci-accent)] hover:text-[var(--ayci-accent)] transition-colors disabled:opacity-50"
-              title="Pull weekly values from external sources (Transistor, ConvertKit, Circle, Monday)"
+              title="Pull weekly values from configured external sources"
             >
               <RefreshCw className={"w-4 h-4 " + (syncing ? "animate-spin" : "")} />
               {syncing ? "Syncing…" : "Sync"}
@@ -311,7 +365,11 @@ export default function WeeklyScorecard() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right metric-number font-semibold text-[var(--ayci-ink)]">
-                              {formatValue(m.goal, m.format)}
+                              {m.goal == null ? (
+                                <span className="text-[var(--ayci-ink-muted)] font-normal text-xs italic">No target</span>
+                              ) : (
+                                formatValue(m.goal, m.format)
+                              )}
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex justify-center">

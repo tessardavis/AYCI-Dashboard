@@ -22,6 +22,7 @@ import student_lookup as lookup
 import upcoming_interviews as upcoming
 import coach_activity as coach_act
 import onboarding_gap as ob_gap
+import scorecard_auto
 import cohort as cohort_mod
 import google_drive as gdrive
 import launches as launches_mod
@@ -201,23 +202,29 @@ class Metric(BaseModel):
     name: str
     category: MetricCategory
     owner_ids: List[str] = []
-    goal: float = 0
+    goal: Optional[float] = 0
     format: MetricFormat = "number"
     order: int = 0
     goal_direction: Literal["above", "below"] = "above"
     source_type: Optional[str] = None  # e.g. "convertkit_tag_new_subscribers"
     source_params: Optional[dict] = None  # connector-specific config
+    # Hide from weekly view (e.g. cohort-only metrics surveyed once per cohort)
+    cohort_only: bool = False
+    # Whether the metric value can be auto-computed via /scorecard/auto-compute
+    is_auto: bool = False
 
 
 class MetricCreate(BaseModel):
     name: str
     category: MetricCategory
     owner_ids: List[str] = []
-    goal: float = 0
+    goal: Optional[float] = 0
     format: MetricFormat = "number"
     goal_direction: Literal["above", "below"] = "above"
     source_type: Optional[str] = None
     source_params: Optional[dict] = None
+    cohort_only: bool = False
+    is_auto: bool = False
 
 
 class MetricUpdate(BaseModel):
@@ -597,6 +604,34 @@ async def delete_metric(metric_id: str, admin: dict = Depends(require_admin)):
 
 
 # --- Weekly values ----------------------------------------------------------
+@api.get("/scorecard/auto-compute")
+async def scorecard_auto_compute(
+    week_start: str,
+    user: dict = Depends(require_board("weekly_scorecard")),
+):
+    """
+    Auto-compute six derived weekly metrics from external APIs:
+      Interviews This Week, Results Received, Hours of Private Tier Calls,
+      Testimonial Calls Recorded, Wins Shared, Active Academy Members.
+
+    `week_start` must be an ISO date (e.g. "2026-04-21" — a Monday). Returns
+    one block per metric with the computed value and an `explain` string the
+    UI can show as a tooltip.
+    """
+    try:
+        ws = datetime.fromisoformat(week_start).date()
+    except ValueError:
+        raise HTTPException(400, "week_start must be ISO date (YYYY-MM-DD)")
+    cache_key = f"scorecard_auto:{ws.isoformat()}"
+
+    async def _compute():
+        return await scorecard_auto.auto_compute_all(db, ws)
+
+    return await launches_mod._stale_while_revalidate(
+        db, cache_key, ttl_min=60, compute_fn=_compute,
+    )
+
+
 @api.get("/weekly-values")
 async def list_weekly_values(user: dict = Depends(get_current_user)):
     values = await db.weekly_values.find({}, {"_id": 0}).to_list(100000)

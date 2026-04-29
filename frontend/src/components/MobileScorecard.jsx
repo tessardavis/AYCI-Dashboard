@@ -208,8 +208,14 @@ function MetricCard({
               {metric.name}
             </div>
             <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
-              Goal {formatValue(metric.goal, metric.format)}
-              {metric.goal_direction === "below" ? " or below" : " or above"}
+              {metric.goal == null ? (
+                <span className="italic opacity-70">No target</span>
+              ) : (
+                <>
+                  Goal {formatValue(metric.goal, metric.format)}
+                  {metric.goal_direction === "below" ? " or below" : " or above"}
+                </>
+              )}
             </div>
           </div>
 

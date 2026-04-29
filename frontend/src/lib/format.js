@@ -49,6 +49,7 @@ export function formatDateShort(iso) {
 
 export function isOnTrack(value, goal, direction = "above") {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
+  if (goal === null || goal === undefined || Number.isNaN(Number(goal))) return null; // No goal set → no on-track verdict
   if (direction === "below") return Number(value) <= Number(goal);
   return Number(value) >= Number(goal);
 }
