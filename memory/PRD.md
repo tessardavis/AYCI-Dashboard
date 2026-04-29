@@ -13,6 +13,15 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — Admin → Users team_member linking UI
+- **`/admin/users` response** now includes `team_members: [{id, name}]` for the dropdown.
+- **`PATCH /admin/users/{id}`** accepts `team_member_id` (string to link, empty string/null to unlink). Validates target team_member exists → 400 on unknown ID.
+- **Admin → Users UI**:
+  - Each non-admin user row has a "Team member" dropdown listing all team_members + "— Not linked —".
+  - Amber badge in panel title: "⚠ N not linked" (hides when 0).
+  - Inline warning "Can't edit any rocks until linked" shown beside unlinked user dropdowns.
+- **Tests**: 14/14 pass in `test_iteration8.py` (added 3 new: team_members exposed, admin can link/unlink, invalid ID rejected).
+
 ### 2026-04-29 — DnD metric reorder + per-user rock edit + quarter archiving
 - **Metric drag-and-drop reorder** (Settings → Metrics): admins drag metric rows within each category using `@hello-pangea/dnd`. Optimistic UI + auto-rollback on error. New endpoint `PATCH /api/metrics/reorder` (admin-only) accepts `{"order": [{id, order}, ...]}` and bulk-updates the `order` field.
 - **Per-user rock edit restriction**:
@@ -82,9 +91,10 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Prioritised backlog
 **P1**
-- Admin → Users: surface `team_member_id` editor so admins can manually link/update users not auto-matched by name (e.g. Becky Platt currently has no team_member).
 - CSV scorecard export.
-- `/api/settings/reset-active-quarter` or similar to blank out active_quarter (edge case — rarely needed).
+- Push notifications for SLA breaches.
+- Add team_members for "Regression User" + "Test Coach" (or ignore — they're test accounts).
+- Add a team_member for Becky Platt so her admin account can edit her rocks.
 
 **P2**
 - Push notifications for SLA breaches.

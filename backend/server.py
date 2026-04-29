@@ -128,10 +128,14 @@ async def admin_list_users(admin: dict = Depends(require_admin)):
     users = await db.users.find(
         {}, {"_id": 0, "password_hash": 0}
     ).sort("created_at", 1).to_list(500)
-    # Normalise older docs that don't have board_access
     for u in users:
         u["board_access"] = u.get("board_access") or []
-    return {"users": users, "all_boards": ALL_BOARDS}
+    team_members = await db.team_members.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+    return {
+        "users": users,
+        "all_boards": ALL_BOARDS,
+        "team_members": team_members,
+    }
 
 
 @api.patch("/admin/users/{user_id}")
@@ -150,6 +154,14 @@ async def admin_update_user(
         update["board_access"] = data.board_access
     if data.password:
         update["password_hash"] = hash_password(data.password)
+    # team_member_id: "" or None means "unlink"; a real ID links.
+    if data.team_member_id is not None:
+        tm_id = (data.team_member_id or "").strip() or None
+        if tm_id:
+            exists = await db.team_members.find_one({"id": tm_id}, {"_id": 1})
+            if not exists:
+                raise HTTPException(status_code=400, detail="Unknown team_member_id")
+        update["team_member_id"] = tm_id
     if not update:
         raise HTTPException(status_code=400, detail="No changes")
 

@@ -140,6 +140,54 @@ def test_admin_can_edit_any_rock(admin):
     assert r.status_code == 200
 
 
+def test_admin_users_exposes_team_members_and_link(admin):
+    r = admin.get(f"{BASE_URL}/api/admin/users", timeout=20)
+    assert r.status_code == 200
+    body = r.json()
+    assert "team_members" in body and isinstance(body["team_members"], list)
+    assert len(body["team_members"]) > 0
+    # At least one user has team_member_id set (the auto-link migration ran)
+    assert any(u.get("team_member_id") for u in body["users"])
+
+
+def test_admin_can_link_and_unlink_team_member(admin):
+    body = admin.get(f"{BASE_URL}/api/admin/users", timeout=20).json()
+    unlinked = next(
+        (u for u in body["users"] if u["role"] != "admin" and not u.get("team_member_id")),
+        None,
+    )
+    if unlinked is None:
+        pytest.skip("No unlinked user available to test with")
+    tm = body["team_members"][0]
+    # Link
+    r = admin.patch(
+        f"{BASE_URL}/api/admin/users/{unlinked['id']}",
+        json={"team_member_id": tm["id"]},
+        timeout=20,
+    )
+    assert r.status_code == 200
+    assert r.json()["team_member_id"] == tm["id"]
+    # Unlink (empty string)
+    r = admin.patch(
+        f"{BASE_URL}/api/admin/users/{unlinked['id']}",
+        json={"team_member_id": ""},
+        timeout=20,
+    )
+    assert r.status_code == 200
+    assert r.json().get("team_member_id") is None
+
+
+def test_admin_rejects_unknown_team_member_id(admin):
+    body = admin.get(f"{BASE_URL}/api/admin/users", timeout=20).json()
+    victim = body["users"][0]
+    r = admin.patch(
+        f"{BASE_URL}/api/admin/users/{victim['id']}",
+        json={"team_member_id": "nonsense-id-xyz"},
+        timeout=20,
+    )
+    assert r.status_code == 400
+
+
 # ---------------- Task 3: quarter archiving ----------------
 def test_rocks_quarters_has_active_field(admin):
     r = admin.get(f"{BASE_URL}/api/rocks/quarters", timeout=20)

@@ -181,6 +181,7 @@ const BOARD_LABELS = {
 function UsersSection({ isAdmin }) {
   const [users, setUsers] = useState([]);
   const [allBoards, setAllBoards] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -197,6 +198,7 @@ function UsersSection({ isAdmin }) {
       const { data } = await apiClient.get("/admin/users");
       setUsers(data.users || []);
       setAllBoards(data.all_boards || []);
+      setTeamMembers(data.team_members || []);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load users");
     } finally {
@@ -340,7 +342,19 @@ function UsersSection({ isAdmin }) {
         </div>
       </Panel>
 
-      <Panel title={`Existing users (${users.length})`}>
+      <Panel
+        title={`Existing users (${users.length})`}
+        action={
+          users.filter((u) => u.role !== "admin" && !u.team_member_id).length > 0 ? (
+            <span
+              className="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800"
+              data-testid="users-unlinked-badge"
+            >
+              ⚠ {users.filter((u) => u.role !== "admin" && !u.team_member_id).length} not linked
+            </span>
+          ) : null
+        }
+      >
         {loading ? (
           <div className="p-6 text-sm text-[var(--ayci-ink-muted)]">Loading…</div>
         ) : (
@@ -387,7 +401,43 @@ function UsersSection({ isAdmin }) {
                   </div>
                 </div>
                 {u.role === "user" && (
-                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                  <>
+                    <div className="mt-3 flex items-center gap-2 flex-wrap" data-testid={`user-tm-row-${u.id}`}>
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] font-semibold">
+                        Team member:
+                      </span>
+                      <Select
+                        value={u.team_member_id || "__none__"}
+                        onValueChange={(v) =>
+                          updateUser(u.id, { team_member_id: v === "__none__" ? "" : v })
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-7 w-[200px] text-xs"
+                          data-testid={`user-tm-select-${u.id}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Not linked —</SelectItem>
+                          {teamMembers.map((tm) => (
+                            <SelectItem
+                              key={tm.id}
+                              value={tm.id}
+                              data-testid={`user-tm-option-${u.id}-${tm.id}`}
+                            >
+                              {tm.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!u.team_member_id && (
+                        <span className="text-[10px] text-amber-700">
+                          Can't edit any rocks until linked
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-1.5">
                     {allBoards.map((b) => {
                       const has = (u.board_access || []).includes(b);
                       return (
@@ -407,6 +457,7 @@ function UsersSection({ isAdmin }) {
                       );
                     })}
                   </div>
+                  </>
                 )}
               </div>
             ))}
