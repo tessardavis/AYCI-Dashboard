@@ -846,6 +846,32 @@ def _monday_of(d: datetime) -> datetime:
     return d - timedelta(days=d.weekday())
 
 
+async def _ensure_results_from_this_weeks_metric():
+    """Idempotent: insert 'Results From This Week's Interviews' metric if it
+    doesn't already exist. Added Apr-29-2026 alongside the new auto-compute
+    function. Owner: Oksana (matches the related 'Results Received' metric)."""
+    name = "Results From This Week's Interviews"
+    if await db.metrics.find_one({"name": name}, {"_id": 1}):
+        return
+    members = await db.team_members.find({}, {"_id": 0}).to_list(1000)
+    oksana = _find_member(members, "Oksana")
+    last_order = await db.metrics.find_one(
+        {"category": "SOCIAL PROOF"}, sort=[("order", -1)], projection={"_id": 0, "order": 1},
+    )
+    order = (last_order or {}).get("order", 0) + 1
+    doc = Metric(
+        name=name,
+        category="SOCIAL PROOF",
+        owner_ids=[oksana] if oksana else [],
+        goal=80,
+        format="percentage",
+        order=order,
+    ).model_dump()
+    doc["owner_ids"] = [o for o in doc["owner_ids"] if o]
+    await db.metrics.insert_one(doc)
+    logger.info(f"[migration] Inserted metric '{name}' (id={doc['id']})")
+
+
 async def _seed_weekly_values():
     count = await db.weekly_values.count_documents({})
     if count > 0:
@@ -1178,6 +1204,7 @@ async def on_startup():
     await _seed_admin()
     await _seed_team()
     await _seed_metrics()
+    await _ensure_results_from_this_weeks_metric()
     await _seed_weekly_values()
     await _seed_rocks()
     await _seed_launches()

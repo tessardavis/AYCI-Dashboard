@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — New scorecard metric: Results From This Week's Interviews
+- Added 7th auto-computed Weekly Scorecard metric: **"Results From This Week's Interviews"** (% of students whose Monday `Interview Date` is this week who have submitted a Tally result form *at any time*). Complements the existing `Results Received` (which is submission-date based).
+- Backend: new `compute_results_from_this_weeks_interviews()` in `scorecard_auto.py`; reuses `tally_lookup.get_cached_submissions(db)` (24h TTL) so it's near-free to compute. Wired into `COMPUTE_MAP`.
+- Idempotent migration `_ensure_results_from_this_weeks_metric()` runs on startup — inserts the metric (SOCIAL PROOF · Oksana · goal 80% · format percentage) only if it doesn't already exist.
+- Live verified: w/c 21-Apr-2026 returns **57.1% (12/21)** — vs `Results Received` at 52.4% (11/21). Late reporters whose interview was last week but submitted this week now get counted.
+
 ### 2026-04-29 — Private Tier Utilisation + Cohort Engagement Bar + Tier mismatch fix
 - **Private Tier Utilisation widget** on `/interviews` (top of page): flags Private Plus + VIP students with an upcoming interview in the next 7/14/30 days who haven't used enough of their video / call allowance. Compact table (student · tier · interview · videos used · calls used · action needed). Summary pills per tier. Collapsible "On track" section. Bound to existing Private window selector.
   - Backend: `GET /api/interviews/private-tier-utilisation?days={7|14|30}` (`require_board('interviews')`). Returns `{summary_by_tier, flagged[], on_track[], window_days, last_refreshed}`. SWR-cached 30 min via `_stale_while_revalidate`.

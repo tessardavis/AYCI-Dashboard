@@ -352,6 +352,96 @@ async def compute_results_received(db, week_start: date, week_end: date) -> dict
     }
 
 
+# ---------- Results From This Week's Interviews ------------------------------
+async def compute_results_from_this_weeks_interviews(db, week_start: date, week_end: date) -> dict:
+    """% of students whose interview happened this week (Monday `Interview Date`)
+    who have ALSO submitted a Tally result form (with a result answer) — at any
+    time, not just this week. Complements `compute_results_received` (which is
+    submission-date based)."""
+    import tally_lookup
+
+    # Step 1 — get the list of interviewee emails for this week from Monday.
+    start_str = week_start.isoformat()
+    end_str = week_end.isoformat()
+    q = """
+    query ($boardId: ID!, $cursor: String) {
+      boards(ids: [$boardId]) {
+        items_page(limit: 200, cursor: $cursor) {
+          cursor
+          items {
+            id name
+            column_values(ids: ["%s","%s"]) { id text }
+          }
+        }
+      }
+    }
+    """ % (COL_INTERVIEW_DATE, COL_EMAIL)
+
+    items: list[dict] = []
+    cursor: Optional[str] = None
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while True:
+            r = await c.post(
+                MONDAY_URL,
+                headers={**_monday_headers(), "Content-Type": "application/json"},
+                json={"query": q, "variables": {"boardId": str(ACADEMY_MEMBERS_BOARD_ID), "cursor": cursor}},
+            )
+            r.raise_for_status()
+            page = (r.json().get("data", {}).get("boards") or [{}])[0].get("items_page") or {}
+            items.extend(page.get("items") or [])
+            cursor = page.get("cursor")
+            if not cursor:
+                break
+
+    interviewee_emails: set[str] = set()
+    for it in items:
+        cvs = {cv.get("id"): (cv.get("text") or "").strip() for cv in (it.get("column_values") or [])}
+        d = cvs.get(COL_INTERVIEW_DATE) or ""
+        if not d:
+            continue
+        try:
+            di = datetime.fromisoformat(d.split(" ")[0]).date()
+        except ValueError:
+            continue
+        if start_str <= di.isoformat() <= end_str:
+            em = (cvs.get(COL_EMAIL) or "").strip().lower()
+            if em:
+                interviewee_emails.add(em)
+
+    denom = len(interviewee_emails)
+    if denom == 0:
+        return {
+            "value": 0,
+            "explain": "No interviews this week",
+            "numerator": 0,
+            "denominator": 0,
+        }
+
+    # Step 2 — pull cached Tally submissions and find which interviewee emails
+    # have submitted a result answer (at any time).
+    submissions = await tally_lookup.get_cached_submissions(db)
+    submitted_emails: set[str] = set()
+    RESULT_KEYWORDS = ("got it", "didn", "rescheduled")
+    for s in submissions:
+        parsed = tally_lookup._parse_submission(s)
+        if not parsed:
+            continue
+        outcome = (parsed.get("outcome") or "").lower()
+        rescheduled = (parsed.get("rescheduled") or "").lower()
+        blob = f"{outcome} {rescheduled}"
+        if any(k in blob for k in RESULT_KEYWORDS):
+            submitted_emails.add(parsed["email"])
+
+    matched = interviewee_emails & submitted_emails
+    pct = round((len(matched) / denom) * 100, 1)
+    return {
+        "value": pct,
+        "explain": f"{len(matched)} of {denom} this-week interviewees have reported a result",
+        "numerator": len(matched),
+        "denominator": denom,
+    }
+
+
 # ---------- Active Academy Members --------------------------------------------
 # Circle tags applied via gamification — coach maintains these manually on
 # each member. Match-on-presence (any of these tags = active for that
@@ -470,6 +560,7 @@ COMPUTE_MAP: dict[str, Any] = {
     "testimonial calls recorded": compute_testimonial_calls,
     "wins shared": compute_wins_shared,
     "results received": compute_results_received,
+    "results from this week's interviews": compute_results_from_this_weeks_interviews,
     "active academy members": compute_active_members,
 }
 
