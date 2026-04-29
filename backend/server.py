@@ -1141,6 +1141,29 @@ async def _scheduled_sync() -> None:
                 errors.append(f"{m.get('name')}: {e}")
                 logger.warning(f"[scheduler] Sync failed for {m.get('name')}: {e}")
         logger.info(f"[scheduler] Wrote {written} values for w/c {last_monday}; {len(errors)} errors")
+
+        # Auto-fill the 6 derived metrics (Calendly/Circle/Tally/Monday-derived)
+        try:
+            ws = datetime.fromisoformat(last_monday).date()
+            auto = await scorecard_auto.auto_compute_all(db, ws)
+            metrics_by_name = {m["name"].lower(): m for m in await db.metrics.find({}, {"_id": 0}).to_list(1000)}
+            auto_written = 0
+            for name, payload in (auto.get("metrics") or {}).items():
+                v = payload.get("value")
+                if v is None or payload.get("error"):
+                    continue
+                metric = metrics_by_name.get(name.lower())
+                if not metric:
+                    continue
+                await db.weekly_values.update_one(
+                    {"metric_id": metric["id"], "week_start": last_monday},
+                    {"$set": {"metric_id": metric["id"], "week_start": last_monday, "value": float(v)}},
+                    upsert=True,
+                )
+                auto_written += 1
+            logger.info(f"[scheduler] Auto-fill wrote {auto_written} derived metrics for w/c {last_monday}")
+        except Exception as e:
+            logger.exception(f"[scheduler] Auto-fill failed: {e}")
     except Exception as e:
         logger.exception(f"[scheduler] Weekly sync crashed: {e}")
 
