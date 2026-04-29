@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Trash2, Plus, Link2 } from "lucide-react";
+import { Trash2, Plus, Link2, GripVertical } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { formatValue } from "@/lib/format";
 import MetricSourceDialog from "@/components/MetricSourceDialog";
 import CohortMilestonesSection from "@/components/settings/CohortMilestonesSection";
@@ -535,53 +536,147 @@ function MetricsSection({ isAdmin }) {
       <table className="w-full text-sm">
         <thead className="bg-slate-50 border-b border-[var(--ayci-border)]">
           <tr>
+            {isAdmin && <th className="w-8" />}
             <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Name</th>
-            <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Category</th>
             <th className="text-right px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Goal</th>
             <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Format</th>
             <th className="text-left px-6 py-3 font-medium text-[var(--ayci-ink-muted)]">Source</th>
             {isAdmin && <th />}
           </tr>
         </thead>
-        <tbody>
-          {metrics.map((m) => (
-            <tr key={m.id} className="border-b border-[var(--ayci-border)] last:border-0">
-              <td className="px-6 py-2.5 font-medium text-[var(--ayci-ink)]">{m.name}</td>
-              <td className="px-6 py-2.5 text-xs text-[var(--ayci-ink-muted)]">{m.category}</td>
-              <td className="px-6 py-2.5 text-right metric-number">{formatValue(m.goal, m.format)}</td>
-              <td className="px-6 py-2.5 capitalize text-[var(--ayci-ink-muted)]">{m.format}</td>
-              <td className="px-6 py-2.5">
-                {m.source_type ? (
-                  <button
-                    onClick={() => isAdmin && setSourceMetric(m)}
-                    className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200 hover:bg-sky-100"
-                    data-testid={`metric-source-${m.id}`}
+        <DragDropContext
+          onDragEnd={async (result) => {
+            if (!isAdmin) return;
+            if (!result.destination) return;
+            const category = result.source.droppableId;
+            if (result.destination.droppableId !== category) return;
+
+            const groupMetrics = metrics
+              .filter((m) => m.category === category)
+              .sort((a, b) => a.order - b.order);
+            const [moved] = groupMetrics.splice(result.source.index, 1);
+            groupMetrics.splice(result.destination.index, 0, moved);
+
+            // Re-assign orders in this category starting from the min order
+            const minOrder = Math.min(...groupMetrics.map((m) => m.order));
+            const updates = groupMetrics.map((m, i) => ({ id: m.id, order: minOrder + i }));
+
+            // Optimistic UI
+            setMetrics((prev) =>
+              prev.map((m) => {
+                const u = updates.find((x) => x.id === m.id);
+                return u ? { ...m, order: u.order } : m;
+              }),
+            );
+
+            try {
+              await apiClient.patch("/metrics/reorder", { order: updates });
+              toast.success("Reordered");
+            } catch (err) {
+              toast.error(
+                formatApiErrorDetail(err.response?.data?.detail) || "Reorder failed",
+              );
+              load(); // rollback
+            }
+          }}
+        >
+          {CATEGORIES.map((cat) => {
+            const rows = metrics
+              .filter((m) => m.category === cat)
+              .sort((a, b) => a.order - b.order);
+            if (rows.length === 0) return null;
+            return (
+              <tbody key={cat}>
+                <tr className="bg-slate-50/50">
+                  <td
+                    colSpan={isAdmin ? 6 : 5}
+                    className="px-6 py-1.5 text-[10px] font-display font-semibold uppercase tracking-[0.2em] text-[var(--ayci-teal)] border-t border-b border-[var(--ayci-border)]"
                   >
-                    <Link2 className="w-3 h-3" />
-                    {m.source_type.replace(/_/g, " ")}
-                  </button>
-                ) : isAdmin ? (
-                  <button
-                    onClick={() => setSourceMetric(m)}
-                    className="text-[11px] text-[var(--ayci-accent)] hover:underline"
-                    data-testid={`metric-source-${m.id}`}
-                  >
-                    + Connect source
-                  </button>
-                ) : (
-                  <span className="text-xs text-[var(--ayci-ink-muted)]">manual</span>
-                )}
-              </td>
-              {isAdmin && (
-                <td className="px-6 py-2.5 text-right">
-                  <Button variant="ghost" size="icon" onClick={() => remove(m.id)} data-testid={`metric-delete-${m.id}`}>
-                    <Trash2 className="w-4 h-4 text-slate-500" />
-                  </Button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
+                    {cat}
+                  </td>
+                </tr>
+                <Droppable droppableId={cat} isDropDisabled={!isAdmin}>
+                  {(dropProv) => (
+                    <>
+                      {rows.map((m, idx) => (
+                        <Draggable key={m.id} draggableId={m.id} index={idx} isDragDisabled={!isAdmin}>
+                          {(dragProv, snap) => (
+                            <tr
+                              ref={dragProv.innerRef}
+                              {...dragProv.draggableProps}
+                              className={
+                                "border-b border-[var(--ayci-border)] last:border-0 " +
+                                (snap.isDragging ? "bg-amber-50 shadow-md" : "")
+                              }
+                              style={dragProv.draggableProps.style}
+                              data-testid={`metric-row-${m.id}`}
+                            >
+                              {isAdmin && (
+                                <td
+                                  className="px-2 text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-600"
+                                  {...dragProv.dragHandleProps}
+                                  data-testid={`metric-drag-${m.id}`}
+                                >
+                                  <GripVertical className="w-4 h-4" />
+                                </td>
+                              )}
+                              <td className="px-6 py-2.5 font-medium text-[var(--ayci-ink)]">
+                                {m.name}
+                              </td>
+                              <td className="px-6 py-2.5 text-right metric-number">
+                                {formatValue(m.goal, m.format)}
+                              </td>
+                              <td className="px-6 py-2.5 capitalize text-[var(--ayci-ink-muted)]">
+                                {m.format}
+                              </td>
+                              <td className="px-6 py-2.5">
+                                {m.source_type ? (
+                                  <button
+                                    onClick={() => isAdmin && setSourceMetric(m)}
+                                    className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200 hover:bg-sky-100"
+                                    data-testid={`metric-source-${m.id}`}
+                                  >
+                                    <Link2 className="w-3 h-3" />
+                                    {m.source_type.replace(/_/g, " ")}
+                                  </button>
+                                ) : isAdmin ? (
+                                  <button
+                                    onClick={() => setSourceMetric(m)}
+                                    className="text-[11px] text-[var(--ayci-accent)] hover:underline"
+                                    data-testid={`metric-source-${m.id}`}
+                                  >
+                                    + Connect source
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-[var(--ayci-ink-muted)]">manual</span>
+                                )}
+                              </td>
+                              {isAdmin && (
+                                <td className="px-6 py-2.5 text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => remove(m.id)}
+                                    data-testid={`metric-delete-${m.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-slate-500" />
+                                  </Button>
+                                </td>
+                              )}
+                            </tr>
+                          )}
+                        </Draggable>
+                      ))}
+                      <tr ref={dropProv.innerRef} {...dropProv.droppableProps} className="h-0">
+                        <td colSpan={isAdmin ? 6 : 5}>{dropProv.placeholder}</td>
+                      </tr>
+                    </>
+                  )}
+                </Droppable>
+              </tbody>
+            );
+          })}
+        </DragDropContext>
       </table>
       <MetricSourceDialog
         open={!!sourceMetric}
@@ -599,12 +694,36 @@ function RocksSection({ isAdmin }) {
   const [team, setTeam] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ owner_id: "", title: "", status: "on_track", due_date: "2026-06-30", notes: "", quarter: "Q2 2026" });
+  const [quarters, setQuarters] = useState([]);
+  const [activeQuarter, setActiveQuarter] = useState(null);
+  const [savingActive, setSavingActive] = useState(false);
 
   const load = useCallback(async () => {
-    const [r, t] = await Promise.all([apiClient.get("/rocks"), apiClient.get("/team")]);
+    const [r, t, q] = await Promise.all([
+      apiClient.get("/rocks"),
+      apiClient.get("/team"),
+      apiClient.get("/rocks/quarters"),
+    ]);
     setRocks(r.data); setTeam(t.data);
+    const qd = q.data;
+    setQuarters(Array.isArray(qd) ? qd : qd.quarters || []);
+    setActiveQuarter(Array.isArray(qd) ? null : qd.active);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  const setActive = async (q) => {
+    if (!isAdmin || !q) return;
+    setSavingActive(true);
+    try {
+      const { data } = await apiClient.put("/rocks/active-quarter", { quarter: q });
+      setActiveQuarter(data.active);
+      toast.success(`Active quarter set to ${data.active}`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to set active quarter");
+    } finally {
+      setSavingActive(false);
+    }
+  };
 
   const save = async () => {
     try {
@@ -666,12 +785,51 @@ function RocksSection({ isAdmin }) {
         </Dialog>
       )}
     >
+      {quarters.length > 0 && (
+        <div
+          className="px-5 py-4 border-b border-[var(--ayci-border)] bg-slate-50/50 flex items-center gap-3 flex-wrap"
+          data-testid="active-quarter-panel"
+        >
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">
+              Active quarter
+            </div>
+            <div className="text-sm text-[var(--ayci-ink)] mt-0.5">
+              Rocks in other quarters become read-only for non-admin users.
+            </div>
+          </div>
+          <Select
+            value={activeQuarter || ""}
+            onValueChange={setActive}
+            disabled={!isAdmin || savingActive}
+          >
+            <SelectTrigger className="w-[200px] bg-white" data-testid="active-quarter-select">
+              <SelectValue placeholder="Pick active quarter" />
+            </SelectTrigger>
+            <SelectContent>
+              {quarters.map((q) => (
+                <SelectItem key={q} value={q} data-testid={`active-quarter-option-${q}`}>
+                  {q}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <ul className="divide-y divide-[var(--ayci-border)]">
         {rocks.map((r) => (
           <li key={r.id} className="px-6 py-3 flex items-center gap-4">
             <div className="w-32 text-xs text-[var(--ayci-ink-muted)]">{teamById[r.owner_id]?.name || "—"}</div>
             <div className="flex-1 text-sm">{r.title}</div>
-            <div className="text-xs text-[var(--ayci-ink-muted)]">{r.quarter}</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-1">
+              {r.quarter}
+              {r.quarter === activeQuarter && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider font-semibold">
+                  Active
+                </span>
+              )}
+            </div>
             <div className="text-xs text-[var(--ayci-ink-muted)] capitalize">{r.status.replace("_", " ")}</div>
             {isAdmin && (
               <Button variant="ghost" size="icon" onClick={() => remove(r.id)} data-testid={`rock-delete-${r.id}`}>

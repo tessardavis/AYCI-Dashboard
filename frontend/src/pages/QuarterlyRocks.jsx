@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CheckCircle2, Circle, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_META = {
@@ -50,12 +50,18 @@ export default function QuarterlyRocks() {
   const [rocks, setRocks] = useState([]);
   const [quarter, setQuarter] = useState("Q2 2026");
   const [quarters, setQuarters] = useState(["Q2 2026"]);
+  const [activeQuarter, setActiveQuarter] = useState(null);
   const [expandedNotes, setExpandedNotes] = useState({});
   const [notesDraft, setNotesDraft] = useState({});
-  // On mobile, owner cards collapse by default (showing just a chevron + counts).
-  // We default them to OPEN on initial render so first-time mobile users see the
-  // rocks immediately; they can collapse the ones they don't care about.
   const [collapsedOwners, setCollapsedOwners] = useState({});
+
+  const isAdmin = user?.role === "admin";
+  const isArchived = activeQuarter != null && quarter !== activeQuarter;
+  const canEdit = (rock) => {
+    if (isAdmin) return true;
+    if (isArchived) return false;
+    return rock.owner_id === user?.team_member_id;
+  };
 
   const loadData = useCallback(async (q) => {
     try {
@@ -66,7 +72,12 @@ export default function QuarterlyRocks() {
       ]);
       setTeam(t.data);
       setRocks(r.data);
-      setQuarters(qs.data.length > 0 ? qs.data : ["Q2 2026"]);
+      // Endpoint now returns {quarters, active}. Support the legacy array
+      // shape defensively so in-flight deploys don't break the page.
+      const qd = qs.data;
+      const list = Array.isArray(qd) ? qd : qd.quarters || [];
+      setQuarters(list.length > 0 ? list : ["Q2 2026"]);
+      setActiveQuarter(!Array.isArray(qd) ? qd.active : null);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     }
@@ -96,6 +107,10 @@ export default function QuarterlyRocks() {
   }, [rocks]);
 
   const cycleStatus = async (rock) => {
+    if (!canEdit(rock)) {
+      toast.error(isArchived ? "This quarter is archived" : "Only the rock owner or an admin can edit");
+      return;
+    }
     const next = NEXT_STATUS[rock.status];
     try {
       const { data } = await apiClient.patch(`/rocks/${rock.id}`, { status: next });
@@ -106,6 +121,10 @@ export default function QuarterlyRocks() {
   };
 
   const saveNotes = async (rock) => {
+    if (!canEdit(rock)) {
+      toast.error(isArchived ? "This quarter is archived" : "Only the rock owner or an admin can edit");
+      return;
+    }
     const notes = notesDraft[rock.id] ?? rock.notes ?? "";
     try {
       const { data } = await apiClient.patch(`/rocks/${rock.id}`, { notes });
@@ -125,7 +144,7 @@ export default function QuarterlyRocks() {
         right={<RocksSummary {...summary} />}
       />
 
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-8 flex-wrap">
         <span className="text-xs text-[var(--ayci-ink-muted)]">Quarter:</span>
         <Select value={quarter} onValueChange={setQuarter}>
           <SelectTrigger className="w-[180px] bg-white" data-testid="rocks-quarter-select">
@@ -134,12 +153,30 @@ export default function QuarterlyRocks() {
           <SelectContent>
             {quarters.map((q) => (
               <SelectItem key={q} value={q} data-testid={`rocks-quarter-option-${q}`}>
-                {q}
+                {q} {q === activeQuarter ? "· Active" : ""}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {isArchived && (
+          <span
+            className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700"
+            data-testid="archived-badge"
+          >
+            <Lock className="w-3 h-3" />
+            Archived · read-only
+          </span>
+        )}
       </div>
+
+      {isArchived && !isAdmin && (
+        <div
+          className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3 mb-6 text-sm"
+          data-testid="archived-banner"
+        >
+          This quarter has been archived. Status, notes, and ownership are locked. Admins can still make changes.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
         {byOwner.map(({ member, rocks: owned }) => (
@@ -186,6 +223,7 @@ export default function QuarterlyRocks() {
                 const meta = STATUS_META[rock.status];
                 const expanded = expandedNotes[rock.id];
                 const draft = notesDraft[rock.id] ?? rock.notes ?? "";
+                const editable = canEdit(rock);
                 return (
                   <li key={rock.id} className="px-4 py-3 sm:px-5 sm:py-4" data-testid={`rock-${rock.id}`}>
                     <div className="flex items-start gap-3">
@@ -197,15 +235,17 @@ export default function QuarterlyRocks() {
                       </div>
                       <button
                         onClick={() => cycleStatus(rock)}
+                        disabled={!editable}
                         data-testid={`rock-status-${rock.id}`}
                         className={[
                           "inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-2.5 sm:py-1 rounded-full text-[11px] font-medium shrink-0",
-                          "ring-1 transition-transform active:scale-95 hover:scale-105",
+                          "ring-1 transition-transform",
+                          editable ? "active:scale-95 hover:scale-105 cursor-pointer" : "cursor-not-allowed opacity-90",
                           meta.bg,
                           meta.text,
                           meta.ring,
                         ].join(" ")}
-                        title="Click to cycle status"
+                        title={editable ? "Click to cycle status" : (isArchived ? "Archived quarter" : "Only the rock owner or admin can edit")}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
                         {meta.label}
@@ -220,7 +260,7 @@ export default function QuarterlyRocks() {
                       data-testid={`rock-notes-toggle-${rock.id}`}
                     >
                       {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      {rock.notes ? "Notes" : "Add notes"}
+                      {rock.notes ? "Notes" : editable ? "Add notes" : "No notes"}
                     </button>
 
                     {expanded && (
@@ -230,20 +270,23 @@ export default function QuarterlyRocks() {
                           onChange={(e) =>
                             setNotesDraft((s) => ({ ...s, [rock.id]: e.target.value }))
                           }
-                          placeholder="Update log… e.g. 12 Apr: kicked off affiliate outreach"
+                          placeholder={editable ? "Update log… e.g. 12 Apr: kicked off affiliate outreach" : ""}
                           className="text-sm"
+                          disabled={!editable}
                           data-testid={`rock-notes-textarea-${rock.id}`}
                         />
-                        <div className="flex justify-end">
-                          <Button
-                            size="sm"
-                            onClick={() => saveNotes(rock)}
-                            data-testid={`rock-notes-save-${rock.id}`}
-                            style={{ backgroundColor: "var(--ayci-accent)" }}
-                          >
-                            Save
-                          </Button>
-                        </div>
+                        {editable && (
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => saveNotes(rock)}
+                              data-testid={`rock-notes-save-${rock.id}`}
+                              style={{ backgroundColor: "var(--ayci-accent)" }}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </li>

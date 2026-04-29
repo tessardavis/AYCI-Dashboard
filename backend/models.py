@@ -39,6 +39,7 @@ class UserPatch(BaseModel):
     role: Optional[Literal["admin", "user"]] = None
     board_access: Optional[List[str]] = None
     password: Optional[str] = None
+    team_member_id: Optional[str] = None
 
 
 class ChangePasswordInput(BaseModel):

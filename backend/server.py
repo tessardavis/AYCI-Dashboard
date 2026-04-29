@@ -113,6 +113,7 @@ async def me(user: dict = Depends(get_current_user)):
         "email": user["email"],
         "name": user.get("name"),
         "role": user.get("role", "user"),
+        "team_member_id": user.get("team_member_id"),
         "board_access": (
             ALL_BOARDS + ADMIN_ONLY_BOARDS
             if user.get("role") == "admin"
@@ -254,6 +255,7 @@ async def refresh_token(request: Request, response: Response):
         "email": user["email"],
         "name": user["name"],
         "role": user.get("role", "user"),
+        "team_member_id": user.get("team_member_id"),
         "board_access": (
             ALL_BOARDS + ADMIN_ONLY_BOARDS
             if user.get("role") == "admin"
@@ -406,6 +408,50 @@ async def _backfill_results_received_goal():
         {"$set": {"goal": 50.0}},
     )
     logger.info("[migration] Backfilled 'Results Received' goal → 50%")
+
+
+async def _autolink_users_to_team_members():
+    """Idempotent: link `users` to `team_members` by name (case-insensitive
+    substring) when `team_member_id` is missing. Logs each match. Users we
+    can't auto-match keep team_member_id=None and an admin can set it later
+    via Admin → Users."""
+    users = await db.users.find(
+        {"$or": [
+            {"team_member_id": {"$exists": False}},
+            {"team_member_id": None},
+        ]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1},
+    ).to_list(1000)
+    members = await db.team_members.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    if not users or not members:
+        return
+
+    def _norm(s):
+        return (s or "").strip().lower()
+
+    for u in users:
+        u_name = _norm(u.get("name"))
+        if not u_name:
+            continue
+        # 1. exact match
+        match = next((m for m in members if _norm(m["name"]) == u_name), None)
+        # 2. substring either direction (e.g. "Anoop Chidambaram" user vs "Anoop" team_member)
+        if not match:
+            match = next(
+                (
+                    m for m in members
+                    if _norm(m["name"]) and (_norm(m["name"]) in u_name or u_name in _norm(m["name"]))
+                ),
+                None,
+            )
+        if match:
+            await db.users.update_one(
+                {"id": u["id"]},
+                {"$set": {"team_member_id": match["id"]}},
+            )
+            logger.info(
+                f"[migration] Linked user '{u.get('name')}' → team_member '{match['name']}'"
+            )
 
 
 async def _seed_weekly_values():
@@ -742,6 +788,7 @@ async def on_startup():
     await _seed_metrics()
     await _ensure_results_from_this_weeks_metric()
     await _backfill_results_received_goal()
+    await _autolink_users_to_team_members()
     await _seed_weekly_values()
     await _seed_rocks()
     await _seed_launches()

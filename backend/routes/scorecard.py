@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 import scorecard_auto
 import launches as launches_mod
@@ -29,6 +29,29 @@ async def create_metric(data: MetricCreate, admin: dict = Depends(require_admin)
     m = Metric(**data.model_dump(), order=count)
     await db.metrics.insert_one(m.model_dump())
     return m
+
+
+@router.patch("/metrics/reorder")
+async def reorder_metrics(
+    payload: dict = Body(..., example={"order": [{"id": "metric-id", "order": 0}]}),
+    admin: dict = Depends(require_admin),
+):
+    """Admin-only: bulk-update the `order` field of multiple metrics.
+    Payload: `{"order": [{"id": "<metric_id>", "order": 0}, ...]}`. Used by
+    the drag-and-drop reorder UI in Settings → Metrics."""
+    items = payload.get("order")
+    if not isinstance(items, list):
+        raise HTTPException(400, "Payload must be {\"order\": [{id, order}...]}")
+    updated = 0
+    for item in items:
+        mid = item.get("id")
+        order = item.get("order")
+        if not mid or order is None:
+            continue
+        res = await db.metrics.update_one({"id": mid}, {"$set": {"order": int(order)}})
+        if res.modified_count:
+            updated += 1
+    return {"ok": True, "updated": updated}
 
 
 @router.patch("/metrics/{metric_id}", response_model=Metric)

@@ -13,6 +13,20 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — DnD metric reorder + per-user rock edit + quarter archiving
+- **Metric drag-and-drop reorder** (Settings → Metrics): admins drag metric rows within each category using `@hello-pangea/dnd`. Optimistic UI + auto-rollback on error. New endpoint `PATCH /api/metrics/reorder` (admin-only) accepts `{"order": [{id, order}, ...]}` and bulk-updates the `order` field.
+- **Per-user rock edit restriction**:
+  - Added `team_member_id` field to `User` model. Idempotent startup migration `_autolink_users_to_team_members()` links users to team_members by name (exact, then substring fallback). 4 users auto-linked on first run: Arub, Oksana, Coralie, Anoop (→ "Anoop").
+  - `/auth/me` and `/auth/refresh` now include `team_member_id`.
+  - Rock `PATCH` + `DELETE` guards: admin always passes; non-admins must have `team_member_id == rock.owner_id`. Attempts to reassign `owner_id` or change `quarter` by non-admin are silently stripped.
+  - Frontend: rock status pills are `disabled` + muted for rocks user can't edit; notes textarea locked; "Add notes" toggle becomes "No notes".
+- **Quarter archiving**:
+  - `app_settings._id="active_quarter"` stores the current active quarter (default = most-recent quarter).
+  - `GET /api/rocks/quarters` now returns `{quarters[], active}`; admin-only `PUT /api/rocks/active-quarter` to change it.
+  - Non-admins can't create or edit rocks outside the active quarter. Admin remains unrestricted.
+  - UI: Settings → Rocks has an "Active quarter" selector panel. Quarterly Rocks page shows "Q2 2026 · Active" in the selector, and a read-only banner + lock badge appear when viewing an archived quarter.
+- **Tests**: 11/11 pass in `/app/backend/tests/test_iteration8.py` covering all three features (reorder swap, non-admin 403, team_member_id auto-link, Arub-edits-own-rock success, Arub-edits-other-rock 403, owner_id strip, admin bypass, active-quarter GET/PUT, archived-quarter 403).
+
 ### 2026-04-29 — server.py route refactor (Phase 2) + /api/auth/refresh + Q8 confirmed
 - **Phase 2 refactor complete**: extracted ~40 route handlers from `server.py` into `/app/backend/routes/` feature modules:
   - `routes/team.py`, `routes/rocks.py`, `routes/scorecard.py` (metrics + weekly values + auto-compute), `routes/sync.py`, `routes/students.py`, `routes/interviews.py`, `routes/coach.py`, `routes/cohorts.py`, `routes/launches.py` (CRUD + analytics + pace + comparisons + onboarding-gap + phase-breakdown).
@@ -68,9 +82,9 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Prioritised backlog
 **P1**
-- Drag-and-drop re-ordering of metrics within a category.
-- Quarter archiving (make old quarters read-only once new one is active).
-- Per-user rock-edit restriction (currently any authenticated user can update any rock).
+- Admin → Users: surface `team_member_id` editor so admins can manually link/update users not auto-matched by name (e.g. Becky Platt currently has no team_member).
+- CSV scorecard export.
+- `/api/settings/reset-active-quarter` or similar to blank out active_quarter (edge case — rarely needed).
 
 **P2**
 - Push notifications for SLA breaches.
