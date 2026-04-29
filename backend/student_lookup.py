@@ -309,11 +309,16 @@ async def circle_lookup(db, email: str) -> dict:
 
 
 # -------------------------------------------------------------------- Monday
-async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID) -> dict:
+async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, name_hint: Optional[str] = None) -> dict:
     """
     Search the Academy Members board for items whose email column matches.
     Uses items_page_by_column_values for server-side filtering. Falls back
     to a capped scan only if the email column can't be discovered.
+
+    If `name_hint` is provided and the email-based search returns nothing,
+    we make a second attempt by searching the `name` column. This handles
+    the common case of a student whose Circle/Stripe email differs from
+    the email recorded on Monday (e.g. work vs personal address).
     """
     try:
         target = email.strip().lower()
@@ -439,6 +444,42 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID) ->
                     cursor = p.get("cursor")
                     if not cursor or not batch or items:
                         break
+
+            # Name-based fallback: when the caller supplied a name hint and the
+            # email-based search returned nothing, try matching the Monday
+            # `name` column. Helps when a student's Circle / Stripe email
+            # doesn't match the email recorded on Monday.
+            if not items and name_hint:
+                name_q = """
+                query ($boardId: ID!, $value: String!) {
+                  items_page_by_column_values(
+                    board_id: $boardId,
+                    columns: [{column_id: "name", column_values: [$value]}],
+                    limit: 5
+                  ) {
+                    items {
+                      id name url created_at
+                      column_values { id text value type column { title } }
+                    }
+                  }
+                }
+                """
+                try:
+                    rn = await c.post(
+                        MONDAY_URL,
+                        headers={**_monday_headers(), "Content-Type": "application/json"},
+                        json={
+                            "query": name_q,
+                            "variables": {"boardId": str(board_id), "value": name_hint.strip()},
+                        },
+                    )
+                    rn.raise_for_status()
+                    bn = rn.json()
+                    if not bn.get("errors"):
+                        page = bn.get("data", {}).get("items_page_by_column_values") or {}
+                        items = page.get("items") or []
+                except Exception:
+                    pass
 
         if not items:
             return {"found": False, "data": None, "error": None}

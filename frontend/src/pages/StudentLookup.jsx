@@ -63,14 +63,14 @@ export default function StudentLookup() {
     return () => debounceRef.current && clearTimeout(debounceRef.current);
   }, [search]);
 
-  const runLookupForEmail = async (email) => {
+  const runLookupForEmail = async (email, name = null) => {
     setLoading(true);
     setResult(null);
     setQuery(email);
     setShowSuggestions(false);
     try {
       const { data } = await apiClient.get(`/students/lookup`, {
-        params: { email },
+        params: name ? { email, name } : { email },
         timeout: 90000,
       });
       setResult(data);
@@ -100,7 +100,8 @@ export default function StudentLookup() {
       await runLookupForEmail(trimmed);
     } else if (suggestions.length > 0) {
       // Pick top match
-      await runLookupForEmail(suggestions[0].email);
+      const top = suggestions[0];
+      await runLookupForEmail(top.email, top.name);
     } else {
       toast.info("No matching student found by name");
     }
@@ -108,7 +109,7 @@ export default function StudentLookup() {
 
   const pickSuggestion = (s) => {
     setSearch(s.name || s.email);
-    runLookupForEmail(s.email);
+    runLookupForEmail(s.email, s.name);
   };
 
   // Hover-prefetch: warm the unified-lookup endpoint for the hovered

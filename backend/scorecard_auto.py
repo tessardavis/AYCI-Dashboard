@@ -42,7 +42,7 @@ PRIVATE_TIER_LABELS = {
 
 # Constants from elsewhere in the codebase
 ACADEMY_MEMBERS_BOARD_ID = 1956295952
-COL_TIER = "color_mkpkrnz0"
+COL_TIER = "dropdown_mkqxgqbq"
 COL_INTERVIEW_DATE = "date_mkr7rdv7"
 COL_EMAIL = "email_mkqxv0j0"
 

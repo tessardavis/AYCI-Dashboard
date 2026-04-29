@@ -1468,11 +1468,14 @@ async def sync_run(req: SyncRequest, user: dict = Depends(get_current_user)):
 
 # --- Student Lookup --------------------------------------------------------
 @api.get("/students/lookup")
-async def students_lookup(email: str, user: dict = Depends(require_board("students"))):
+async def students_lookup(email: str, name: Optional[str] = None, user: dict = Depends(require_board("students"))):
     """
     Unified student lookup — fan out an email across Monday.com, Circle,
     Stripe, ConvertKit, and Calendly in parallel. Each platform returns
     independently so partial failures don't block the whole view.
+
+    Optional `name` param is forwarded to Monday as a fallback when the
+    student's Monday email differs from their Circle/Stripe email.
     """
     import asyncio
     import tally_lookup as tally
@@ -1480,7 +1483,7 @@ async def students_lookup(email: str, user: dict = Depends(require_board("studen
         raise HTTPException(400, "Valid email required")
     email = email.strip().lower()
     monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
-        lookup.monday_lookup(email),
+        lookup.monday_lookup(email, name_hint=name),
         lookup.circle_lookup(db, email),
         lookup.stripe_lookup(email),
         lookup.convertkit_lookup(email),
@@ -1606,6 +1609,32 @@ async def upcoming_interviews(
         "academy": academy,
         "private": data["private"],
     }
+
+
+# --- Private Tier Utilisation -------------------------------------------
+@api.get("/interviews/private-tier-utilisation")
+async def private_tier_utilisation(
+    days: int = 14,
+    refresh: bool = False,
+    user: dict = Depends(require_board("interviews")),
+):
+    """
+    For Private Plus + VIP students with an interview in the next `days`
+    (default 14), return who's flagged for under-utilising their video /
+    call allowance vs who's on track. Cached 30 min via SWR.
+    """
+    if days not in (7, 14, 30):
+        raise HTTPException(400, "days must be 7, 14 or 30")
+    import private_tier_utilisation as ptu
+    cache_key = f"private_tier_utilisation:{days}"
+    if refresh:
+        await db["fn_cache"].delete_one({"_id": cache_key})
+    return await launches_mod._stale_while_revalidate(
+        db,
+        cache_key,
+        ttl_min=30,
+        compute_fn=lambda: ptu.fetch_private_tier_utilisation(days=days),
+    )
 
 
 # --- Coach Activity ------------------------------------------------------

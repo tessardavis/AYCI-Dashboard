@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2 } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -94,6 +94,8 @@ export default function UpcomingInterviews() {
   const [view, setView] = useState("private"); // "private" | "all"
   const [academyDays, setAcademyDays] = useState(7);
   const [privateDays, setPrivateDays] = useState(14);
+  const [utilisation, setUtilisation] = useState(null);
+  const [utilLoading, setUtilLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -110,8 +112,24 @@ export default function UpcomingInterviews() {
     }
   };
 
+  const loadUtilisation = async () => {
+    setUtilLoading(true);
+    try {
+      const { data } = await apiClient.get(`/interviews/private-tier-utilisation`, {
+        params: { days: privateDays },
+        timeout: 60000,
+      });
+      setUtilisation(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load tier utilisation");
+    } finally {
+      setUtilLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    loadUtilisation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [academyDays, privateDays]);
 
@@ -192,6 +210,12 @@ export default function UpcomingInterviews() {
           Loading upcoming interviews from Monday…
         </div>
       )}
+
+      <UtilisationSection
+        utilisation={utilisation}
+        loading={utilLoading}
+        days={privateDays}
+      />
 
       {data && (
         <div className={"grid grid-cols-1 gap-6 " + (showAcademy ? "xl:grid-cols-2" : "")}>
@@ -463,5 +487,206 @@ function SlotRow({ slot }) {
         {slot.text}
       </span>
     </div>
+  );
+}
+
+// ============================================================================
+// Private Tier Utilisation — flagged students who haven't used their videos /
+// calls yet, surfaced ahead of their interview so coaches can chase.
+// ============================================================================
+function UtilisationSection({ utilisation, loading, days }) {
+  if (loading && !utilisation) {
+    return (
+      <div
+        className="bg-white border border-[var(--ayci-border)] rounded-lg p-6 text-center text-[var(--ayci-ink-muted)]"
+        data-testid="tier-utilisation-loading"
+      >
+        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[var(--ayci-teal)]" />
+        Loading tier utilisation…
+      </div>
+    );
+  }
+  if (!utilisation) return null;
+
+  const ppSummary = utilisation.summary_by_tier?.["Private Plus"] || { total: 0, on_track: 0, flagged: 0 };
+  const vipSummary = utilisation.summary_by_tier?.VIP || { total: 0, on_track: 0, flagged: 0 };
+  const flagged = utilisation.flagged || [];
+  const onTrack = utilisation.on_track || [];
+  const totalStudents = ppSummary.total + vipSummary.total;
+
+  if (totalStudents === 0) return null;
+
+  return (
+    <section
+      className="bg-white border border-[var(--ayci-border)] rounded-xl shadow-sm overflow-hidden"
+      data-testid="tier-utilisation-section"
+    >
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[var(--ayci-border)] bg-gradient-to-r from-violet-50 to-pink-50">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-violet-600" />
+              <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+                Private Tier Utilisation
+              </h2>
+              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-white/70 border border-violet-200 text-violet-700 rounded-full font-semibold">
+                Next {days} days
+              </span>
+            </div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] mt-1">
+              Private Plus + VIP students with an upcoming interview who haven't used enough of their video / call allowance yet.
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <SummaryPill
+              label="Private Plus"
+              total={ppSummary.total}
+              flagged={ppSummary.flagged}
+              onTrack={ppSummary.on_track}
+            />
+            <SummaryPill
+              label="VIP"
+              total={vipSummary.total}
+              flagged={vipSummary.flagged}
+              onTrack={vipSummary.on_track}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Flagged table */}
+      {flagged.length > 0 ? (
+        <div className="overflow-x-auto" data-testid="flagged-table-wrapper">
+          <table className="w-full text-sm" data-testid="flagged-table">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] bg-slate-50">
+                <th className="px-4 py-2 font-semibold">Student</th>
+                <th className="px-3 py-2 font-semibold">Tier</th>
+                <th className="px-3 py-2 font-semibold">Interview</th>
+                <th className="px-3 py-2 font-semibold text-center">Videos</th>
+                <th className="px-3 py-2 font-semibold text-center">Calls</th>
+                <th className="px-3 py-2 font-semibold">Action needed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flagged.map((s) => (
+                <FlaggedRow key={s.monday_id} student={s} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="px-5 py-6 text-center text-sm text-[var(--ayci-ink-muted)] bg-emerald-50/30">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
+          All Private Plus + VIP students with an interview in the next {days} days are on track.
+        </div>
+      )}
+
+      {/* On-track collapsed list */}
+      {onTrack.length > 0 && (
+        <details className="border-t border-[var(--ayci-border)]" data-testid="on-track-details">
+          <summary className="px-5 py-2.5 text-xs uppercase tracking-wider text-[var(--ayci-ink-muted)] cursor-pointer hover:bg-slate-50 flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            On track ({onTrack.length})
+          </summary>
+          <div className="overflow-x-auto bg-slate-50/40">
+            <table className="w-full text-sm">
+              <tbody>
+                {onTrack.map((s) => (
+                  <FlaggedRow key={s.monday_id} student={s} okay />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function SummaryPill({ label, total, flagged, onTrack }) {
+  if (total === 0) return null;
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-lg px-3 py-1.5 flex items-center gap-2"
+      data-testid={`tier-summary-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <span className="text-[11px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">
+        {label}
+      </span>
+      <span className="text-sm font-display font-bold text-[var(--ayci-ink)]">{total}</span>
+      <span className="text-[11px] text-rose-600 font-semibold">{flagged} flagged</span>
+      <span className="text-[11px] text-emerald-600 font-semibold">{onTrack} ok</span>
+    </div>
+  );
+}
+
+function FlaggedRow({ student, okay = false }) {
+  const tierColor = student.tier === "VIP"
+    ? "bg-amber-50 text-amber-700 border-amber-200"
+    : "bg-violet-50 text-violet-700 border-violet-200";
+  const daysColor = student.days_until <= 3
+    ? "text-rose-600 font-bold"
+    : student.days_until <= 7
+    ? "text-amber-700 font-semibold"
+    : "text-[var(--ayci-ink)] font-semibold";
+  const videosOk = student.videos_submitted >= student.videos_min;
+  const callsOk = student.calls_used >= student.calls_min;
+  return (
+    <tr
+      className="border-t border-[var(--ayci-border)] hover:bg-slate-50/50"
+      data-testid={`flagged-row-${student.monday_id}`}
+    >
+      <td className="px-4 py-2.5">
+        <a
+          href={student.monday_url}
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
+        >
+          {student.name}
+        </a>
+        {student.speciality && (
+          <div className="text-[11px] text-[var(--ayci-ink-muted)]">{student.speciality}</div>
+        )}
+      </td>
+      <td className="px-3 py-2.5">
+        <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 border rounded-full font-semibold ${tierColor}`}>
+          {student.tier}
+        </span>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className={daysColor + " text-sm"}>
+          {student.days_until === 0 ? "Today"
+            : student.days_until === 1 ? "Tomorrow"
+            : `In ${student.days_until} d`}
+        </div>
+        <div className="text-[11px] text-[var(--ayci-ink-muted)]">
+          {new Date(student.interview_date + "T00:00:00Z").toLocaleDateString("en-GB", {
+            day: "numeric", month: "short", timeZone: "UTC",
+          })}
+        </div>
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        <span className={(okay || videosOk ? "text-emerald-700" : "text-rose-600") + " font-semibold"}>
+          {student.videos_submitted}
+        </span>
+        <span className="text-[var(--ayci-ink-muted)] text-xs"> / {student.videos_allowance}</span>
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        <span className={(okay || callsOk ? "text-emerald-700" : "text-rose-600") + " font-semibold"}>
+          {student.calls_used}
+        </span>
+        <span className="text-[var(--ayci-ink-muted)] text-xs"> / {student.calls_allowance}</span>
+      </td>
+      <td className="px-3 py-2.5 text-xs text-[var(--ayci-ink-muted)]">
+        {okay ? (
+          <span className="text-emerald-700 font-semibold">On track</span>
+        ) : (
+          (student.reasons || []).join(" · ")
+        )}
+      </td>
+    </tr>
   );
 }

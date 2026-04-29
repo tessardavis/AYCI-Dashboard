@@ -37,9 +37,9 @@ from connectors import (
 # Same constants as upcoming_interviews
 ACADEMY_MEMBERS_BOARD_ID = 1956295952
 COL_INTERVIEW_DATE = "date_mkr7rdv7"
-COL_TIER = "color_mkpkrnz0"
+COL_TIER = "dropdown_mkqxgqbq"
 COL_EMAIL = "email_mkqxv0j0"
-COL_VIDEOS_SUBMITTED = "numbers_mkqxbf38"  # Number column "Videos submitted"
+COL_VIDEOS_SUBMITTED = "numeric_mkxfq65c"  # Number column "Videos submitted"
 COL_NAME = "name"
 COL_SPECIALITY = "color_mkqx20m0"
 COL_HOSPITAL = "color_mkqxckby"
@@ -82,7 +82,6 @@ async def _fetch_private_tier_with_interviews(days: int) -> list[dict]:
     Interview Date is in [today, today + days]."""
     today = datetime.now(timezone.utc).date()
     cutoff = (today + timedelta(days=days)).isoformat()
-    today_str = today.isoformat()
 
     q = """
     query ($boardId: ID!, $cursor: String) {
@@ -175,41 +174,13 @@ async def _fetch_private_call_counts(emails: list[str]) -> dict[str, int]:
         if not org:
             return out
 
-        # Pull recent (past 365d) AYCI private-call events org-wide, then bucket by invitee email.
-        # This is a lot more efficient than per-student queries.
+        # Pull recent (past 365d) AYCI private-call events grouped by invitee email.
+        # Per-email Calendly query is the reliable way (org-wide listing doesn't
+        # include invitee details inline).
         max_start = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         min_start = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat().replace("+00:00", "Z")
-        target_emails = set(emails)
 
-        page_token: Optional[str] = None
-        while True:
-            params = {
-                "organization": org,
-                "min_start_time": min_start,
-                "max_start_time": max_start,
-                "count": 100,
-                "status": "active",
-            }
-            if page_token:
-                params["page_token"] = page_token
-            r = await c.get(f"{CALENDLY_BASE}/scheduled_events", headers=_calendly_headers(), params=params)
-            if r.status_code != 200:
-                break
-            body = r.json()
-            for ev in body.get("collection", []):
-                evt_name = ev.get("name") or ""
-                if not any(n.lower() in evt_name.lower() for n in PRIVATE_CALL_NAMES):
-                    continue
-                # Get invitee (need to call /scheduled_events/{uri}/invitees)
-                # For efficiency: skip — we'll fan out invitee lookups in parallel
-                ev["_match"] = True
-            page_token = (body.get("pagination") or {}).get("next_page_token")
-            if not page_token:
-                break
-
-        # Re-fetch matched events with their invitees (Calendly requires per-event call)
-        # Simpler approach: query Calendly /scheduled_events with invitee_email filter per email.
-        # Concurrency-bounded to be polite.
+        # Concurrency-bounded per-email lookup.
         sem = asyncio.Semaphore(6)
 
         async def _per_email(em: str) -> tuple[str, int]:
