@@ -13,6 +13,15 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — server.py route refactor (Phase 2) + /api/auth/refresh + Q8 confirmed
+- **Phase 2 refactor complete**: extracted ~40 route handlers from `server.py` into `/app/backend/routes/` feature modules:
+  - `routes/team.py`, `routes/rocks.py`, `routes/scorecard.py` (metrics + weekly values + auto-compute), `routes/sync.py`, `routes/students.py`, `routes/interviews.py`, `routes/coach.py`, `routes/cohorts.py`, `routes/launches.py` (CRUD + analytics + pace + comparisons + onboarding-gap + phase-breakdown).
+  - Each module owns its own `APIRouter(prefix="/api")` and is mounted in `server.py` via `app.include_router(...)`.
+  - **`server.py`: 2082 → 966 lines (-54%)**. Now retains only auth, admin/users, settings, scheduler, lifecycle, seeders/migrations, root.
+  - Zero behaviour change. All 19 smoke-tested endpoints return 200; 24/24 latest pytest pass; lint clean. Every dashboard page loads with zero alerts.
+- **`POST /api/auth/refresh`**: mints a fresh access_token + rotates refresh_token using the httpOnly refresh cookie. Returns the user payload (with admin board_access expanded) so the client stays in sync without a follow-up `/auth/me`. Validated: 200 with valid cookie, 401 without.
+- **Q8 vs submission-date — confirmed resolved**: `compute_number_of_interviews` already uses Monday's `Interview Date` column (the actual interview date) — not Tally submission date. The new `compute_results_from_this_weeks_interviews` provides the cohort follow-through view (interview-date based). Together they cover both signals.
+
 ### 2026-04-29 — server.py foundation refactor + Settings cohort milestones tab + Results Received goal
 - **Foundation refactor (Phase 1 of /backend/routes/ migration)** — extracted shared building blocks from `server.py` (2082 → 1761 lines, -321):
   - `/app/backend/db.py` — single `motor` client + `db` handle.
@@ -59,11 +68,9 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Prioritised backlog
 **P1**
-- **Refactor Phase 2**: extract route handlers into `/app/backend/routes/{auth,launches,students,interviews,coach,sync,team,scorecard,rocks,cohorts}.py` using the foundation modules added in Phase 1. Move feature-by-feature with curl regression after each move.
-- Interview-date accuracy: decide whether "Interviews This Week" should track by Tally form Q8 (actual interview date) instead of submission date.
 - Drag-and-drop re-ordering of metrics within a category.
 - Quarter archiving (make old quarters read-only once new one is active).
-- `/api/auth/refresh` endpoint implementation.
+- Per-user rock-edit restriction (currently any authenticated user can update any rock).
 
 **P2**
 - Push notifications for SLA breaches.
