@@ -7,15 +7,12 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import uuid
 import logging
-import bcrypt
-import jwt
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel
 
 import connectors
 import student_lookup as lookup
@@ -23,6 +20,7 @@ import upcoming_interviews as upcoming
 import coach_activity as coach_act
 import onboarding_gap as ob_gap
 import scorecard_auto
+import settings_store
 import cohort as cohort_mod
 import google_drive as gdrive
 import launches as launches_mod
@@ -30,10 +28,27 @@ import at_risk as at_risk_mod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# --- MongoDB ----------------------------------------------------------------
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+# --- Shared infrastructure --------------------------------------------------
+from db import client, db
+from auth_utils import (
+    hash_password, verify_password,
+    create_access_token, create_refresh_token, set_auth_cookies,
+)
+from deps import (
+    ALL_BOARDS, ADMIN_ONLY_BOARDS,
+    get_current_user, require_admin, require_board, user_has_board,
+)
+from models import (
+    LoginInput, RegisterInput, UserOut, UserPatch, ChangePasswordInput,
+    TeamMember, TeamMemberCreate,
+    Metric, MetricCreate, MetricUpdate,
+    WeeklyValue, WeeklyValueInput,
+    Rock, RockCreate, RockUpdate,
+    LaunchPhase, LaunchPhases,
+    Launch, LaunchCreate, LaunchUpdate,
+    LaunchData, LaunchDataUpdate,
+    DailyRegistration, DailyRegistrationInput,
+)
 
 # --- App --------------------------------------------------------------------
 app = FastAPI(title="AYCI Team Dashboard")
@@ -41,340 +56,6 @@ api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-# --- Auth helpers -----------------------------------------------------------
-JWT_ALGORITHM = "HS256"
-
-
-def jwt_secret() -> str:
-    return os.environ["JWT_SECRET"]
-
-
-def hash_password(pw: str) -> str:
-    return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-
-def verify_password(pw: str, hashed: str) -> bool:
-    try:
-        return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
-        return False
-
-
-def create_access_token(user_id: str, email: str, role: str) -> str:
-    payload = {
-        "sub": user_id,
-        "email": email,
-        "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
-        "type": "access",
-    }
-    return jwt.encode(payload, jwt_secret(), algorithm=JWT_ALGORITHM)
-
-
-def create_refresh_token(user_id: str) -> str:
-    payload = {
-        "sub": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
-        "type": "refresh",
-    }
-    return jwt.encode(payload, jwt_secret(), algorithm=JWT_ALGORITHM)
-
-
-def set_auth_cookies(response: Response, access: str, refresh: str) -> None:
-    response.set_cookie("access_token", access, httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24, path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=False, samesite="lax", max_age=60 * 60 * 24 * 7, path="/")
-
-
-async def get_current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        payload = jwt.decode(token, jwt_secret(), algorithms=[JWT_ALGORITHM])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
-async def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
-    return user
-
-
-# All boards in the app. Admin-only boards (settings) are not in DEFAULT_BOARDS.
-ALL_BOARDS = [
-    "weekly_scorecard",
-    "quarterly_rocks",
-    "launches",
-    "cohort",
-    "interviews",
-    "students",
-    "at_risk",
-    "coach_activity",
-]
-ADMIN_ONLY_BOARDS = ["settings"]
-
-
-def user_has_board(user: dict, board: str) -> bool:
-    """Admins always pass. Members must have the board in their board_access list."""
-    if user.get("role") == "admin":
-        return True
-    if board in ADMIN_ONLY_BOARDS:
-        return False
-    return board in (user.get("board_access") or [])
-
-
-def require_board(board: str):
-    """FastAPI dependency factory: ensures the current user can access `board`."""
-    async def _check(user: dict = Depends(get_current_user)) -> dict:
-        if not user_has_board(user, board):
-            raise HTTPException(status_code=403, detail=f"Access to '{board}' board is not granted")
-        return user
-    return _check
-
-
-# --- Models -----------------------------------------------------------------
-class LoginInput(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class RegisterInput(BaseModel):
-    email: EmailStr
-    password: str
-    name: str
-    role: Literal["admin", "user"] = "user"
-    board_access: List[str] = Field(default_factory=list)
-
-
-class UserOut(BaseModel):
-    id: str
-    email: EmailStr
-    name: str
-    role: str
-    board_access: List[str] = Field(default_factory=list)
-
-
-class UserPatch(BaseModel):
-    name: Optional[str] = None
-    role: Optional[Literal["admin", "user"]] = None
-    board_access: Optional[List[str]] = None
-    password: Optional[str] = None  # set new password
-
-
-class ChangePasswordInput(BaseModel):
-    current_password: str
-    new_password: str
-
-
-class TeamMember(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    role_title: str
-    avatar_url: Optional[str] = None
-
-
-class TeamMemberCreate(BaseModel):
-    name: str
-    role_title: str
-    avatar_url: Optional[str] = None
-
-
-MetricFormat = Literal["number", "currency", "percentage"]
-MetricCategory = Literal["GROWTH + INTEREST", "CONVERSION + INTENT", "REVENUE", "SOCIAL PROOF", "DELIVERY + OPERATIONS"]
-
-
-class Metric(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    category: MetricCategory
-    owner_ids: List[str] = []
-    goal: Optional[float] = 0
-    format: MetricFormat = "number"
-    order: int = 0
-    goal_direction: Literal["above", "below"] = "above"
-    source_type: Optional[str] = None  # e.g. "convertkit_tag_new_subscribers"
-    source_params: Optional[dict] = None  # connector-specific config
-    # Hide from weekly view (e.g. cohort-only metrics surveyed once per cohort)
-    cohort_only: bool = False
-    # Whether the metric value can be auto-computed via /scorecard/auto-compute
-    is_auto: bool = False
-
-
-class MetricCreate(BaseModel):
-    name: str
-    category: MetricCategory
-    owner_ids: List[str] = []
-    goal: Optional[float] = 0
-    format: MetricFormat = "number"
-    goal_direction: Literal["above", "below"] = "above"
-    source_type: Optional[str] = None
-    source_params: Optional[dict] = None
-    cohort_only: bool = False
-    is_auto: bool = False
-
-
-class MetricUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[MetricCategory] = None
-    owner_ids: Optional[List[str]] = None
-    goal: Optional[float] = None
-    format: Optional[MetricFormat] = None
-    order: Optional[int] = None
-    goal_direction: Optional[Literal["above", "below"]] = None
-    source_type: Optional[str] = None
-    source_params: Optional[dict] = None
-
-
-class WeeklyValue(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    metric_id: str
-    week_start: str  # ISO date YYYY-MM-DD (Monday)
-    value: float
-
-
-class WeeklyValueInput(BaseModel):
-    metric_id: str
-    week_start: str
-    value: float
-
-
-RockStatus = Literal["on_track", "off_track", "done"]
-
-
-class Rock(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    owner_id: str
-    title: str
-    status: RockStatus = "on_track"
-    due_date: str  # ISO date
-    notes: str = ""
-    quarter: str  # e.g. "Q2 2026"
-
-
-class RockCreate(BaseModel):
-    owner_id: str
-    title: str
-    status: RockStatus = "on_track"
-    due_date: str
-    notes: str = ""
-    quarter: str
-
-
-class RockUpdate(BaseModel):
-    title: Optional[str] = None
-    status: Optional[RockStatus] = None
-    due_date: Optional[str] = None
-    notes: Optional[str] = None
-    owner_id: Optional[str] = None
-
-
-class LaunchPhase(BaseModel):
-    start: Optional[str] = None  # YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ
-    end: Optional[str] = None
-
-
-class LaunchPhases(BaseModel):
-    in_between_start: LaunchPhase = Field(default_factory=LaunchPhase)
-    early_access: LaunchPhase = Field(default_factory=LaunchPhase)
-    flash_sale: LaunchPhase = Field(default_factory=LaunchPhase)
-    webinar: LaunchPhase = Field(default_factory=LaunchPhase)
-    open_cart: LaunchPhase = Field(default_factory=LaunchPhase)
-    close_cart: LaunchPhase = Field(default_factory=LaunchPhase)
-    in_between_end: LaunchPhase = Field(default_factory=LaunchPhase)
-    # Legacy fields kept for backwards-compat reads from existing DB rows.
-    # New launches should use the keys above.
-    early_signups: Optional[LaunchPhase] = None
-    legacy_upgrades: Optional[LaunchPhase] = None
-    in_between: Optional[LaunchPhase] = None
-
-
-class Launch(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str  # human-readable, e.g. "April 2026"
-    code: Optional[str] = None  # Kit tag prefix code, e.g. "APR-26"
-    start_date: str   # overall launch start (early signups start)
-    end_date: Optional[str] = None  # overall launch end
-    webinar_date: str
-    target_good: float
-    target_better: float
-    target_best: float
-    phases: Optional[LaunchPhases] = None
-
-
-class LaunchCreate(BaseModel):
-    name: str
-    code: Optional[str] = None
-    start_date: str
-    end_date: Optional[str] = None
-    webinar_date: str
-    target_good: float
-    target_better: float
-    target_best: float
-    phases: Optional[LaunchPhases] = None
-
-
-class LaunchUpdate(BaseModel):
-    name: Optional[str] = None
-    code: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    webinar_date: Optional[str] = None
-    target_good: Optional[float] = None
-    target_better: Optional[float] = None
-    target_best: Optional[float] = None
-    phases: Optional[LaunchPhases] = None
-
-
-class LaunchData(BaseModel):
-    """Per-launch aggregate data."""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    launch_id: str
-    total_registrations: float = 0
-    webinar_attendance_rate: float = 0  # percentage
-    sales_academy_count: float = 0
-    sales_private_plus_count: float = 0
-    sales_vip_count: float = 0
-    sales_boost_count: float = 0
-    upgrade_count: float = 0
-    upsell_count: float = 0
-
-
-class LaunchDataUpdate(BaseModel):
-    total_registrations: Optional[float] = None
-    webinar_attendance_rate: Optional[float] = None
-    sales_academy_count: Optional[float] = None
-    sales_private_plus_count: Optional[float] = None
-    sales_vip_count: Optional[float] = None
-    sales_boost_count: Optional[float] = None
-    upgrade_count: Optional[float] = None
-    upsell_count: Optional[float] = None
-
-
-class DailyRegistration(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    launch_id: str
-    date: str  # ISO date
-    count: float
-
-
-class DailyRegistrationInput(BaseModel):
-    launch_id: str
-    date: str
-    count: float
 
 
 # --- Auth endpoints ---------------------------------------------------------
@@ -510,6 +191,29 @@ async def admin_delete_user(user_id: str, admin: dict = Depends(require_admin)):
             )
     await db.users.delete_one({"id": user_id})
     return {"ok": True}
+
+
+# --- App Settings: Cohort Milestones ---------------------------------------
+@api.get("/settings/cohort-milestones")
+async def get_cohort_milestones(user: dict = Depends(get_current_user)):
+    """Return the 5 milestone tag names tracked for cohort engagement.
+    Available to any logged-in user (used by Student Lookup engagement bar)."""
+    milestones = await settings_store.get_cohort_milestones(db)
+    return {"milestones": milestones}
+
+
+@api.put("/settings/cohort-milestones")
+async def update_cohort_milestones(
+    payload: dict,
+    admin: dict = Depends(require_admin),
+):
+    """Admin-only: replace the 5 cohort milestone tag names."""
+    milestones = payload.get("milestones")
+    try:
+        saved = await settings_store.set_cohort_milestones(db, milestones)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"milestones": saved}
 
 
 @api.post("/auth/logout")
@@ -872,6 +576,27 @@ async def _ensure_results_from_this_weeks_metric():
     logger.info(f"[migration] Inserted metric '{name}' (id={doc['id']})")
 
 
+async def _backfill_results_received_goal():
+    """One-shot fix: 'Results Received' metric was originally seeded as a count
+    (goal=15) but later converted to a percentage; goal was wiped to None during
+    that conversion. Restore a sensible 50% baseline (responsiveness target —
+    half of this week's interviewees report back the same week)."""
+    metric = await db.metrics.find_one(
+        {"name": "Results Received"}, {"_id": 0, "id": 1, "goal": 1, "format": 1},
+    )
+    if not metric:
+        return
+    if metric.get("goal") is not None:
+        return
+    if metric.get("format") != "percentage":
+        return
+    await db.metrics.update_one(
+        {"id": metric["id"]},
+        {"$set": {"goal": 50.0}},
+    )
+    logger.info("[migration] Backfilled 'Results Received' goal → 50%")
+
+
 async def _seed_weekly_values():
     count = await db.weekly_values.count_documents({})
     if count > 0:
@@ -1205,6 +930,7 @@ async def on_startup():
     await _seed_team()
     await _seed_metrics()
     await _ensure_results_from_this_weeks_metric()
+    await _backfill_results_received_goal()
     await _seed_weekly_values()
     await _seed_rocks()
     await _seed_launches()

@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { Check, Lock } from "lucide-react";
 
-// 5 Circle milestone tags the team uses to track cohort progress.
-// Order = ascending difficulty / progression.
-export const COHORT_MILESTONES = [
+import { apiClient } from "@/lib/api";
+
+// Default 5 Circle milestone tags — used as a fallback if the settings API fails.
+// The active list is loaded dynamically from /api/settings/cohort-milestones.
+export const DEFAULT_COHORT_MILESTONES = [
   "USP Guru",
   "Verified Examples Badge",
   "Senior-Level Thinker",
@@ -10,20 +13,52 @@ export const COHORT_MILESTONES = [
   "Authentic Self",
 ];
 
+let _milestoneCache = null;
+
+async function _loadMilestones() {
+  if (_milestoneCache) return _milestoneCache;
+  try {
+    const { data } = await apiClient.get("/settings/cohort-milestones");
+    if (Array.isArray(data?.milestones) && data.milestones.length === 5) {
+      _milestoneCache = data.milestones;
+      return _milestoneCache;
+    }
+  } catch {
+    // fallback below
+  }
+  _milestoneCache = DEFAULT_COHORT_MILESTONES;
+  return _milestoneCache;
+}
+
+export function invalidateMilestoneCache() {
+  _milestoneCache = null;
+}
+
 /**
  * 5-step progress bar showing which Circle milestone tags this student
  * has earned. Driven by `circle.data.member_tags` from the unified lookup.
+ * Milestone names are loaded from the admin-editable settings endpoint.
  */
 export default function EngagementBar({ circle }) {
+  const [milestones, setMilestones] = useState(DEFAULT_COHORT_MILESTONES);
+  useEffect(() => {
+    let cancelled = false;
+    _loadMilestones().then((m) => {
+      if (!cancelled) setMilestones(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const tags = circle?.data?.member_tags || [];
-  // Case-insensitive contains check
   const tagsLower = tags.map((t) => (t || "").toLowerCase().trim());
-  const status = COHORT_MILESTONES.map((m) => ({
+  const status = milestones.map((m) => ({
     name: m,
     achieved: tagsLower.includes(m.toLowerCase()),
   }));
   const achievedCount = status.filter((s) => s.achieved).length;
-  const pct = Math.round((achievedCount / COHORT_MILESTONES.length) * 100);
+  const pct = Math.round((achievedCount / milestones.length) * 100);
   const noCircle = !circle?.found;
 
   return (
@@ -39,7 +74,7 @@ export default function EngagementBar({ circle }) {
           <div className="text-sm text-[var(--ayci-ink-muted)] mt-0.5">
             {noCircle
               ? "No Circle account found — milestones can't be tracked."
-              : `${achievedCount} of ${COHORT_MILESTONES.length} milestones earned · ${pct}%`}
+              : `${achievedCount} of ${milestones.length} milestones earned · ${pct}%`}
           </div>
         </div>
         {!noCircle && (
@@ -52,14 +87,12 @@ export default function EngagementBar({ circle }) {
         )}
       </div>
 
-      {/* Steps */}
       <div className="relative" aria-hidden={noCircle}>
-        {/* Track + fill */}
         <div className="absolute left-3 right-3 top-3 h-0.5 bg-slate-200 rounded-full" />
         <div
           className="absolute left-3 top-3 h-0.5 bg-emerald-500 rounded-full transition-all duration-500"
           style={{
-            width: `calc((100% - 24px) * ${achievedCount === 0 ? 0 : (achievedCount - 1) / (COHORT_MILESTONES.length - 1)})`,
+            width: `calc((100% - 24px) * ${achievedCount === 0 ? 0 : (achievedCount - 1) / (milestones.length - 1)})`,
           }}
         />
 

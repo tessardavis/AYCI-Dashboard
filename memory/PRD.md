@@ -13,6 +13,17 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — server.py foundation refactor + Settings cohort milestones tab + Results Received goal
+- **Foundation refactor (Phase 1 of /backend/routes/ migration)** — extracted shared building blocks from `server.py` (2082 → 1761 lines, -321):
+  - `/app/backend/db.py` — single `motor` client + `db` handle.
+  - `/app/backend/auth_utils.py` — bcrypt + JWT helpers (`hash_password`, `verify_password`, `create_access_token`, `create_refresh_token`, `set_auth_cookies`, `decode_access_token`).
+  - `/app/backend/deps.py` — FastAPI dependencies (`get_current_user`, `require_admin`, `require_board`) + board constants (`ALL_BOARDS`, `ADMIN_ONLY_BOARDS`, `user_has_board`).
+  - `/app/backend/models.py` — all Pydantic models (auth, team, metrics, weekly values, rocks, launches, daily registrations).
+  - `server.py` now imports from these. Zero behaviour change. 24/24 latest pytest pass; all key endpoints return 200; lint clean.
+  - Phase 2 (route-by-route extraction into `/backend/routes/launches.py`, `/students.py`, `/interviews.py`, etc.) deferred — to be done with full regression testing per route group.
+- **Settings → Cohort tab**: admin-editable 5 milestone tag names. New backend module `settings_store.py` (Mongo `app_settings._id=cohort_milestones`). Endpoints: `GET /api/settings/cohort-milestones` (any auth user) + `PUT /api/settings/cohort-milestones` (admin-only, validates exactly 5 non-empty strings). Frontend: new `<CohortMilestonesSection />` tab in Settings, reset-to-defaults button. `EngagementBar.jsx` now loads milestone names dynamically (cached in module memory; cache invalidated on save).
+- **Results Received goal backfilled to 50%**: idempotent migration `_backfill_results_received_goal()` runs on startup. Sets goal only if currently `None` AND format is `percentage` (defensive — won't clobber an admin-set value).
+
 ### 2026-04-29 — New scorecard metric: Results From This Week's Interviews
 - Added 7th auto-computed Weekly Scorecard metric: **"Results From This Week's Interviews"** (% of students whose Monday `Interview Date` is this week who have submitted a Tally result form *at any time*). Complements the existing `Results Received` (which is submission-date based).
 - Backend: new `compute_results_from_this_weeks_interviews()` in `scorecard_auto.py`; reuses `tally_lookup.get_cached_submissions(db)` (24h TTL) so it's near-free to compute. Wired into `COMPUTE_MAP`.
@@ -48,8 +59,7 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Prioritised backlog
 **P1**
-- Settings UI to manage milestone tag names without dev help (so team can rename without a code change).
-- Refactor `server.py` (~2000 lines) into `/app/backend/routes/` folder.
+- **Refactor Phase 2**: extract route handlers into `/app/backend/routes/{auth,launches,students,interviews,coach,sync,team,scorecard,rocks,cohorts}.py` using the foundation modules added in Phase 1. Move feature-by-feature with curl regression after each move.
 - Interview-date accuracy: decide whether "Interviews This Week" should track by Tally form Q8 (actual interview date) instead of submission date.
 - Drag-and-drop re-ordering of metrics within a category.
 - Quarter archiving (make old quarters read-only once new one is active).

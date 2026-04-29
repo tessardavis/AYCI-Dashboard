@@ -26,6 +26,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Trash2, Plus, Link2 } from "lucide-react";
 import { formatValue } from "@/lib/format";
 import MetricSourceDialog from "@/components/MetricSourceDialog";
+import CohortMilestonesSection from "@/components/settings/CohortMilestonesSection";
 
 const CATEGORIES = [
   "GROWTH + INTEREST",
@@ -60,12 +61,14 @@ export default function Settings() {
           <TabsTrigger value="metrics" data-testid="settings-tab-metrics">Metrics</TabsTrigger>
           <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>
           <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
+          <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
         </TabsList>
         <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="metrics"><MetricsSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="rocks"><RocksSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>
+        <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>
       </Tabs>
     </div>
   );
