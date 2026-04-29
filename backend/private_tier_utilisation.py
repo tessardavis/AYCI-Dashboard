@@ -246,12 +246,14 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
         else:
             ok = passes_videos or passes_calls
 
-        # Build reason list for flagged students
+        # Reasons only populated when row is flagged — on_track rows
+        # always have an empty list.
         reasons: list[str] = []
-        if not passes_videos:
-            reasons.append(f"{videos} / {allow['videos']} videos used (need {videos_min})")
-        if not passes_calls:
-            reasons.append(f"{calls} / {allow['calls']} calls used (need {calls_min})")
+        if not ok:
+            if not passes_videos:
+                reasons.append(f"{videos} / {allow['videos']} videos used (need {videos_min})")
+            if not passes_calls:
+                reasons.append(f"{calls} / {allow['calls']} calls used (need {calls_min})")
 
         row = {
             **s,

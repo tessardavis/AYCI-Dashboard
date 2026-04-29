@@ -11,19 +11,59 @@ A single-page view where the team searches a student by email and sees a unified
 - **Frontend**: React 19 + React Router 7 + shadcn/ui + Tailwind + Recharts + Sonner. Manrope (display) + Inter (body) fonts. AuthContext with `withCredentials: true`.
 - **Data model (MongoDB)**: `users`, `team_members`, `metrics`, `weekly_values`, `rocks`, `launches`, `launch_data`, `daily_registrations`, `circle_members_cache` (slim Circle member list, 24 h TTL).
 
-## User personas
-- **Admin (Tessa / Arub)** — full CRUD on team, metrics, rocks, launches, users.
-- **Team member (user)** — view everything, update scorecard weekly values, update own rock status/notes, edit launch KPIs, search students.
-
-## Core requirements
-1. Weekly Scorecard: 13-week grid of **completed** weeks (current in-progress Monday excluded), 5 categories, owner avatars, editable cells, green/red goal highlighting, sparklines, summary ring with "X of Y on track".
-2. Quarterly Rocks: grouped by owner, status pills (On Track/Off Track/Done) click-to-cycle, expandable notes, quarter selector, donut summary.
-3. Launch Dashboard: per-launch KPI cards, stepped Good/Better/Best target bar, daily registrations line chart with previous launch overlay + cumulative, editable sales breakdown, launch-over-launch bar chart.
-4. Student Lookup: single search → 5 platform cards (Monday, Stripe, ConvertKit, Circle, Calendly) fan out in parallel; partial failures don't block the view.
-5. Settings: tabs for Team, Users, Metrics, Rocks, Launches (admin-only CRUD).
-6. Auth: JWT cookie login, admin-only register endpoint, logout.
-
 ## Implemented
+
+### 2026-04-29 — Private Tier Utilisation + Cohort Engagement Bar + Tier mismatch fix
+- **Private Tier Utilisation widget** on `/interviews` (top of page): flags Private Plus + VIP students with an upcoming interview in the next 7/14/30 days who haven't used enough of their video / call allowance. Compact table (student · tier · interview · videos used · calls used · action needed). Summary pills per tier. Collapsible "On track" section. Bound to existing Private window selector.
+  - Backend: `GET /api/interviews/private-tier-utilisation?days={7|14|30}` (`require_board('interviews')`). Returns `{summary_by_tier, flagged[], on_track[], window_days, last_refreshed}`. SWR-cached 30 min via `_stale_while_revalidate`.
+  - Logic: Private Plus on_track if `videos ≥ 50% allowance OR calls ≥ 1`. VIP on_track if `videos ≥ 33% allowance AND calls ≥ 2`. Allowances: PP 15 vids + 1 call; VIP 30 vids + 5 calls. Calls counted from Calendly events whose name matches "AYCI 1:1", "AYCI VIP", "AYCI Bonus Call", or "AYCI Mock" (org-wide, last 365 d, per-email).
+  - 16/16 pytest pass. Live data: 12 Private Plus + 2 VIP students in 14-day window.
+- **Cohort engagement progress bar** on Student Lookup: 5-step bar showing which Circle milestone tags the student has earned. Tags: USP Guru → Verified Examples Badge → Senior-Level Thinker → Job Mastermind → Authentic Self. Locked-icon fallback when student has no Circle account. Sits between Coach Summary and Quick Links.
+- **Bug fix — Monday tier mismatch (Deepika Reddy)**: When a student's Circle/Stripe email differs from their Monday email (e.g. Circle: `deepika.t.reddy@gmail.com`, Monday: `dtreddy@doctors.org.uk`), the unified lookup now passes the candidate's name as a fallback hint. `monday_lookup` does email lookup first, then falls back to a name-column search if email returns nothing. Frontend pickSuggestion / runLookupForEmail now forwards the name. Verified live: Deepika Reddy → tier "Upgrade Private Plus" surfaces correctly.
+- **Bug fix — wrong COL_TIER constant**: `private_tier_utilisation.py` and `scorecard_auto.py` were referencing the old `color_mkpkrnz0` Monday column ID. Updated to the current `dropdown_mkqxgqbq` (matches `cohort.py` and `upcoming_interviews.py`).
+- **Bug fix — wrong COL_VIDEOS_SUBMITTED**: `private_tier_utilisation.py` had `numbers_mkqxbf38`; corrected to `numeric_mkxfq65c` (matches upcoming_interviews.py).
+
+### 2026-04-27 — Mobile Quarterly Rocks + PWA installable
+[older entries omitted for brevity — see git history]
+
+## External integrations in use
+| Platform   | Env var              | Purpose                                                 |
+|------------|----------------------|---------------------------------------------------------|
+| Transistor | TRANSISTOR_API_KEY   | Weekly podcast downloads                                |
+| ConvertKit | CONVERTKIT_API_SECRET| Subscribers, tags, CTR, student lookup                  |
+| Stripe     | STRIPE_API_KEY       | Revenue metrics, student payment history                |
+| Circle     | CIRCLE_API_TOKEN     | Community members, activity, milestone tags            |
+| Monday.com | MONDAY_API_TOKEN     | Academy Members board, student columns                 |
+| Tally      | TALLY_API_KEY        | Form submissions (interviews, results)                 |
+| Calendly   | CALENDLY_TOKEN       | Scheduled events, past calls per invitee, AYCI 1:1/VIP/Bonus/Mock private call counts |
+| YouTube    | YOUTUBE_API_KEY      | Podcast playlist views                                  |
+| Google Drive | GOOGLE_SERVICE_ACCOUNT_FILE | Private-tier doc summaries (Claude AI)        |
+| Anthropic  | EMERGENT_LLM_KEY     | Claude Sonnet 4.5 doc summaries                        |
+
+## Prioritised backlog
+**P1**
+- Settings UI to manage milestone tag names without dev help (so team can rename without a code change).
+- Refactor `server.py` (~2000 lines) into `/app/backend/routes/` folder.
+- Interview-date accuracy: decide whether "Interviews This Week" should track by Tally form Q8 (actual interview date) instead of submission date.
+- Drag-and-drop re-ordering of metrics within a category.
+- Quarter archiving (make old quarters read-only once new one is active).
+- `/api/auth/refresh` endpoint implementation.
+
+**P2**
+- Push notifications for SLA breaches.
+- "Sync preview" — show what would be pulled without writing.
+- Per-user rock-edit restriction (currently any authenticated user can update any rock).
+- CSV export of scorecard.
+- Real-time updates via WebSocket for Monday live meetings.
+- Email/Slack digest reminder before Monday meeting.
+- Cosmetic: `<span>` inside `<option>` hydration warning in UpcomingInterviews.jsx Selector.
+- Tighten CORS_ORIGINS.
+
+## Next tasks
+- Settings → Cohort Milestones tab (P1).
+- `server.py` route-folder refactor (P1).
+
+
 ### 2026-04 — Mobile Quarterly Rocks + PWA installable (Apr 27)
 - **Quarterly Rocks mobile-friendly**: each owner card is now collapsible on phones (tap header to toggle, chevron rotates, lg+ stays always-open). Owner header gained a 3-dot status summary (off-track / on-track / done counts) so coaches can see a member's whole quarter in one glance without expanding. Card padding tightened on `<sm` (`px-4 py-3` vs `px-5 py-4`). Status pills get a slightly larger tap target on mobile.
 - **PWA installable**: new `/public/manifest.json` (standalone display, AYCI icon, navy theme, portrait-primary, 192×192 + 512×512 icons), `/public/sw.js` (no-op pass-through service worker that satisfies Chrome's installability criteria without caching stale dashboard data), Apple iOS meta tags (`apple-mobile-web-app-capable`, status bar style, AYCI title), and SW registration in `src/index.js`. Verified live: manifest serves 200, SW reaches `activated` state. Coaches can now "Add to Home Screen" on iOS or use Chrome's install prompt to launch the dashboard full-screen with the AYCI icon.
@@ -229,36 +269,3 @@ A single-page view where the team searches a student by email and sees a unified
 - **Settings → Launches → Edit dialog**: code field + 7 phase pickers (datetime-local), all edits via PATCH.
 - **Quick fixes**: Upcoming Interviews defaults to Private only with toggle to "All tiers". Cohort total = new+legacy from Kit. Circle bar gradient now uses inline linear-gradient (was broken Tailwind syntax). Student Lookup accepts name search with autocomplete dropdown (`/api/students/name-search`).
 
-## External integrations in use
-| Platform   | Env var              | Purpose                                                 |
-|------------|----------------------|---------------------------------------------------------|
-| Transistor | TRANSISTOR_API_KEY   | Weekly podcast downloads                                |
-| ConvertKit | CONVERTKIT_API_SECRET| Subscribers, tags, CTR, student lookup                  |
-| Stripe     | STRIPE_API_KEY       | Revenue metrics, student payment history                |
-| Circle     | CIRCLE_API_TOKEN     | Community members, activity, student profile           |
-| Monday.com | MONDAY_API_TOKEN     | Academy Members board, student columns                 |
-| Tally      | TALLY_API_KEY        | Form submissions (interviews, results)                 |
-| Calendly   | CALENDLY_TOKEN       | Scheduled events, past calls per invitee               |
-| YouTube    | YOUTUBE_API_KEY      | Podcast playlist views                                  |
-
-## Prioritised backlog
-**P1**
-- Interview-date accuracy: decide whether "Interviews This Week" should track by Tally form Q8 (actual interview date) instead of submission date.
-- Google Drive integration: Private-tier doc summary on Student Lookup card (requires Google OAuth setup).
-- Drag-and-drop re-ordering of metrics within a category.
-- Quarter archiving (make old quarters read-only once new one is active).
-- `/api/auth/refresh` endpoint implementation.
-
-**P2**
-- "Sync preview" — show what would be pulled without writing.
-- Per-user rock-edit restriction (currently any authenticated user can update any rock).
-- CSV export of scorecard.
-- Real-time updates via WebSocket for Monday live meetings.
-- Email/Slack digest reminder before Monday meeting.
-- Recharts Sparkline negative-width console warning cleanup (cosmetic).
-- Tighten CORS_ORIGINS (currently `*` with credentials).
-
-## Next tasks
-- Confirm with user: switch "Interviews This Week" to Q8-based tracking? (asked, pending)
-- Circle member auto-refresh: add a second APScheduler job for daily cache refresh (currently only startup + manual).
-- Google Drive integration for private-tier docs (Student Lookup enhancement).
