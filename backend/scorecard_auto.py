@@ -279,53 +279,75 @@ TALLY_INTERVIEW_DATE_FORM_ID = "nGyGj2"
 
 
 async def compute_results_received(db, week_start: date, week_end: date) -> dict:
-    """Count Tally 'AYCI - Interview Date Form' submissions during the week
-    (proxy for results reported), as a % of interviews-this-week."""
+    """Count Tally submissions during the week where the student told us
+    how their interview went (the result question's answer matches one of
+    the result option strings). As a % of interviews-this-week.
+    """
     import os
-    submitted = 0
+    submitted_with_result = 0
     start_iso = datetime(week_start.year, week_start.month, week_start.day, tzinfo=timezone.utc)
     end_iso = start_iso + timedelta(days=7)
+
+    # Strings that indicate an actual outcome was reported
+    RESULT_ANSWERS = [
+        "i got it",
+        "unfortunately i didn't get it",
+        "unfortunately i didn",
+        "my interview was rescheduled",
+        "interview was rescheduled",
+    ]
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         page = 1
-        while page <= 20:
+        bail = False
+        while page <= 30 and not bail:
             r = await c.get(
                 f"https://api.tally.so/forms/{TALLY_INTERVIEW_DATE_FORM_ID}/submissions",
                 headers={"Authorization": f"Bearer {os.environ['TALLY_API_KEY']}"},
-                params={"page": page, "limit": 100, "filter": "all"},
+                params={"page": page, "limit": 100},
             )
             if r.status_code != 200:
                 break
             body = r.json()
-            for s in body.get("submissions", []):
+            subs = body.get("submissions", [])
+            if not subs:
+                break
+            for s in subs:
                 ca = s.get("submittedAt") or s.get("createdAt") or ""
                 try:
                     dt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
                 except ValueError:
                     continue
-                if start_iso <= dt < end_iso:
-                    submitted += 1
-                elif dt < start_iso:
-                    # Tally sorts newest-first; bail out
-                    page = 999
+                if dt < start_iso:
+                    bail = True
                     break
+                if dt >= end_iso:
+                    continue
+                # Scan all answer strings for any of the RESULT_ANSWERS
+                answers_blob = " ".join(
+                    str((resp.get("answer") or "")).lower()
+                    for resp in (s.get("responses") or [])
+                )
+                if any(a in answers_blob for a in RESULT_ANSWERS):
+                    submitted_with_result += 1
             page += 1
-            if not body.get("hasMore"):
+            if not body.get("hasMore", False) and len(subs) < 100:
                 break
 
     interviews = await compute_number_of_interviews(db, week_start, week_end)
     denom = (interviews.get("value") or 0)
     if denom > 0:
-        pct = round((submitted / denom) * 100, 1)
+        pct = round((submitted_with_result / denom) * 100, 1)
         return {
             "value": pct,
-            "explain": f"{submitted} results submitted / {denom} interviews this week",
-            "numerator": submitted,
+            "explain": f"{submitted_with_result} interview-result submissions / {denom} interviews this week",
+            "numerator": submitted_with_result,
             "denominator": denom,
         }
     return {
-        "value": submitted,
-        "explain": f"{submitted} results submitted (no interviews this week to divide by)",
-        "numerator": submitted,
+        "value": submitted_with_result,
+        "explain": f"{submitted_with_result} interview-result submissions (no interviews this week to divide by)",
+        "numerator": submitted_with_result,
         "denominator": 0,
     }
 
@@ -335,14 +357,24 @@ async def compute_results_received(db, week_start: date, week_end: date) -> dict
 # each member. Match-on-presence (any of these tags = active for that
 # milestone). Uses the active cohort tag (set per launch) to find members.
 
-INTRO_POST_TAG_NAMES = ["intro post", "introduction", "intro"]
+INTRO_POST_TAG_NAMES = ["verified!", "verified community member", "intro post", "introduction", "intro"]
 MILESTONE_TAG_NAMES = [
-    # 5 cohort milestone names + variants
+    # Coach-applied tags that signal milestone completion (5 cohort milestones).
+    # The exact tag names shown to coaches in Circle are based on the
+    # programme content. These are the closest matches we've seen on
+    # APR-26 cohort members so far. Update as new milestones are added.
     "uso", "usos",
     "examples",
     "senior level thinking", "senior-level thinking", "senior thinking",
     "job specific", "job-specific knowledge",
     "bringing in you", "bring in you",
+    "daily prep",
+    "baseline tmay",
+    "deep dive",
+    "video course legend",
+    "boss",
+    "interview week",
+    "rfi-",
 ]
 
 ACTIVE_MEMBER_DEFAULT_COHORT_TAG = "Apr '26"
@@ -392,6 +424,8 @@ async def compute_active_members(db, week_start: date, week_end: date) -> dict:
     except Exception:
         pass
 
+    # Cohort tag includes a rosette/emoji prefix in Circle (e.g. "🏵️ Apr '26")
+    # so we strip non-alphanumerics and compare on the month-year stem only.
     cohort_tag_lc = cohort_tag.lower()
     intros_lc = [s.lower() for s in INTRO_POST_TAG_NAMES]
     miles_lc = [s.lower() for s in MILESTONE_TAG_NAMES]
@@ -401,7 +435,9 @@ async def compute_active_members(db, week_start: date, week_end: date) -> dict:
 
     cohort_members = []
     for m in members:
-        tags = [(t.get("name") or "").lower() for t in (m.get("tags") or [])]
+        tag_objects = m.get("member_tags") or m.get("tags") or []
+        tags = [(t.get("name") or "").lower() for t in tag_objects]
+        # Match on substring — handles "🏵️ Apr '26" and any other emoji prefix
         if any(cohort_tag_lc in t for t in tags):
             cohort_members.append({"name": m.get("name"), "tags": tags})
 
