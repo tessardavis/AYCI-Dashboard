@@ -13,6 +13,7 @@ import TallyCard from "@/components/student/TallyCard";
 import PrivateDocCard from "@/components/student/PrivateDocCard";
 import CoachSummary from "@/components/student/CoachSummary";
 import QuickLinks from "@/components/student/QuickLinks";
+import EngagementBar from "@/components/student/EngagementBar";
 import SignupHistoryCard from "@/components/student/SignupHistoryCard";
 
 export default function StudentLookup() {
@@ -310,6 +311,9 @@ export default function StudentLookup() {
 
           {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
           <CoachSummary result={result} />
+
+          {/* Cohort engagement progress — 5 Circle milestone tags */}
+          <EngagementBar circle={result.circle} />
 
           {/* Quick links — private chat + Google Doc */}
           <QuickLinks result={result} />

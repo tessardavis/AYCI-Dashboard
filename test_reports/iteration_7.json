@@ -1,0 +1,55 @@
+{
+  "summary": "Iteration 7 — Private Tier Utilisation endpoint/widget + Student Lookup name-fallback + EngagementBar. Backend: 15/16 pytest PASS. Frontend: all 3 review bullets verified. One real backend bug surfaced: on_track rows still contain non-empty reasons[] when the OR-logic passes on one dimension only (violates review spec which explicitly says 'Reasons array empty for on_track rows').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/interviews/private-tier-utilisation",
+        "issue": "on_track rows are returned with non-empty reasons[] when the OR-logic passes calls but fails videos (or vice versa). Review spec explicitly states 'Reasons array empty for on_track rows'. Example: Hema Barot (Private Plus, logic=or, calls_used=1≥1 ✓ but videos=1<7) → on_track=true, yet reasons=['1 / 15 videos used (need 7)']. Fix: in backend/private_tier_utilisation.py ~line 250, only build the reasons list when the row is flagged (i.e. set reasons=[] when ok=True), e.g. `reasons = [] if ok else [ ... ]`."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/interviews Private window selector",
+        "issues": [
+          "Pre-existing React hydration warning from <span> inside <option> inside the Selector component (also reported in iteration_6). Console logs 'In HTML, <span> cannot be a child of <option>'. Render is unaffected. Low priority."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration7.py",
+    "/app/test_reports/pytest/iteration7.xml"
+  ],
+  "action_items": [
+    "Fix private_tier_utilisation.py so on_track rows always return reasons=[] (currently they inherit partial-failure reason strings even when overall logic passes). Trivial patch: move the reasons-building block inside the `if not ok:` branch, or set `reasons = [] if ok else reasons`.",
+    "OPTIONAL (pre-existing from iter 6): remove <span> wrapper inside <option> in UpcomingInterviews.jsx Selector to silence hydration warning."
+  ],
+  "critical_code_review_comments": [
+    "private_tier_utilisation.py builds reasons[] unconditionally from passes_videos / passes_calls flags, then splits into on_track vs flagged by `ok`. This violates the stated contract that on_track rows have empty reasons. Two-line fix.",
+    "private_tier_utilisation.py correctly uses the new COL_TIER = 'dropdown_mkqxgqbq' constant — verified by live endpoint returning 12 Private Plus + 2 VIP students in the 14-day window (matches main agent's smoke).",
+    "server.py /api/interviews/private-tier-utilisation: validates days ∈ {7,14,30} with 400 on mismatch ✓, requires 'interviews' board via require_board dep ✓, stale-while-revalidate caching via launches_mod._stale_while_revalidate(ttl_min=30) ✓. Warm cache call <200ms in tests.",
+    "server.py /api/students/lookup: properly forwards optional name param to lookup.monday_lookup(email, name_hint=name). Verified live: without name → monday.found=false; with name='Deepika Reddy' → monday.found=true with Tier='Upgrade Private Plus' at data.columns.Tier.text.",
+    "EngagementBar.jsx: clean implementation. 5 milestones hard-coded in COHORT_MILESTONES array, case-insensitive match against circle.data.member_tags, data-testid on bar + per-milestone, lock-icon fallback when !circle.found. Fill-bar width calc uses (achievedCount-1)/(total-1) which correctly sets 0% fill at 1 achievement — intentional so the track meets the first step exactly.",
+    "Frontend Private window selector triggers a re-fetch of BOTH /interviews AND /interviews/private-tier-utilisation on change (verified: 14→7→30 updates summary counts: Private Plus total = 7 / 12 / 18 across windows, VIP = 0 / 2 / 2). Pill header text updates correctly (CSS uppercase — visible as 'NEXT 7 DAYS' / 'NEXT 14 DAYS' / 'NEXT 30 DAYS' in the rendered DOM).",
+    "Admin has 'interviews' in board_access (verified via /api/auth/me). Unauthenticated requests to the utilisation endpoint return 403 as expected (require_board raises 403 without session cookie)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration7.py (new — 16 test cases covering tier utilisation + deepika bug fix + normal lookup)",
+    "/app/test_reports/pytest/iteration7.xml (generated)"
+  ],
+  "success_rate": {
+    "backend": "94% (15/16 pytest — 1 real bug: on_track.reasons should be empty)",
+    "frontend": "100% (all 3 review bullets verified: Charlotte 100%/5 checks, Becks 40%/2 checks, NoCircle 5 locks + 'No Circle account found' fallback)"
+  },
+  "test_credentials": "admin@ayci.com / Admin@2026 (only auth used; no mutations).",
+  "seed_data_creation": "None. Live preview data (Monday + Calendly + Circle) used.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `export $(grep REACT_APP_BACKEND_URL /app/frontend/.env) && pytest /app/backend/tests/test_iteration7.py -v --junitxml=/app/test_reports/pytest/iteration7.xml` (~25s warm, ~55s cold). The only failing assertion is test_utilisation_14d_shape's 'on_track row reasons must be empty' check — this is the real bug, not a test issue. After main agent fixes private_tier_utilisation.py to zero out reasons when ok=True, re-run and all 16 should pass.",
+  "rca of the issue": "In /app/backend/private_tier_utilisation.py (fetch_private_tier_utilisation, ~L250-267), the `reasons` list is populated based purely on passes_videos/passes_calls flags, independently of whether the row ends up on_track or flagged. For Private Plus (logic='or'), a row with passes_calls=True but passes_videos=False is on_track (OR holds), but reasons still contains the 'X/15 videos used' message. The contract expects on_track.reasons == []. Minimal fix: wrap the reasons.append calls under `if not ok:` or set `reasons = []` after the ok check when ok is True. Reproduction: GET /api/interviews/private-tier-utilisation?days=14 as admin → inspect body.on_track[*].reasons → Hema Barot row has ['1 / 15 videos used (need 7)']."
+}
