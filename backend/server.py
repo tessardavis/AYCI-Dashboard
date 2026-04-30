@@ -447,6 +447,33 @@ async def _backfill_results_received_goal():
     logger.info("[migration] Backfilled 'Results Received' goal → 50%")
 
 
+async def _ensure_becky_team_member():
+    """Idempotent: ensure a `team_members` row exists for Becky Platt and that
+    her user is linked to it. Becky was the only post-launch team user without
+    a matching team_member when the auto-link migration ran on 29 Apr 2026."""
+    user = await db.users.find_one(
+        {"email": "becky@medicalinterviewprep.com"},
+        {"_id": 0, "id": 1, "team_member_id": 1, "name": 1},
+    )
+    if not user:
+        return
+    tm = await db.team_members.find_one({"name": "Becky Platt"}, {"_id": 0, "id": 1})
+    if not tm:
+        tm_doc = TeamMember(name="Becky Platt", role_title="Coach").model_dump()
+        await db.team_members.insert_one(tm_doc)
+        tm = {"id": tm_doc["id"]}
+        logger.info("[migration] Inserted team_member 'Becky Platt'")
+    if user.get("team_member_id") != tm["id"]:
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"team_member_id": tm["id"]}},
+        )
+        logger.info(
+            "[migration] Linked user 'Becky Platt' → team_member 'Becky Platt'"
+        )
+
+
+
 async def _autolink_users_to_team_members():
     """Idempotent: link `users` to `team_members` by name (case-insensitive
     substring) when `team_member_id` is missing. Logs each match. Users we
@@ -826,6 +853,7 @@ async def on_startup():
     await _ensure_results_from_this_weeks_metric()
     await _backfill_results_received_goal()
     await _autolink_users_to_team_members()
+    await _ensure_becky_team_member()
     await _seed_weekly_values()
     await _seed_rocks()
     await _seed_launches()
@@ -929,8 +957,26 @@ async def on_startup():
         id="daily_phase_breakdown_refresh",
         replace_existing=True,
     )
+
+    async def _daily_sla_digest():
+        import sla_notifications
+        try:
+            await sla_notifications.send_sla_digest(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] SLA digest failed: {e}")
+
+    scheduler.add_job(
+        _daily_sla_digest,
+        CronTrigger(hour=8, minute=0, timezone=tz),
+        id="daily_sla_digest",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info(f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20), daily_phase_breakdown_refresh (05:25) — {tz}")
+    logger.info(
+        f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
+        f"daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20), "
+        f"daily_phase_breakdown_refresh (05:25), daily_sla_digest (08:00) — {tz}"
+    )
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
     # Fire-and-forget so startup doesn't block.
@@ -1045,11 +1091,13 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     coach as routes_coach,
     cohorts as routes_cohorts,
     launches as routes_launches,
+    notifications as routes_notifications,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
     routes_sync.router, routes_students.router, routes_interviews.router,
     routes_coach.router, routes_cohorts.router, routes_launches.router,
+    routes_notifications.router,
 ):
     app.include_router(_r)
 

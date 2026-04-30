@@ -6,7 +6,7 @@ import Sparkline from "@/components/Sparkline";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { Filter, X, RefreshCw } from "lucide-react";
+import { Filter, X, RefreshCw, Download, ChevronDown } from "lucide-react";
 import MobileScorecard from "@/components/MobileScorecard";
 
 const CATEGORY_ORDER = [
@@ -247,6 +247,7 @@ export default function WeeklyScorecard() {
               <RefreshCw className={"w-4 h-4 " + (syncing ? "animate-spin" : "")} />
               {syncing ? "Syncing…" : "Sync"}
             </button>
+            <CsvExportButton apiBase={apiClient.defaults.baseURL} />
             <SummaryRing onTrack={summary.onTrack} total={summary.withValue} pct={onTrackPct} />
           </div>
         }
@@ -490,3 +491,71 @@ function SummaryRing({ onTrack, total, pct }) {
     </div>
   );
 }
+
+
+function CsvExportButton({ apiBase }) {
+  const [open, setOpen] = useState(false);
+  const download = (scope) => {
+    setOpen(false);
+    // Use a same-origin auth-cookie GET via a hidden iframe so the file
+    // download inherits the httpOnly access_token cookie. Anchor + click
+    // works for cookie-authenticated downloads in Chrome/Safari/Firefox.
+    const url =
+      `${apiBase}/scorecard/export.csv?scope=${scope}` +
+      (scope === "recent" ? "&weeks=8" : "");
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    a.click();
+  };
+  return (
+    <div className="relative" data-testid="scorecard-csv-export">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-[var(--ayci-border)] bg-white text-sm font-medium hover:border-[var(--ayci-accent)] hover:text-[var(--ayci-accent)] transition-colors"
+        data-testid="scorecard-csv-btn"
+        title="Export the scorecard as CSV"
+      >
+        <Download className="w-4 h-4" />
+        CSV
+        <ChevronDown className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-10"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
+          <div
+            className="absolute right-0 mt-1 w-52 bg-white border border-[var(--ayci-border)] rounded-md shadow-lg z-20 overflow-hidden"
+            data-testid="scorecard-csv-menu"
+          >
+            <button
+              onClick={() => download("recent")}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              data-testid="scorecard-csv-recent"
+            >
+              Last 8 weeks
+              <div className="text-[10px] text-[var(--ayci-ink-muted)]">
+                Current view
+              </div>
+            </button>
+            <div className="border-t border-[var(--ayci-border)]" />
+            <button
+              onClick={() => download("year")}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              data-testid="scorecard-csv-year"
+            >
+              Full archive
+              <div className="text-[10px] text-[var(--ayci-ink-muted)]">
+                All weeks of the year
+              </div>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+

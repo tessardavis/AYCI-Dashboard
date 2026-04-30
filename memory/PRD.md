@@ -13,6 +13,19 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-30 — Becky Platt linked + Slack SLA digest + CSV scorecard export
+- **Becky Platt team_member**: idempotent migration `_ensure_becky_team_member()` runs on startup. Inserts a `team_members` row (`name="Becky Platt"`, `role_title="Coach"`) if missing, then links her existing user. Becky can now edit her own rocks. Verified: `team_member` row exists, user `team_member_id` populated.
+- **Slack SLA digest**:
+  - New `sla_notifications.py` module: posts a daily digest of >48 h unanswered Circle posts (Recorded Answer Review + Specific Interview Support spaces) to a single Slack incoming webhook.
+  - New `POST /api/notifications/slack/test` (admin) for manual triggering. Falls through gracefully (no 500) when `SLACK_WEBHOOK_URL` env var is missing.
+  - APScheduler cron: **daily 08:00 Europe/London** → `_daily_sla_digest()`.
+  - **In-app bell** in the AppShell sidebar: "🔔 SLA breaches" with live count badge (red bubble for >0, "clear" pill for 0). Polls `/api/notifications/sla/count` every 5 min. Hidden for users without Coach Activity board access. Clicking jumps to the Coach Activity dashboard.
+  - **Setup**: add `SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...` to `/app/backend/.env` and `sudo supervisorctl restart backend`. Config is server-side env (never touched in this app's `.env` editing rules).
+- **CSV scorecard export**:
+  - `GET /api/scorecard/export.csv?scope=year|recent` (board-guarded). `scope=recent&weeks=8` returns just the last N weeks; `scope=year` returns every recorded week. Streamed `text/csv` with proper filename.
+  - "📥 CSV ▾" button on the Weekly Scorecard with a dropdown menu: "Last 8 weeks · Current view" + "Full archive · All weeks of the year". Triggers a same-origin authenticated download via anchor click (uses the httpOnly access cookie).
+- **Tests**: 8/8 pass in `test_iteration9.py` covering: Becky team_member exists + linked, SLA count endpoint, Slack test endpoint graceful fallback, SLA endpoint auth-required, CSV recent + year exports, invalid scope → 400.
+
 ### 2026-04-29 — Cohort Dashboard tweaks (round 2) + Locum/Substantive on PTU
 - **Cohort total = new + legacy from ConvertKit** (421 = 173 new + 248 legacy). Two denominators are now exposed: `students` (= new+legacy, headline) and `monday_cohort_total` (the subset on Monday with full data, used for tier/milestone/speciality % so they sum to 100% within the visible Monday population).
 - **On Circle / Intros denominators** = cohort total (421). Match logic now intersects `(new_emails ∪ legacy_emails)` against Circle membership tags / intro-space posters.

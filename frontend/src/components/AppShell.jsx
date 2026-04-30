@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
+import { apiClient } from "@/lib/api";
 
 const NAV = [
   { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard" },
@@ -147,6 +148,15 @@ export default function AppShell() {
             <div className="text-[var(--ayci-sidebar-muted)] text-xs capitalize">{user?.role || ""}</div>
           </div>
           <button
+            onClick={() => navigate("/coach-activity")}
+            data-testid="sidebar-sla-bell"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="flex-1 text-left">SLA breaches</span>
+            <SLACountBadge user={user} />
+          </button>
+          <button
             onClick={() => navigate("/profile")}
             data-testid="sidebar-profile-btn"
             className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
@@ -171,3 +181,46 @@ export default function AppShell() {
     </div>
   );
 }
+
+
+function SLACountBadge({ user }) {
+  const [count, setCount] = useState(null);
+  useEffect(() => {
+    if (!userCanAccess(user, "coach_activity")) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data } = await apiClient.get("/notifications/sla/count");
+        if (!cancelled) setCount(data.unanswered_count);
+      } catch {
+        // Silently swallow — bell is a nice-to-have, not critical.
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5 * 60 * 1000); // refresh every 5 min
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [user]);
+  if (count === null) return null;
+  if (count === 0) {
+    return (
+      <span
+        className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300"
+        data-testid="sla-bell-clear"
+      >
+        clear
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500 text-white"
+      data-testid="sla-bell-count"
+    >
+      {count}
+    </span>
+  );
+}
+

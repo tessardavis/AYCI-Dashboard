@@ -1,8 +1,9 @@
 """Scorecard: metrics CRUD + weekly values + auto-compute endpoint."""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 import scorecard_auto
 import launches as launches_mod
@@ -120,3 +121,77 @@ async def upsert_weekly_value(data: WeeklyValueInput, user: dict = Depends(get_c
     )
     await db.weekly_values.insert_one(wv.model_dump())
     return wv.model_dump()
+
+
+
+# -- CSV export -------------------------------------------------------------
+def _format_csv_value(value, fmt):
+    """Format a metric value for CSV. None → empty cell."""
+    if value is None:
+        return ""
+    if fmt == "currency":
+        return f"{float(value):.2f}"
+    if fmt == "percentage":
+        return f"{float(value):.1f}"
+    return str(value)
+
+
+@router.get("/scorecard/export.csv")
+async def scorecard_export_csv(
+    scope: str = "year",
+    weeks: int = 8,
+    user: dict = Depends(require_board("weekly_scorecard")),
+):
+    """CSV export of the weekly scorecard.
+
+    Query params:
+      - scope=year   (default) — every recorded week for every metric
+      - scope=recent — last `weeks` weeks (default 8) only
+    Each row: Category, Metric, Goal, Format, then one column per week.
+    """
+    if scope not in ("year", "recent"):
+        raise HTTPException(400, "scope must be 'year' or 'recent'")
+    metrics = await db.metrics.find({}, {"_id": 0}).sort([("category", 1), ("order", 1)]).to_list(1000)
+    weekly_values = await db.weekly_values.find({}, {"_id": 0}).to_list(100000)
+
+    # Build {metric_id: {week_start: value}}
+    by_metric: dict[str, dict[str, float]] = {}
+    all_weeks: set[str] = set()
+    for wv in weekly_values:
+        by_metric.setdefault(wv["metric_id"], {})[wv["week_start"]] = wv["value"]
+        all_weeks.add(wv["week_start"])
+    weeks_sorted = sorted(all_weeks)
+
+    if scope == "recent":
+        today = datetime.now(timezone.utc).date()
+        this_monday = today - timedelta(days=today.weekday())
+        cutoff = (this_monday - timedelta(weeks=max(1, int(weeks)) - 1)).isoformat()
+        weeks_sorted = [w for w in weeks_sorted if w >= cutoff]
+
+    # Build CSV rows
+    import csv
+    import io
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    header = ["Category", "Metric", "Format", "Goal"] + weeks_sorted
+    writer.writerow(header)
+    for m in metrics:
+        row = [
+            m.get("category", ""),
+            m.get("name", ""),
+            m.get("format", ""),
+            _format_csv_value(m.get("goal"), m.get("format", "number")),
+        ]
+        values = by_metric.get(m["id"], {})
+        for w in weeks_sorted:
+            row.append(_format_csv_value(values.get(w), m.get("format", "number")))
+        writer.writerow(row)
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    filename = f"ayci-scorecard-{scope}-{today_iso}.csv"
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
