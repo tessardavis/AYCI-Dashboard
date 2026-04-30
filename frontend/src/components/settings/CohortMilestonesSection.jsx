@@ -160,6 +160,148 @@ export default function CohortMilestonesSection({ isAdmin }) {
           Admin-only — read-only view.
         </p>
       )}
+
+      <CoachSpacesEditor isAdmin={isAdmin} />
     </div>
+  );
+}
+
+function CoachSpacesEditor({ isAdmin }) {
+  const [spaces, setSpaces] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/settings/coach-spaces");
+      setSpaces(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load coach spaces");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const save = async () => {
+    if (!isAdmin || !spaces) return;
+    setSaving(true);
+    try {
+      const { data } = await apiClient.put("/settings/coach-spaces", spaces);
+      setSpaces(data);
+      toast.success("Coach Activity spaces updated — dashboard cache cleared");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !spaces) return null;
+
+  return (
+    <div
+      className="mt-8 pt-6 border-t border-[var(--ayci-border)]"
+      data-testid="coach-spaces-editor"
+    >
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 shrink-0">
+          <Tag className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="font-display font-bold text-base text-[var(--ayci-ink)]">
+            Coach Activity — Circle spaces
+          </h3>
+          <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            The Coach Activity dashboard tracks coach engagement in these two
+            Circle spaces from the cohort start date. Update when a new cohort
+            spins up new spaces. Find the space ID in the Circle URL after `/c/`
+            (open the space, copy the slug, then look up its numeric ID).
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+        <FieldRow
+          label="Recorded Answer Review — space ID"
+          value={spaces.recorded_answer_space_id}
+          onChange={(v) =>
+            setSpaces((s) => ({ ...s, recorded_answer_space_id: Number(v) || 0 }))
+          }
+          disabled={!isAdmin || saving}
+          testid="coach-recorded-space-id"
+          inputType="number"
+        />
+        <FieldRow
+          label="Cohort start (recorded answers)"
+          value={spaces.recorded_answer_start}
+          onChange={(v) => setSpaces((s) => ({ ...s, recorded_answer_start: v }))}
+          disabled={!isAdmin || saving}
+          testid="coach-recorded-start"
+          inputType="date"
+        />
+        <FieldRow
+          label="Interview Support — space ID"
+          value={spaces.interview_support_space_id}
+          onChange={(v) =>
+            setSpaces((s) => ({ ...s, interview_support_space_id: Number(v) || 0 }))
+          }
+          disabled={!isAdmin || saving}
+          testid="coach-interview-space-id"
+          inputType="number"
+        />
+        <FieldRow
+          label="Cohort start (interview support)"
+          value={spaces.interview_support_start}
+          onChange={(v) => setSpaces((s) => ({ ...s, interview_support_start: v }))}
+          disabled={!isAdmin || saving}
+          testid="coach-interview-start"
+          inputType="date"
+        />
+      </div>
+
+      {isAdmin && (
+        <div className="mt-4">
+          <Button
+            onClick={save}
+            disabled={saving}
+            data-testid="save-coach-spaces-btn"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save coach spaces
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FieldRow({ label, value, onChange, disabled, testid, inputType = "text" }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">
+        {label}
+      </span>
+      <Input
+        type={inputType}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        data-testid={testid}
+      />
+    </label>
   );
 }

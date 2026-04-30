@@ -229,6 +229,31 @@ async def update_cohort_milestones(
     return {"milestones": saved}
 
 
+@api.get("/settings/coach-spaces")
+async def get_coach_spaces_endpoint(user: dict = Depends(get_current_user)):
+    """Current Coach Activity Circle space IDs + cohort start dates.
+    Available to anyone with auth (read-only for non-admins)."""
+    return await settings_store.get_coach_spaces(db)
+
+
+@api.put("/settings/coach-spaces")
+async def update_coach_spaces_endpoint(
+    payload: dict,
+    admin: dict = Depends(require_admin),
+):
+    """Admin-only: update Coach Activity Circle space IDs / cohort start dates.
+    Accepts any subset of: recorded_answer_space_id, interview_support_space_id,
+    recorded_answer_start, interview_support_start. Clears the SWR cache so the
+    next dashboard load shows the new space immediately."""
+    try:
+        saved = await settings_store.set_coach_spaces(db, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Bust the cached coach-activity payload so the change takes effect now.
+    await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
+    return saved
+
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")

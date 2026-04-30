@@ -23,5 +23,5 @@ async def coach_activity_summary(
         db,
         "coach_activity:summary",
         ttl_min=30,
-        compute_fn=coach_act.fetch_coach_activity_summary,
+        compute_fn=lambda: coach_act.fetch_coach_activity_summary(db),
     )

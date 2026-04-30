@@ -452,10 +452,26 @@ async def fetch_private_video_submissions() -> dict:
 
 # ---------- Top-level fan-out -------------------------------------------------
 
-async def fetch_coach_activity_summary() -> dict:
-    """Top-level payload for the Coach Activity dashboard. Run all 3 fetches in parallel."""
-    recorded_task = analyse_circle_space(RECORDED_ANSWER_SPACE_ID, RECORDED_ANSWERS_START, "Recorded Answer Review")
-    interview_task = analyse_circle_space(INTERVIEW_SUPPORT_SPACE_ID, INTERVIEW_SUPPORT_START, "Specific Interview Support")
+async def fetch_coach_activity_summary(db=None) -> dict:
+    """Top-level payload for the Coach Activity dashboard. Run all 3 fetches in parallel.
+    Space IDs + start dates are admin-configurable via Settings → Coach Spaces."""
+    if db is not None:
+        try:
+            import settings_store
+            cfg = await settings_store.get_coach_spaces(db)
+            recorded_space = cfg["recorded_answer_space_id"]
+            interview_space = cfg["interview_support_space_id"]
+            recorded_start = date.fromisoformat(cfg["recorded_answer_start"])
+            interview_start = date.fromisoformat(cfg["interview_support_start"])
+        except Exception:
+            recorded_space, interview_space = RECORDED_ANSWER_SPACE_ID, INTERVIEW_SUPPORT_SPACE_ID
+            recorded_start, interview_start = RECORDED_ANSWERS_START, INTERVIEW_SUPPORT_START
+    else:
+        recorded_space, interview_space = RECORDED_ANSWER_SPACE_ID, INTERVIEW_SUPPORT_SPACE_ID
+        recorded_start, interview_start = RECORDED_ANSWERS_START, INTERVIEW_SUPPORT_START
+
+    recorded_task = analyse_circle_space(recorded_space, recorded_start, "Recorded Answer Review")
+    interview_task = analyse_circle_space(interview_space, interview_start, "Specific Interview Support")
     private_task = fetch_private_video_submissions()
     recorded, interview, private = await asyncio.gather(
         recorded_task, interview_task, private_task, return_exceptions=True,

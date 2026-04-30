@@ -13,6 +13,14 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — Coach Activity space switch (apr-26) + admin-editable space config
+- **Switched Recorded-Answer-Review tracking from `2513456` (`/c/recorded-answer-review-march/`) → `2529508` (`/c/recorded-answer-review-apr-26/`)** per team confirmation. Note: at switch time the old space had 14 posts since 4 Apr, the new space had 0 — Coach Activity will appear empty until students start posting in apr-26, which is the intended behaviour during the transition.
+- **Made Circle space IDs admin-configurable** so future cohort transitions don't need a code change:
+  - New `app_settings.coach_spaces` doc with: `recorded_answer_space_id`, `interview_support_space_id`, `recorded_answer_start`, `interview_support_start`. Defaults baked in for current apr-26 cohort.
+  - `GET /api/settings/coach-spaces` (any auth) + `PUT /api/settings/coach-spaces` (admin-only). PUT busts the `coach_activity:summary` SWR cache so changes take effect on next dashboard load.
+  - `coach_activity.fetch_coach_activity_summary(db)` now reads from settings (with constant fallback if DB is unavailable).
+  - Settings → Cohort tab: new "Coach Activity — Circle spaces" panel with 4 inputs (2 space IDs + 2 start dates), Save button, helper text explaining how to find a space ID.
+
 ### 2026-04-29 — Admin → Users team_member linking UI
 - **`/admin/users` response** now includes `team_members: [{id, name}]` for the dropdown.
 - **`PATCH /admin/users/{id}`** accepts `team_member_id` (string to link, empty string/null to unlink). Validates target team_member exists → 400 on unknown ID.
