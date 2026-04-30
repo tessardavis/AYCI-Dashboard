@@ -29,11 +29,12 @@ import httpx
 from connectors import CIRCLE_BASE, _circle_headers, MONDAY_URL, _monday_headers, TIMEOUT
 
 
-# Circle space IDs — note: the cohort is using the older "March/April" space
-# (id=2513456) for actual recorded answer activity even though the cohort
-# is named "April 26". The newer "apr-26" space (2529508) was provisioned
-# but unused. Update if the team migrates to the apr-26 space.
-RECORDED_ANSWER_SPACE_ID = 2513456           # /c/recorded-answer-review-march/
+# Circle space IDs for the April 26 cohort.
+# `recorded-answer-review-apr-26` = the dedicated space for this cohort's
+# recorded-answer practice. Earlier cohorts had separate spaces; the
+# previous code accidentally pointed at the legacy March/April space
+# (2513456) — corrected 2026-04-29 after team confirmed the active space.
+RECORDED_ANSWER_SPACE_ID = 2529508           # /c/recorded-answer-review-apr-26/
 INTERVIEW_SUPPORT_SPACE_ID = 2529509         # /c/specific-interview-support-apr-26/
 PRIVATE_VIDEOS_BOARD_ID = 5083952249         # AYCI - Private video responses
 
