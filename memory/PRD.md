@@ -13,6 +13,13 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — Cohort Dashboard fixes: new-signup denominator + specialty to bottom
+- **Cohort total now = new signups in this launch** (ConvertKit `Cohort - New` tag ∩ Monday Cohort-Joined), not the raw Monday board headcount. All downstream stats (tier %, milestone %, Circle coverage, intros coverage) now use this denominator. Backend `cohort_summary()` filters per-item loops to new signups only; legacy students no longer skew tier / speciality / milestone counts.
+- **Stat cards updated**: "Total (Kit)" → "Cohort total" (value = new-signup total, subtitle "New signups in this launch"). "New (Kit)" and "Legacy (Kit)" subtitles clarified to "X% of Kit". "On Circle" subtitle now says "% of cohort (tag …)".
+- **On Circle denominator fixed** — was `monday_total` (170), now matches cohort total (169 new signups).
+- **Speciality section moved to the bottom** of the dashboard, below the Tier/Milestones grid and the Circle-join/Intros grid. Full-width card.
+- Live verified: Cohort total 169 · Academy 86.4%, VIP 7.1%, Academy Private Plus 5.9%, Upgrade VIP 0.6% (sum = 100%). On Circle 116 / 169 (68.6%). Intros 21 / 169 (12.4%).
+
 ### 2026-04-29 — Coach Activity space switch (apr-26) + admin-editable space config
 - **Switched Recorded-Answer-Review tracking from `2513456` (`/c/recorded-answer-review-march/`) → `2529508` (`/c/recorded-answer-review-apr-26/`)** per team confirmation. Note: at switch time the old space had 14 posts since 4 Apr, the new space had 0 — Coach Activity will appear empty until students start posting in apr-26, which is the intended behaviour during the transition.
 - **Made Circle space IDs admin-configurable** so future cohort transitions don't need a code change:

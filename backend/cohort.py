@@ -182,7 +182,7 @@ async def cohort_summary(
         intros_space_id = DEFAULT_INTROS_SPACE_ID
 
     items = await _fetch_cohort_items(cohort_label)
-    total = len(items)
+    monday_total = len(items)  # all Monday students with Cohort Joined = this cohort
 
     def _txt(cols: list[dict], col_id: str) -> str:
         for c in cols:
@@ -190,40 +190,9 @@ async def cohort_summary(
                 return (c.get("text") or "").strip()
         return ""
 
-    tier_counter: Counter = Counter()
-    emails: set[str] = set()
-    active_cohort_count = 0
-    milestone_totals = [0 for _ in MILESTONE_COLS]
-    specialities: Counter = Counter()
-
-    for it in items:
-        cols = it.get("column_values") or []
-        # Tier split (may contain multiple comma-separated values — take primary)
-        tier = _txt(cols, COL_TIER) or "(no tier)"
-        # Some students have tier like "Academy, Boost & Go Plus" — split
-        first_tier = tier.split(",")[0].strip()
-        tier_counter[first_tier] += 1
-
-        # Email
-        email = _txt(cols, COL_EMAIL).lower()
-        if email:
-            emails.add(email)
-
-        # In active cohort
-        if _txt(cols, COL_IN_ACTIVE_COHORT).lower() == "yes":
-            active_cohort_count += 1
-
-        # Speciality
-        sp = _txt(cols, COL_SPECIALITY)
-        if sp:
-            specialities[sp.split(",")[0].strip()] += 1
-
-        # Milestones
-        for i, (cid, _) in enumerate(MILESTONE_COLS):
-            if _txt(cols, cid).strip().lower() == "yes":
-                milestone_totals[i] += 1
-
-    # New vs Legacy from ConvertKit tags (authoritative)
+    # New vs Legacy from ConvertKit tags (authoritative). We need `new_emails`
+    # before the per-item loop so we can filter stats to new signups only —
+    # the team tracks "cohort" = "new signups in this launch", not upgrades.
     new_count = 0
     legacy_count = 0
     new_emails: set[str] = set()
@@ -240,11 +209,60 @@ async def cohort_summary(
         except Exception as e:
             kit_error = str(e)
 
-    # Circle cross-reference
+    tier_counter: Counter = Counter()
+    emails: set[str] = set()  # all Monday emails for this cohort (new + legacy)
+    new_cohort_emails: set[str] = set()  # Monday ∩ ConvertKit Cohort-New
+    active_cohort_count = 0
+    milestone_totals = [0 for _ in MILESTONE_COLS]
+    specialities: Counter = Counter()
+
+    for it in items:
+        cols = it.get("column_values") or []
+        email = _txt(cols, COL_EMAIL).lower()
+        if email:
+            emails.add(email)
+
+        # Cohort = new signups only. If we have a new-tag list, skip legacy
+        # students for the per-tier / per-speciality / milestone counts.
+        is_new = email in new_emails if new_emails else True
+        if is_new and email:
+            new_cohort_emails.add(email)
+
+        if _txt(cols, COL_IN_ACTIVE_COHORT).lower() == "yes":
+            active_cohort_count += 1
+
+        # Skip non-new students for the breakdown stats
+        if not is_new:
+            continue
+
+        # Tier split (may contain multiple comma-separated values — take primary)
+        tier = _txt(cols, COL_TIER) or "(no tier)"
+        first_tier = tier.split(",")[0].strip()
+        tier_counter[first_tier] += 1
+
+        # Speciality
+        sp = _txt(cols, COL_SPECIALITY)
+        if sp:
+            specialities[sp.split(",")[0].strip()] += 1
+
+        # Milestones
+        for i, (cid, _) in enumerate(MILESTONE_COLS):
+            if _txt(cols, cid).strip().lower() == "yes":
+                milestone_totals[i] += 1
+
+    # The denominator for all cohort stats: count of new signups actually on
+    # the Monday board for this cohort (Monday ∩ ConvertKit Cohort-New). Falls
+    # back to the Monday total when ConvertKit data isn't available.
+    cohort_total = len(new_cohort_emails) if new_emails else monday_total
+
+    # Circle cross-reference — count only students who are in the new-signup
+    # cohort (matches the team's definition of "cohort total").
     circle_tag_name = circle_tag or _derive_circle_tag(cohort_label)
     circle_matched = 0
     circle_tagged_total = 0
     circle_cache_available = False
+
+    cohort_email_set = new_cohort_emails if new_emails else emails
 
     doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
     if doc:
@@ -255,7 +273,7 @@ async def cohort_summary(
             tags = m.get("member_tags") or []
             if any(t and t.strip().lower() == circle_tag_name.strip().lower() for t in tags):
                 circle_tagged_total += 1
-        for email in emails:
+        for email in cohort_email_set:
             m = by_email.get(email)
             if not m:
                 continue
@@ -267,8 +285,8 @@ async def cohort_summary(
         {
             "label": lbl,
             "completed": milestone_totals[i],
-            "total": total,
-            "percent": round(milestone_totals[i] / total * 100, 1) if total else 0.0,
+            "total": cohort_total,
+            "percent": round(milestone_totals[i] / cohort_total * 100, 1) if cohort_total else 0.0,
         }
         for i, (_, lbl) in enumerate(MILESTONE_COLS)
     ]
@@ -282,14 +300,16 @@ async def cohort_summary(
             intros_emails = await _circle_space_post_authors(int(intros_space_id))
             intros_total_posts = intros_emails.get("post_count", 0)
             poster_emails = intros_emails.get("emails", set())
-            intros_posters = len(emails & poster_emails)
+            intros_posters = len(cohort_email_set & poster_emails)
         except Exception as e:
             intros_error = str(e)
 
     return {
         "cohort": cohort_label,
         "totals": {
-            "students": total,  # Monday board headcount
+            # `students` is the authoritative cohort size — new signups only.
+            "students": cohort_total,
+            "monday_total": monday_total,  # retained for reference / debugging
             "new": new_count,
             "legacy": legacy_count,
             "new_plus_legacy": new_count + legacy_count,
@@ -298,7 +318,11 @@ async def cohort_summary(
             "source": "convertkit" if (new_count + legacy_count) else "monday",
         },
         "tiers": [
-            {"tier": t, "count": n, "percent": round(n / total * 100, 1) if total else 0.0}
+            {
+                "tier": t,
+                "count": n,
+                "percent": round(n / cohort_total * 100, 1) if cohort_total else 0.0,
+            }
             for t, n in tier_counter.most_common()
         ],
         "specialities": [
@@ -309,15 +333,19 @@ async def cohort_summary(
             "tag": circle_tag_name,
             "cache_available": circle_cache_available,
             "students_on_circle": circle_matched,
-            "students_total": total,
-            "coverage_percent": round(circle_matched / total * 100, 1) if total else 0.0,
+            "students_total": cohort_total,
+            "coverage_percent": (
+                round(circle_matched / cohort_total * 100, 1) if cohort_total else 0.0
+            ),
             "tag_total_in_circle": circle_tagged_total,
             "intros": {
                 "space_id": intros_space_id,
                 "posts_total": intros_total_posts,
                 "students_posted": intros_posters,
-                "students_total": total,
-                "coverage_percent": round(intros_posters / total * 100, 1) if total else 0.0,
+                "students_total": cohort_total,
+                "coverage_percent": (
+                    round(intros_posters / cohort_total * 100, 1) if cohort_total else 0.0
+                ),
                 "error": intros_error,
             },
         },

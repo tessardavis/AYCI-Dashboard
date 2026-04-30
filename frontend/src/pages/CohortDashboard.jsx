@@ -101,11 +101,11 @@ export default function CohortDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               icon={Users}
-              label="Total (Kit)"
-              value={data.totals.new_plus_legacy || data.totals.students}
+              label="Cohort total"
+              value={data.totals.students}
               sub={
                 data.totals.new_plus_legacy
-                  ? `New + legacy (Monday board has ${data.totals.students})`
+                  ? `New signups in this launch (Kit + Monday)`
                   : "from Academy Members board"
               }
               testid="stat-total"
@@ -114,7 +114,7 @@ export default function CohortDashboard() {
               icon={Users}
               label="New (Kit)"
               value={data.totals.new}
-              sub={`${pct(data.totals.new, data.totals.new_plus_legacy)} of cohort`}
+              sub={`${pct(data.totals.new, data.totals.new_plus_legacy)} of Kit`}
               tone="emerald"
               testid="stat-new"
             />
@@ -122,7 +122,7 @@ export default function CohortDashboard() {
               icon={Users}
               label="Legacy (Kit)"
               value={data.totals.legacy}
-              sub={`${pct(data.totals.legacy, data.totals.new_plus_legacy)} of cohort`}
+              sub={`${pct(data.totals.legacy, data.totals.new_plus_legacy)} of Kit`}
               tone="violet"
               testid="stat-legacy"
             />
@@ -130,7 +130,7 @@ export default function CohortDashboard() {
               icon={CircleDot}
               label="On Circle"
               value={`${data.circle.students_on_circle} / ${data.circle.students_total}`}
-              sub={`${data.circle.coverage_percent}% joined (tag "${data.circle.tag}")`}
+              sub={`${data.circle.coverage_percent}% of cohort (tag "${data.circle.tag}")`}
               tone="sky"
               testid="stat-circle"
             />
@@ -193,34 +193,6 @@ export default function CohortDashboard() {
                 </div>
               )}
             </section>
-
-            {/* Speciality */}
-            <section
-              className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm lg:col-span-2"
-              data-testid="speciality-breakdown"
-            >
-              <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-4">
-                Top specialities
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                {data.specialities.map((s) => (
-                  <div
-                    key={s.speciality}
-                    className="bg-slate-50 border border-[var(--ayci-border)] rounded p-3"
-                  >
-                    <div className="text-xs text-[var(--ayci-ink-muted)]">{s.speciality}</div>
-                    <div className="font-display font-bold text-xl text-[var(--ayci-ink)] mt-0.5">
-                      {s.count}
-                    </div>
-                  </div>
-                ))}
-                {data.specialities.length === 0 && (
-                  <div className="col-span-full text-sm text-[var(--ayci-ink-muted)] italic">
-                    No speciality data
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
 
           {/* Circle detail */}
@@ -233,7 +205,7 @@ export default function CohortDashboard() {
                 Circle community join rate
               </h2>
               <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
-                Of the {data.circle.students_total} {cohort} students,{" "}
+                Of the {data.circle.students_total} new {cohort} signups,{" "}
                 <span className="text-[var(--ayci-ink)] font-semibold">
                   {data.circle.students_on_circle}
                 </span>{" "}
@@ -300,6 +272,34 @@ export default function CohortDashboard() {
               </section>
             )}
           </div>
+
+          {/* Speciality (bottom) */}
+          <section
+            className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+            data-testid="speciality-breakdown"
+          >
+            <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)] mb-4">
+              Top specialities
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {data.specialities.map((s) => (
+                <div
+                  key={s.speciality}
+                  className="bg-slate-50 border border-[var(--ayci-border)] rounded p-3"
+                >
+                  <div className="text-xs text-[var(--ayci-ink-muted)]">{s.speciality}</div>
+                  <div className="font-display font-bold text-xl text-[var(--ayci-ink)] mt-0.5">
+                    {s.count}
+                  </div>
+                </div>
+              ))}
+              {data.specialities.length === 0 && (
+                <div className="col-span-full text-sm text-[var(--ayci-ink-muted)] italic">
+                  No speciality data
+                </div>
+              )}
+            </div>
+          </section>
         </>
       )}
     </div>
