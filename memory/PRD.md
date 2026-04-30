@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-04-29 — Cohort Dashboard tweaks (round 2) + Locum/Substantive on PTU
+- **Cohort total = new + legacy from ConvertKit** (421 = 173 new + 248 legacy). Two denominators are now exposed: `students` (= new+legacy, headline) and `monday_cohort_total` (the subset on Monday with full data, used for tier/milestone/speciality % so they sum to 100% within the visible Monday population).
+- **On Circle / Intros denominators** = cohort total (421). Match logic now intersects `(new_emails ∪ legacy_emails)` against Circle membership tags / intro-space posters.
+- **Tier split is now compact** — replaced 5 tall bars with a single horizontal stacked bar + chip legend (≈60% less vertical space). Tooltips still show count + %.
+- **Upcoming Interviews → Private Tier Utilisation** rows now show a "LOCUM" / "SUBSTANTIVE" pill under each student name, sourced from Monday column `color_mkr7wahg` (Interview Type). Locum badge is amber, Substantive grey for instant scannability.
+
 ### 2026-04-29 — Cohort Dashboard fixes: new-signup denominator + specialty to bottom
 - **Cohort total now = new signups in this launch** (ConvertKit `Cohort - New` tag ∩ Monday Cohort-Joined), not the raw Monday board headcount. All downstream stats (tier %, milestone %, Circle coverage, intros coverage) now use this denominator. Backend `cohort_summary()` filters per-item loops to new signups only; legacy students no longer skew tier / speciality / milestone counts.
 - **Stat cards updated**: "Total (Kit)" → "Cohort total" (value = new-signup total, subtitle "New signups in this launch"). "New (Kit)" and "Legacy (Kit)" subtitles clarified to "X% of Kit". "On Circle" subtitle now says "% of cohort (tag …)".

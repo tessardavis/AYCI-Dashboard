@@ -211,10 +211,12 @@ async def cohort_summary(
 
     tier_counter: Counter = Counter()
     emails: set[str] = set()  # all Monday emails for this cohort (new + legacy)
-    new_cohort_emails: set[str] = set()  # Monday ∩ ConvertKit Cohort-New
+    cohort_emails: set[str] = set()  # Monday ∩ (ConvertKit Cohort-New ∪ Cohort-Legacy)
     active_cohort_count = 0
     milestone_totals = [0 for _ in MILESTONE_COLS]
     specialities: Counter = Counter()
+
+    cohort_tag_emails = new_emails | legacy_emails
 
     for it in items:
         cols = it.get("column_values") or []
@@ -222,17 +224,18 @@ async def cohort_summary(
         if email:
             emails.add(email)
 
-        # Cohort = new signups only. If we have a new-tag list, skip legacy
-        # students for the per-tier / per-speciality / milestone counts.
-        is_new = email in new_emails if new_emails else True
-        if is_new and email:
-            new_cohort_emails.add(email)
+        # Cohort = new + legacy signups (i.e. anyone tagged as part of this
+        # launch in ConvertKit). When ConvertKit data isn't loaded yet we
+        # fall back to the Monday cohort filter only.
+        is_in_cohort = email in cohort_tag_emails if cohort_tag_emails else True
+        if is_in_cohort and email:
+            cohort_emails.add(email)
 
         if _txt(cols, COL_IN_ACTIVE_COHORT).lower() == "yes":
             active_cohort_count += 1
 
-        # Skip non-new students for the breakdown stats
-        if not is_new:
+        # Skip non-cohort students for the breakdown stats
+        if not is_in_cohort:
             continue
 
         # Tier split (may contain multiple comma-separated values — take primary)
@@ -250,19 +253,29 @@ async def cohort_summary(
             if _txt(cols, cid).strip().lower() == "yes":
                 milestone_totals[i] += 1
 
-    # The denominator for all cohort stats: count of new signups actually on
-    # the Monday board for this cohort (Monday ∩ ConvertKit Cohort-New). Falls
-    # back to the Monday total when ConvertKit data isn't available.
-    cohort_total = len(new_cohort_emails) if new_emails else monday_total
+    # Two denominators:
+    # - `cohort_total` = new + legacy (the team's headline "cohort size") —
+    #   used for the top stat card and the On Circle / Intros coverage.
+    # - `monday_cohort_total` = the subset of those who are also on the
+    #   Monday board for this cohort — used for tier/milestone/speciality
+    #   breakdowns so percentages sum within the visible Monday data.
+    if cohort_tag_emails:
+        cohort_total = new_count + legacy_count
+        monday_cohort_total = len(cohort_emails)
+    else:
+        cohort_total = monday_total
+        monday_cohort_total = monday_total
 
-    # Circle cross-reference — count only students who are in the new-signup
-    # cohort (matches the team's definition of "cohort total").
+    # Circle cross-reference — count any cohort-tagged student (new + legacy
+    # from ConvertKit) who's on Circle with the cohort tag. Uses the full
+    # cohort set (not just Monday subset) so the denominator matches the
+    # headline cohort total.
     circle_tag_name = circle_tag or _derive_circle_tag(cohort_label)
     circle_matched = 0
     circle_tagged_total = 0
     circle_cache_available = False
 
-    cohort_email_set = new_cohort_emails if new_emails else emails
+    full_cohort_emails = (new_emails | legacy_emails) if cohort_tag_emails else emails
 
     doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
     if doc:
@@ -273,7 +286,7 @@ async def cohort_summary(
             tags = m.get("member_tags") or []
             if any(t and t.strip().lower() == circle_tag_name.strip().lower() for t in tags):
                 circle_tagged_total += 1
-        for email in cohort_email_set:
+        for email in full_cohort_emails:
             m = by_email.get(email)
             if not m:
                 continue
@@ -285,8 +298,14 @@ async def cohort_summary(
         {
             "label": lbl,
             "completed": milestone_totals[i],
-            "total": cohort_total,
-            "percent": round(milestone_totals[i] / cohort_total * 100, 1) if cohort_total else 0.0,
+            # Milestones come from Monday columns — use the Monday subset
+            # as denominator so percentages reflect the visible population.
+            "total": monday_cohort_total,
+            "percent": (
+                round(milestone_totals[i] / monday_cohort_total * 100, 1)
+                if monday_cohort_total
+                else 0.0
+            ),
         }
         for i, (_, lbl) in enumerate(MILESTONE_COLS)
     ]
@@ -300,16 +319,17 @@ async def cohort_summary(
             intros_emails = await _circle_space_post_authors(int(intros_space_id))
             intros_total_posts = intros_emails.get("post_count", 0)
             poster_emails = intros_emails.get("emails", set())
-            intros_posters = len(cohort_email_set & poster_emails)
+            intros_posters = len(full_cohort_emails & poster_emails)
         except Exception as e:
             intros_error = str(e)
 
     return {
         "cohort": cohort_label,
         "totals": {
-            # `students` is the authoritative cohort size — new signups only.
+            # `students` = new + legacy from Kit (the headline cohort size).
             "students": cohort_total,
-            "monday_total": monday_total,  # retained for reference / debugging
+            "monday_cohort_total": monday_cohort_total,
+            "monday_total": monday_total,
             "new": new_count,
             "legacy": legacy_count,
             "new_plus_legacy": new_count + legacy_count,
@@ -321,7 +341,11 @@ async def cohort_summary(
             {
                 "tier": t,
                 "count": n,
-                "percent": round(n / cohort_total * 100, 1) if cohort_total else 0.0,
+                "percent": (
+                    round(n / monday_cohort_total * 100, 1)
+                    if monday_cohort_total
+                    else 0.0
+                ),
             }
             for t, n in tier_counter.most_common()
         ],

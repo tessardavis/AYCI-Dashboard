@@ -43,6 +43,7 @@ COL_VIDEOS_SUBMITTED = "numeric_mkxfq65c"  # Number column "Videos submitted"
 COL_NAME = "name"
 COL_SPECIALITY = "color_mkqx20m0"
 COL_HOSPITAL = "color_mkqxckby"
+COL_INTERVIEW_TYPE = "color_mkr7wahg"  # Status: "Locum" / "Substantive"
 
 # Tiers we care about
 PRIVATE_PLUS_LABELS = {"Academy Private Plus", "Upgrade Private Plus", "Silver", "Gold"}
@@ -90,7 +91,7 @@ async def _fetch_private_tier_with_interviews(days: int) -> list[dict]:
           cursor
           items {
             id name url
-            column_values(ids: ["%s","%s","%s","%s","%s","%s"]) {
+            column_values(ids: ["%s","%s","%s","%s","%s","%s","%s"]) {
               id text
             }
           }
@@ -99,7 +100,7 @@ async def _fetch_private_tier_with_interviews(days: int) -> list[dict]:
     }
     """ % (
         COL_INTERVIEW_DATE, COL_TIER, COL_EMAIL,
-        COL_VIDEOS_SUBMITTED, COL_SPECIALITY, COL_HOSPITAL,
+        COL_VIDEOS_SUBMITTED, COL_SPECIALITY, COL_HOSPITAL, COL_INTERVIEW_TYPE,
     )
 
     items: list[dict] = []
@@ -151,6 +152,7 @@ async def _fetch_private_tier_with_interviews(days: int) -> list[dict]:
             "videos_submitted": videos,
             "speciality": cvs.get(COL_SPECIALITY) or "",
             "hospital": cvs.get(COL_HOSPITAL) or "",
+            "interview_type": cvs.get(COL_INTERVIEW_TYPE) or "",
         })
     out.sort(key=lambda s: s["interview_date"])
     return out

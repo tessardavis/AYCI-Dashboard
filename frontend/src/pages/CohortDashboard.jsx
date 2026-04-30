@@ -105,7 +105,7 @@ export default function CohortDashboard() {
               value={data.totals.students}
               sub={
                 data.totals.new_plus_legacy
-                  ? `New signups in this launch (Kit + Monday)`
+                  ? `New + legacy in this launch`
                   : "from Academy Members board"
               }
               testid="stat-total"
@@ -136,37 +136,56 @@ export default function CohortDashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Tier split */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Tier split — compact */}
             <section
-              className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+              className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
               data-testid="tier-split"
             >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display font-bold text-base text-[var(--ayci-ink)]">
                   Tier split
                 </h2>
                 <span className="text-xs text-[var(--ayci-ink-muted)]">
                   {data.tiers.length} tiers
                 </span>
               </div>
-              <div className="space-y-3">
+              {/* Stacked horizontal bar */}
+              <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100" data-testid="tier-stacked-bar">
                 {data.tiers.map((t) => (
-                  <Bar
+                  <div
                     key={t.tier}
-                    label={t.tier}
-                    value={t.count}
-                    total={data.totals.students}
-                    percent={t.percent}
-                    color={tierColor(t.tier)}
+                    title={`${t.tier}: ${t.count} (${t.percent}%)`}
+                    style={{ width: `${t.percent}%`, backgroundColor: tierColor(t.tier) }}
                   />
                 ))}
               </div>
+              {/* Compact chip legend */}
+              <ul className="mt-3 space-y-1.5">
+                {data.tiers.map((t) => (
+                  <li
+                    key={t.tier}
+                    className="flex items-center justify-between text-xs"
+                    data-testid={`tier-row-${t.tier}`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: tierColor(t.tier) }}
+                      />
+                      <span className="truncate text-[var(--ayci-ink)]">{t.tier}</span>
+                    </span>
+                    <span className="text-[var(--ayci-ink-muted)] tabular-nums shrink-0 ml-2">
+                      {t.count} · {t.percent}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </section>
 
             {/* Milestone progress */}
             <section
-              className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm"
+              className="bg-white border border-[var(--ayci-border)] rounded-lg p-5 shadow-sm lg:col-span-2"
               data-testid="milestone-progress"
             >
               <div className="flex items-center justify-between mb-4">
@@ -205,7 +224,7 @@ export default function CohortDashboard() {
                 Circle community join rate
               </h2>
               <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
-                Of the {data.circle.students_total} new {cohort} signups,{" "}
+                Of the {data.circle.students_total} {cohort} cohort students (new + legacy),{" "}
                 <span className="text-[var(--ayci-ink)] font-semibold">
                   {data.circle.students_on_circle}
                 </span>{" "}

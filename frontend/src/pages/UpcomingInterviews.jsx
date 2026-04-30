@@ -647,9 +647,21 @@ function FlaggedRow({ student, okay = false }) {
         >
           {student.name}
         </a>
-        {student.speciality && (
-          <div className="text-[11px] text-[var(--ayci-ink-muted)]">{student.speciality}</div>
-        )}
+        <div className="text-[11px] text-[var(--ayci-ink-muted)] flex items-center gap-1.5 flex-wrap">
+          {student.interview_type && (
+            <span
+              className={
+                "uppercase tracking-wider font-semibold text-[9px] px-1.5 py-0.5 rounded " +
+                (student.interview_type.toLowerCase() === "locum"
+                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                  : "bg-slate-100 text-slate-700 border border-slate-200")
+              }
+            >
+              {student.interview_type}
+            </span>
+          )}
+          {student.speciality && <span>{student.speciality}</span>}
+        </div>
       </td>
       <td className="px-3 py-2.5">
         <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 border rounded-full font-semibold ${tierColor}`}>
