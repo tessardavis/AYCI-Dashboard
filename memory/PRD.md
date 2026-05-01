@@ -13,6 +13,18 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-01 — Pulse Score (team-health composite) + Pending Circle Joins UI verified
+- **Pulse Score**: new top-of-page card on the Weekly Scorecard. Single 0–100 score amalgamating four pillars (each scored /25):
+  1. **Scorecard goals** — % of latest-week metrics on-track.
+  2. **Quarterly rocks** — % of active-quarter rocks NOT off-track.
+  3. **SLA breaches** — Circle posts >48 h unanswered (each docks 3 pts, floor 0).
+  4. **At-risk students** — high-spend dormant students (each docks 1 pt, floor 0).
+  Tier bands: ≥80 Healthy (emerald), 60-79 Watch (amber), <60 At risk (rose). Card shows a gradient ring with the score, the tier badge, "Week of YYYY-MM-DD", and 4 mini-pillar tiles each with score, mini progress bar, and human-readable label (e.g. "10 of 14 scorecard goals missed", "58 high-spend students dormant on Circle").
+  - New backend module `/app/backend/pulse_score.py` + route `/api/pulse-score` (in `routes/pulse.py`). All inputs reuse existing caches (coach_activity, at_risk_cache) so the endpoint is sub-100ms after warm caches.
+  - Frontend component `/app/frontend/src/components/PulseCard.jsx` with `data-testid` selectors (`pulse-card`, `pulse-tier`, `pulse-pillar-{key}`).
+  - Tests: `/app/backend/tests/test_pulse_score.py` validates shape, score range, label values, and pillar-sum invariant.
+- **Pending Circle Joins** (verified rendering): "Still to join Circle" 60-count banner on the Cohort Dashboard with VIP/Academy Private Plus/Academy/(unknown) tier chips, plus a chase-list table at the bottom (Name, Tier, Email, Has Circle account?). Sorted by tier severity. Live: 60 cohort students still missing the "Apr '26" tag.
+
 ### 2026-04-30 — Becky Platt linked + Slack SLA digest + CSV scorecard export
 - **Becky Platt team_member**: idempotent migration `_ensure_becky_team_member()` runs on startup. Inserts a `team_members` row (`name="Becky Platt"`, `role_title="Coach"`) if missing, then links her existing user. Becky can now edit her own rocks. Verified: `team_member` row exists, user `team_member_id` populated.
 - **Slack SLA digest**:
