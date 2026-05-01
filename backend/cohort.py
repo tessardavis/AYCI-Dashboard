@@ -215,6 +215,7 @@ async def cohort_summary(
     active_cohort_count = 0
     milestone_totals = [0 for _ in MILESTONE_COLS]
     specialities: Counter = Counter()
+    monday_by_email: dict[str, dict] = {}
 
     cohort_tag_emails = new_emails | legacy_emails
 
@@ -253,6 +254,14 @@ async def cohort_summary(
             if _txt(cols, cid).strip().lower() == "yes":
                 milestone_totals[i] += 1
 
+        # Stash for the "still to join Circle" list
+        if email:
+            monday_by_email[email] = {
+                "name": (it.get("name") or "").strip(),
+                "tier": first_tier,
+                "monday_url": it.get("url"),
+            }
+
     # Two denominators:
     # - `cohort_total` = new + legacy (the team's headline "cohort size") —
     #   used for the top stat card and the On Circle / Intros coverage.
@@ -274,8 +283,11 @@ async def cohort_summary(
     circle_matched = 0
     circle_tagged_total = 0
     circle_cache_available = False
+    circle_emails_with_tag: set[str] = set()  # cohort emails actually on Circle with cohort tag
 
     full_cohort_emails = (new_emails | legacy_emails) if cohort_tag_emails else emails
+
+    by_email: dict[str, dict] = {}
 
     doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
     if doc:
@@ -293,6 +305,51 @@ async def cohort_summary(
             tags = m.get("member_tags") or []
             if any(t and t.strip().lower() == circle_tag_name.strip().lower() for t in tags):
                 circle_matched += 1
+                circle_emails_with_tag.add(email)
+
+    # ---- "Still to join Circle" — the full chase list ---------------------
+    # Anyone in the cohort (new + legacy from Kit) who isn't on Circle with
+    # the cohort tag yet. We try to enrich each row with name + tier from
+    # Monday; if they're not on Monday's April-26 board we fall back to the
+    # Circle directory's first/last name (and "(unknown)" tier).
+    pending_emails = sorted(full_cohort_emails - circle_emails_with_tag)
+    pending_list: list[dict] = []
+    pending_tier_counter: Counter = Counter()
+    for email in pending_emails:
+        info = monday_by_email.get(email) or {}
+        circle_member = by_email.get(email) or {}
+        if not info.get("name"):
+            cm_name = (
+                circle_member.get("name")
+                or " ".join(
+                    filter(None, [
+                        circle_member.get("first_name"),
+                        circle_member.get("last_name"),
+                    ])
+                )
+                or ""
+            ).strip()
+            info = {"name": cm_name, "tier": "(unknown)", "monday_url": None}
+        tier = info.get("tier") or "(unknown)"
+        # Has a Circle account (any tag) but not the cohort tag — useful to know
+        on_circle_no_tag = email in by_email
+        pending_tier_counter[tier] += 1
+        pending_list.append({
+            "email": email,
+            "name": info.get("name") or "",
+            "tier": tier,
+            "monday_url": info.get("monday_url"),
+            "has_circle_account": on_circle_no_tag,
+        })
+    # Sort: highest-tier-first (VIP / Private Plus / Boost / Academy), name asc within tier
+    _tier_priority = {
+        "VIP": 0, "Upgrade VIP": 0,
+        "Private Plus": 1, "Academy Private Plus": 1, "Upgrade Private Plus": 1,
+        "Boost": 2, "Go Plus": 2,
+        "Academy": 3,
+        "(no tier)": 4, "(unknown)": 5,
+    }
+    pending_list.sort(key=lambda r: (_tier_priority.get(r["tier"], 6), r["name"].lower()))
 
     milestones_payload = [
         {
@@ -362,6 +419,17 @@ async def cohort_summary(
                 round(circle_matched / cohort_total * 100, 1) if cohort_total else 0.0
             ),
             "tag_total_in_circle": circle_tagged_total,
+            "pending": {
+                "count": len(pending_list),
+                "by_tier": [
+                    {"tier": t, "count": n}
+                    for t, n in sorted(
+                        pending_tier_counter.items(),
+                        key=lambda x: _tier_priority.get(x[0], 6),
+                    )
+                ],
+                "list": pending_list,
+            },
             "intros": {
                 "space_id": intros_space_id,
                 "posts_total": intros_total_posts,

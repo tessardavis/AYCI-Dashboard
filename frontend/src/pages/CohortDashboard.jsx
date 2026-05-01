@@ -247,6 +247,42 @@ export default function CohortDashboard() {
                   {data.circle.coverage_percent > 15 ? `${data.circle.coverage_percent}%` : ""}
                 </div>
               </div>
+              {data.circle.pending && data.circle.pending.count > 0 && (
+                <div
+                  className="mt-4 pt-4 border-t border-[var(--ayci-border)]"
+                  data-testid="circle-pending-summary"
+                >
+                  <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+                    <div className="text-xs text-[var(--ayci-ink-muted)]">
+                      Still to join Circle
+                    </div>
+                    <div className="font-display font-bold text-2xl text-rose-600 tabular-nums">
+                      {data.circle.pending.count}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.circle.pending.by_tier.map((t) => (
+                      <span
+                        key={t.tier}
+                        className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border"
+                        style={{
+                          color: tierColor(t.tier),
+                          borderColor: tierColor(t.tier) + "55",
+                          background: tierColor(t.tier) + "11",
+                        }}
+                        data-testid={`pending-tier-${t.tier}`}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ background: tierColor(t.tier) }}
+                        />
+                        {t.tier}
+                        <span className="font-semibold">{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Intros space */}
@@ -291,6 +327,94 @@ export default function CohortDashboard() {
               </section>
             )}
           </div>
+
+          {/* Pending-Circle chase list */}
+          {data.circle.pending && data.circle.pending.list.length > 0 && (
+            <section
+              className="bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm overflow-hidden"
+              data-testid="circle-pending-list"
+            >
+              <div className="px-5 py-4 border-b border-[var(--ayci-border)] bg-rose-50/30">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+                    Still to join Circle ({data.circle.pending.count})
+                  </h2>
+                  <p className="text-xs text-[var(--ayci-ink-muted)]">
+                    Cohort students without the "{data.circle.tag}" tag on Circle.
+                    Sorted by tier (highest first).
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white z-10">
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">
+                      <th className="px-4 py-2 font-semibold">Name</th>
+                      <th className="px-3 py-2 font-semibold">Tier</th>
+                      <th className="px-3 py-2 font-semibold">Email</th>
+                      <th className="px-3 py-2 font-semibold text-center">Has Circle account?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.circle.pending.list.map((s) => (
+                      <tr
+                        key={s.email}
+                        className="border-t border-[var(--ayci-border)] hover:bg-slate-50/50"
+                        data-testid={`pending-row-${s.email}`}
+                      >
+                        <td className="px-4 py-2">
+                          {s.monday_url ? (
+                            <a
+                              href={s.monday_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
+                            >
+                              {s.name || "(name unknown)"}
+                            </a>
+                          ) : (
+                            <span className="font-semibold text-[var(--ayci-ink)]">
+                              {s.name || "(name unknown)"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border"
+                            style={{
+                              color: tierColor(s.tier),
+                              borderColor: tierColor(s.tier) + "55",
+                              background: tierColor(s.tier) + "11",
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{ background: tierColor(s.tier) }}
+                            />
+                            {s.tier}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-[var(--ayci-ink-muted)] font-mono text-xs">
+                          {s.email}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {s.has_circle_account ? (
+                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
+                              Yes — needs tag
+                            </span>
+                          ) : (
+                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
+                              No account
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Speciality (bottom) */}
           <section
