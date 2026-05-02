@@ -83,4 +83,9 @@ export const HERO_PRESETS = {
     accentDot: "rgba(254,215,170,0.35)",
     eyebrowColor: "#FED7AA",
   },
+  spotlight: {
+    gradient: "linear-gradient(135deg, #0F766E 0%, #14B8A6 55%, #06B6D4 100%)",
+    accentDot: "rgba(167,243,208,0.30)",
+    eyebrowColor: "#A7F3D0",
+  },
 };

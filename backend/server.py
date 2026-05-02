@@ -1093,12 +1093,13 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     launches as routes_launches,
     notifications as routes_notifications,
     pulse as routes_pulse,
+    spotlight as routes_spotlight,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
     routes_sync.router, routes_students.router, routes_interviews.router,
     routes_coach.router, routes_cohorts.router, routes_launches.router,
-    routes_notifications.router, routes_pulse.router,
+    routes_notifications.router, routes_pulse.router, routes_spotlight.router,
 ):
     app.include_router(_r)
 

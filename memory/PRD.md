@@ -13,6 +13,18 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-02 — Spotlight Coaching board
+- New top-level sidebar item **"Spotlight Coaching"** (✨ icon, teal hero gradient). Shows the next 4 upcoming Circle live sessions classified as **Curriculum Session** or **General/Bonus General Coaching**, each with the students who've submitted the spotlight Tally form for that session.
+- **Per-session card** displays: session name + UK start time, submission deadline (calendar day before), "Open in Circle" deep link, totals (submissions, interview-soon), then a priority-ordered table of: Priority#, Student, Topic they'd like to work on, Interview date / days-until / type, Submitted-on. Top-most row card is highlighted ("Next up" pill, gradient header).
+- **Priority sort**: students with an upcoming interview (any date ≥ today) rank above those without; within that group, soonest interview wins. Rows where the interview is ≤7 days away get a rose/red row tint and rose priority chip — making it impossible for the coach to miss who needs spotlight today.
+- **Cross-reference**: spotlight Tally forms `mY8WPq` (curriculum) + `wgxO1l` (group coaching) don't capture email, so we match against the existing post-interview Tally form (`nGyGj2`) by **full name**, falling back to **first-word only** when the interview form's name field stores just a first name (e.g. "Rami"). Ambiguous first-word matches (multiple distinct names share a first word) are skipped.
+- **Cycle scoping**: each upcoming session only shows submissions made *after the previous same-type session started* and *before the upcoming session starts* — so signups carry through the cycle without polluting future weeks.
+- **"Late" / "Form not done"** badges: submissions made after the calendar-day-before deadline are flagged "Late"; students who claim an interview on the spotlight form but haven't submitted the interview tally form get a "Form not done" amber badge in the Interview column.
+- **Dedup**: Circle returns one event row per host duplicate — we collapse `(name, starts_at)` pairs.
+- **Caching**: 15-min Mongo cache for both Tally form pulls and Circle events list, sub-100 ms after warm.
+- **Backend**: `/app/backend/spotlight.py` + `/app/backend/routes/spotlight.py` (`GET /api/spotlight/sessions?limit=4`). New board id `spotlight` added to `ALL_BOARDS`.
+- **Frontend**: `/app/frontend/src/pages/SpotlightCoaching.jsx` + sidebar entry in `AppShell.jsx`.
+
 ### 2026-05-01 — Pulse Score (team-health composite) + Pending Circle Joins UI verified
 - **Pulse Score**: new top-of-page card on the Weekly Scorecard. Single 0–100 score amalgamating four pillars (each scored /25):
   1. **Scorecard goals** — % of latest-week metrics on-track.

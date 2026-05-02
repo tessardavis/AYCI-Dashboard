@@ -27,6 +27,7 @@ ALL_BOARDS = [
     "students",
     "at_risk",
     "coach_activity",
+    "spotlight",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]
 
