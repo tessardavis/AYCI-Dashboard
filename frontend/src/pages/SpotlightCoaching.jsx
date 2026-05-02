@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Calendar, Loader2, RefreshCw, ExternalLink, AlertCircle, Clock, Users, Award } from "lucide-react";
+import { Calendar, Loader2, RefreshCw, ExternalLink, AlertCircle, Clock, Users, Award, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -119,6 +119,28 @@ export default function SpotlightCoaching() {
 function SessionCard({ session, primary }) {
   const label = SESSION_LABEL[session.session_type] || "Session";
   const badge = SESSION_BADGE[session.session_type] || "bg-slate-50 text-slate-700 border-slate-200";
+  const [sending, setSending] = useState(false);
+
+  const sendSlackPreview = async () => {
+    setSending(true);
+    try {
+      const { data } = await apiClient.post(`/spotlight/slack/test`, null, {
+        params: { session_id: session.id },
+        timeout: 30000,
+      });
+      if (data.sent) {
+        toast.success("Slack preview sent — check your channel");
+      } else {
+        toast.error(
+          data.reason || data.error || "Slack send failed — is SLACK_WEBHOOK_URL set?"
+        );
+      }
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to send");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <section
@@ -184,6 +206,20 @@ function SessionCard({ session, primary }) {
               tone={session.with_interview_total > 0 ? "rose" : "slate"}
               testid={`spotlight-stat-interviews-${session.id}`}
             />
+            <button
+              onClick={sendSlackPreview}
+              disabled={sending}
+              data-testid={`spotlight-slack-preview-${session.id}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-semibold border border-[var(--ayci-border)] bg-white hover:border-[var(--ayci-teal)] hover:text-[var(--ayci-teal)] transition-colors disabled:opacity-50"
+              title="Send a preview of this session's reminder to Slack right now"
+            >
+              {sending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Send className="w-3 h-3" />
+              )}
+              {sending ? "Sending…" : "Slack preview"}
+            </button>
           </div>
         </div>
       </div>
