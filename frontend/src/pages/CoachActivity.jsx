@@ -138,8 +138,8 @@ function CircleSpaceCard({ space, primaryNoun }) {
           empty="No student has exceeded the 3-per-week limit."
           testid="flag-rate-limited"
         >
-          {space.rate_limited.map((rl, i) => (
-            <div key={i} className="text-sm py-1.5 border-b border-amber-100 last:border-0">
+          {space.rate_limited.map((rl) => (
+            <div key={`${rl.name}-${rl.week_start}`} className="text-sm py-1.5 border-b border-amber-100 last:border-0">
               <div className="flex items-center justify-between gap-2">
                 <div className="font-display font-semibold text-[var(--ayci-ink)]">{rl.name}</div>
                 <span className="text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">

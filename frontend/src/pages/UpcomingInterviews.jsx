@@ -396,8 +396,8 @@ function PrivateCard({ student, today }) {
             Show slot-by-slot status
           </summary>
           <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1.5">
-            {[...calls.items, ...mocks.items, ...bonus.items].map((s, i) => (
-              <SlotRow key={i} slot={s} />
+            {[...calls.items, ...mocks.items, ...bonus.items].map((s) => (
+              <SlotRow key={s.label} slot={s} />
             ))}
           </div>
         </details>

@@ -38,7 +38,7 @@ export default function TallyCard({ data }) {
       <div className="space-y-2">
         {history.slice(0, 8).map((h, i) => (
           <div
-            key={i}
+            key={`${h.date}-${h.submitted_at || i}`}
             className="border border-[var(--ayci-border)] rounded-md p-2.5 bg-slate-50/50"
             data-testid={`tally-history-row-${i}`}
           >

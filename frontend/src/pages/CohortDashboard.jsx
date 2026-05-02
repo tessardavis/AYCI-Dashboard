@@ -37,8 +37,8 @@ export default function CohortDashboard() {
         if (Array.isArray(data) && data.length) {
           setLabels(data.map((l) => l.name));
         }
-      } catch {
-        // Fallback to the hardcoded default; non-fatal
+      } catch (e) {
+        console.warn("[cohort] failed to load labels, falling back to default", e);
       }
       load(DEFAULT_COHORT);
     })();

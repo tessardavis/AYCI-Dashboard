@@ -23,8 +23,8 @@ async function _loadMilestones() {
       _milestoneCache = data.milestones;
       return _milestoneCache;
     }
-  } catch {
-    // fallback below
+  } catch (e) {
+    console.warn("[engagement-bar] failed to load milestones, using defaults", e);
   }
   _milestoneCache = DEFAULT_COHORT_MILESTONES;
   return _milestoneCache;
