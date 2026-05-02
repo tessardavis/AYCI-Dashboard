@@ -13,6 +13,20 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-02 — Leaderboard tiebreaker + 30-min Slack reminders for Spotlight Coaching
+- **Leaderboard scoring** (`/app/backend/leaderboard.py`): treats Circle `member_tags` as the badge ledger. Score = total tags − cohort tags − private-tier tags.
+  - Cohort tags detected by regex (`/^[A-Za-z]+ '\d{2}$/`), `AYGI*`, `RFI-*`, "Legacy Cohort".
+  - Private-tier tags = {VIP, Private Tier, Private Plus, Platinum, Gold, 1:1, Boost & Go}.
+  - Only members carrying the active cohort tag (`Apr '26`) get a score; others render as no-leaderboard.
+- **Spotlight prioritisation** now uses the leaderboard as the **secondary sort key** after "interview soon": within the same interview-day group, higher badge count wins. Visible in the UI as an amber "🏆 N" pill next to each student's name, and as the order of rows.
+  - Live: Lorna Clemans (7 badges) jumps above mohamed shaisha (2) and Ala Haqiqi (1) within the 6 May interview group; Lucy Bemand-Qureshi (6 badges) leads the no-interview tail.
+- **30-min Slack reminders** (`/app/backend/spotlight_slack.py`):
+  - APScheduler cron runs every 5 minutes; for any spotlight-eligible Circle session whose `starts_at` falls in the [25, 35]-min window from now, it builds a prioritised digest and POSTs to the existing `SLACK_WEBHOOK_URL`.
+  - Mongo collection `spotlight_reminders_sent` tracks `session_id → sent_at` for idempotency, so each session triggers exactly once even if the cron fires multiple times during the window.
+  - Digest blocks: header (session name + start time + counts), top-8 prioritised students (interview date + days, badge count, late flag), "Open in Circle" link.
+  - New admin-only routes: `POST /api/spotlight/slack/check-now` (run the cron logic on demand) and `POST /api/spotlight/slack/test?session_id=<id>` (force-send for one session, bypassing the time window).
+- **Tests**: `/app/backend/tests/test_leaderboard.py` — 6 passing tests covering cohort/tier detection, basic scoring, list[dict] vs list[str] shapes, edge cases.
+
 ### 2026-05-02 — Spotlight Coaching board
 - New top-level sidebar item **"Spotlight Coaching"** (✨ icon, teal hero gradient). Shows the next 4 upcoming Circle live sessions classified as **Curriculum Session** or **General/Bonus General Coaching**, each with the students who've submitted the spotlight Tally form for that session.
 - **Per-session card** displays: session name + UK start time, submission deadline (calendar day before), "Open in Circle" deep link, totals (submissions, interview-soon), then a priority-ordered table of: Priority#, Student, Topic they'd like to work on, Interview date / days-until / type, Submitted-on. Top-most row card is highlighted ("Next up" pill, gradient header).

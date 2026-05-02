@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 import tally_lookup
+import leaderboard as leaderboard_mod
 
 logger = logging.getLogger(__name__)
 
@@ -291,12 +292,16 @@ def _resolve_interview(name_key: str, index: dict[str, dict]) -> Optional[dict]:
 async def _build_session_payload(
     db, event: dict, form_id: str, interview_index: dict[str, dict],
     cycle_start_iso: Optional[str],
+    leaderboard_index: dict[str, int],
 ) -> dict:
     """Compose one session block: header + eligible students.
 
     `cycle_start_iso` is the ISO-8601 UTC timestamp of when the SPOTLIGHT cycle
     for this session opened — i.e. the start of the previous same-type session,
     or None to fall back to a 14-day floor.
+
+    `leaderboard_index` is `{name_key: badge_score}` from `leaderboard_mod`,
+    keyed by lowercased "first last".
     """
     starts_at = event.get("starts_at") or ""
     session_uk_date = _to_uk_date(starts_at) if starts_at else None
@@ -341,6 +346,11 @@ async def _build_session_payload(
         eligible = (deadline_uk_date is not None) and (sub_uk_date <= deadline_uk_date)
         # Cross-reference with interview tally form
         ix = _resolve_interview(p["name_key"], interview_index) or {}
+        # Leaderboard score (Circle badge count)
+        score = leaderboard_index.get(p["name_key"])
+        if score is None:
+            # Fallback: try first-name only for interview-style first-only matches
+            score = leaderboard_index.get(p["name_key"].split(" ")[0])
         in_window.append({
             **p,
             "submitted_uk_date": sub_uk_date,
@@ -348,16 +358,21 @@ async def _build_session_payload(
             "interview_date": ix.get("interview_date"),
             "interview_type": ix.get("interview_type"),
             "days_until_interview": ix.get("days_until"),
+            "leaderboard_score": score,
         })
 
-    # Sort: interview-soon (smallest days_until) first, then eligible first,
-    # then earliest submission first.
+    # Sort:
+    #   1. interview-soon first (smallest days_until wins; None goes after)
+    #   2. higher leaderboard score wins
+    #   3. eligible-on-time before late
+    #   4. earliest submission first
     def _sort_key(x):
         days = x.get("days_until_interview")
-        # None → push to bottom of "interview soon" tier (use a large number)
+        score = x.get("leaderboard_score")
         return (
             0 if days is not None else 1,
             days if days is not None else 9999,
+            -(score or 0),
             0 if x.get("eligible") else 1,
             x.get("submitted_at") or "",
         )
@@ -419,6 +434,7 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
         }
 
     interview_index = await _interview_lookup_by_name(db)
+    leaderboard_index = await leaderboard_mod.build_leaderboard_index(db, cohort_tag="Apr '26")
 
     # Build a per-(form_id) timeline of past events so we can derive the cycle
     # start (when the *previous* same-type session ran) for each upcoming session.
@@ -448,7 +464,7 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
         candidate_starts = [s for s in candidate_starts if s and s < (event.get("starts_at") or "")]
         cycle_start_iso = max(candidate_starts) if candidate_starts else None
         sessions.append(
-            await _build_session_payload(db, event, form_id, interview_index, cycle_start_iso)
+            await _build_session_payload(db, event, form_id, interview_index, cycle_start_iso, leaderboard_index)
         )
         seen_for_cycle[form_id] = event.get("starts_at") or seen_for_cycle.get(form_id, "")
     return {

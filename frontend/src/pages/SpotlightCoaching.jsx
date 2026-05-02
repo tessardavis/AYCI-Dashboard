@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Calendar, Loader2, RefreshCw, ExternalLink, AlertCircle, Clock, Users } from "lucide-react";
+import { Calendar, Loader2, RefreshCw, ExternalLink, AlertCircle, Clock, Users, Award } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -244,7 +244,19 @@ function StudentRow({ student, index, session }) {
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="font-semibold text-[var(--ayci-ink)]">{student.name}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-[var(--ayci-ink)]">{student.name}</span>
+          {student.leaderboard_score != null && student.leaderboard_score > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold tabular-nums"
+              title="Number of Circle badges (cohort + private tier badges excluded)"
+              data-testid={`spotlight-badges-${session.id}-${index}`}
+            >
+              <Award className="w-3 h-3" />
+              {student.leaderboard_score}
+            </span>
+          )}
+        </div>
         {!student.eligible && (
           <span
             className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold mt-1"
