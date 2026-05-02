@@ -42,7 +42,7 @@ def _format_session_blocks(session: dict) -> dict:
         f"*🎯 Spotlight prep · {name}*\n"
         f"_Starts in ~30 min ({when})_\n"
         f"*{len(students)} submission{'' if len(students) == 1 else 's'}*"
-        f" · {len(eligible)} on-time"
+        f" · {len(eligible)} eligible (submitted on {session.get('deadline_uk_date') or 'the day before'})"
         f" · {session.get('with_interview_total', 0)} have interviews soon"
     )
 
@@ -71,7 +71,13 @@ def _format_session_blocks(session: dict) -> dict:
         if score:
             meta.append(f":star: {score} badges")
         if not s.get("eligible"):
-            meta.append(":hourglass_flowing_sand: late")
+            why = s.get("eligibility")
+            if why == "late":
+                meta.append(":hourglass_flowing_sand: late")
+            elif why == "early":
+                meta.append(":calendar: too early")
+            else:
+                meta.append(":grey_question: not eligible")
         meta_str = (" · " + " · ".join(meta)) if meta else ""
         lines.append(f"{i}. *{name_label}* — _{topic}_{meta_str}")
 

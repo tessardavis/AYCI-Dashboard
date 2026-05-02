@@ -182,7 +182,7 @@ function SessionCard({ session, primary }) {
               {session.deadline_uk_date && (
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
-                  Submission deadline: {formatDate(session.deadline_uk_date)}
+                  Eligible only if submitted: {formatDate(session.deadline_uk_date)}
                 </span>
               )}
               {session.circle_url && (
@@ -293,12 +293,20 @@ function StudentRow({ student, index, session }) {
             </span>
           )}
         </div>
-        {!student.eligible && (
+        {!student.eligible && student.eligibility === "late" && (
           <span
-            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold mt-1"
-            title="Submitted after the calendar-day-before deadline"
+            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold mt-1"
+            title={`Submitted ${student.submitted_uk_date}, after the deadline (${session.deadline_uk_date})`}
           >
             <AlertCircle className="w-3 h-3" /> Late
+          </span>
+        )}
+        {!student.eligible && student.eligibility === "early" && (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold mt-1"
+            title={`Submitted ${student.submitted_uk_date} — needs to be the day before (${session.deadline_uk_date})`}
+          >
+            <AlertCircle className="w-3 h-3" /> Early
           </span>
         )}
       </td>

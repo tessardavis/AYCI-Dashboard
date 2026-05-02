@@ -343,7 +343,18 @@ async def _build_session_payload(
             if session_dt and sub_dt > session_dt:
                 continue  # submitted AFTER session has already started
         sub_uk_date = sub_dt.astimezone(UK_TZ).date().isoformat()
-        eligible = (deadline_uk_date is not None) and (sub_uk_date <= deadline_uk_date)
+        # Eligibility: must be submitted on the deadline UK date itself (the
+        # calendar day before the session). Submissions before or after are
+        # not eligible.
+        if not deadline_uk_date:
+            eligibility = "unknown"
+        elif sub_uk_date == deadline_uk_date:
+            eligibility = "on_time"
+        elif sub_uk_date < deadline_uk_date:
+            eligibility = "early"
+        else:
+            eligibility = "late"
+        eligible = eligibility == "on_time"
         # Cross-reference with interview tally form
         ix = _resolve_interview(p["name_key"], interview_index) or {}
         # Leaderboard score (Circle badge count)
@@ -355,6 +366,7 @@ async def _build_session_payload(
             **p,
             "submitted_uk_date": sub_uk_date,
             "eligible": eligible,
+            "eligibility": eligibility,
             "interview_date": ix.get("interview_date"),
             "interview_type": ix.get("interview_type"),
             "days_until_interview": ix.get("days_until"),
