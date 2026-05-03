@@ -13,6 +13,7 @@ import UpcomingInterviews from "@/pages/UpcomingInterviews";
 import CohortDashboard from "@/pages/CohortDashboard";
 import CoachActivity from "@/pages/CoachActivity";
 import SpotlightCoaching from "@/pages/SpotlightCoaching";
+import CohortLeaderboard from "@/pages/CohortLeaderboard";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import NotAuthorized from "@/pages/NotAuthorized";
@@ -65,6 +66,7 @@ function App() {
                 <Route path="/interviews" element={<BoardGuard board="interviews"><UpcomingInterviews /></BoardGuard>} />
                 <Route path="/coach-activity" element={<BoardGuard board="coach_activity"><CoachActivity /></BoardGuard>} />
                 <Route path="/spotlight" element={<BoardGuard board="spotlight"><SpotlightCoaching /></BoardGuard>} />
+                <Route path="/leaderboard" element={<BoardGuard board="leaderboard"><CohortLeaderboard /></BoardGuard>} />
                 <Route path="/settings" element={<BoardGuard board="settings"><Settings /></BoardGuard>} />
                 <Route path="/profile" element={<Profile />} />
               </Route>

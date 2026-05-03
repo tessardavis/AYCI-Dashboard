@@ -88,4 +88,9 @@ export const HERO_PRESETS = {
     accentDot: "rgba(167,243,208,0.30)",
     eyebrowColor: "#A7F3D0",
   },
+  leaderboard: {
+    gradient: "linear-gradient(135deg, #7C2D12 0%, #C2410C 55%, #F59E0B 100%)",
+    accentDot: "rgba(254,215,170,0.30)",
+    eyebrowColor: "#FED7AA",
+  },
 };

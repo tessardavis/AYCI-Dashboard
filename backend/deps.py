@@ -28,6 +28,7 @@ ALL_BOARDS = [
     "at_risk",
     "coach_activity",
     "spotlight",
+    "leaderboard",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]
 
