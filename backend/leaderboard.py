@@ -54,6 +54,11 @@ EXCLUDED_TAGS_RAW = [
     "Academy Member",
     "Sep-25 early",
     "Apr '26",
+    "RFI-1",
+    "RFI-2",
+    "RFI-3",
+    "RFI-4",
+    "RFI-5",
 ]
 EXCLUDED_TAGS = {t.strip().lower() for t in EXCLUDED_TAGS_RAW}
 
