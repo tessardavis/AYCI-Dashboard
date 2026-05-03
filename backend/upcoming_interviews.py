@@ -173,11 +173,27 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         if not interview_date:
             continue
 
+        # Normalise Monday's free-form Tier dropdown into the canonical group
+        # used by Private Tier Utilisation and the Cohort Dashboard, so the
+        # same student doesn't read "Silver" in one place and "Private Plus"
+        # in another. PRIVATE_PLUS_LABELS / VIP_LABELS are the source of truth
+        # in `private_tier_utilisation.py`; we mirror them here.
+        _PP_LABELS = {"academy private plus", "upgrade private plus", "silver", "gold"}
+        _VIP_LABELS = {"vip", "platinum"}
+        _t_low = tier.strip().lower()
+        if _t_low in _PP_LABELS:
+            tier_group = "Private Plus"
+        elif _t_low in _VIP_LABELS:
+            tier_group = "VIP"
+        else:
+            tier_group = tier  # Academy 1:1, Boost & Go, etc. — keep as-is
+
         base = {
             "id": it.get("id"),
             "name": it.get("name"),
             "email": email,
             "tier": tier,
+            "tier_group": tier_group,
             "interview_date": interview_date,
             "speciality": _txt(COL_SPECIALITY),
             "hospital": _txt(COL_HOSPITAL),

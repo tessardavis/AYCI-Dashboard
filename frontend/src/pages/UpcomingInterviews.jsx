@@ -361,9 +361,17 @@ function PrivateCard({ student, today }) {
             >
               {student.name}
             </a>
-            <span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] uppercase tracking-wider font-semibold">
-              {student.tier}
+            <span
+              className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] uppercase tracking-wider font-semibold"
+              title={student.tier && student.tier !== student.tier_group ? `Sub-tier: ${student.tier}` : undefined}
+            >
+              {student.tier_group || student.tier}
             </span>
+            {student.tier && student.tier_group && student.tier !== student.tier_group && (
+              <span className="text-[10px] text-[var(--ayci-ink-muted)] tracking-wider">
+                · {student.tier}
+              </span>
+            )}
             {student.interview_type && (
               <InterviewTypeBadge type={student.interview_type} />
             )}
@@ -583,9 +591,10 @@ function UtilisationSection({ utilisation, loading, days }) {
         </div>
       )}
 
-      {/* On-track collapsed list */}
+      {/* On-track collapsed list (default open so coaches see everyone with
+          an interview this week, not just the flagged ones) */}
       {onTrack.length > 0 && (
-        <details className="border-t border-[var(--ayci-border)]" data-testid="on-track-details">
+        <details className="border-t border-[var(--ayci-border)]" data-testid="on-track-details" open>
           <summary className="px-5 py-2.5 text-xs uppercase tracking-wider text-[var(--ayci-ink-muted)] cursor-pointer hover:bg-slate-50 flex items-center gap-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
             On track ({onTrack.length})
