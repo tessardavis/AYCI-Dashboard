@@ -7,19 +7,25 @@ import { toast } from "sonner";
 
 export default function Login() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("admin@ayci.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
-    const res = await login(email, password);
-    setLoading(false);
-    if (!res.ok) {
-      toast.error(res.error || "Login failed");
-    } else {
-      toast.success("Welcome back");
+    try {
+      const res = await login(email, password);
+      if (!res.ok) {
+        toast.error(res.error || "Login failed");
+      } else {
+        toast.success("Welcome back");
+      }
+    } catch (err) {
+      toast.error(err?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,7 +75,15 @@ export default function Login() {
 
       {/* Right form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
-        <form onSubmit={handleSubmit} className="w-full max-w-sm" data-testid="login-form">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-sm"
+          data-testid="login-form"
+          name="login"
+          method="post"
+          action="#"
+          autoComplete="on"
+        >
           <div className="mb-10">
             <h2 className="font-display text-3xl font-bold tracking-tight text-[var(--ayci-ink)]">Sign in</h2>
             <p className="text-sm text-[var(--ayci-ink-muted)] mt-2">
@@ -82,8 +96,10 @@ export default function Login() {
               <Label htmlFor="email" className="text-[13px] font-medium">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
-                autoComplete="email"
+                autoComplete="username"
+                inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@ayci.com"
@@ -95,6 +111,7 @@ export default function Login() {
               <Label htmlFor="password" className="text-[13px] font-medium">Password</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 value={password}
