@@ -107,6 +107,20 @@ async def build_leaderboard_index(db, cohort_tag: str = "Apr '26") -> dict[str, 
     return out
 
 
+def member_badges(member_tags: list) -> list[str]:
+    """Return the individual badge names — tags minus cohort tags minus private
+    tier tags. Sorted alphabetically for consistent UI rendering."""
+    out: list[str] = []
+    for t in member_tags or []:
+        name = _tag_name(t)
+        if not name:
+            continue
+        if _is_cohort_tag(name) or _is_private_tier_tag(name):
+            continue
+        out.append(name)
+    return sorted(set(out), key=lambda s: s.lower())
+
+
 async def get_top_leaderboard(db, cohort_tag: str = "Apr '26", limit: int = 25) -> list[dict]:
     """Top-`limit` members on the cohort leaderboard."""
     doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
@@ -119,11 +133,13 @@ async def get_top_leaderboard(db, cohort_tag: str = "Apr '26", limit: int = 25) 
         names = {_tag_name(t).lower() for t in tags}
         if target not in names:
             continue
+        badges = member_badges(tags)
         rows.append({
             "name": m.get("name"),
             "email": (m.get("email") or "").lower(),
             "avatar_url": m.get("avatar_url"),
-            "score": member_badge_score(tags),
+            "score": len(badges),
+            "badges": badges,
         })
-    rows.sort(key=lambda r: -r["score"])
+    rows.sort(key=lambda r: (-r["score"], (r.get("name") or "").lower()))
     return rows[:limit]

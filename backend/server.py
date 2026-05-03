@@ -985,12 +985,27 @@ async def on_startup():
         id="spotlight_reminders",
         replace_existing=True,
     )
+
+    async def _daily_leaderboard_snapshot():
+        import leaderboard_snapshots
+        try:
+            result = await leaderboard_snapshots.snapshot_all_active_cohorts(db)
+            logger.info(f"[scheduler] leaderboard snapshot: {result}")
+        except Exception as e:
+            logger.warning(f"[scheduler] leaderboard snapshot failed: {e}")
+
+    scheduler.add_job(
+        _daily_leaderboard_snapshot,
+        CronTrigger(hour=2, minute=15, timezone=tz),
+        id="daily_leaderboard_snapshot",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
         f"daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20), "
         f"daily_phase_breakdown_refresh (05:25), daily_sla_digest (08:00), "
-        f"spotlight_reminders (every 5 min) — {tz}"
+        f"spotlight_reminders (every 5 min), daily_leaderboard_snapshot (02:15) — {tz}"
     )
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
