@@ -411,14 +411,34 @@ async def _build_session_payload(
 
 
 async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
-    """Return the next `limit` upcoming spotlight-eligible Circle sessions
-    with their submission rosters."""
+    """Return the next `limit` upcoming (or currently-live) spotlight-eligible
+    Circle sessions with their submission rosters.
+
+    A session is considered "still current" until its `ends_at` (or
+    `starts_at + 2h` if no end is published). This way today's session stays
+    visible while it's actually happening — coaches still need to see the
+    prep list during the call."""
     events = await _fetch_circle_events(db)
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_utc = datetime.now(timezone.utc)
+
+    def _still_current(e: dict) -> bool:
+        starts = e.get("starts_at") or ""
+        ends = e.get("ends_at") or ""
+        if not starts:
+            return False
+        try:
+            if ends:
+                end_dt = datetime.fromisoformat(ends.replace("Z", "+00:00"))
+            else:
+                start_dt = datetime.fromisoformat(starts.replace("Z", "+00:00"))
+                end_dt = start_dt + timedelta(hours=2)
+        except ValueError:
+            return False
+        return end_dt > now_utc
+
     upcoming: list[tuple[dict, str]] = []  # (event, form_id)
     for e in events:
-        starts_at = e.get("starts_at") or ""
-        if starts_at <= now_iso:
+        if not _still_current(e):
             continue
         cls = _classify_session(e.get("name") or "")
         if not cls:
@@ -449,15 +469,18 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
     leaderboard_index = await leaderboard_mod.build_leaderboard_index(db, cohort_tag="Apr '26")
 
     # Build a per-(form_id) timeline of past events so we can derive the cycle
-    # start (when the *previous* same-type session ran) for each upcoming session.
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # start (when the *previous* same-type session ran) for each upcoming
+    # session. "Past" here means anything whose `starts_at` is before the
+    # earliest currently-displayed session — today's session is displayed so
+    # its start time acts as the lower cutoff, not `now`.
+    earliest_displayed = upcoming[0][0].get("starts_at") or now_utc.isoformat()
     past_by_form: dict[str, list[str]] = {}
     for e in events:
         cls = _classify_session(e.get("name") or "")
         if not cls:
             continue
         starts = e.get("starts_at") or ""
-        if not starts or starts > now_iso:
+        if not starts or starts >= earliest_displayed:
             continue
         past_by_form.setdefault(cls[1], []).append(starts)
     for fid, lst in past_by_form.items():
