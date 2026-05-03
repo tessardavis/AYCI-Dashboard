@@ -275,17 +275,18 @@ async def cohort_summary(
         cohort_total = monday_total
         monday_cohort_total = monday_total
 
-    # Circle cross-reference — count any cohort-tagged student (new + legacy
-    # from ConvertKit) who's on Circle with the cohort tag. Uses the full
-    # cohort set (not just Monday subset) so the denominator matches the
-    # headline cohort total.
+    # Circle cross-reference — count only NEW signups (not legacy) who joined
+    # Circle for this cohort. Tessa wants the "On Circle" / Pending counts to
+    # measure the launch's job, i.e. getting new customers onto Circle. Legacy
+    # students are already established on Circle from prior cohorts.
     circle_tag_name = circle_tag or _derive_circle_tag(cohort_label)
     circle_matched = 0
     circle_tagged_total = 0
     circle_cache_available = False
-    circle_emails_with_tag: set[str] = set()  # cohort emails actually on Circle with cohort tag
+    circle_emails_with_tag: set[str] = set()  # NEW-cohort emails on Circle with cohort tag
 
     full_cohort_emails = (new_emails | legacy_emails) if cohort_tag_emails else emails
+    new_only_emails = new_emails if cohort_tag_emails else emails  # scope for Circle stats
 
     by_email: dict[str, dict] = {}
 
@@ -298,7 +299,7 @@ async def cohort_summary(
             tags = m.get("member_tags") or []
             if any(t and t.strip().lower() == circle_tag_name.strip().lower() for t in tags):
                 circle_tagged_total += 1
-        for email in full_cohort_emails:
+        for email in new_only_emails:
             m = by_email.get(email)
             if not m:
                 continue
@@ -307,12 +308,12 @@ async def cohort_summary(
                 circle_matched += 1
                 circle_emails_with_tag.add(email)
 
-    # ---- "Still to join Circle" — the full chase list ---------------------
-    # Anyone in the cohort (new + legacy from Kit) who isn't on Circle with
-    # the cohort tag yet. We try to enrich each row with name + tier from
-    # Monday; if they're not on Monday's April-26 board we fall back to the
-    # Circle directory's first/last name (and "(unknown)" tier).
-    pending_emails = sorted(full_cohort_emails - circle_emails_with_tag)
+    # ---- "Still to join Circle" — chase list (NEW signups only) -----------
+    # Limit to new signups (the launch's primary onboarding job). Legacy
+    # students are excluded — they're either already long-time Circle members
+    # or chased through other workflows.
+    circle_denominator = len(new_only_emails)
+    pending_emails = sorted(new_only_emails - circle_emails_with_tag)
     pending_list: list[dict] = []
     pending_tier_counter: Counter = Counter()
     for email in pending_emails:
@@ -414,9 +415,11 @@ async def cohort_summary(
             "tag": circle_tag_name,
             "cache_available": circle_cache_available,
             "students_on_circle": circle_matched,
-            "students_total": cohort_total,
+            "students_total": circle_denominator,
+            "scope": "new_signups_only",
             "coverage_percent": (
-                round(circle_matched / cohort_total * 100, 1) if cohort_total else 0.0
+                round(circle_matched / circle_denominator * 100, 1)
+                if circle_denominator else 0.0
             ),
             "tag_total_in_circle": circle_tagged_total,
             "pending": {

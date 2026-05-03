@@ -130,7 +130,7 @@ export default function CohortDashboard() {
               icon={CircleDot}
               label="On Circle"
               value={`${data.circle.students_on_circle} / ${data.circle.students_total}`}
-              sub={`${data.circle.coverage_percent}% of cohort (tag "${data.circle.tag}")`}
+              sub={`${data.circle.coverage_percent}% of new signups (tag "${data.circle.tag}")`}
               tone="sky"
               testid="stat-circle"
             />
@@ -224,7 +224,7 @@ export default function CohortDashboard() {
                 Circle community join rate
               </h2>
               <p className="text-xs text-[var(--ayci-ink-muted)] mb-4">
-                Of the {data.circle.students_total} {cohort} cohort students (new + legacy),{" "}
+                Of the {data.circle.students_total} new {cohort} signups,{" "}
                 <span className="text-[var(--ayci-ink)] font-semibold">
                   {data.circle.students_on_circle}
                 </span>{" "}
@@ -232,7 +232,7 @@ export default function CohortDashboard() {
                 <span className="text-[var(--ayci-ink)] font-semibold">
                   {data.circle.tag_total_in_circle}
                 </span>{" "}
-                members total (includes legacy/non-cohort folks).
+                members total (legacy + new combined).
               </p>
               <div className="h-5 bg-slate-100 rounded-full overflow-hidden">
                 <div
