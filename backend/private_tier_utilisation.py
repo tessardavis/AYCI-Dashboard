@@ -11,7 +11,7 @@ Allowances (per tier, defined by the team):
                                          (we treat the 60-min as a 5th call)
 
 On-track thresholds:
-  - Private Plus: ≥ 50% of video allowance (≥8 videos) OR ≥ 1 call → ✅
+  - Private Plus: ≥ 50% of video allowance (≥8 videos) AND ≥ 1 call → ✅
   - VIP:           ≥ 2 calls AND ≥ 1/3 of video allowance (≥10 videos) → ✅
 
 Calls are filtered to the four AYCI 1:1 / VIP / Bonus / Mock event types so
@@ -20,6 +20,7 @@ group-coaching events don't accidentally count.
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
@@ -57,7 +58,7 @@ ALLOWANCES = {
 
 # Thresholds
 THRESHOLDS = {
-    "Private Plus": {"min_videos_pct": 0.50, "min_calls": 1, "logic": "or"},
+    "Private Plus": {"min_videos_pct": 0.50, "min_calls": 1, "logic": "and"},
     "VIP":          {"min_videos_pct": 1 / 3, "min_calls": 2, "logic": "and"},
 }
 
@@ -239,7 +240,8 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
         calls = call_counts.get(s["email"], 0)
         videos_pct = round((videos / allow["videos"]) * 100) if allow["videos"] else 0
         calls_pct = round((calls / allow["calls"]) * 100) if allow["calls"] else 0
-        videos_min = int(allow["videos"] * thresh["min_videos_pct"])
+        # math.ceil so that e.g. 50% of 15 = 8 (not int()'s truncated 7).
+        videos_min = math.ceil(allow["videos"] * thresh["min_videos_pct"])
         calls_min = thresh["min_calls"]
         passes_videos = videos >= videos_min
         passes_calls = calls >= calls_min
