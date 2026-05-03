@@ -422,19 +422,21 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
     now_utc = datetime.now(timezone.utc)
 
     def _still_current(e: dict) -> bool:
+        """A session stays on the upcoming list until the END of its calendar
+        day in UK local time — so coaches can still record outcomes the
+        evening of the session (not just during its run window)."""
         starts = e.get("starts_at") or ""
-        ends = e.get("ends_at") or ""
         if not starts:
             return False
         try:
-            if ends:
-                end_dt = datetime.fromisoformat(ends.replace("Z", "+00:00"))
-            else:
-                start_dt = datetime.fromisoformat(starts.replace("Z", "+00:00"))
-                end_dt = start_dt + timedelta(hours=2)
+            start_dt = datetime.fromisoformat(starts.replace("Z", "+00:00"))
         except ValueError:
             return False
-        return end_dt > now_utc
+        uk_date = start_dt.astimezone(UK_TZ).date()
+        end_of_day_uk = datetime.combine(
+            uk_date + timedelta(days=1), datetime.min.time(), tzinfo=UK_TZ
+        )
+        return end_of_day_uk > now_utc
 
     upcoming: list[tuple[dict, str]] = []  # (event, form_id)
     for e in events:
