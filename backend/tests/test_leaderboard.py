@@ -1,70 +1,75 @@
-"""Unit tests for leaderboard.member_badge_score (no DB needed)."""
-import sys, os
+"""Unit tests for leaderboard.member_badge_score (no DB needed).
+
+The scoring rule is: score = count of member_tags NOT in the explicit
+EXCLUDED_TAGS set (cohort + tier + specialty + ops tags)."""
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from leaderboard import (
     member_badge_score,
-    _is_cohort_tag,
-    _is_private_tier_tag,
+    member_badges,
+    _is_excluded,
+    EXCLUDED_TAGS,
 )
 
 
-def test_cohort_tag_detection():
-    assert _is_cohort_tag("Apr '26")
-    assert _is_cohort_tag("Feb '26")
-    assert _is_cohort_tag("April '25")
-    assert _is_cohort_tag("Sep '24")
-    assert _is_cohort_tag("AYGI 25/26")
-    assert _is_cohort_tag("AYGI 25 VIP")
-    assert _is_cohort_tag("RFI-1")
-    assert _is_cohort_tag("RFI-5")
-    assert _is_cohort_tag("Legacy Cohort")
-    # not cohort
-    assert not _is_cohort_tag("Verified!")
-    assert not _is_cohort_tag("Boss")
-    assert not _is_cohort_tag("Daily Prep")
+def test_exclusion_coverage():
+    # Spot-check every category is in the set
+    for t in (
+        "Apr '26", "Feb '26", "Sep '25", "April '25", "Legacy Cohort",
+        "VIP", "Private Tier", "Private Plus", "Platinum", "Gold", "1:1", "Boost & Go",
+        "Surgery", "Radiology", "Paeds", "ED", "Breast surgery", "Anaesthetics",
+        "Coach", "Circle Member", "Academy Member", "Autoreply hold", "Interview week",
+        "Deep Dive 5", "Boss", "Fast Track", "Sep-25 early",
+    ):
+        assert _is_excluded(t), f"{t!r} should be excluded"
 
 
-def test_private_tier_detection():
-    for t in ("VIP", "vip", "Private Tier", "Private Plus", "Platinum",
-              "Gold", "1:1", "Boost & Go"):
-        assert _is_private_tier_tag(t), f"{t} should be private tier"
-    assert not _is_private_tier_tag("Academy Member")
-    assert not _is_private_tier_tag("Circle Member")
+def test_non_excluded_tags_count():
+    # Tags NOT in the list → counted as badges
+    for t in ("Verified!", "Daily Prep", "Video Course Legend", "Baseline TMAY",
+              "USP Guru", "Verified Community Member"):
+        assert not _is_excluded(t), f"{t!r} should NOT be excluded"
 
 
-def test_score_basic():
-    # Mix of all categories — only "Verified!" + "Daily Prep" + "Boss" count
-    tags_dict = [
-        {"name": "Apr '26"},        # cohort -> excluded
-        {"name": "VIP"},             # private tier -> excluded
-        {"name": "Verified!"},       # badge
-        {"name": "Daily Prep"},      # badge
-        {"name": "Boss"},            # badge
+def test_score_ignores_excluded():
+    tags = [
+        {"name": "Apr '26"}, {"name": "VIP"}, {"name": "Paeds"}, {"name": "Boss"},
+        {"name": "Verified!"}, {"name": "Daily Prep"}, {"name": "Baseline TMAY"},
     ]
-    assert member_badge_score(tags_dict) == 3
-
-    # Same data, but as list[str] (slim cache shape)
-    tags_str = ["Apr '26", "VIP", "Verified!", "Daily Prep", "Boss"]
-    assert member_badge_score(tags_str) == 3
+    # 3 real badges (Verified!, Daily Prep, Baseline TMAY), rest all excluded
+    assert member_badge_score(tags) == 3
+    assert member_badges(tags) == ["Baseline TMAY", "Daily Prep", "Verified!"]
 
 
-def test_score_no_badges_only_cohort_and_tier():
-    tags = [{"name": "Apr '26"}, {"name": "Private Tier"}, {"name": "Platinum"}]
+def test_score_zero_for_excluded_only():
+    tags = [{"name": "Apr '26"}, {"name": "VIP"}, {"name": "Paeds"}, {"name": "Coach"}]
+    assert member_badge_score(tags) == 0
+    assert member_badges(tags) == []
+
+
+def test_case_insensitive_exclusion():
+    tags = ["apr '26", "VIP", "paeds"]
     assert member_badge_score(tags) == 0
 
 
-def test_score_handles_empty_and_blank():
+def test_handles_empty_and_none():
     assert member_badge_score([]) == 0
     assert member_badge_score(None) == 0
     assert member_badge_score([{"name": ""}, {"name": None}]) == 0
 
 
-def test_specialty_tags_count_as_badges():
-    """Tessa explicitly named only cohort + private-tier as exclusions, so
-    speciality / 'Verified!' / engagement tags all count as badges."""
-    tags = ["Paeds", "Anaesthetics ", "Verified!", "Apr '26"]
-    assert member_badge_score(tags) == 3
+def test_accepts_str_list_shape():
+    """circle_members_cache stores tags as list[str], not list[dict]."""
+    tags = ["Apr '26", "Verified!", "Daily Prep"]
+    assert member_badge_score(tags) == 2
+    assert member_badges(tags) == ["Daily Prep", "Verified!"]
+
+
+def test_exclusion_set_size_matches_raw_list():
+    """Guard against typos shrinking the exclusion set."""
+    assert len(EXCLUDED_TAGS) == 39
 
 
 if __name__ == "__main__":
