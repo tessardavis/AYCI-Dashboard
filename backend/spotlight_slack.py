@@ -112,12 +112,18 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
 
     body_block = {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}
 
-    actions = []
-    if session.get("circle_url"):
-        actions.append({
+    board_url = (os.environ.get("SPOTLIGHT_BOARD_URL") or "").strip()
+    if not board_url:
+        # Default to the same-origin /spotlight path on the deployed preview.
+        # Tessa can override by setting SPOTLIGHT_BOARD_URL in backend/.env.
+        board_url = "https://ayci-dashboard.preview.emergentagent.com/spotlight"
+
+    actions = [
+        {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"<{session['circle_url']}|Open this session in Circle>"},
-        })
+            "text": {"type": "mrkdwn", "text": f"<{board_url}|Open Spotlight Coaching board →>"},
+        }
+    ]
 
     return {
         "text": f"Spotlight reminder: {name} starts in ~30 min ({len(students)} signups).",
