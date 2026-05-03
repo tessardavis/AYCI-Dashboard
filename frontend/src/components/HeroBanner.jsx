@@ -20,7 +20,7 @@ export default function HeroBanner({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl px-5 py-7 sm:px-8 sm:py-10 shadow-sm border border-[var(--ayci-border)]"
+      className="relative overflow-hidden rounded-2xl px-4 py-4 sm:px-8 sm:py-10 shadow-sm border border-[var(--ayci-border)]"
       style={{ background: gradient }}
       data-testid={testid}
     >
@@ -28,7 +28,7 @@ export default function HeroBanner({
         src="/ayci-icon.png"
         alt=""
         aria-hidden="true"
-        className="absolute -top-16 -right-16 w-[280px] h-[280px] sm:w-[420px] sm:h-[420px] pointer-events-none select-none"
+        className="absolute -top-10 -right-10 w-[180px] h-[180px] sm:w-[420px] sm:h-[420px] pointer-events-none select-none"
         style={{
           filter: "brightness(0) invert(1)",
           opacity: 0.07,
@@ -39,7 +39,7 @@ export default function HeroBanner({
         className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full pointer-events-none"
         style={{ background: `radial-gradient(closest-side, ${accentDot}, transparent)` }}
       />
-      <div className="relative flex items-start justify-between flex-wrap gap-4">
+      <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
           {eyebrow && (
             <div
@@ -51,13 +51,13 @@ export default function HeroBanner({
             </div>
           )}
           <h1
-            className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-white mt-1"
+            className="text-lg sm:text-3xl lg:text-4xl font-display font-bold text-white mt-1 leading-tight"
             data-testid={`${testid}-title`}
           >
             {title}
           </h1>
           {subtitle && (
-            <p className="text-white/75 text-xs sm:text-sm mt-1 max-w-2xl">{subtitle}</p>
+            <p className="hidden sm:block text-white/75 text-xs sm:text-sm mt-1 max-w-2xl">{subtitle}</p>
           )}
         </div>
         {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}

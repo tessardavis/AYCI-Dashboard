@@ -20,6 +20,15 @@ from connectors import MONDAY_URL, _monday_headers, TIMEOUT, CONVERTKIT_V3, _ck_
 
 ACADEMY_MEMBERS_BOARD_ID = 1956295952
 
+# Team-account emails that should NEVER appear on the "still to join Circle"
+# chase list, even when tagged as new signups in ConvertKit. These are AYCI
+# internal accounts used for testing / auto-bots.
+TEAM_ACCOUNT_EMAILS = {
+    "tessadavis06@gmail.com",
+    "tessadavis06+1@gmail.com",
+    "arubyousufwork@gmail.com",
+}
+
 # Column IDs (same as Upcoming Interviews)
 COL_TIER = "dropdown_mkqxgqbq"
 COL_EMAIL = "email_mkqxv0j0"
@@ -311,9 +320,12 @@ async def cohort_summary(
     # ---- "Still to join Circle" — chase list (NEW signups only) -----------
     # Limit to new signups (the launch's primary onboarding job). Legacy
     # students are excluded — they're either already long-time Circle members
-    # or chased through other workflows.
+    # or chased through other workflows. Team test accounts (TEAM_ACCOUNT_EMAILS)
+    # are also excluded so the coach doesn't chase themselves.
     circle_denominator = len(new_only_emails)
-    pending_emails = sorted(new_only_emails - circle_emails_with_tag)
+    pending_emails = sorted(
+        (new_only_emails - circle_emails_with_tag) - TEAM_ACCOUNT_EMAILS
+    )
     pending_list: list[dict] = []
     pending_tier_counter: Counter = Counter()
     for email in pending_emails:
