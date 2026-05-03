@@ -13,6 +13,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -20,27 +21,52 @@ import spotlight
 
 logger = logging.getLogger(__name__)
 
+UK_TZ = ZoneInfo("Europe/London")
+
 
 def _webhook_url() -> Optional[str]:
     url = (os.environ.get("SLACK_WEBHOOK_URL") or "").strip()
     return url or None
 
 
-def _format_session_blocks(session: dict) -> dict:
+def _relative_time_phrase(starts_at: datetime, now: datetime) -> str:
+    """Return a human phrase like "starts in 28 min", "in progress", or
+    "started 45 min ago", computed from `starts_at` vs `now` (both UTC)."""
+    delta_min = int((starts_at - now).total_seconds() / 60)
+    if delta_min >= 1:
+        if delta_min >= 90:
+            hours = round(delta_min / 60, 1)
+            return f"starts in {hours:g} h"
+        return f"starts in {delta_min} min"
+    if delta_min <= -1:
+        ago = -delta_min
+        if ago >= 90:
+            hours = round(ago / 60, 1)
+            return f"started {hours:g} h ago"
+        return f"started {ago} min ago"
+    return "starting now"
+
+
+def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> dict:
     """Build the Slack block payload for a single session."""
     name = session.get("name") or "Spotlight session"
-    starts_at = session.get("starts_at") or ""
+    starts_at_iso = session.get("starts_at") or ""
+    now_utc = now or datetime.now(timezone.utc)
+    uk_label = "—"
+    relative = "(time unknown)"
     try:
-        dt = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
-        when = dt.strftime("%a %d %b · %H:%M UTC")
+        start_dt = datetime.fromisoformat(starts_at_iso.replace("Z", "+00:00"))
+        uk_local = start_dt.astimezone(UK_TZ)
+        uk_label = uk_local.strftime("%a %d %b · %H:%M") + " UK"
+        relative = _relative_time_phrase(start_dt, now_utc)
     except ValueError:
-        when = starts_at[:16]
+        pass
 
     students = session.get("students") or []
     eligible = [s for s in students if s.get("eligible")]
     header = (
         f"*🎯 Spotlight prep · {name}*\n"
-        f"_Starts in ~30 min ({when})_\n"
+        f"_{relative.capitalize()} · {uk_label}_\n"
         f"*{len(students)} submission{'' if len(students) == 1 else 's'}*"
         f" · {len(eligible)} eligible (submitted on {session.get('deadline_uk_date') or 'the day before'})"
         f" · {session.get('with_interview_total', 0)} have interviews soon"

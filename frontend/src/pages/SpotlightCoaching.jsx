@@ -55,6 +55,25 @@ function formatUkDateTime(iso) {
   });
 }
 
+function relativeTimePhrase(iso) {
+  if (!iso) return null;
+  const start = new Date(iso).getTime();
+  const now = Date.now();
+  const min = Math.round((start - now) / 60000);
+  if (Math.abs(min) < 1) return { text: "starting now", tone: "emerald" };
+  if (min > 0) {
+    if (min >= 90) return { text: `starts in ${(min / 60).toFixed(1)} h`, tone: "slate" };
+    if (min >= 60) return { text: `starts in ${Math.round(min / 60)} h`, tone: "slate" };
+    return { text: `starts in ${min} min`, tone: min <= 30 ? "amber" : "slate" };
+  }
+  const ago = -min;
+  const end = iso ? new Date(iso).getTime() + 2 * 3600 * 1000 : 0;
+  const inProgress = end > now;
+  if (inProgress) return { text: `in progress · started ${ago} min ago`, tone: "emerald" };
+  if (ago >= 90) return { text: `started ${(ago / 60).toFixed(1)} h ago`, tone: "slate" };
+  return { text: `started ${ago} min ago`, tone: "slate" };
+}
+
 function formatDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso + "T00:00:00Z");
@@ -243,6 +262,23 @@ function SessionCard({ session, primary, onRecordsChange }) {
                 <Calendar className="w-3.5 h-3.5" />
                 {formatUkDateTime(session.starts_at)} (UK)
               </span>
+              {(() => {
+                const rel = relativeTimePhrase(session.starts_at);
+                if (!rel) return null;
+                const tones = {
+                  emerald: "bg-emerald-50 text-emerald-800 border-emerald-200",
+                  amber: "bg-amber-50 text-amber-800 border-amber-200",
+                  slate: "bg-slate-50 text-slate-700 border-slate-200",
+                };
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border font-semibold ${tones[rel.tone]}`}
+                    data-testid={`spotlight-relative-${session.id}`}
+                  >
+                    {rel.text}
+                  </span>
+                );
+              })()}
               {session.deadline_uk_date && (
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
