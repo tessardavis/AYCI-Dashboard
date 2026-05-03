@@ -222,19 +222,20 @@ def _parse_spotlight_submission(s: dict, qids: dict[str, Optional[str]]) -> Opti
 
 async def _interview_lookup_by_name(db) -> dict[str, dict]:
     """Build `{name_key: {date, type, days_until}}` from the post-interview
-    Tally form. We use the FUTURE-most date >= today (the upcoming interview),
-    not the latest past one.
+    Tally form, prioritising the MOST RECENTLY SUBMITTED entry per person.
 
-    Names on the interview form are often just a first name (e.g. "Rami"), but
-    spotlight submissions have "first + last" (e.g. "Rami Fares"). To get sane
-    matches, we index every submission by *both* the full normalised name and
-    its first word. Lookups try full-name first, then first-word only — but
-    only when the first word is unambiguous (i.e. exactly one person on the
-    interview form has that first word and is in the future)."""
+    Why "most recently submitted" rather than "soonest future date"? When a
+    student reschedules, they submit a fresh tally entry. The latest
+    submission is the source of truth — even if its date is later than an
+    older "ghost" entry that's still in the future. Past dates are dropped
+    only after we've already picked the latest submission.
+    """
     today = datetime.now(UK_TZ).date()
     submissions = await tally_lookup.get_cached_submissions(db)
-    upcoming_by_full: dict[str, list[dict]] = {}
-    upcoming_by_first: dict[str, list[dict]] = {}
+    # Index by (name_key) and (first_word) — collect ALL parses, sorted by
+    # submitted_at desc.
+    by_full: dict[str, list[dict]] = {}
+    by_first: dict[str, list[dict]] = {}
     for s in submissions:
         parsed = tally_lookup._parse_submission(s)
         if not parsed:
@@ -250,30 +251,35 @@ async def _interview_lookup_by_name(db) -> dict[str, dict]:
             dt = datetime.fromisoformat(d).date()
         except ValueError:
             continue
-        if dt < today:
-            continue
         record = {
             "interview_date": dt.isoformat(),
             "interview_type": parsed.get("type"),
             "days_until": (dt - today).days,
+            "submitted_at": parsed.get("submitted_at") or "",
             "_name": name,
         }
-        upcoming_by_full.setdefault(nk, []).append(record)
+        by_full.setdefault(nk, []).append(record)
         first_word = nk.split(" ")[0]
         if first_word:
-            upcoming_by_first.setdefault(first_word, []).append(record)
+            by_first.setdefault(first_word, []).append(record)
 
-    # Pick the soonest interview for each name key
+    # For each name, pick the most recently SUBMITTED entry — but only if its
+    # date is in the future. If the latest submission's date is past, the
+    # student doesn't have an upcoming interview (don't fall back to older
+    # entries; they're stale and the student rescheduled past).
     out: dict[str, dict] = {}
-    for nk, rows in upcoming_by_full.items():
-        rows.sort(key=lambda r: r["interview_date"])
-        out[f"full:{nk}"] = rows[0]
-    for fw, rows in upcoming_by_first.items():
-        # Only use the first-word index when unambiguous (one distinct person)
+    for nk, rows in by_full.items():
+        rows.sort(key=lambda r: r["submitted_at"], reverse=True)
+        latest = rows[0]
+        if latest["days_until"] >= 0:
+            out[f"full:{nk}"] = latest
+    for fw, rows in by_first.items():
         distinct_names = {_norm_name(r["_name"]) for r in rows}
         if len(distinct_names) == 1:
-            rows.sort(key=lambda r: r["interview_date"])
-            out[f"first:{fw}"] = rows[0]
+            rows.sort(key=lambda r: r["submitted_at"], reverse=True)
+            latest = rows[0]
+            if latest["days_until"] >= 0:
+                out[f"first:{fw}"] = latest
     return out
 
 
