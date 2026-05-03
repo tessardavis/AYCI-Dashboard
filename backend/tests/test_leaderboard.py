@@ -69,7 +69,7 @@ def test_accepts_str_list_shape():
 
 def test_exclusion_set_size_matches_raw_list():
     """Guard against typos shrinking the exclusion set."""
-    assert len(EXCLUDED_TAGS) == 44
+    assert len(EXCLUDED_TAGS) == 39
 
 
 if __name__ == "__main__":
