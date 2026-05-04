@@ -13,6 +13,17 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-04 — Support Tickets feature (Phase 1)
+- **New board "Support Tickets"** (`/tickets`): customer service ticket system with full Kanban (Open / In Progress / Waiting on Student / Resolved / Closed) + Table view, search, filters (priority/category/assignee), "My tickets" toggle.
+- **Sources**: Manual entry from the dashboard, **Tally form** (`D4BW1N` "AYCI Support Desk", 73 historical submissions auto-backfilled on startup), and Phase 2 inbox auto-pull (Gmail/Outlook). Tally is dual-fed: 15-min APScheduler poll + public webhook (`POST /api/tickets/tally/webhook`) for near-real-time delivery, both deduped by Tally `submissionId`.
+- **Per-priority SLA**: Urgent=4h, High=24h, Medium=48h, Low=120h. Open/In-Progress/Waiting tickets older than the SLA flag as `overdue` (computed live, no DB writes).
+- **Slack-on-Urgent**: when a ticket is created OR escalated to Urgent, posts a digest to `SLACK_WEBHOOK_URL`. Idempotent via `slack_urgent_sent` flag (resets on every escalation).
+- **Notes thread** per ticket (team-internal). Auto-link from ticket detail to Student Lookup by email.
+- **Weekly Scorecard widget** (`/app/frontend/src/components/SupportTicketsWidget.jsx`): compact card showing Open / Overdue / Resolved-this-week, links to `/tickets`.
+- **Backend**: `/app/backend/tickets.py` (logic + Tally + Slack), `/app/backend/routes/tickets.py` (REST), `/app/backend/models.py` (Ticket models), `/app/backend/server.py` (initial backfill + 15-min sync cron).
+- **Tests**: `/app/backend/tests/test_tickets.py` — 15/15 passing (CRUD, filters, search, notes, Tally sync idempotency, webhook accept/reject/dedup, permissions). Frontend Playwright run passed all flows.
+
+
 ### 2026-05-04 — Cohort pending list + Upcoming Interviews tier accuracy
 - **Cohort "Still to join Circle"** (`/app/backend/cohort.py`): now excludes students whose Monday **"On Circle" status column** (`color_mkqxdbm8`) is manually set to `On Circle, in <cohort> spaces` (e.g. `"On Circle, in Apr '26 spaces"`). The team maintains this column by hand and it's the authoritative join signal — bridges email mismatches between Monday/ConvertKit and Circle (students frequently register on Circle with a different email). Chase-list count on April 26 cohort dropped 39 → 28; previously false-positive students (Veronica Chinchon, Sarah Somerville, Oliver Smith, Maleeha Rafiq, David Maxey, Anirudh Kumar, Adekunle Sobowale) correctly excluded. Lidia Trup remains excluded via existing Boss-badge rule.
 - **Upcoming Interviews pane** (`/app/backend/upcoming_interviews.py`, `/app/backend/private_tier_utilisation.py`): **Silver** and **Gold** removed from `PRIVATE_PLUS_LABELS`. Those were legacy product names; today Silver/Gold students have no private allowances and should render in the Academy pane. `_ACADEMY_EQUIV = {"academy", "silver", "gold"}` is the new routing rule. Verified against Ibtisam Salim, Thomas Elliott, Martin Van Carlen, Claire Crichton-Iannone — all now correctly Academy.
