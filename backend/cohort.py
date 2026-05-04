@@ -317,14 +317,30 @@ async def cohort_summary(
                 circle_matched += 1
                 circle_emails_with_tag.add(email)
 
+    # Build a quick "has Boss badge" set so we can exclude students who have
+    # already landed a job (Boss = job-secured indicator on Circle).
+    boss_emails: set[str] = set()
+    if doc:
+        for m in (doc.get("members") or []):
+            email = (m.get("email") or "").strip().lower()
+            if not email:
+                continue
+            for t in (m.get("member_tags") or []):
+                name = t.get("name") if isinstance(t, dict) else str(t or "")
+                if (name or "").strip().lower() == "boss":
+                    boss_emails.add(email)
+                    break
+
     # ---- "Still to join Circle" — chase list (NEW signups only) -----------
     # Limit to new signups (the launch's primary onboarding job). Legacy
     # students are excluded — they're either already long-time Circle members
     # or chased through other workflows. Team test accounts (TEAM_ACCOUNT_EMAILS)
-    # are also excluded so the coach doesn't chase themselves.
+    # are also excluded so the coach doesn't chase themselves. Students with
+    # the "Boss" badge on Circle are excluded too — they already have a job
+    # and don't need chasing into the cohort space.
     circle_denominator = len(new_only_emails)
     pending_emails = sorted(
-        (new_only_emails - circle_emails_with_tag) - TEAM_ACCOUNT_EMAILS
+        ((new_only_emails - circle_emails_with_tag) - TEAM_ACCOUNT_EMAILS) - boss_emails
     )
     pending_list: list[dict] = []
     pending_tier_counter: Counter = Counter()
