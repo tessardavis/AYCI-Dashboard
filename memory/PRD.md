@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-04 — Universal student matching on Support Tickets + Wati live
+- **Wati WhatsApp Business**: credentials wired (`WATI_BASE_URL=https://live-mt-server.wati.io/480152`, token + phone `+44 20 8058 5289`). API health verified — 39 approved templates flowing. Webhook URL given to user: `https://ayci-dashboard.preview.emergentagent.com/api/wati/webhook`.
+- **Universal ticket → student linker** (`/app/backend/student_match.py`): every ticket now auto-matches to a Monday Academy Member record by email (fast indexed search) OR phone (digit-normalised scan of last 10 digits — handles UK local `07…` vs E.164 `447…` WhatsApp format). Match cached on the ticket under `student_match` + 24h TTL; force-refresh via `POST /api/tickets/{id}/match-student`. Ticket detail modal surfaces a **LINKED STUDENT RECORD** card with tier, cohort, Student Lookup link (fixed `?email=` query param), and Monday deep link.
+- **Circle DMs — NOT available**: documented that Circle's REST API doesn't expose DM inbox/retrieval. Decision: once Gmail auto-pull is live, Circle DM email notifications will naturally flow into tickets.
+
+
 ### 2026-05-04 — Phase 2: Gmail + Wati WhatsApp inbox auto-pull (scaffolding)
 - **Gmail multi-account OAuth** (`/app/backend/gmail_sync.py`, `routes/oauth_gmail.py`): admin connects multiple Gmail inboxes via popup OAuth → 15-min cron polls each inbox → inbound emails (excluding internal team domains) become Support Tickets. Replies on existing Gmail thread auto-append as notes. Attachment metadata captured (filename + size, no body download). Settings → Inboxes admin UI for connect/list/disconnect/manual-sync.
 - **Wati WhatsApp Business** (`/app/backend/wati.py`, `routes/wati.py`): public webhook at `/api/wati/webhook` ingests Wati `messageReceived` events. Threading rule: ONE OPEN ticket per WhatsApp number — new messages append as notes, new tickets created when previous one closed/resolved. Two-way: ticket detail panel shows green WhatsApp reply box (free-text within 24h window) + template dropdown (sourced from `/api/wati/templates`) when out of window. Verified: dedup by message ID, append-on-same-student, idempotent webhook.

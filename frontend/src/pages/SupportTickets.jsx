@@ -677,6 +677,26 @@ function CreateTicketModal({ team, onClose, onSubmit }) {
 function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
   const [note, setNote] = useState("");
   const [posting, setPosting] = useState(false);
+  const [fullTicket, setFullTicket] = useState(ticket);
+  const [matching, setMatching] = useState(false);
+
+  // Fetch the full ticket (triggers backend student-match lookup against Monday)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await apiClient.get(`/tickets/${ticket.id}`);
+        if (!cancelled) setFullTicket(data);
+      } catch {
+        // non-fatal — fall back to the list-view ticket
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ticket.id]);
+
+  const t = fullTicket || ticket;
 
   const handleField = (field, value) => onUpdate(ticket.id, { [field]: value });
 
@@ -708,48 +728,121 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     }
   };
 
-  const studentLookupHref = `/students?q=${encodeURIComponent(ticket.student_email)}`;
+  const match = t.student_match;
+  const matchedEmail = (match && match.matched && match.email) || t.student_email || null;
+  const studentLookupHref = matchedEmail
+    ? `/students?email=${encodeURIComponent(matchedEmail)}`
+    : null;
 
   return (
     <Modal title={null} onClose={onClose} wide testid="ticket-detail-modal">
       <div className="space-y-4">
         <div className="flex items-start gap-3">
-          <PriorityChip priority={ticket.priority} />
-          <StatusChip status={ticket.status} />
-          {ticket.overdue && (
+          <PriorityChip priority={t.priority} />
+          <StatusChip status={t.status} />
+          {t.overdue && (
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
               <AlertTriangle className="w-3 h-3" /> SLA breach
             </span>
           )}
           <span className="ml-auto text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">
-            via {SOURCE_LABEL[ticket.source] || ticket.source}
+            via {SOURCE_LABEL[t.source] || t.source}
           </span>
         </div>
         <h2 className="text-xl font-bold text-[var(--ayci-ink)] font-display leading-tight">
-          {ticket.subject}
+          {t.subject}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label>Student</Label>
-            <div className="font-semibold">{ticket.student_name}</div>
-            <a
-              href={`mailto:${ticket.student_email}`}
-              className="text-sm text-[var(--ayci-accent)] hover:underline flex items-center gap-1 mt-0.5"
-            >
-              <Mail className="w-3 h-3" /> {ticket.student_email}
-            </a>
-            <a
-              href={studentLookupHref}
-              className="text-xs text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-accent)] flex items-center gap-1 mt-1.5"
-              data-testid="ticket-student-lookup-link"
-            >
-              <ExternalLink className="w-3 h-3" /> Open in Student Lookup
-            </a>
+            <div className="font-semibold">{t.student_name}</div>
+            {t.student_email && (
+              <a
+                href={`mailto:${t.student_email}`}
+                className="text-sm text-[var(--ayci-accent)] hover:underline flex items-center gap-1 mt-0.5"
+              >
+                <Mail className="w-3 h-3" /> {t.student_email}
+              </a>
+            )}
+            {t.wati_wa_id && (
+              <div className="text-sm text-emerald-700 flex items-center gap-1 mt-0.5">
+                <MessageCircle className="w-3 h-3" /> {t.wati_wa_id}
+              </div>
+            )}
+
+            {match && match.matched ? (
+              <div
+                className="mt-2 border border-emerald-200 bg-emerald-50 rounded-md p-2 text-xs"
+                data-testid="linked-student-card"
+              >
+                <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-800 mb-0.5">
+                  Linked student record
+                </div>
+                <div className="font-semibold text-[var(--ayci-ink)]">{match.name}</div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {match.tier && (
+                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
+                      {match.tier}
+                    </span>
+                  )}
+                  {match.cohort && (
+                    <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[10px]">
+                      {match.cohort}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-1.5">
+                  {studentLookupHref && (
+                    <a
+                      href={studentLookupHref}
+                      className="text-[var(--ayci-accent)] hover:underline flex items-center gap-1 font-semibold"
+                      data-testid="ticket-student-lookup-link"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Student Lookup
+                    </a>
+                  )}
+                  {match.monday_url && (
+                    <a
+                      href={match.monday_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-accent)] flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Monday
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-[var(--ayci-ink-muted)] italic">
+                Not matched to a student record yet —
+                <button
+                  onClick={async () => {
+                    setMatching(true);
+                    try {
+                      const { data } = await apiClient.post(`/tickets/${t.id}/match-student`);
+                      setFullTicket({ ...t, student_match: data });
+                      if (data.matched) toast.success(`Linked: ${data.name}`);
+                      else toast.info("No matching student found in Monday");
+                    } catch (err) {
+                      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Match failed");
+                    } finally {
+                      setMatching(false);
+                    }
+                  }}
+                  disabled={matching}
+                  className="ml-1 text-[var(--ayci-accent)] hover:underline font-semibold"
+                  data-testid="ticket-match-student-retry"
+                >
+                  {matching ? "searching…" : "search again"}
+                </button>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <Field label="Status">
               <select
-                value={ticket.status}
+                value={t.status}
                 onChange={(e) => handleField("status", e.target.value)}
                 data-testid="ticket-detail-status"
                 className={inputCls}
@@ -763,7 +856,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             </Field>
             <Field label="Priority">
               <select
-                value={ticket.priority}
+                value={t.priority}
                 onChange={(e) => handleField("priority", e.target.value)}
                 data-testid="ticket-detail-priority"
                 className={inputCls}
@@ -777,7 +870,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             </Field>
             <Field label="Category">
               <select
-                value={ticket.category}
+                value={t.category}
                 onChange={(e) => handleField("category", e.target.value)}
                 data-testid="ticket-detail-category"
                 className={inputCls}
@@ -791,15 +884,15 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             </Field>
             <Field label="Assignee">
               <select
-                value={ticket.assignee_id || ""}
+                value={t.assignee_id || ""}
                 onChange={(e) => handleField("assignee_id", e.target.value || null)}
                 data-testid="ticket-detail-assignee"
                 className={inputCls}
               >
                 <option value="">Unassigned</option>
-                {team.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                {team.map((tm) => (
+                  <option key={tm.id} value={tm.id}>
+                    {tm.name}
                   </option>
                 ))}
               </select>
@@ -809,21 +902,21 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         <div>
           <Label>Description</Label>
           <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-sm whitespace-pre-wrap text-[var(--ayci-ink)] max-h-[40vh] overflow-y-auto">
-            {ticket.description || <span className="text-[var(--ayci-ink-muted)] italic">(no description)</span>}
+            {t.description || <span className="text-[var(--ayci-ink-muted)] italic">(no description)</span>}
           </div>
         </div>
 
-        {ticket.source === "whatsapp" && (
-          <WhatsAppReplyPanel ticket={ticket} onSent={onRefresh} />
+        {t.source === "whatsapp" && (
+          <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
         <div>
-          <Label>Internal notes ({(ticket.notes || []).length})</Label>
+          <Label>Internal notes ({(t.notes || []).length})</Label>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-            {(ticket.notes || []).length === 0 ? (
+            {(t.notes || []).length === 0 ? (
               <div className="text-xs text-[var(--ayci-ink-muted)] italic">No notes yet.</div>
             ) : (
-              ticket.notes.map((n) => (
+              t.notes.map((n) => (
                 <div
                   key={n.id}
                   className="border border-slate-200 bg-slate-50 rounded-md p-2.5 text-sm"
@@ -860,8 +953,8 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
 
         <div className="flex justify-between items-center pt-3 border-t border-slate-100 text-[11px] text-[var(--ayci-ink-muted)]">
           <div>
-            Created {formatUk(ticket.created_at)} ·{" "}
-            {ticket.resolved_at ? `Resolved ${formatUk(ticket.resolved_at)}` : `Updated ${formatUk(ticket.updated_at)}`}
+            Created {formatUk(t.created_at)} ·{" "}
+            {t.resolved_at ? `Resolved ${formatUk(t.resolved_at)}` : `Updated ${formatUk(t.updated_at)}`}
           </div>
           <button
             onClick={handleDelete}

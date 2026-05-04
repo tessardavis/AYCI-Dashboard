@@ -93,7 +93,24 @@ async def get_ticket(ticket_id: str, user: dict = Depends(require_board("tickets
     t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Ticket not found")
+    # Lazy-match to Monday so the team sees student context without an extra round-trip
+    try:
+        import student_match as sm
+        await sm.ensure_ticket_student_match(db, t)
+    except Exception:
+        pass
     return tickets_mod.enrich_ticket(t)
+
+
+@router.post("/{ticket_id}/match-student")
+async def match_student_now(ticket_id: str, user: dict = Depends(require_board("tickets"))):
+    """Force-refresh the student_match cache on this ticket."""
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    import student_match as sm
+    match = await sm.ensure_ticket_student_match(db, t, force=True)
+    return match
 
 
 @router.patch("/{ticket_id}")
