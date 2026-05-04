@@ -351,6 +351,7 @@ export default function CohortDashboard() {
                     <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">
                       <th className="px-4 py-2 font-semibold">Name</th>
                       <th className="px-3 py-2 font-semibold">Tier</th>
+                      <th className="px-3 py-2 font-semibold whitespace-nowrap">Signed up</th>
                       <th className="px-3 py-2 font-semibold">Email</th>
                       <th className="px-3 py-2 font-semibold text-center">Has Circle account?</th>
                     </tr>
@@ -393,6 +394,13 @@ export default function CohortDashboard() {
                             />
                             {s.tier}
                           </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {s.signup_date ? (
+                            <SignupDateBadge iso={s.signup_date} />
+                          ) : (
+                            <span className="text-xs text-[var(--ayci-ink-muted)]">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-[var(--ayci-ink-muted)] font-mono text-xs">
                           {s.email}
@@ -509,4 +517,29 @@ function tierColor(tier) {
   if (t.includes("boost")) return "#10b981";
   if (t === "academy") return "#4457B6";
   return "#AF41AC";
+}
+
+function SignupDateBadge({ iso }) {
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return <span className="text-xs text-[var(--ayci-ink-muted)]">—</span>;
+  const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
+  const dateStr = dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  // Tone the badge based on how long they've been waiting:
+  //  ≤7 days → green (just signed up, give it time)
+  //  8-21 days → amber (chase soon)
+  //  >21 days → rose (overdue)
+  let tone = "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (days > 21) tone = "bg-rose-50 text-rose-700 border-rose-200";
+  else if (days > 7) tone = "bg-amber-50 text-amber-700 border-amber-200";
+  return (
+    <span
+      className={`inline-flex flex-col items-start gap-0 px-2 py-0.5 border rounded ${tone}`}
+      title={dt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+    >
+      <span className="text-xs font-semibold tabular-nums leading-tight">{dateStr}</span>
+      <span className="text-[10px] uppercase tracking-wider opacity-80">
+        {days === 0 ? "today" : days === 1 ? "1d ago" : `${days}d ago`}
+      </span>
+    </span>
+  );
 }

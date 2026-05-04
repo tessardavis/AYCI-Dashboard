@@ -205,12 +205,14 @@ async def cohort_summary(
     new_count = 0
     legacy_count = 0
     new_emails: set[str] = set()
+    new_signup_dates: dict[str, str] = {}  # email → ConvertKit subscription created_at
     legacy_emails: set[str] = set()
     kit_error: str | None = None
     if new_tag_id or legacy_tag_id:
         try:
             if new_tag_id:
-                new_emails = await _ck_tag_emails(int(new_tag_id))
+                new_signup_dates = await _ck_tag_email_dates(int(new_tag_id))
+                new_emails = set(new_signup_dates.keys())
                 new_count = len(new_emails)
             if legacy_tag_id:
                 legacy_emails = await _ck_tag_emails(int(legacy_tag_id))
@@ -369,6 +371,7 @@ async def cohort_summary(
             "tier": tier,
             "monday_url": info.get("monday_url"),
             "has_circle_account": on_circle_no_tag,
+            "signup_date": new_signup_dates.get(email),
         })
     # Sort: highest-tier-first (VIP / Private Plus / Boost / Academy), name asc within tier
     _tier_priority = {
@@ -378,7 +381,13 @@ async def cohort_summary(
         "Academy": 3,
         "(no tier)": 4, "(unknown)": 5,
     }
-    pending_list.sort(key=lambda r: (_tier_priority.get(r["tier"], 6), r["name"].lower()))
+    # Sort: tier priority first, then OLDEST signup at top (longest waiting =
+    # most overdue to chase), then name as a final tiebreaker.
+    pending_list.sort(key=lambda r: (
+        _tier_priority.get(r["tier"], 6),
+        r.get("signup_date") or "9999-99-99",
+        r["name"].lower(),
+    ))
 
     milestones_payload = [
         {
@@ -511,6 +520,36 @@ async def _ck_tag_emails(tag_id: int) -> set[str]:
                 email = (sub.get("email_address") or "").strip().lower()
                 if email:
                     out.add(email)
+            total_pages = body.get("total_pages", 1)
+            if page >= total_pages:
+                break
+            page += 1
+    return out
+
+
+async def _ck_tag_email_dates(tag_id: int) -> dict[str, str]:
+    """Like `_ck_tag_emails` but returns `{email: signup_date_iso}`. The
+    signup date is the subscription's `created_at` (when this person was
+    tagged — i.e. when they joined this cohort)."""
+    out: dict[str, str] = {}
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 200:
+            r = await c.get(
+                f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions",
+                params={"api_secret": _ck_secret(), "page": page, "sort_order": "desc"},
+            )
+            r.raise_for_status()
+            body = r.json()
+            subs = body.get("subscriptions", [])
+            if not subs:
+                break
+            for s in subs:
+                sub = s.get("subscriber") or {}
+                email = (sub.get("email_address") or "").strip().lower()
+                created = s.get("created_at") or sub.get("created_at") or ""
+                if email and email not in out:
+                    out[email] = created
             total_pages = body.get("total_pages", 1)
             if page >= total_pages:
                 break
