@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 
 import gmail_sync
 from db import db
-from deps import require_admin
+from deps import require_admin, require_board
 
 router = APIRouter(prefix="/api/oauth/gmail", tags=["gmail-oauth"])
 
@@ -86,6 +86,28 @@ async def remove_inbox(inbox_id: str, admin: dict = Depends(require_admin)):
 @router.post("/sync")
 async def sync_now(admin: dict = Depends(require_admin)):
     return await gmail_sync.sync_all(db)
+
+
+# -------------------------------------------------------- Reply (send)
+@router.post("/tickets/{ticket_id}/reply")
+async def reply(
+    ticket_id: str,
+    payload: dict,
+    user: dict = Depends(require_board("tickets")),
+):
+    """Send an email reply to an email-sourced ticket via the original inbox."""
+    body = (payload.get("body") or "").strip()
+    if not body:
+        raise HTTPException(400, "body required")
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    try:
+        return await gmail_sync.send_reply(db, t, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
 
 
 # -------------------------------------------------------- HTML helper

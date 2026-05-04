@@ -36,11 +36,10 @@ import tickets as tickets_mod
 logger = logging.getLogger(__name__)
 
 
-# Read-only is enough for Phase 1 (pull + classify). We DO NOT need
-# gmail.modify or gmail.labels yet — that comes if the team wants to apply a
-# "ticketed" label back on the message.
+# Read + send. Send is required for two-way reply from the ticket detail.
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -507,3 +506,108 @@ async def sync_all(db) -> dict:
             logger.exception(f"[gmail] sync_all crashed on {inb.get('email')}: {e}")
             totals["errors"] += 1
     return totals
+
+
+# -------------------------------------------------------- Outbound (reply)
+import base64 as _b64  # noqa: E402
+from email.mime.text import MIMEText  # noqa: E402
+from email.utils import formataddr, make_msgid  # noqa: E402
+
+
+async def send_reply(
+    db,
+    ticket: dict,
+    body: str,
+) -> dict:
+    """Send an email reply via the same Gmail inbox that received the ticket.
+    Maintains the Gmail threadId so it appears as a normal in-thread reply.
+
+    Ticket must have been ingested by this module (source='email',
+    `gmail_inbox_email` + `gmail_thread_id` populated).
+    """
+    if not is_configured():
+        raise RuntimeError("Gmail not configured")
+    if ticket.get("source") != "email":
+        raise ValueError("Ticket isn't an email ticket")
+    inbox_email = ticket.get("gmail_inbox_email")
+    thread_id = ticket.get("gmail_thread_id")
+    if not inbox_email or not thread_id:
+        raise ValueError("Ticket missing gmail_inbox_email / gmail_thread_id")
+    recipient = (ticket.get("student_email") or "").strip()
+    if not recipient:
+        raise ValueError("Ticket has no student_email to reply to")
+
+    inbox = await db.gmail_inboxes.find_one({"email": inbox_email})
+    if not inbox:
+        raise ValueError(f"Inbox {inbox_email} no longer connected")
+
+    service = await _build_service(db, inbox)
+
+    # Fetch one message from the thread to read In-Reply-To/References so
+    # mail clients render this as a proper reply in the existing thread.
+    in_reply_to = ""
+    references = ""
+    original_subject = (ticket.get("subject") or "").strip() or "(no subject)"
+    try:
+        t = service.users().threads().get(userId="me", id=thread_id, format="metadata",
+                                          metadataHeaders=["Message-ID", "References", "Subject"]).execute()
+        messages = t.get("messages") or []
+        if messages:
+            # Use the most recent inbound message for threading
+            msg = messages[-1]
+            headers = msg.get("payload", {}).get("headers") or []
+            in_reply_to = _header(headers, "Message-ID")
+            references = _header(headers, "References") or in_reply_to
+            sub = _header(headers, "Subject")
+            if sub:
+                original_subject = sub
+    except HttpError as e:
+        logger.warning(f"[gmail] reply thread fetch failed: {e}")
+
+    subject = original_subject
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+
+    mime = MIMEText(body, "plain", "utf-8")
+    mime["To"] = recipient
+    mime["From"] = formataddr((inbox.get("name") or "Support", inbox_email))
+    mime["Subject"] = subject
+    mime["Message-ID"] = make_msgid(domain=inbox_email.split("@", 1)[-1])
+    if in_reply_to:
+        mime["In-Reply-To"] = in_reply_to
+        mime["References"] = (references + " " + in_reply_to).strip()
+
+    raw = _b64.urlsafe_b64encode(mime.as_bytes()).decode()
+    try:
+        sent = service.users().messages().send(
+            userId="me",
+            body={"raw": raw, "threadId": thread_id},
+        ).execute()
+    except HttpError as e:
+        raise RuntimeError(f"Gmail send failed: {e}")
+
+    # Log as a note on the ticket
+    iso = datetime.now(timezone.utc).isoformat()
+    note = {
+        "id": str(uuid.uuid4()),
+        "author_id": "_gmail_outbound",
+        "author_name": f"Reply via {inbox_email}",
+        "body": body,
+        "created_at": iso,
+        "internal": True,
+        "gmail_message_id": sent.get("id"),
+    }
+    await db.tickets.update_one(
+        {"id": ticket["id"]},
+        {"$push": {"notes": note}, "$set": {"updated_at": iso}},
+    )
+    return {"ok": True, "gmail_message_id": sent.get("id")}
+
+
+def _header(headers: list[dict], name: str) -> str:  # noqa: F811 — re-exported
+    n = name.lower()
+    for h in headers or []:
+        if (h.get("name") or "").lower() == n:
+            return h.get("value") or ""
+    return ""
+

@@ -910,6 +910,10 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
+        {t.source === "email" && (
+          <EmailReplyPanel ticket={t} onSent={onRefresh} />
+        )}
+
         <div>
           <Label>Internal notes ({(t.notes || []).length})</Label>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -968,6 +972,74 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     </Modal>
   );
 }
+
+// -------------------- Email reply panel (Gmail two-way) --------------------
+
+function EmailReplyPanel({ ticket, onSent }) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const inbox = ticket.gmail_inbox_email;
+
+  const handleSend = async () => {
+    const text = body.trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      await apiClient.post(`/oauth/gmail/tickets/${ticket.id}/reply`, { body: text });
+      setBody("");
+      toast.success(`Reply sent from ${inbox}`);
+      onSent && (await onSent());
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!inbox) {
+    return (
+      <div className="border border-slate-200 bg-slate-50 rounded-md p-3 text-xs text-[var(--ayci-ink-muted)]">
+        This email ticket predates the Gmail integration — reply via your email client.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="border border-sky-200 bg-sky-50/40 rounded-md p-3"
+      data-testid="email-reply-panel"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <Mail className="w-4 h-4 text-sky-700" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-sky-800">
+          Reply via Gmail · from {inbox}
+        </span>
+      </div>
+      <div className="flex items-end gap-2">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Type a reply…"
+          rows={4}
+          className={inputCls}
+          data-testid="email-reply-input"
+        />
+        <Button
+          onClick={handleSend}
+          disabled={!body.trim() || sending}
+          size="sm"
+          data-testid="email-reply-send"
+          className="bg-sky-600 hover:bg-sky-700"
+        >
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+
 
 
 // -------------------- WhatsApp reply panel --------------------
