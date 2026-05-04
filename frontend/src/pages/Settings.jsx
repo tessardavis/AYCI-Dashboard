@@ -28,6 +28,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { formatValue } from "@/lib/format";
 import MetricSourceDialog from "@/components/MetricSourceDialog";
 import CohortMilestonesSection from "@/components/settings/CohortMilestonesSection";
+import ConnectedInboxesSection from "@/components/settings/ConnectedInboxesSection";
 
 const CATEGORIES = [
   "GROWTH + INTEREST",
@@ -63,6 +64,7 @@ export default function Settings() {
           <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>
           <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
           <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
+          <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
         </TabsList>
         <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>
@@ -70,6 +72,7 @@ export default function Settings() {
         <TabsContent value="rocks"><RocksSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>
+        <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>
       </Tabs>
     </div>
   );

@@ -1019,6 +1019,25 @@ async def on_startup():
         id="tickets_tally_sync",
         replace_existing=True,
     )
+
+    # Gmail → Tickets sync every 15 min for every connected inbox. Skips
+    # silently if GOOGLE_CLIENT_ID/SECRET aren't set (i.e. integration not
+    # yet configured) — no inboxes possible.
+    async def _gmail_inbox_sync():
+        import gmail_sync
+        try:
+            res = await gmail_sync.sync_all(db)
+            if res.get("created") or res.get("updated") or res.get("errors"):
+                logger.info(f"[scheduler] gmail sync: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] gmail sync failed: {e}")
+
+    scheduler.add_job(
+        _gmail_inbox_sync,
+        CronTrigger(minute="*/15", timezone=tz),
+        id="gmail_inbox_sync",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
@@ -1158,13 +1177,14 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     spotlight as routes_spotlight,
     leaderboard as routes_leaderboard,
     tickets as routes_tickets,
+    oauth_gmail as routes_oauth_gmail,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
     routes_sync.router, routes_students.router, routes_interviews.router,
     routes_coach.router, routes_cohorts.router, routes_launches.router,
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
-    routes_leaderboard.router, routes_tickets.router,
+    routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
 ):
     app.include_router(_r)
 
