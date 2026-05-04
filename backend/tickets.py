@@ -233,7 +233,8 @@ def _ticket_from_tally_submission(sub: dict) -> Optional[dict]:
 async def sync_tally(db) -> dict:
     """Pull new submissions from the AYCI Support Desk Tally form and create
     tickets for any not yet ingested. Idempotent — uses `source_ref` (Tally
-    submission id) as the dedup key."""
+    submission id) as the dedup key. Also consults `ticket_source_dedup` so
+    refs from previously-deleted tickets don't re-import."""
     submissions = await _tally_fetch_submissions(TALLY_SUPPORT_FORM_ID)
     if not submissions:
         return {"inserted": 0, "scanned": 0}
@@ -243,6 +244,14 @@ async def sync_tally(db) -> dict:
         {"source": "tally"}, {"_id": 0, "source_ref": 1}
     )
     async for d in cursor:
+        ref = d.get("source_ref")
+        if ref:
+            existing_refs.add(ref)
+    # Also pick up tombstones from previously-deleted tickets
+    cursor2 = db.ticket_source_dedup.find(
+        {"source": "tally"}, {"_id": 0, "source_ref": 1}
+    )
+    async for d in cursor2:
         ref = d.get("source_ref")
         if ref:
             existing_refs.add(ref)
