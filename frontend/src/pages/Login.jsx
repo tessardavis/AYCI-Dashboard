@@ -33,38 +33,33 @@ export default function Login() {
     <div className="min-h-screen flex">
       {/* Left brand panel */}
       <div
-        className="hidden lg:flex w-5/12 flex-col justify-between p-12 text-white relative overflow-hidden"
+        className="hidden lg:flex w-5/12 flex-col items-center justify-center p-12 text-white relative overflow-hidden"
         style={{ backgroundColor: "var(--ayci-sidebar)" }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-11 h-11 rounded-lg flex items-center justify-center bg-white/10 p-1.5"
-          >
+        <div className="relative z-10 flex flex-col items-center text-center">
+          <div className="w-28 h-28 rounded-2xl flex items-center justify-center bg-white/10 p-5 mb-8">
             <img
               src="/ayci-icon.png"
-              alt="AYCI"
+              alt="AYCI Academy"
               className="w-full h-full object-contain"
               style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>
-          <div className="font-display font-bold text-xl">AYCI Academy</div>
-        </div>
-
-        <div className="relative z-10 ayci-fade-up">
-          <div className="text-[var(--ayci-accent)] text-xs uppercase tracking-[0.3em] mb-4">Team Dashboard</div>
-          <h1 className="font-display text-5xl xl:text-6xl font-extrabold leading-[1.05] tracking-tight mb-6">
-            Monday mornings,<br />answered in one screen.
+          <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-tight tracking-tight">
+            AYCI Academy
           </h1>
-          <p className="text-slate-300 text-base max-w-md leading-relaxed">
-            Scorecard. Quarterly rocks. Launch pacing. Everything the team reviews at Monday
-            stand-up — clean, fast, and always current.
-          </p>
+          <div className="text-[var(--ayci-accent)] text-sm uppercase tracking-[0.3em] mt-3">
+            Team Dashboard
+          </div>
         </div>
 
-        <div className="text-xs text-slate-400">© {new Date().getFullYear()} AYCI Academy. EOS Team Workspace.</div>
+        <div className="absolute bottom-8 text-xs text-slate-400">
+          © {new Date().getFullYear()} AYCI Academy
+        </div>
 
         {/* subtle grid accent */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
           style={{
             backgroundImage:
               "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",

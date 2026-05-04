@@ -119,9 +119,19 @@ async def send_sla_digest(db) -> dict:
 
 async def count_unanswered(db) -> int:
     """Return the live count of >48h unanswered posts across both spaces.
-    Used by the in-app notification bell badge."""
+    Used by the in-app notification bell badge and the Pulse Score.
+
+    Uses the same 30-min SWR cache as the Coach Activity dashboard so this is
+    sub-100 ms on the hot path; otherwise it would trigger a ~10s Circle sweep
+    on every dashboard load (including login → WeeklyScorecard landing)."""
     try:
-        summary = await coach_act.fetch_coach_activity_summary(db)
+        import launches as launches_mod
+        summary = await launches_mod._stale_while_revalidate(
+            db,
+            "coach_activity:summary",
+            ttl_min=30,
+            compute_fn=lambda: coach_act.fetch_coach_activity_summary(db),
+        )
     except Exception:
         return 0
     total = 0
