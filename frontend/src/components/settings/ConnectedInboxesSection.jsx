@@ -25,6 +25,7 @@ export default function ConnectedInboxesSection({ isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [ingestInbound, setIngestInbound] = useState(false);
 
   const load = async () => {
     try {
@@ -40,12 +41,8 @@ export default function ConnectedInboxesSection({ isAdmin }) {
   };
 
   useEffect(() => {
-    if (!isAdmin) {
-      setLoading(false);
-      return;
-    }
     load();
-  }, [isAdmin]);
+  }, []);
 
   // Listen for popup → opener message after OAuth completes
   useEffect(() => {
@@ -67,7 +64,7 @@ export default function ConnectedInboxesSection({ isAdmin }) {
     setConnecting(true);
     try {
       const { data } = await apiClient.post("/oauth/gmail/start", null, {
-        params: { return_to: "/settings" },
+        params: { return_to: "/settings", ingest_inbound: ingestInbound },
       });
       const url = data.authorize_url;
       const w = 520;
@@ -117,14 +114,6 @@ export default function ConnectedInboxesSection({ isAdmin }) {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-4 py-3">
-        Admin access is required to manage connected inboxes.
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--ayci-ink-muted)]">
@@ -143,13 +132,13 @@ export default function ConnectedInboxesSection({ isAdmin }) {
             </div>
             <div>
               <h3 className="font-display font-bold text-[var(--ayci-ink)]">
-                Gmail Inboxes
+                My Gmail Inbox
               </h3>
               <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-xl">
-                Connect any Gmail account. Inbound emails become Support
-                Tickets every 15 min; replies on the same thread append to the
-                existing ticket. Internal team domains are ignored
-                automatically.
+                Connect your own Gmail account so ticket replies go out from
+                your address. Optionally also "ingest inbound" — incoming
+                emails (from non-team senders) become Support Tickets every
+                15 min, with reply threads appended automatically.
               </p>
             </div>
           </div>
@@ -179,10 +168,24 @@ export default function ConnectedInboxesSection({ isAdmin }) {
               ) : (
                 <Plus className="w-3.5 h-3.5 mr-1.5" />
               )}
-              Connect inbox
+              Connect Gmail
             </Button>
           </div>
         </div>
+
+        <label className="mt-3 flex items-start gap-2 text-xs text-[var(--ayci-ink-muted)] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={ingestInbound}
+            onChange={(e) => setIngestInbound(e.target.checked)}
+            className="mt-0.5"
+            data-testid="inboxes-ingest-inbound"
+          />
+          <span>
+            <span className="font-semibold text-[var(--ayci-ink)]">Ingest inbound emails as tickets</span>
+            <span className="block">Tick this if your inbox is a shared support address (e.g. <code>support@…</code>). Most personal inboxes should leave this off.</span>
+          </span>
+        </label>
 
         {!data?.configured && (
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900">
@@ -207,8 +210,8 @@ export default function ConnectedInboxesSection({ isAdmin }) {
 
         {(data?.inboxes || []).length === 0 ? (
           <div className="mt-5 text-sm text-[var(--ayci-ink-muted)] text-center py-8 border border-dashed border-slate-200 rounded-md">
-            No inboxes connected yet.
-            {data?.configured && " Click 'Connect inbox' to authorise your first Gmail account."}
+            You haven't connected a Gmail inbox yet.
+            {data?.configured && " Click 'Connect Gmail' to authorise your account."}
           </div>
         ) : (
           <div className="mt-5 divide-y divide-slate-100 border border-slate-200 rounded-md overflow-hidden">
@@ -217,12 +220,27 @@ export default function ConnectedInboxesSection({ isAdmin }) {
             ))}
           </div>
         )}
+
+        {data?.is_admin && (data?.all_inboxes || []).length > (data?.inboxes || []).length && (
+          <div className="mt-4 text-xs text-[var(--ayci-ink-muted)]">
+            <details>
+              <summary className="cursor-pointer font-semibold">
+                Admin · all team inboxes ({(data?.all_inboxes || []).length})
+              </summary>
+              <div className="mt-2 divide-y divide-slate-100 border border-slate-200 rounded-md overflow-hidden">
+                {data.all_inboxes.map((ib) => (
+                  <InboxRow key={ib.id} inbox={ib} onRemove={() => handleRemove(ib)} adminView />
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function InboxRow({ inbox, onRemove }) {
+function InboxRow({ inbox, onRemove, adminView }) {
   const last = inbox.last_sync_at
     ? new Date(inbox.last_sync_at).toLocaleString("en-GB", {
         day: "numeric",
@@ -232,7 +250,7 @@ function InboxRow({ inbox, onRemove }) {
         timeZone: "Europe/London",
       })
     : null;
-  const status = inbox.last_sync_status || (last ? "ok" : "pending");
+  const status = inbox.last_sync_status || (last ? "ok" : (inbox.ingest_inbound ? "pending" : "send-only"));
   const isError = status && status.startsWith && (status.startsWith("auth_") || status.startsWith("api_"));
   return (
     <div
@@ -243,12 +261,22 @@ function InboxRow({ inbox, onRemove }) {
         <div className="flex items-center gap-2 font-semibold text-[var(--ayci-ink)] truncate">
           <Mail className="w-3.5 h-3.5 text-[var(--ayci-ink-muted)] flex-shrink-0" />
           <span className="truncate">{inbox.email}</span>
+          {inbox.ingest_inbound ? (
+            <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200 font-bold">
+              Ingest
+            </span>
+          ) : (
+            <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200 font-bold">
+              Send-only
+            </span>
+          )}
         </div>
         <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex items-center gap-3 flex-wrap">
           <span>
             {inbox.tickets_created || 0} created · {inbox.tickets_updated || 0} updated
           </span>
           {last && <span>Last sync {last}</span>}
+          {adminView && inbox.user_id && <span className="opacity-60">user: {inbox.user_id.slice(0, 8)}</span>}
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -264,7 +292,7 @@ function InboxRow({ inbox, onRemove }) {
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-slate-50 text-slate-600 rounded border border-slate-200">
-            Pending
+            {status === "send-only" ? "Send-only" : "Pending"}
           </span>
         )}
         <button

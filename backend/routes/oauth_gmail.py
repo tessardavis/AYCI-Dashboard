@@ -13,30 +13,44 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 
 import gmail_sync
 from db import db
-from deps import require_admin, require_board
+from deps import get_current_user, require_admin, require_board
 
 router = APIRouter(prefix="/api/oauth/gmail", tags=["gmail-oauth"])
 
 
+def _is_admin(user: dict) -> bool:
+    return user.get("role") == "admin"
+
+
 @router.get("/status")
-async def status(admin: dict = Depends(require_admin)):
-    inboxes = await gmail_sync.list_inboxes(db)
+async def status(user: dict = Depends(get_current_user)):
+    # Admins see every connected inbox; members see only their own
+    mine = await gmail_sync.list_inboxes(db, user_id=user["id"])
+    all_inboxes = await gmail_sync.list_inboxes(db) if _is_admin(user) else None
     return {
         "configured": gmail_sync.is_configured(),
-        "inbox_count": len(inboxes),
-        "inboxes": inboxes,
+        "is_admin": _is_admin(user),
+        "my_inbox_count": len(mine),
+        "inboxes": mine,
+        "all_inboxes": all_inboxes,  # None for non-admins
     }
 
 
 @router.post("/start")
-async def start(admin: dict = Depends(require_admin), return_to: str = "/settings"):
+async def start(
+    user: dict = Depends(get_current_user),
+    return_to: str = "/settings",
+    ingest_inbound: bool = False,
+):
     if not gmail_sync.is_configured():
         raise HTTPException(
             500,
             "Gmail integration not configured — admin must set GOOGLE_CLIENT_ID + "
             "GOOGLE_CLIENT_SECRET in the backend environment first.",
         )
-    url = await gmail_sync.start_oauth(db, return_to=return_to)
+    url = await gmail_sync.start_oauth(
+        db, user_id=user["id"], ingest_inbound=ingest_inbound, return_to=return_to,
+    )
     return {"authorize_url": url}
 
 
@@ -71,20 +85,25 @@ async def callback(code: str | None = None, state: str | None = None, error: str
 
 
 @router.get("/inboxes")
-async def inboxes(admin: dict = Depends(require_admin)):
-    return {"inboxes": await gmail_sync.list_inboxes(db)}
+async def inboxes(user: dict = Depends(get_current_user)):
+    rows = await gmail_sync.list_inboxes(db, user_id=user["id"])
+    return {"inboxes": rows}
 
 
 @router.delete("/inboxes/{inbox_id}")
-async def remove_inbox(inbox_id: str, admin: dict = Depends(require_admin)):
-    ok = await gmail_sync.remove_inbox(db, inbox_id)
+async def remove_inbox(inbox_id: str, user: dict = Depends(get_current_user)):
+    # Admin can remove any; members only their own
+    scope_user_id = None if _is_admin(user) else user["id"]
+    ok = await gmail_sync.remove_inbox(db, inbox_id, user_id=scope_user_id)
     if not ok:
-        raise HTTPException(404, "Inbox not found")
+        raise HTTPException(404, "Inbox not found or not yours to remove")
     return {"ok": True}
 
 
 @router.post("/sync")
-async def sync_now(admin: dict = Depends(require_admin)):
+async def sync_now(user: dict = Depends(get_current_user)):
+    # Any member can trigger a sync — it only touches inboxes flagged
+    # `ingest_inbound` anyway.
     return await gmail_sync.sync_all(db)
 
 
@@ -104,7 +123,9 @@ async def reply(
     if not t:
         raise HTTPException(404, "Ticket not found")
     try:
-        return await gmail_sync.send_reply(db, t, body, from_inbox_email=from_inbox)
+        return await gmail_sync.send_reply(
+            db, t, body, from_inbox_email=from_inbox, sender_user_id=user["id"],
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:

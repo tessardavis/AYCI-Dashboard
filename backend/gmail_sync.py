@@ -90,8 +90,10 @@ def _flow() -> Flow:
 
 
 # -------------------------------------------------------- OAuth flow
-async def start_oauth(db, *, return_to: str = "/settings") -> str:
-    """Generate an OAuth URL the admin clicks to start connecting an inbox."""
+async def start_oauth(
+    db, *, user_id: str, ingest_inbound: bool = False, return_to: str = "/settings",
+) -> str:
+    """Generate an OAuth URL the user clicks to connect their Gmail account."""
     if not is_configured():
         raise RuntimeError("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set")
     flow = _flow()
@@ -103,6 +105,8 @@ async def start_oauth(db, *, return_to: str = "/settings") -> str:
     await db.gmail_oauth_states.insert_one({
         "state": state,
         "return_to": return_to,
+        "user_id": user_id,
+        "ingest_inbound": bool(ingest_inbound),
         "created_at": datetime.now(timezone.utc),
     })
     return url
@@ -151,6 +155,8 @@ async def complete_oauth(db, code: str, state: str) -> dict:
         "id": str(uuid.uuid4()),
         "email": email,
         "name": info.get("name") or email.split("@")[0],
+        "user_id": state_doc.get("user_id"),
+        "ingest_inbound": bool(state_doc.get("ingest_inbound")),
         "access_token": creds.token,
         "refresh_token": creds.refresh_token,
         "expires_at": expires_at,
@@ -164,7 +170,7 @@ async def complete_oauth(db, code: str, state: str) -> dict:
         "tickets_updated": 0,
     }
 
-    # Upsert by email (re-connecting the same inbox refreshes tokens)
+    # Upsert by email (re-connecting the same inbox refreshes tokens + owner)
     await db.gmail_inboxes.update_one(
         {"email": email},
         {"$set": {k: v for k, v in inbox_doc.items() if k not in ("id", "tickets_created", "tickets_updated")},
@@ -175,17 +181,36 @@ async def complete_oauth(db, code: str, state: str) -> dict:
     return {"email": email, "return_to": state_doc.get("return_to") or "/settings"}
 
 
-async def list_inboxes(db) -> list[dict]:
+async def list_inboxes(db, *, user_id: Optional[str] = None) -> list[dict]:
+    """If user_id provided, filter to inboxes owned by that user. Admin should
+    pass None to see all connected inboxes."""
+    q: dict = {}
+    if user_id is not None:
+        q["user_id"] = user_id
     rows = await db.gmail_inboxes.find(
-        {},
+        q,
         {"_id": 0, "access_token": 0, "refresh_token": 0, "scopes": 0},
     ).sort("connected_at", 1).to_list(50)
     return rows
 
 
-async def remove_inbox(db, inbox_id: str) -> bool:
-    res = await db.gmail_inboxes.delete_one({"id": inbox_id})
+async def remove_inbox(db, inbox_id: str, *, user_id: Optional[str] = None) -> bool:
+    """If user_id provided, only allow deletion by the owner."""
+    q: dict = {"id": inbox_id}
+    if user_id is not None:
+        q["user_id"] = user_id
+    res = await db.gmail_inboxes.delete_one(q)
     return res.deleted_count > 0
+
+
+async def get_inbox_for_user(db, user_id: str) -> Optional[dict]:
+    """Return the first connected inbox for this user — used as the default
+    'From' when they reply to a ticket."""
+    return await db.gmail_inboxes.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "access_token": 0, "refresh_token": 0, "scopes": 0},
+        sort=[("connected_at", 1)],
+    )
 
 
 # -------------------------------------------------------- Auth refresh
@@ -492,10 +517,10 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
 
 
 async def sync_all(db) -> dict:
-    """Iterate every connected inbox and sync."""
+    """Iterate every connected inbox flagged `ingest_inbound` and sync."""
     if not is_configured():
         return {"skipped": "not_configured"}
-    inboxes = await db.gmail_inboxes.find({}, {"_id": 0}).to_list(50)
+    inboxes = await db.gmail_inboxes.find({"ingest_inbound": True}, {"_id": 0}).to_list(50)
     totals = {"inboxes": len(inboxes), "created": 0, "updated": 0, "scanned": 0, "errors": 0}
     for inb in inboxes:
         try:
@@ -520,14 +545,18 @@ async def send_reply(
     body: str,
     *,
     from_inbox_email: Optional[str] = None,
+    sender_user_id: Optional[str] = None,
 ) -> dict:
     """Send an email reply to any ticket that has a student email.
 
-    For email-sourced tickets we reply from the original inbox (threading
-    preserved via In-Reply-To/References/threadId). For other sources
-    (Tally/manual/WhatsApp with an email on the ticket), we send a fresh
-    email from `from_inbox_email` — or the first connected inbox if not
-    specified. The send is logged as a note on the ticket."""
+    Inbox preference (first non-None wins):
+      1. `from_inbox_email` (explicit pick)
+      2. `ticket.gmail_inbox_email` (original inbox that received it — email source)
+      3. the inbox owned by `sender_user_id` (the current user's personal Gmail)
+      4. the first connected inbox globally (fallback)
+
+    The send is logged as a note on the ticket.
+    """
     if not is_configured():
         raise RuntimeError("Gmail not configured")
     recipient = (ticket.get("student_email") or "").strip()
@@ -536,8 +565,12 @@ async def send_reply(
 
     original_inbox = ticket.get("gmail_inbox_email")
     target_inbox_email = from_inbox_email or original_inbox
+    if not target_inbox_email and sender_user_id:
+        own = await get_inbox_for_user(db, sender_user_id)
+        if own:
+            target_inbox_email = own["email"]
     if not target_inbox_email:
-        # Pick the first connected inbox as a sensible default
+        # Last-resort fallback: first connected inbox
         first = await db.gmail_inboxes.find_one(
             {}, {"_id": 0, "email": 1}, sort=[("connected_at", 1)],
         )

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import ConnectedInboxesSection from "@/components/settings/ConnectedInboxesSection";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -131,6 +132,11 @@ export default function Profile() {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* My Gmail — every user can connect their own */}
+      <div className="mt-6">
+        <ConnectedInboxesSection isAdmin={user?.role === "admin"} />
       </div>
     </div>
   );

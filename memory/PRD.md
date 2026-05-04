@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-04 — Gmail two-way reply + per-user inboxes
+- **Gmail two-way reply** (`gmail_sync.send_reply`, `routes/oauth_gmail.py POST /tickets/{id}/reply`): added `gmail.send` scope; reply goes from the original receiving inbox (email-source tickets, threading preserved via `In-Reply-To`/`References`/`threadId`) or — for Tally/Manual — from the current user's connected Gmail (or a fallback). First reply on a non-email ticket stamps `gmail_thread_id` so subsequent replies thread correctly.
+- **Per-user Gmail** (`gmail_inboxes.user_id` + `ingest_inbound`): each team member connects their own Gmail via **Profile → My Gmail Inbox** (no longer admin-only). Each user sees only their own inbox; admin sees all in a collapsible section. Polling only runs on inboxes flagged `ingest_inbound=true` (typically a shared `support@` mailbox, not personal). Status badge shows "Send-only" vs "Ingest" + Healthy/Pending/Error.
+- **Reply matrix per source**: WhatsApp → Wati API · Email/Tally/Manual (with student email) → Gmail (current user's inbox or original receiving inbox).
+
+
 ### 2026-05-04 — Universal student matching on Support Tickets + Wati live
 - **Wati WhatsApp Business**: credentials wired (`WATI_BASE_URL=https://live-mt-server.wati.io/480152`, token + phone `+44 20 8058 5289`). API health verified — 39 approved templates flowing. Webhook URL given to user: `https://ayci-dashboard.preview.emergentagent.com/api/wati/webhook`.
 - **Universal ticket → student linker** (`/app/backend/student_match.py`): every ticket now auto-matches to a Monday Academy Member record by email (fast indexed search) OR phone (digit-normalised scan of last 10 digits — handles UK local `07…` vs E.164 `447…` WhatsApp format). Match cached on the ticket under `student_match` + 24h TTL; force-refresh via `POST /api/tickets/{id}/match-student`. Ticket detail modal surfaces a **LINKED STUDENT RECORD** card with tier, cohort, Student Lookup link (fixed `?email=` query param), and Monday deep link.
