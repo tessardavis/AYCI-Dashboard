@@ -256,7 +256,7 @@ class DailyRegistrationInput(BaseModel):
 TicketStatus = Literal["open", "in_progress", "waiting", "resolved", "closed"]
 TicketPriority = Literal["low", "medium", "high", "urgent"]
 TicketCategory = Literal["billing", "tech", "coaching", "refund", "other"]
-TicketSource = Literal["manual", "tally", "email"]
+TicketSource = Literal["manual", "tally", "email", "whatsapp"]
 
 
 class TicketNote(BaseModel):

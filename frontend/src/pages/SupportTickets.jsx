@@ -14,6 +14,7 @@ import {
   Filter,
   LayoutGrid,
   Rows,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -46,7 +47,7 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-const SOURCE_LABEL = { manual: "Manual", tally: "Form", email: "Email" };
+const SOURCE_LABEL = { manual: "Manual", tally: "Form", email: "Email", whatsapp: "WhatsApp" };
 
 function formatUk(iso) {
   if (!iso) return "—";
@@ -812,6 +813,10 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           </div>
         </div>
 
+        {ticket.source === "whatsapp" && (
+          <WhatsAppReplyPanel ticket={ticket} onSent={onRefresh} />
+        )}
+
         <div>
           <Label>Internal notes ({(ticket.notes || []).length})</Label>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -870,6 +875,160 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     </Modal>
   );
 }
+
+
+// -------------------- WhatsApp reply panel --------------------
+
+function WhatsAppReplyPanel({ ticket, onSent }) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // 24h session window — Wati requires templates after this
+  const lastInbound = ticket.wati_last_inbound_at || ticket.created_at;
+  const hoursSince = lastInbound ? (Date.now() - new Date(lastInbound).getTime()) / 3600000 : Infinity;
+  const outOfWindow = hoursSince >= 24;
+
+  const loadTemplates = async () => {
+    if (templatesLoaded) return;
+    try {
+      const { data } = await apiClient.get("/wati/templates");
+      setTemplates(data.templates || []);
+      setTemplatesLoaded(true);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load templates");
+    }
+  };
+
+  const handleSend = async () => {
+    const text = body.trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      await apiClient.post(`/wati/tickets/${ticket.id}/reply`, { body: text });
+      setBody("");
+      toast.success("WhatsApp reply sent");
+      onSent && (await onSent());
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendTemplate = async () => {
+    if (!templateName) return;
+    setSending(true);
+    try {
+      await apiClient.post(`/wati/tickets/${ticket.id}/template`, {
+        template_name: templateName,
+        broadcast_name: `ticket-${ticket.id}`,
+        parameters: [],
+      });
+      setTemplateName("");
+      toast.success("Template message sent");
+      onSent && (await onSent());
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Template send failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      className="border border-emerald-200 bg-emerald-50/40 rounded-md p-3"
+      data-testid="whatsapp-reply-panel"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <MessageCircle className="w-4 h-4 text-emerald-700" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-emerald-800">
+          WhatsApp reply · {ticket.wati_wa_id}
+        </span>
+        {outOfWindow && (
+          <span className="ml-auto text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded border border-amber-200">
+            24H WINDOW EXPIRED
+          </span>
+        )}
+      </div>
+
+      {!outOfWindow ? (
+        <div className="flex items-end gap-2">
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Type a WhatsApp reply…"
+            rows={2}
+            className={inputCls}
+            data-testid="whatsapp-reply-input"
+          />
+          <Button
+            onClick={handleSend}
+            disabled={!body.trim() || sending}
+            size="sm"
+            data-testid="whatsapp-reply-send"
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-amber-900">
+            More than 24h since last student message — only pre-approved templates can be sent.
+          </p>
+          {!showTemplates ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setShowTemplates(true);
+                await loadTemplates();
+              }}
+              data-testid="whatsapp-load-templates"
+            >
+              Load templates
+            </Button>
+          ) : (
+            <div className="flex items-end gap-2">
+              <select
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                className={inputCls}
+                data-testid="whatsapp-template-select"
+              >
+                <option value="">Choose a template…</option>
+                {templates.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name} ({t.language})
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={handleSendTemplate}
+                disabled={!templateName || sending}
+                size="sm"
+                data-testid="whatsapp-template-send"
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </Button>
+            </div>
+          )}
+          {templateName && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] bg-white border border-slate-200 rounded p-2">
+              {(templates.find((t) => t.name === templateName) || {}).body || "—"}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // -------------------- Generic UI helpers --------------------
 

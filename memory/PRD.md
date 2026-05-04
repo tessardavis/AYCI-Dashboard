@@ -13,6 +13,13 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-04 — Phase 2: Gmail + Wati WhatsApp inbox auto-pull (scaffolding)
+- **Gmail multi-account OAuth** (`/app/backend/gmail_sync.py`, `routes/oauth_gmail.py`): admin connects multiple Gmail inboxes via popup OAuth → 15-min cron polls each inbox → inbound emails (excluding internal team domains) become Support Tickets. Replies on existing Gmail thread auto-append as notes. Attachment metadata captured (filename + size, no body download). Settings → Inboxes admin UI for connect/list/disconnect/manual-sync.
+- **Wati WhatsApp Business** (`/app/backend/wati.py`, `routes/wati.py`): public webhook at `/api/wati/webhook` ingests Wati `messageReceived` events. Threading rule: ONE OPEN ticket per WhatsApp number — new messages append as notes, new tickets created when previous one closed/resolved. Two-way: ticket detail panel shows green WhatsApp reply box (free-text within 24h window) + template dropdown (sourced from `/api/wati/templates`) when out of window. Verified: dedup by message ID, append-on-same-student, idempotent webhook.
+- **Tally webhook**: connected by user — new support form submissions appear in `/tickets` in real time.
+- **Awaiting credentials**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `WATI_BASE_URL`, `WATI_ACCESS_TOKEN`. Endpoints + UI degrade gracefully when not configured (`status.configured=false`).
+
+
 ### 2026-05-04 — Support Tickets feature (Phase 1)
 - **New board "Support Tickets"** (`/tickets`): customer service ticket system with full Kanban (Open / In Progress / Waiting on Student / Resolved / Closed) + Table view, search, filters (priority/category/assignee), "My tickets" toggle.
 - **Sources**: Manual entry from the dashboard, **Tally form** (`D4BW1N` "AYCI Support Desk", 73 historical submissions auto-backfilled on startup), and Phase 2 inbox auto-pull (Gmail/Outlook). Tally is dual-fed: 15-min APScheduler poll + public webhook (`POST /api/tickets/tally/webhook`) for near-real-time delivery, both deduped by Tally `submissionId`.

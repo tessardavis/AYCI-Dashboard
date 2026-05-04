@@ -1178,6 +1178,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     leaderboard as routes_leaderboard,
     tickets as routes_tickets,
     oauth_gmail as routes_oauth_gmail,
+    wati as routes_wati,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1185,6 +1186,7 @@ for _r in (
     routes_coach.router, routes_cohorts.router, routes_launches.router,
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
+    routes_wati.router,
 ):
     app.include_router(_r)
 
