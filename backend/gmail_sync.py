@@ -518,90 +518,108 @@ async def send_reply(
     db,
     ticket: dict,
     body: str,
+    *,
+    from_inbox_email: Optional[str] = None,
 ) -> dict:
-    """Send an email reply via the same Gmail inbox that received the ticket.
-    Maintains the Gmail threadId so it appears as a normal in-thread reply.
+    """Send an email reply to any ticket that has a student email.
 
-    Ticket must have been ingested by this module (source='email',
-    `gmail_inbox_email` + `gmail_thread_id` populated).
-    """
+    For email-sourced tickets we reply from the original inbox (threading
+    preserved via In-Reply-To/References/threadId). For other sources
+    (Tally/manual/WhatsApp with an email on the ticket), we send a fresh
+    email from `from_inbox_email` — or the first connected inbox if not
+    specified. The send is logged as a note on the ticket."""
     if not is_configured():
         raise RuntimeError("Gmail not configured")
-    if ticket.get("source") != "email":
-        raise ValueError("Ticket isn't an email ticket")
-    inbox_email = ticket.get("gmail_inbox_email")
-    thread_id = ticket.get("gmail_thread_id")
-    if not inbox_email or not thread_id:
-        raise ValueError("Ticket missing gmail_inbox_email / gmail_thread_id")
     recipient = (ticket.get("student_email") or "").strip()
     if not recipient:
         raise ValueError("Ticket has no student_email to reply to")
 
-    inbox = await db.gmail_inboxes.find_one({"email": inbox_email})
+    original_inbox = ticket.get("gmail_inbox_email")
+    target_inbox_email = from_inbox_email or original_inbox
+    if not target_inbox_email:
+        # Pick the first connected inbox as a sensible default
+        first = await db.gmail_inboxes.find_one(
+            {}, {"_id": 0, "email": 1}, sort=[("connected_at", 1)],
+        )
+        if not first:
+            raise ValueError("No Gmail inbox connected — connect one first")
+        target_inbox_email = first["email"]
+
+    inbox = await db.gmail_inboxes.find_one({"email": target_inbox_email})
     if not inbox:
-        raise ValueError(f"Inbox {inbox_email} no longer connected")
+        raise ValueError(f"Inbox {target_inbox_email} no longer connected")
 
     service = await _build_service(db, inbox)
 
-    # Fetch one message from the thread to read In-Reply-To/References so
-    # mail clients render this as a proper reply in the existing thread.
+    # Threading: only for email-sourced tickets replying via the original inbox
     in_reply_to = ""
     references = ""
+    thread_id = ticket.get("gmail_thread_id") if target_inbox_email == original_inbox else None
     original_subject = (ticket.get("subject") or "").strip() or "(no subject)"
-    try:
-        t = service.users().threads().get(userId="me", id=thread_id, format="metadata",
-                                          metadataHeaders=["Message-ID", "References", "Subject"]).execute()
-        messages = t.get("messages") or []
-        if messages:
-            # Use the most recent inbound message for threading
-            msg = messages[-1]
-            headers = msg.get("payload", {}).get("headers") or []
-            in_reply_to = _header(headers, "Message-ID")
-            references = _header(headers, "References") or in_reply_to
-            sub = _header(headers, "Subject")
-            if sub:
-                original_subject = sub
-    except HttpError as e:
-        logger.warning(f"[gmail] reply thread fetch failed: {e}")
+    if thread_id:
+        try:
+            t = service.users().threads().get(
+                userId="me", id=thread_id, format="metadata",
+                metadataHeaders=["Message-ID", "References", "Subject"],
+            ).execute()
+            messages = t.get("messages") or []
+            if messages:
+                msg = messages[-1]
+                headers = msg.get("payload", {}).get("headers") or []
+                in_reply_to = _header(headers, "Message-ID")
+                references = _header(headers, "References") or in_reply_to
+                sub = _header(headers, "Subject")
+                if sub:
+                    original_subject = sub
+        except HttpError as e:
+            logger.warning(f"[gmail] reply thread fetch failed: {e}")
+            thread_id = None  # fall back to fresh thread
 
     subject = original_subject
-    if not subject.lower().startswith("re:"):
+    if thread_id and not subject.lower().startswith("re:"):
         subject = f"Re: {subject}"
 
     mime = MIMEText(body, "plain", "utf-8")
     mime["To"] = recipient
-    mime["From"] = formataddr((inbox.get("name") or "Support", inbox_email))
+    mime["From"] = formataddr((inbox.get("name") or "Support", target_inbox_email))
     mime["Subject"] = subject
-    mime["Message-ID"] = make_msgid(domain=inbox_email.split("@", 1)[-1])
+    mime["Message-ID"] = make_msgid(domain=target_inbox_email.split("@", 1)[-1])
     if in_reply_to:
         mime["In-Reply-To"] = in_reply_to
         mime["References"] = (references + " " + in_reply_to).strip()
 
     raw = _b64.urlsafe_b64encode(mime.as_bytes()).decode()
+    send_body: dict = {"raw": raw}
+    if thread_id:
+        send_body["threadId"] = thread_id
     try:
         sent = service.users().messages().send(
-            userId="me",
-            body={"raw": raw, "threadId": thread_id},
+            userId="me", body=send_body,
         ).execute()
     except HttpError as e:
         raise RuntimeError(f"Gmail send failed: {e}")
 
-    # Log as a note on the ticket
+    # Log as a note on the ticket. If this is the first reply for a non-email
+    # ticket, also stash the new thread id so subsequent replies thread cleanly.
     iso = datetime.now(timezone.utc).isoformat()
     note = {
         "id": str(uuid.uuid4()),
         "author_id": "_gmail_outbound",
-        "author_name": f"Reply via {inbox_email}",
+        "author_name": f"Reply via {target_inbox_email}",
         "body": body,
         "created_at": iso,
         "internal": True,
         "gmail_message_id": sent.get("id"),
     }
+    update: dict = {"updated_at": iso}
+    if not ticket.get("gmail_thread_id") and sent.get("threadId"):
+        update["gmail_thread_id"] = sent.get("threadId")
+        update["gmail_inbox_email"] = target_inbox_email
     await db.tickets.update_one(
         {"id": ticket["id"]},
-        {"$push": {"notes": note}, "$set": {"updated_at": iso}},
+        {"$push": {"notes": note}, "$set": update},
     )
-    return {"ok": True, "gmail_message_id": sent.get("id")}
+    return {"ok": True, "gmail_message_id": sent.get("id"), "from_inbox": target_inbox_email}
 
 
 def _header(headers: list[dict], name: str) -> str:  # noqa: F811 — re-exported

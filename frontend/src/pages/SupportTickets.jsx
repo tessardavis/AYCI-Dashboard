@@ -910,7 +910,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
-        {t.source === "email" && (
+        {t.student_email && t.source !== "whatsapp" && (
           <EmailReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
@@ -978,17 +978,49 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
 function EmailReplyPanel({ ticket, onSent }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [inboxes, setInboxes] = useState([]);
+  const [selectedInbox, setSelectedInbox] = useState("");
+  const [loadingInboxes, setLoadingInboxes] = useState(false);
+  const [gmailReady, setGmailReady] = useState(null); // null=unknown
 
-  const inbox = ticket.gmail_inbox_email;
+  const originalInbox = ticket.gmail_inbox_email;
+  const needsPicker = !originalInbox; // non-email tickets need to choose
+
+  // Load gmail status + inboxes once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingInboxes(true);
+      try {
+        const { data } = await apiClient.get("/oauth/gmail/status");
+        if (cancelled) return;
+        setGmailReady(!!data.configured);
+        setInboxes(data.inboxes || []);
+        if (!originalInbox && (data.inboxes || []).length > 0) {
+          setSelectedInbox(data.inboxes[0].email);
+        }
+      } catch {
+        setGmailReady(false);
+      } finally {
+        if (!cancelled) setLoadingInboxes(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [originalInbox]);
 
   const handleSend = async () => {
     const text = body.trim();
     if (!text) return;
     setSending(true);
     try {
-      await apiClient.post(`/oauth/gmail/tickets/${ticket.id}/reply`, { body: text });
+      const { data } = await apiClient.post(`/oauth/gmail/tickets/${ticket.id}/reply`, {
+        body: text,
+        from_inbox_email: originalInbox ? undefined : selectedInbox || undefined,
+      });
       setBody("");
-      toast.success(`Reply sent from ${inbox}`);
+      toast.success(`Reply sent from ${data.from_inbox || originalInbox}`);
       onSent && (await onSent());
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
@@ -997,25 +1029,59 @@ function EmailReplyPanel({ ticket, onSent }) {
     }
   };
 
-  if (!inbox) {
+  if (loadingInboxes) {
     return (
-      <div className="border border-slate-200 bg-slate-50 rounded-md p-3 text-xs text-[var(--ayci-ink-muted)]">
-        This email ticket predates the Gmail integration — reply via your email client.
+      <div className="border border-slate-200 bg-slate-50 rounded-md p-3 text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking Gmail…
       </div>
     );
   }
+
+  if (!gmailReady) {
+    return (
+      <div className="border border-amber-200 bg-amber-50 rounded-md p-3 text-xs text-amber-900">
+        Gmail integration not configured yet. Admin must connect a Gmail inbox in Settings → Inboxes to enable email replies.
+      </div>
+    );
+  }
+
+  if (!originalInbox && inboxes.length === 0) {
+    return (
+      <div className="border border-amber-200 bg-amber-50 rounded-md p-3 text-xs text-amber-900">
+        No Gmail inbox connected yet. Connect one in Settings → Inboxes to reply from the dashboard.
+      </div>
+    );
+  }
+
+  const fromLabel = originalInbox
+    ? `from ${originalInbox}`
+    : `from ${selectedInbox || "(choose inbox)"}`;
 
   return (
     <div
       className="border border-sky-200 bg-sky-50/40 rounded-md p-3"
       data-testid="email-reply-panel"
     >
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <Mail className="w-4 h-4 text-sky-700" />
         <span className="text-[11px] uppercase tracking-wider font-semibold text-sky-800">
-          Reply via Gmail · from {inbox}
+          Reply via Gmail · {fromLabel} · to {ticket.student_email}
         </span>
       </div>
+      {needsPicker && inboxes.length > 1 && (
+        <select
+          value={selectedInbox}
+          onChange={(e) => setSelectedInbox(e.target.value)}
+          className={inputCls + " mb-2"}
+          data-testid="email-reply-inbox-picker"
+        >
+          {inboxes.map((ib) => (
+            <option key={ib.id} value={ib.email}>
+              {ib.email}
+            </option>
+          ))}
+        </select>
+      )}
       <div className="flex items-end gap-2">
         <textarea
           value={body}

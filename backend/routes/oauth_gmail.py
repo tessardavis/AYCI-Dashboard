@@ -99,11 +99,12 @@ async def reply(
     body = (payload.get("body") or "").strip()
     if not body:
         raise HTTPException(400, "body required")
+    from_inbox = (payload.get("from_inbox_email") or "").strip().lower() or None
     t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Ticket not found")
     try:
-        return await gmail_sync.send_reply(db, t, body)
+        return await gmail_sync.send_reply(db, t, body, from_inbox_email=from_inbox)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
