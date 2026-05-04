@@ -13,6 +13,11 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-04 — Cohort pending list + Upcoming Interviews tier accuracy
+- **Cohort "Still to join Circle"** (`/app/backend/cohort.py`): now excludes students whose Monday **"On Circle" status column** (`color_mkqxdbm8`) is manually set to `On Circle, in <cohort> spaces` (e.g. `"On Circle, in Apr '26 spaces"`). The team maintains this column by hand and it's the authoritative join signal — bridges email mismatches between Monday/ConvertKit and Circle (students frequently register on Circle with a different email). Chase-list count on April 26 cohort dropped 39 → 28; previously false-positive students (Veronica Chinchon, Sarah Somerville, Oliver Smith, Maleeha Rafiq, David Maxey, Anirudh Kumar, Adekunle Sobowale) correctly excluded. Lidia Trup remains excluded via existing Boss-badge rule.
+- **Upcoming Interviews pane** (`/app/backend/upcoming_interviews.py`, `/app/backend/private_tier_utilisation.py`): **Silver** and **Gold** removed from `PRIVATE_PLUS_LABELS`. Those were legacy product names; today Silver/Gold students have no private allowances and should render in the Academy pane. `_ACADEMY_EQUIV = {"academy", "silver", "gold"}` is the new routing rule. Verified against Ibtisam Salim, Thomas Elliott, Martin Van Carlen, Claire Crichton-Iannone — all now correctly Academy.
+
+
 ### 2026-05-02 — Leaderboard tiebreaker + 30-min Slack reminders for Spotlight Coaching
 - **Leaderboard scoring** (`/app/backend/leaderboard.py`): treats Circle `member_tags` as the badge ledger. Score = total tags − cohort tags − private-tier tags.
   - Cohort tags detected by regex (`/^[A-Za-z]+ '\d{2}$/`), `AYGI*`, `RFI-*`, "Legacy Cohort".

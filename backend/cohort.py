@@ -36,6 +36,12 @@ COL_SPECIALITY = "dropdown_mkqxk94m"
 COL_COHORT_JOINED = "dropdown_mkqxhw8p"
 COL_LEGACY = "dropdown_mkqxpct4"
 COL_IN_ACTIVE_COHORT = "color_mkrd1evr"
+# Manually-curated Monday status column: "On Circle, in Apr '26 spaces" /
+# "On Circle, not in spaces" / blank. When set to the in-cohort-spaces
+# variant, the student has been manually verified as joined for the cohort
+# — authoritative signal that bridges email mismatches between Monday and
+# Circle (students often sign up to Circle with a different email).
+COL_ON_CIRCLE = "color_mkqxdbm8"
 MILESTONE_COLS = [
     ("color_mkqxkrrp", "Milestone 1"),
     ("color_mkqxxhp6", "Milestone 2"),
@@ -271,6 +277,7 @@ async def cohort_summary(
                 "name": (it.get("name") or "").strip(),
                 "tier": first_tier,
                 "monday_url": it.get("url"),
+                "on_circle_status": _txt(cols, COL_ON_CIRCLE),
             }
 
     # Two denominators:
@@ -340,9 +347,33 @@ async def cohort_summary(
     # are also excluded so the coach doesn't chase themselves. Students with
     # the "Boss" badge on Circle are excluded too — they already have a job
     # and don't need chasing into the cohort space.
+    #
+    # Additionally, students whose Monday "On Circle" column is manually set
+    # to "On Circle, in <cohort> spaces" are excluded. This is the team's
+    # authoritative join signal and bridges email mismatches between
+    # Monday/ConvertKit and Circle (students often register on Circle with a
+    # different email than they gave us at signup).
+    circle_tag_short = circle_tag_name.strip().lower()  # e.g. "apr '26"
+    monday_confirmed_joined: set[str] = set()
+    for em, info in monday_by_email.items():
+        status = (info.get("on_circle_status") or "").strip().lower()
+        if not status:
+            continue
+        # Accept either the cohort-specific variant ("on circle, in apr '26
+        # spaces") or a generic "on circle, in <x> spaces" that names the
+        # same circle tag. The "not in spaces" variant does NOT count —
+        # those students have a Circle account but haven't joined the
+        # cohort's space yet, so they should stay on the chase list.
+        if "in" in status and "spaces" in status and circle_tag_short in status:
+            monday_confirmed_joined.add(em)
+
     circle_denominator = len(new_only_emails)
     pending_emails = sorted(
-        ((new_only_emails - circle_emails_with_tag) - TEAM_ACCOUNT_EMAILS) - boss_emails
+        (
+            ((new_only_emails - circle_emails_with_tag) - TEAM_ACCOUNT_EMAILS)
+            - boss_emails
+        )
+        - monday_confirmed_joined
     )
     pending_list: list[dict] = []
     pending_tier_counter: Counter = Counter()

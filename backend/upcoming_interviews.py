@@ -177,8 +177,9 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # used by Private Tier Utilisation and the Cohort Dashboard, so the
         # same student doesn't read "Silver" in one place and "Private Plus"
         # in another. PRIVATE_PLUS_LABELS / VIP_LABELS are the source of truth
-        # in `private_tier_utilisation.py`; we mirror them here.
-        _PP_LABELS = {"academy private plus", "upgrade private plus", "silver", "gold"}
+        # in `private_tier_utilisation.py`; we mirror them here. Silver/Gold
+        # are legacy product names and now behave as plain Academy.
+        _PP_LABELS = {"academy private plus", "upgrade private plus"}
         _VIP_LABELS = {"vip", "platinum"}
         _t_low = tier.strip().lower()
         if _t_low in _PP_LABELS:
@@ -205,8 +206,11 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # is listed, route them to private.
         # An empty Tier dropdown is treated as plain Academy (team's default — many
         # Academy students never have the dropdown explicitly set).
+        # Silver/Gold are legacy product names; students on those tiers today
+        # are effectively Academy and should stay in the Academy pane.
+        _ACADEMY_EQUIV = {"academy", "silver", "gold"}
         tier_parts = [t.strip().lower() for t in tier.split(",") if t.strip()]
-        is_pure_academy = (not tier_parts) or tier_parts == ["academy"]
+        is_pure_academy = (not tier_parts) or all(tp in _ACADEMY_EQUIV for tp in tier_parts)
 
         if is_pure_academy:
             academy.append(base)

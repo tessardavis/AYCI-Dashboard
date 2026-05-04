@@ -46,8 +46,12 @@ COL_SPECIALITY = "color_mkqx20m0"
 COL_HOSPITAL = "color_mkqxckby"
 COL_INTERVIEW_TYPE = "color_mkr7wahg"  # Status: "Locum" / "Substantive"
 
-# Tiers we care about
-PRIVATE_PLUS_LABELS = {"Academy Private Plus", "Upgrade Private Plus", "Silver", "Gold"}
+# Tiers we care about. "Silver" and "Gold" were legacy private-tier product
+# names used before we simplified to Academy Private Plus / VIP. Today,
+# Silver/Gold customers who are still active are effectively Academy (no
+# private call/video allowance), so we don't classify them as Private Plus
+# in Upcoming Interviews or the Private Tier Utilisation board.
+PRIVATE_PLUS_LABELS = {"Academy Private Plus", "Upgrade Private Plus"}
 VIP_LABELS = {"VIP", "Platinum"}
 
 # Allowances
