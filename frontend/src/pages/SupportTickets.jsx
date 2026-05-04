@@ -1001,11 +1001,14 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
                 data-testid="whatsapp-template-select"
               >
                 <option value="">Choose a template…</option>
-                {templates.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name} ({t.language})
-                  </option>
-                ))}
+                {templates.map((t) => {
+                  const lang = typeof t.language === "object" ? (t.language?.text || t.language?.value) : t.language;
+                  return (
+                    <option key={t.name} value={t.name}>
+                      {t.name}{lang ? ` (${lang})` : ""}
+                    </option>
+                  );
+                })}
               </select>
               <Button
                 onClick={handleSendTemplate}
