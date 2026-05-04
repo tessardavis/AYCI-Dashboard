@@ -1000,6 +1000,25 @@ async def on_startup():
         id="daily_leaderboard_snapshot",
         replace_existing=True,
     )
+
+    # Periodic Tally → Tickets sync (every 15 min). The webhook delivers most
+    # tickets in real time; this poll is a safety net for missed webhook calls
+    # and also serves as the initial backfill on first deploy.
+    async def _tickets_tally_sync():
+        import tickets as tickets_mod
+        try:
+            res = await tickets_mod.sync_tally(db)
+            if res.get("inserted"):
+                logger.info(f"[scheduler] tickets tally sync: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] tickets tally sync failed: {e}")
+
+    scheduler.add_job(
+        _tickets_tally_sync,
+        CronTrigger(minute="*/15", timezone=tz),
+        id="tickets_tally_sync",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
@@ -1093,6 +1112,19 @@ async def on_startup():
 
     _asyncio.create_task(_warm_active_launch_data())
 
+    # Initial Tally → Tickets backfill (fire-and-forget). Safe to re-run at
+    # any time — uses Tally submission id as the dedup key.
+    async def _initial_tickets_backfill():
+        try:
+            await _asyncio.sleep(45)
+            import tickets as tickets_mod
+            res = await tickets_mod.sync_tally(db)
+            logger.info(f"[startup] tickets initial backfill: {res}")
+        except Exception as e:
+            logger.warning(f"[startup] tickets backfill failed: {e}")
+
+    _asyncio.create_task(_initial_tickets_backfill())
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -1125,13 +1157,14 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     pulse as routes_pulse,
     spotlight as routes_spotlight,
     leaderboard as routes_leaderboard,
+    tickets as routes_tickets,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
     routes_sync.router, routes_students.router, routes_interviews.router,
     routes_coach.router, routes_cohorts.router, routes_launches.router,
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
-    routes_leaderboard.router,
+    routes_leaderboard.router, routes_tickets.router,
 ):
     app.include_router(_r)
 

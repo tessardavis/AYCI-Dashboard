@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Filter, X, RefreshCw, Download, ChevronDown } from "lucide-react";
 import MobileScorecard from "@/components/MobileScorecard";
 import PulseCard from "@/components/PulseCard";
+import SupportTicketsWidget from "@/components/SupportTicketsWidget";
 
 const CATEGORY_ORDER = [
   "GROWTH + INTEREST",
@@ -255,6 +256,8 @@ export default function WeeklyScorecard() {
       />
 
       <PulseCard />
+
+      <SupportTicketsWidget />
 
       {/* Owner filter — desktop chip row (hidden on mobile, replaced by dropdown) */}
       <div className="hidden sm:flex items-center gap-2 mb-5 flex-wrap">

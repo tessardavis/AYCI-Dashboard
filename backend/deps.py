@@ -29,6 +29,7 @@ ALL_BOARDS = [
     "coach_activity",
     "spotlight",
     "leaderboard",
+    "tickets",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]
 

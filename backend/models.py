@@ -249,3 +249,65 @@ class DailyRegistrationInput(BaseModel):
     launch_id: str
     date: str
     count: float
+
+
+
+# ---------- Support Tickets -------------------------------------------------
+TicketStatus = Literal["open", "in_progress", "waiting", "resolved", "closed"]
+TicketPriority = Literal["low", "medium", "high", "urgent"]
+TicketCategory = Literal["billing", "tech", "coaching", "refund", "other"]
+TicketSource = Literal["manual", "tally", "email"]
+
+
+class TicketNote(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    author_id: str  # user.id
+    author_name: str
+    body: str
+    created_at: str
+    internal: bool = True  # team-only note (vs reply log placeholder)
+
+
+class Ticket(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    student_name: str
+    student_email: str
+    subject: str
+    description: str
+    status: TicketStatus = "open"
+    priority: TicketPriority = "medium"
+    category: TicketCategory = "other"
+    assignee_id: Optional[str] = None  # team_member_id
+    source: TicketSource = "manual"
+    source_ref: Optional[str] = None  # e.g. Tally submission id
+    created_at: str
+    updated_at: str
+    resolved_at: Optional[str] = None
+    notes: List[TicketNote] = Field(default_factory=list)
+    slack_urgent_sent: bool = False  # idempotency for the urgent Slack ping
+
+
+class TicketCreate(BaseModel):
+    student_name: str
+    student_email: EmailStr
+    subject: str
+    description: str = ""
+    priority: TicketPriority = "medium"
+    category: TicketCategory = "other"
+    assignee_id: Optional[str] = None
+
+
+class TicketUpdate(BaseModel):
+    student_name: Optional[str] = None
+    student_email: Optional[EmailStr] = None
+    subject: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[TicketStatus] = None
+    priority: Optional[TicketPriority] = None
+    category: Optional[TicketCategory] = None
+    assignee_id: Optional[str] = None  # "" or null to unassign
+
+
+class TicketNoteCreate(BaseModel):
+    body: str
+    internal: bool = True
