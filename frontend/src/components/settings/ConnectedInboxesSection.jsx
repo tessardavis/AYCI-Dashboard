@@ -64,18 +64,29 @@ export default function ConnectedInboxesSection({ isAdmin }) {
     setConnecting(true);
     try {
       const { data } = await apiClient.post("/oauth/gmail/start", null, {
-        params: { return_to: "/settings", ingest_inbound: ingestInbound },
+        params: { return_to: "/profile", ingest_inbound: ingestInbound },
       });
       const url = data.authorize_url;
+      // Try popup first (desktop). If blocked or we're on mobile, fall back
+      // to a full-window redirect so the OAuth flow still completes.
+      const isSmallScreen = window.innerWidth < 900;
+      if (isSmallScreen) {
+        window.location.assign(url);
+        return;
+      }
       const w = 520;
       const h = 640;
       const left = window.screenX + (window.outerWidth - w) / 2;
       const top = window.screenY + (window.outerHeight - h) / 2;
-      window.open(
+      const popup = window.open(
         url,
         "gmail-oauth",
         `width=${w},height=${h},left=${left},top=${top}`,
       );
+      if (!popup || popup.closed || typeof popup.closed === "undefined") {
+        // Popup blocked — do a top-level redirect instead
+        window.location.assign(url);
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
       toast.error(formatApiErrorDetail(detail) || "Failed to start OAuth");
