@@ -944,6 +944,8 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
                   {studentLookupHref && (
                     <a
                       href={studentLookupHref}
+                      target="_blank"
+                      rel="noreferrer"
                       className="text-[var(--ayci-accent)] hover:underline flex items-center gap-1 font-semibold"
                       data-testid="ticket-student-lookup-link"
                     >
