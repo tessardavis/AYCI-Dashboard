@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
@@ -43,10 +44,29 @@ FUZZY_HARD_FLOOR = 0.55
 
 
 def _drive_service():
-    sa_file = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE")
-    if not sa_file or not os.path.exists(sa_file):
+    """Build a Drive client from either a service-account JSON file path OR
+    the raw JSON content pasted into the same env var. Lets non-technical
+    deployers paste the JSON blob into Emergent Secrets without needing to
+    add a separate filesystem path."""
+    sa_value = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
+    if not sa_value:
         raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_FILE not configured")
-    creds = service_account.Credentials.from_service_account_file(sa_file, scopes=SCOPES)
+    # If it's a file path that exists, load from disk
+    if not sa_value.lstrip().startswith("{") and os.path.exists(sa_value):
+        creds = service_account.Credentials.from_service_account_file(
+            sa_value, scopes=SCOPES,
+        )
+    else:
+        # Otherwise treat the value as raw JSON content
+        try:
+            info = json.loads(sa_value)
+        except Exception as e:
+            raise RuntimeError(
+                f"GOOGLE_SERVICE_ACCOUNT_FILE is neither a valid path nor valid JSON: {e}"
+            ) from e
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=SCOPES,
+        )
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
