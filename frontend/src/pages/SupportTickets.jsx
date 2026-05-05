@@ -22,7 +22,6 @@ import {
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 
 const STATUSES = [
@@ -87,6 +86,14 @@ export default function SupportTickets() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [showOlder, setShowOlder] = useState(false);
+
+  // Hide historical Tally noise: only show tickets created on/after this cutoff
+  // unless the user explicitly toggles "Show older".
+  const SINCE_CUTOFF_MS = useMemo(
+    () => new Date("2026-05-05T00:00:00+01:00").getTime(),
+    [],
+  );
 
   const myTeamId = user?.team_member_id || null;
   const teamById = useMemo(() => Object.fromEntries(team.map((t) => [t.id, t])), [team]);
@@ -114,6 +121,10 @@ export default function SupportTickets() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return tickets.filter((t) => {
+      if (!showOlder && t.created_at) {
+        const ts = new Date(t.created_at).getTime();
+        if (Number.isFinite(ts) && ts < SINCE_CUTOFF_MS) return false;
+      }
       if (filterPriority && t.priority !== filterPriority) return false;
       if (filterCategory && t.category !== filterCategory) return false;
       if (filterAssignee === "_unassigned" && t.assignee_id) return false;
@@ -128,7 +139,15 @@ export default function SupportTickets() {
       }
       return true;
     });
-  }, [tickets, search, filterPriority, filterCategory, filterAssignee, mineOnly, myTeamId]);
+  }, [tickets, search, filterPriority, filterCategory, filterAssignee, mineOnly, myTeamId, showOlder, SINCE_CUTOFF_MS]);
+
+  const olderHiddenCount = useMemo(() => {
+    if (showOlder) return 0;
+    return tickets.filter((t) => {
+      const ts = t.created_at ? new Date(t.created_at).getTime() : NaN;
+      return Number.isFinite(ts) && ts < SINCE_CUTOFF_MS;
+    }).length;
+  }, [tickets, showOlder, SINCE_CUTOFF_MS]);
 
   const grouped = useMemo(() => {
     const out = Object.fromEntries(STATUSES.map((s) => [s.value, []]));
@@ -139,20 +158,26 @@ export default function SupportTickets() {
   }, [filtered]);
 
   const counts = useMemo(() => {
-    const open = tickets.filter((t) => ["open", "in_progress", "waiting"].includes(t.status));
+    const inWindow = showOlder
+      ? tickets
+      : tickets.filter((t) => {
+          const ts = t.created_at ? new Date(t.created_at).getTime() : NaN;
+          return !Number.isFinite(ts) || ts >= SINCE_CUTOFF_MS;
+        });
+    const open = inWindow.filter((t) => ["open", "in_progress", "waiting"].includes(t.status));
     return {
       total_open: open.length,
       overdue: open.filter((t) => t.overdue).length,
       urgent: open.filter((t) => t.priority === "urgent").length,
       mine: myTeamId
-        ? tickets.filter(
+        ? inWindow.filter(
             (t) =>
               t.assignee_id === myTeamId &&
               ["open", "in_progress", "waiting"].includes(t.status),
           ).length
         : 0,
     };
-  }, [tickets, myTeamId]);
+  }, [tickets, myTeamId, showOlder, SINCE_CUTOFF_MS]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -191,56 +216,77 @@ export default function SupportTickets() {
   const activeTicket = tickets.find((t) => t.id === activeId);
 
   return (
-    <div className="p-6 lg:p-10 max-w-[1600px] mx-auto" data-testid="support-tickets-page">
-      <PageHeader
-        eyebrow="Customer Service"
-        title="Support Tickets"
-        description="Triage student issues across manual entry, the AYCI Support Desk Tally form, and (Phase 2) inbox auto-pull. Slack pings on Urgent. Per-priority SLA: 4h Urgent · 24h High · 48h Medium · 5d Low."
-        right={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSync}
-              disabled={syncing}
-              data-testid="tickets-sync-tally"
-            >
-              {syncing ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-1.5" />
-              )}
-              Sync Tally
-            </Button>
-            <Button onClick={() => setCreateOpen(true)} size="sm" data-testid="tickets-new-button">
-              <Plus className="w-4 h-4 mr-1.5" />
-              New ticket
-            </Button>
-          </div>
-        }
-      />
+    <div className="p-4 lg:p-10 max-w-[1600px] mx-auto" data-testid="support-tickets-page">
+      {/* Compact header: title + actions in one row, slim stat strip below */}
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)]">
+          Support Tickets
+        </h1>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing}
+            data-testid="tickets-sync-tally"
+          >
+            {syncing ? (
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-1.5" />
+            )}
+            Sync Tally
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} size="sm" data-testid="tickets-new-button">
+            <Plus className="w-4 h-4 mr-1.5" />
+            New
+          </Button>
+        </div>
+      </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Open" value={counts.total_open} tone="slate" testid="ticket-stat-open" />
-        <StatCard
-          label="Overdue (SLA breach)"
+      {/* Slim inline stats strip */}
+      <div
+        className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1"
+        data-testid="ticket-stats-strip"
+      >
+        <StatPill label="Open" value={counts.total_open} tone="slate" testid="ticket-stat-open" />
+        <StatPill
+          label="Overdue"
           value={counts.overdue}
           tone={counts.overdue > 0 ? "rose" : "emerald"}
-          testid="ticket-stat-overdue"
           icon={AlertTriangle}
+          testid="ticket-stat-overdue"
         />
-        <StatCard
+        <StatPill
           label="Urgent"
           value={counts.urgent}
           tone={counts.urgent > 0 ? "rose" : "slate"}
           testid="ticket-stat-urgent"
         />
-        <StatCard label="Assigned to me" value={counts.mine} tone="sky" testid="ticket-stat-mine" />
+        <StatPill label="Mine" value={counts.mine} tone="sky" testid="ticket-stat-mine" />
+        {olderHiddenCount > 0 && (
+          <button
+            onClick={() => setShowOlder(true)}
+            className="ml-auto text-[11px] font-semibold text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-accent)] underline-offset-2 hover:underline whitespace-nowrap"
+            data-testid="tickets-show-older"
+            title="Show tickets created before 5 May 2026"
+          >
+            +{olderHiddenCount} older
+          </button>
+        )}
+        {showOlder && (
+          <button
+            onClick={() => setShowOlder(false)}
+            className="ml-auto text-[11px] font-semibold text-[var(--ayci-accent)] hover:underline whitespace-nowrap"
+            data-testid="tickets-hide-older"
+          >
+            Hide older
+          </button>
+        )}
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-3 mb-5 flex flex-wrap items-center gap-2">
+      <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-2.5 mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ayci-ink-muted)]" />
           <input
@@ -353,20 +399,21 @@ export default function SupportTickets() {
 
 // -------------------- Subcomponents --------------------
 
-function StatCard({ label, value, tone, icon: Icon, testid }) {
+function StatPill({ label, value, tone, icon: Icon, testid }) {
   const toneCls = {
-    slate: "bg-slate-50 border-slate-200 text-slate-900",
-    rose: "bg-rose-50 border-rose-200 text-rose-900",
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
-    sky: "bg-sky-50 border-sky-200 text-sky-900",
+    slate: "bg-slate-100 border-slate-200 text-slate-800",
+    rose: "bg-rose-100 border-rose-200 text-rose-900",
+    emerald: "bg-emerald-100 border-emerald-200 text-emerald-900",
+    sky: "bg-sky-100 border-sky-200 text-sky-900",
   }[tone || "slate"];
   return (
-    <div className={`border rounded-lg p-3 ${toneCls}`} data-testid={testid}>
-      <div className="text-[11px] uppercase tracking-wider font-semibold opacity-70 flex items-center gap-1">
-        {Icon && <Icon className="w-3.5 h-3.5" />}
-        {label}
-      </div>
-      <div className="text-2xl font-bold mt-1">{value}</div>
+    <div
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-full text-xs font-semibold whitespace-nowrap ${toneCls}`}
+      data-testid={testid}
+    >
+      {Icon && <Icon className="w-3.5 h-3.5" />}
+      <span className="opacity-75">{label}</span>
+      <span className="text-sm font-bold">{value}</span>
     </div>
   );
 }

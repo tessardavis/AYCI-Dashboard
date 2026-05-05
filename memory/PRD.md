@@ -13,6 +13,10 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Support Tickets header trim + historical cutoff
+- **Date cutoff** (`SupportTickets.jsx`): tickets created before **5 May 2026** are now hidden by default to remove the historical Tally backlog noise. A small **+N older** link in the stats strip toggles them back on (state-only — no data deleted). Stat counters (Open / Overdue / Urgent / Mine) also respect the cutoff so they reflect the visible board.
+- **Compact header** (`SupportTickets.jsx`): removed the "Customer Service" eyebrow + long SLA description. The four big stat cards became slim inline pills in a single horizontal strip. Toolbar margins tightened. Mobile reaches the first ticket card noticeably faster.
+
 ### 2026-05-05 — Ticket attachments (Gmail / Wati / Tally → MongoDB GridFS)
 - **Storage** (`/app/backend/attachments.py`): files up to 10 MB stored in GridFS bucket `ticket_attachments`; bytes streamed back via `GET /api/tickets/{id}/attachments/{att_id}` with the right MIME so images render inline. GridFS files auto-GC'd on ticket delete.
 - **Gmail**: `_download_gmail_attachments` pulls each attachment via `users.messages.attachments.get` and stores it. Both new tickets (description block) and replies (note-level `attachments`) get them.
