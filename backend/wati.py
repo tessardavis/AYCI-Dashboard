@@ -69,6 +69,64 @@ def _normalise_phone(raw: str) -> str:
     return "".join(ch for ch in str(raw) if ch.isdigit())
 
 
+# -------------------------------------------------------- Auto-assignment
+# Routing rules per AYCI:
+#   - Prospect (not yet an Academy member) → Arub (sales/onboarding)
+#   - Existing student asking about an upgrade/tier change → Arub
+#   - Existing student with a general question → Coralie
+UPGRADE_KEYWORDS = (
+    "upgrade", "premium", "platinum", "gold tier", "silver tier",
+    "tier", "1-1", "1:1", "one to one", "one-to-one", "one on one",
+    "private coaching", "private coach", "individual coaching",
+    "additional support", "more support",
+)
+
+
+def _looks_like_upgrade(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    return any(kw in t for kw in UPGRADE_KEYWORDS)
+
+
+async def _team_id_by_name(db, *names: str) -> Optional[str]:
+    """Return the team_member.id whose name starts with any of `names`
+    (case-insensitive). Used to resolve "Arub"/"Coralie" → uuid without
+    hardcoding ids."""
+    for name in names:
+        if not name:
+            continue
+        m = await db.team_members.find_one(
+            {"name": {"$regex": f"^{name}", "$options": "i"}},
+            {"_id": 0, "id": 1},
+        )
+        if m:
+            return m["id"]
+    return None
+
+
+async def resolve_whatsapp_assignee(db, *, wa_id: str, body: str) -> Optional[str]:
+    """Pick the right team member for an inbound WhatsApp ticket based on
+    sender status (existing student vs prospect) and message intent."""
+    arub_id = await _team_id_by_name(db, "Arub")
+    coralie_id = await _team_id_by_name(db, "Coralie")
+
+    is_existing = False
+    try:
+        import student_match as sm
+        match = await sm.match_student(phone=wa_id)
+        is_existing = bool(match.get("matched"))
+    except Exception as e:
+        logger.warning(f"[wati] auto-assign student-match failed: {e}")
+
+    if not is_existing:
+        # Prospect → Arub
+        return arub_id
+    if _looks_like_upgrade(body):
+        return arub_id
+    return coralie_id or arub_id
+
+
 # -------------------------------------------------------- Media download
 async def _fetch_wati_media(
     db, media_id: str, *, filename: Optional[str], mime: Optional[str], msg_type: str,
@@ -231,6 +289,14 @@ async def handle_webhook(db, payload: dict) -> dict:
     if not short_subject:
         short_subject = "WhatsApp support request"
 
+    # Pick assignee based on AYCI routing rules (prospect/upgrade → Arub,
+    # existing student general question → Coralie).
+    try:
+        assignee_id = await resolve_whatsapp_assignee(db, wa_id=wa_id, body=body_text)
+    except Exception as e:
+        logger.warning(f"[wati] resolve assignee failed: {e}")
+        assignee_id = None
+
     ticket = {
         "id": str(uuid.uuid4()),
         "student_name": sender_name or wa_id,
@@ -240,7 +306,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         "status": "open",
         "priority": "medium",
         "category": "other",
-        "assignee_id": None,
+        "assignee_id": assignee_id,
         "source": "whatsapp",
         "source_ref": msg_id,
         "wati_wa_id": wa_id,
