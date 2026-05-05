@@ -71,8 +71,8 @@ export default function CoachActivity() {
 
       {data && (
         <>
-          <CircleSpaceCard space={data.recorded_answers} primaryNoun="video" />
-          <CircleSpaceCard space={data.interview_support} primaryNoun="post" />
+          <CircleSpaceCard space={data.recorded_answers} primaryNoun="video" showRateLimit />
+          <CircleSpaceCard space={data.interview_support} primaryNoun="post" showRateLimit={false} />
           <PrivateVideosCard data={data.private_videos} />
         </>
       )}
@@ -80,7 +80,7 @@ export default function CoachActivity() {
   );
 }
 
-function CircleSpaceCard({ space, primaryNoun }) {
+function CircleSpaceCard({ space, primaryNoun, showRateLimit = true }) {
   if (!space || space.error) {
     return (
       <Section title="Circle space" subtitle="">
@@ -106,7 +106,7 @@ function CircleSpaceCard({ space, primaryNoun }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className={`grid grid-cols-1 ${showRateLimit ? "lg:grid-cols-2" : ""} gap-4 mt-4`}>
         <FlagCard
           icon={Clock}
           title={`Awaiting coach reply (${space.unanswered.length})`}
@@ -131,17 +131,19 @@ function CircleSpaceCard({ space, primaryNoun }) {
           ))}
         </FlagCard>
 
-        <FlagCard
-          icon={AlertTriangle}
-          title={`Posting > 3 / week (${space.rate_limited.length})`}
-          tone="amber"
-          empty="No student has exceeded the 3-per-week limit."
-          testid="flag-rate-limited"
-        >
-          {space.rate_limited.map((rl) => (
-            <RateLimitedRow key={`${rl.name}-${rl.week_start}`} rl={rl} />
-          ))}
-        </FlagCard>
+        {showRateLimit && (
+          <FlagCard
+            icon={AlertTriangle}
+            title={`Posting > 3 / week (${space.rate_limited.length})`}
+            tone="amber"
+            empty="No student has exceeded the 3-per-week limit."
+            testid="flag-rate-limited"
+          >
+            {space.rate_limited.map((rl) => (
+              <RateLimitedRow key={`${rl.name}-${rl.week_start}`} rl={rl} />
+            ))}
+          </FlagCard>
+        )}
       </div>
     </Section>
   );

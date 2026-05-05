@@ -13,6 +13,10 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Hide rate-limit card on Specific Interview Support
+- `CircleSpaceCard` now accepts `showRateLimit` prop. Set to `false` for the Specific Interview Support space (students can post freely there). The remaining "Awaiting coach reply" card expands to full width when alone.
+- The Slack alert in `circle_video_alerts.py` is already scoped to Recorded Answer Review only.
+
 ### 2026-05-05 — Auditable rate-limit rows on Coach Activity
 - **Backend** (`coach_activity.analyse_circle_space`): each `rate_limited` entry now includes `posts: [{id, title, url, created_at}]` so the dashboard can show exactly which posts were counted.
 - **Frontend** (`CoachActivity.jsx → RateLimitedRow`): rate-limit rows are now click-to-expand. Reveals a numbered list of the counted posts with date + "Open ↗" Circle link per post — lets you audit a "wait, that's only 3 visible" discrepancy without leaving the dashboard.
