@@ -13,6 +13,14 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Circle videos > 3/week → Slack alert
+- **`circle_video_alerts.check_and_send`** + 5-min APScheduler cron: scans Recorded Answer Review Circle space for any member with >3 posts in the current calendar week (Mon-Sun UK). Posts one-line Slack alert to `#circle-days`. Idempotent per (member, week) via `circle_video_alerts_sent` collection.
+- New env: `SLACK_CIRCLE_DAYS_WEBHOOK_URL` (falls back to `SLACK_WEBHOOK_URL`). Manual test endpoint: `POST /api/coach-activity/circle-video-alerts/test`.
+- **Pending user action**: create dedicated `#circle-days` Slack webhook + add as secret on preview + production.
+
+### 2026-05-05 — Wati live-health badge on Support Tickets header
+- New `GET /api/wati/health` endpoint returns last reconcile run + errors. Frontend `WatiHealthBadge` polls every 60s, shows green/amber/red dot pill next to "Support Tickets" title with humanised "synced 2m ago" / "errors" / "pending sync". Click forces a reconcile and toasts the result. Persists to `app_settings.wati_health` on every reconcile run.
+
 ### 2026-05-05 — Spotlight late/early demoted + private-tier link bug + Wati safety-net
 - **Spotlight ordering** (`spotlight._sort_key`): late & early submissions now ALWAYS sit below eligible-on-time ones. Within each tier, sort still favours interview-soon → most badges → earliest submission. Verified live: Arpita (LATE) dropped from #2 to bottom of Curriculum 1.
 - **Private-tier doc lookup bug** (`google_drive.find_student_doc_link`): fixed snake_case/camelCase key mismatch — `web_view_link` was always returning `None` even when the doc was matched. Hector now resolves correctly to "Hector Garcia Moreno - VIP - Neuro (Movement Disorders)" with a valid Drive URL.

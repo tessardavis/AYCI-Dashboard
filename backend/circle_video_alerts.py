@@ -1,0 +1,91 @@
+"""
+Slack alert: when a student posts > 3 videos in the "Recorded Answer Review"
+Circle space within a single calendar week (Mon 00:00 → Sun 23:59 UK), ping
+`#circle-days` once per (member, week). Idempotent — re-running never spams.
+
+Scheduled every 5 min from `server.py`. The cross-the-threshold detection is
+"first time we observe count > 3 for a given (name, week_start)".
+"""
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timezone
+
+import httpx
+
+import coach_activity as coach_act
+
+logger = logging.getLogger(__name__)
+
+
+def _webhook_url() -> str:
+    """Channel-specific webhook for #circle-days. Falls back to the general
+    `SLACK_WEBHOOK_URL` so the feature still works (in a wrong channel)
+    until the team creates the dedicated webhook."""
+    return (
+        os.environ.get("SLACK_CIRCLE_DAYS_WEBHOOK_URL")
+        or os.environ.get("SLACK_WEBHOOK_URL")
+        or ""
+    ).strip()
+
+
+async def _post(text: str) -> dict:
+    url = _webhook_url()
+    if not url:
+        return {"sent": False, "reason": "no webhook configured"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(url, json={"text": text})
+            r.raise_for_status()
+        return {"sent": True, "status_code": r.status_code}
+    except Exception as e:
+        logger.exception("[circle-video-alerts] post failed")
+        return {"sent": False, "error": str(e)}
+
+
+async def check_and_send(db) -> dict:
+    """Inspect the Recorded Answer Review space, find any student who has
+    posted more than 3 videos in the current calendar week, and post a Slack
+    line — once per (member, week_start)."""
+    try:
+        result = await coach_act.analyse_circle_space(
+            coach_act.RECORDED_ANSWER_SPACE_ID,
+            coach_act.RECORDED_ANSWERS_START,
+            "Recorded Answer Review",
+        )
+    except Exception as e:
+        logger.warning(f"[circle-video-alerts] analyse failed: {e}")
+        return {"sent": 0, "error": str(e)}
+
+    rate_limited = result.get("rate_limited") or []
+    sent = 0
+    skipped = 0
+    for item in rate_limited:
+        name = (item.get("name") or "").strip()
+        week_start = (item.get("week_start") or "").strip()
+        count = int(item.get("count") or 0)
+        if not name or not week_start or count <= coach_act.WEEKLY_VIDEO_LIMIT:
+            continue
+        key = f"{name.lower()}::{week_start}"
+        # Idempotency — one ping per (member, week)
+        existing = await db.circle_video_alerts_sent.find_one({"_id": key})
+        if existing:
+            skipped += 1
+            continue
+        text = f"🎬 *{name}* posted *{count} videos* this week (week of {week_start}) in Recorded Answer Review."
+        post_result = await _post(text)
+        if post_result.get("sent"):
+            await db.circle_video_alerts_sent.insert_one({
+                "_id": key,
+                "name": name,
+                "week_start": week_start,
+                "count_at_alert": count,
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+            })
+            sent += 1
+            logger.info(f"[circle-video-alerts] sent for {name} ({count}/wk, week {week_start})")
+        else:
+            logger.warning(f"[circle-video-alerts] failed to post for {name}: {post_result}")
+
+    return {"sent": sent, "skipped": skipped, "candidates": len(rate_limited)}

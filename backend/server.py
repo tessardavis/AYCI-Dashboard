@@ -254,6 +254,14 @@ async def update_coach_spaces_endpoint(
     return saved
 
 
+@api.post("/coach-activity/circle-video-alerts/test")
+async def test_circle_video_alerts(admin: dict = Depends(require_admin)):
+    """Admin-only: force a re-scan of the Recorded Answer Review space and
+    post any new (member, week) over-3 alerts to #circle-days right now."""
+    import circle_video_alerts as cva
+    return await cva.check_and_send(db)
+
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
@@ -1037,6 +1045,25 @@ async def on_startup():
         _wati_reconcile,
         CronTrigger(minute="*/5", timezone=tz),
         id="wati_reconcile",
+        replace_existing=True,
+    )
+
+    # Circle Recorded-Answer-Review video-spam alerts → #circle-days Slack.
+    # Fires the moment a student crosses 3 posts in the current calendar week
+    # (Mon-Sun UK). Idempotent per (member, week) via `circle_video_alerts_sent`.
+    async def _circle_video_alerts():
+        import circle_video_alerts as cva
+        try:
+            res = await cva.check_and_send(db)
+            if res.get("sent"):
+                logger.info(f"[scheduler] circle video alerts: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] circle video alerts failed: {e}")
+
+    scheduler.add_job(
+        _circle_video_alerts,
+        CronTrigger(minute="*/5", timezone=tz),
+        id="circle_video_alerts",
         replace_existing=True,
     )
 
