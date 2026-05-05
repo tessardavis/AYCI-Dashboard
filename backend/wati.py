@@ -69,6 +69,51 @@ def _normalise_phone(raw: str) -> str:
     return "".join(ch for ch in str(raw) if ch.isdigit())
 
 
+# -------------------------------------------------------- Media download
+async def _fetch_wati_media(
+    db, media_id: str, *, filename: Optional[str], mime: Optional[str], msg_type: str,
+) -> Optional[dict]:
+    """Download a Wati-hosted media attachment and store in GridFS."""
+    if not is_configured():
+        return None
+    import attachments as att_store
+    # Wati exposes media via /api/v1/getMedia?fileName={mediaId}
+    url = f"{_base_url()}/api/v1/getMedia"
+    fname = filename or f"{msg_type}-{media_id}"
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as c:
+            async with c.stream(
+                "GET", url, headers={"Authorization": f"Bearer {_token()}"},
+                params={"fileName": media_id},
+            ) as r:
+                if r.status_code >= 300:
+                    logger.warning(f"[wati] media {media_id} returned {r.status_code}")
+                    return None
+                ctype = (
+                    mime
+                    or r.headers.get("content-type", "").split(";")[0].strip()
+                    or None
+                )
+                # Add an extension if filename is missing one
+                if "." not in fname.split("/")[-1]:
+                    import mimetypes
+                    ext = mimetypes.guess_extension(ctype or "") or ""
+                    fname = fname + ext
+                buf = bytearray()
+                async for chunk in r.aiter_bytes():
+                    buf.extend(chunk)
+                    if len(buf) > att_store.MAX_BYTES:
+                        logger.info(f"[wati] media {media_id} > {att_store.MAX_BYTES}, skipping")
+                        return None
+                return await att_store.store_bytes(
+                    db, data=bytes(buf), filename=fname,
+                    mime_type=ctype, source="whatsapp",
+                )
+    except Exception as e:
+        logger.warning(f"[wati] media {media_id} fetch failed: {e}")
+        return None
+
+
 # -------------------------------------------------------- Webhook handling
 async def handle_webhook(db, payload: dict) -> dict:
     """Process a single Wati webhook event. Returns {action, ticket_id|None}."""
@@ -87,6 +132,24 @@ async def handle_webhook(db, payload: dict) -> dict:
     msg_id = payload.get("id") or payload.get("messageId") or payload.get("whatsappMessageId")
     timestamp = payload.get("timestamp") or payload.get("created")
     operator_email = (payload.get("operatorEmail") or "").strip()
+
+    # Media metadata — Wati flat payloads include these keys when type != text
+    media_id = (
+        payload.get("mediaId") or payload.get("media_id")
+        or (payload.get("data") or {}).get("id") if isinstance(payload.get("data"), dict) else None
+    )
+    media_mime = (
+        payload.get("mimeType") or payload.get("mime_type")
+        or (payload.get("data") or {}).get("mime_type") if isinstance(payload.get("data"), dict) else None
+    )
+    media_filename = (
+        payload.get("fileName") or payload.get("filename")
+        or (payload.get("data") or {}).get("filename") if isinstance(payload.get("data"), dict) else None
+    )
+    media_caption = (
+        payload.get("caption")
+        or (payload.get("data") or {}).get("caption") if isinstance(payload.get("data"), dict) else None
+    )
 
     if not wa_id:
         return {"action": "ignored", "reason": "no waId"}
@@ -119,7 +182,14 @@ async def handle_webhook(db, payload: dict) -> dict:
         except (TypeError, ValueError):
             pass
 
-    body_text = text or f"[{msg_type} message — no text body]"
+    body_text = text or media_caption or f"[{msg_type} message — no text body]"
+
+    # Download media to GridFS if present
+    stored_attachments: list[dict] = []
+    if media_id and msg_type in {"image", "document", "audio", "video", "voice", "sticker"}:
+        att = await _fetch_wati_media(db, media_id, filename=media_filename, mime=media_mime, msg_type=msg_type)
+        if att:
+            stored_attachments = [att]
 
     # Find an existing open ticket for this WhatsApp number
     existing = await db.tickets.find_one(
@@ -140,11 +210,15 @@ async def handle_webhook(db, payload: dict) -> dict:
             "created_at": iso,
             "internal": True,
             "wati_message_id": msg_id,
+            "attachments": stored_attachments,
         }
+        push: dict = {"notes": note, "wati_message_ids": msg_id}
+        if stored_attachments:
+            push["attachments"] = {"$each": stored_attachments}
         await db.tickets.update_one(
             {"id": existing["id"]},
             {
-                "$push": {"notes": note, "wati_message_ids": msg_id},
+                "$push": push,
                 "$set": {"updated_at": iso, "status": "open"},
             },
         )
@@ -177,6 +251,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         "updated_at": iso,
         "resolved_at": None,
         "notes": [],
+        "attachments": stored_attachments,
         "slack_urgent_sent": False,
     }
     await db.tickets.insert_one(ticket)

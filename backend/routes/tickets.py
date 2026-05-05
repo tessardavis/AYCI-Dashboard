@@ -165,10 +165,74 @@ async def update_ticket(
 
 @router.delete("/{ticket_id}")
 async def delete_ticket(ticket_id: str, user: dict = Depends(require_board("tickets"))):
-    res = await db.tickets.delete_one({"id": ticket_id})
-    if res.deleted_count == 0:
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not t:
         raise HTTPException(404, "Ticket not found")
+    # GC any GridFS attachments
+    try:
+        import attachments as att_store
+        await att_store.delete_for_ticket(db, t)
+    except Exception:
+        pass
+    await db.tickets.delete_one({"id": ticket_id})
     return {"ok": True}
+
+
+@router.get("/{ticket_id}/attachments/{attachment_id}")
+async def download_attachment(
+    ticket_id: str, attachment_id: str, user: dict = Depends(require_board("tickets")),
+):
+    """Stream an attachment back to the browser. Used both for inline image
+    preview and for the download button."""
+    t = await db.tickets.find_one(
+        {"id": ticket_id},
+        {"_id": 0, "attachments": 1, "notes": 1},
+    )
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+
+    # Look in top-level attachments AND in note-level attachments
+    target = None
+    for a in (t.get("attachments") or []):
+        if a.get("id") == attachment_id:
+            target = a
+            break
+    if not target:
+        for n in (t.get("notes") or []):
+            for a in (n.get("attachments") or []):
+                if a.get("id") == attachment_id:
+                    target = a
+                    break
+            if target:
+                break
+    if not target:
+        raise HTTPException(404, "Attachment not found")
+
+    import attachments as att_store
+    try:
+        stream = await att_store.open_download_stream(db, target["gridfs_id"])
+    except Exception:
+        raise HTTPException(404, "Attachment file missing")
+
+    async def _iter():
+        try:
+            while True:
+                chunk = await stream.readchunk()
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            stream.close()
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        _iter(),
+        media_type=target.get("mime_type") or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{target.get("filename") or "attachment"}"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
 
 
 # -------------------------------------------------------- Notes
@@ -247,5 +311,8 @@ async def tally_webhook(request: Request, background: BackgroundTasks):
     ticket = tickets_mod._ticket_from_tally_submission(sub)
     if not ticket:
         raise HTTPException(400, "Could not build ticket — missing email")
+    pending_files = ticket.pop("_pending_tally_files", [])
+    if pending_files:
+        ticket["attachments"] = await tickets_mod._fetch_tally_attachments(db, pending_files)
     await db.tickets.insert_one(ticket)
     return {"ok": True, "ticket_id": ticket["id"]}

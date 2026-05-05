@@ -15,9 +15,12 @@ import {
   LayoutGrid,
   Rows,
   MessageCircle,
+  Paperclip,
+  FileText,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -465,6 +468,12 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
           {relativeAge(ticket.created_at)}
+          {(ticket.attachments || []).length > 0 && (
+            <span className="ml-1 inline-flex items-center gap-0.5 text-slate-600" title={`${ticket.attachments.length} attachment(s)`}>
+              <Paperclip className="w-3 h-3" />
+              {ticket.attachments.length}
+            </span>
+          )}
         </span>
         {assignee ? (
           <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 truncate max-w-[100px]">
@@ -904,6 +913,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-sm whitespace-pre-wrap text-[var(--ayci-ink)] max-h-[40vh] overflow-y-auto">
             {t.description || <span className="text-[var(--ayci-ink-muted)] italic">(no description)</span>}
           </div>
+          <AttachmentList ticketId={t.id} attachments={t.attachments} />
         </div>
 
         {t.source === "whatsapp" && (
@@ -931,6 +941,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
                     <span>{formatUk(n.created_at)}</span>
                   </div>
                   <div className="whitespace-pre-wrap">{n.body}</div>
+                  <AttachmentList ticketId={t.id} attachments={n.attachments} compact />
                 </div>
               ))
             )}
@@ -1109,6 +1120,76 @@ function EmailReplyPanel({ ticket, onSent }) {
 
 
 // -------------------- WhatsApp reply panel --------------------
+
+
+// -------------------- Attachments --------------------
+
+function AttachmentList({ ticketId, attachments, compact }) {
+  const list = attachments || [];
+  if (list.length === 0) return null;
+  return (
+    <div
+      className={`flex flex-wrap gap-2 ${compact ? "mt-1.5" : "mt-2"}`}
+      data-testid="ticket-attachments"
+    >
+      {list.map((a) => (
+        <Attachment key={a.id} ticketId={ticketId} att={a} compact={compact} />
+      ))}
+    </div>
+  );
+}
+
+function formatBytes(n) {
+  if (!n) return "";
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)}KB`;
+  return `${(n / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function Attachment({ ticketId, att, compact }) {
+  const url = `${API}/tickets/${ticketId}/attachments/${att.id}`;
+  const dl = `${url}?download=1`;
+  if (att.is_image) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="group relative block border border-slate-200 rounded overflow-hidden hover:border-[var(--ayci-accent)] transition-colors"
+        title={`${att.filename} · ${formatBytes(att.size)}`}
+        data-testid={`attachment-${att.id}`}
+      >
+        <img
+          src={url}
+          alt={att.filename}
+          className={compact ? "h-16 w-16 object-cover" : "h-24 w-24 object-cover"}
+          loading="lazy"
+        />
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+          {att.filename}
+        </div>
+      </a>
+    );
+  }
+  return (
+    <a
+      href={dl}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 hover:border-[var(--ayci-accent)] rounded text-xs transition-colors max-w-xs"
+      title={`Download ${att.filename}`}
+      data-testid={`attachment-${att.id}`}
+    >
+      <FileText className="w-3.5 h-3.5 text-[var(--ayci-ink-muted)] flex-shrink-0" />
+      <span className="truncate text-[var(--ayci-ink)]">{att.filename}</span>
+      <span className="text-[10px] text-[var(--ayci-ink-muted)] flex-shrink-0">
+        {formatBytes(att.size)}
+      </span>
+      <Download className="w-3 h-3 text-[var(--ayci-ink-muted)] flex-shrink-0" />
+    </a>
+  );
+}
+
 
 function WhatsAppReplyPanel({ ticket, onSent }) {
   const [body, setBody] = useState("");

@@ -13,6 +13,15 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Ticket attachments (Gmail / Wati / Tally → MongoDB GridFS)
+- **Storage** (`/app/backend/attachments.py`): files up to 10 MB stored in GridFS bucket `ticket_attachments`; bytes streamed back via `GET /api/tickets/{id}/attachments/{att_id}` with the right MIME so images render inline. GridFS files auto-GC'd on ticket delete.
+- **Gmail**: `_download_gmail_attachments` pulls each attachment via `users.messages.attachments.get` and stores it. Both new tickets (description block) and replies (note-level `attachments`) get them.
+- **Wati WhatsApp**: `_fetch_wati_media` calls `/api/v1/getMedia?fileName={mediaId}` and stores it. Captures captions in the body.
+- **Tally**: `_fetch_tally_attachments` downloads any FILE_UPLOAD answer URLs and stores them. Captured for both poll-sync and webhook flows.
+- **UI**: ticket detail shows image thumbnails (clickable to open full-size in a new tab) and download chips for non-image files. Each note shows its own compact attachments row. Kanban cards display a paperclip badge with attachment count.
+- **Inbox auto-assignment** (`gmail_sync._resolve_assignee_for_inbox` + `settings_store.get_inbox_routing` + `routes/team` GET/PUT `/team/inbox-routing`): admin-editable mapping in **Settings → Team → Inbox auto-assignment**. New email tickets are auto-assigned at creation time. Default seed: `tessa,arub → Arub Yousuf` and `coralie,oksana → Coralie Fairon`. Verified live (real Tessa-inbox ticket auto-assigned to Arub).
+
+
 ### 2026-05-04 — Gmail two-way reply + per-user inboxes
 - **Gmail two-way reply** (`gmail_sync.send_reply`, `routes/oauth_gmail.py POST /tickets/{id}/reply`): added `gmail.send` scope; reply goes from the original receiving inbox (email-source tickets, threading preserved via `In-Reply-To`/`References`/`threadId`) or — for Tally/Manual — from the current user's connected Gmail (or a fallback). First reply on a non-email ticket stamps `gmail_thread_id` so subsequent replies thread correctly.
 - **Per-user Gmail** (`gmail_inboxes.user_id` + `ingest_inbound`): each team member connects their own Gmail via **Profile → My Gmail Inbox** (no longer admin-only). Each user sees only their own inbox; admin sees all in a collapsible section. Polling only runs on inboxes flagged `ingest_inbound=true` (typically a shared `support@` mailbox, not personal). Status badge shows "Send-only" vs "Ingest" + Healthy/Pending/Error.

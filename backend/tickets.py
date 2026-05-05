@@ -196,7 +196,11 @@ def _extract_tally_field(responses: list[dict], question_id: str) -> str:
 
 def _ticket_from_tally_submission(sub: dict) -> Optional[dict]:
     """Build a Ticket dict from a Tally submission row. Returns None if the
-    submission can't be mapped (missing email)."""
+    submission can't be mapped (missing email).
+
+    Note: any FILE_UPLOAD answers become URL refs that the caller can later
+    download into GridFS via `_fetch_tally_attachments` (we keep this fn
+    sync + side-effect-free)."""
     responses = sub.get("responses") or []
     name = _extract_tally_field(responses, TALLY_FIELD_NAME).strip()
     email = _extract_tally_field(responses, TALLY_FIELD_EMAIL).strip().lower()
@@ -204,6 +208,22 @@ def _ticket_from_tally_submission(sub: dict) -> Optional[dict]:
     if not email:
         return None
     submitted = sub.get("submittedAt") or sub.get("createdAt") or _now_iso()
+
+    # Collect any FILE_UPLOAD answers across all questions
+    file_refs: list[dict] = []
+    for r in responses:
+        ans = r.get("answer")
+        if not isinstance(ans, list):
+            continue
+        for f in ans:
+            if isinstance(f, dict) and f.get("url"):
+                file_refs.append({
+                    "url": f["url"],
+                    "filename": f.get("name") or "tally-upload",
+                    "mime_type": f.get("mimeType"),
+                    "size": f.get("size"),
+                })
+
     # Subject = first ~80 chars of description (so the board reads cleanly)
     subject = (desc.splitlines()[0] if desc else "").strip()
     if len(subject) > 80:
@@ -226,8 +246,29 @@ def _ticket_from_tally_submission(sub: dict) -> Optional[dict]:
         "updated_at": submitted,
         "resolved_at": None,
         "notes": [],
+        "attachments": [],
+        "_pending_tally_files": file_refs,  # consumed by sync_tally; never persisted
         "slack_urgent_sent": False,
     }
+
+
+async def _fetch_tally_attachments(db, file_refs: list[dict]) -> list[dict]:
+    """Download each Tally upload URL into GridFS."""
+    if not file_refs:
+        return []
+    import attachments as att_store
+    out: list[dict] = []
+    for ref in file_refs:
+        att = await att_store.store_from_url(
+            db,
+            url=ref["url"],
+            filename=ref.get("filename") or "tally-upload",
+            mime_type=ref.get("mime_type"),
+            source="tally",
+        )
+        if att:
+            out.append(att)
+    return out
 
 
 async def sync_tally(db) -> dict:
@@ -263,6 +304,9 @@ async def sync_tally(db) -> dict:
         ticket = _ticket_from_tally_submission(sub)
         if not ticket:
             continue
+        pending_files = ticket.pop("_pending_tally_files", [])
+        if pending_files:
+            ticket["attachments"] = await _fetch_tally_attachments(db, pending_files)
         await db.tickets.insert_one(ticket)
         inserted += 1
 

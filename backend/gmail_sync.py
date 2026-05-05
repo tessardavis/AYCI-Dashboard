@@ -307,9 +307,9 @@ def _walk_parts(part: dict, out: list[dict]) -> None:
 def _extract_body(payload: dict) -> tuple[str, list[dict]]:
     """Return (plain_text_body, attachment_metadata).
 
-    Attachment metadata: [{filename, size, mime_type}]. We DO NOT download
-    bytes per spec — names + sizes are stored on the ticket so the team knows
-    something was attached.
+    Attachment metadata: [{filename, size, mime_type, attachment_id}]. The
+    `attachment_id` is the Gmail attachment id used to fetch bytes; we keep
+    `size` so the caller can decide whether to download.
     """
     flat: list[dict] = []
     _walk_parts(payload or {}, flat)
@@ -326,6 +326,7 @@ def _extract_body(payload: dict) -> tuple[str, list[dict]]:
                 "filename": filename,
                 "size": int(body.get("size") or 0),
                 "mime_type": mime,
+                "attachment_id": body.get("attachmentId"),
             })
             continue
         data = body.get("data")
@@ -342,6 +343,44 @@ def _extract_body(payload: dict) -> tuple[str, list[dict]]:
         plain = re.sub(r"<[^>]+>", " ", html_fallback)
         plain = re.sub(r"\s+", " ", plain).strip()
     return plain.strip(), attachments
+
+
+async def _download_gmail_attachments(
+    db, service, gmail_msg_id: str, attachments_meta: list[dict],
+) -> list[dict]:
+    """Pull each Gmail attachment's bytes and store in GridFS. Returns the
+    list of attachment dicts to embed on the ticket."""
+    import attachments as att_store
+    out: list[dict] = []
+    for meta in attachments_meta:
+        att_id = meta.get("attachment_id")
+        if not att_id:
+            continue
+        if (meta.get("size") or 0) > att_store.MAX_BYTES:
+            continue
+        try:
+            res = service.users().messages().attachments().get(
+                userId="me", messageId=gmail_msg_id, id=att_id,
+            ).execute()
+        except Exception as e:
+            logger.warning(f"[gmail] attachment fetch failed {att_id}: {e}")
+            continue
+        data_b64 = res.get("data") or ""
+        if not data_b64:
+            continue
+        try:
+            raw = base64.urlsafe_b64decode(data_b64 + "=" * (-len(data_b64) % 4))
+        except Exception:
+            continue
+        stored = await att_store.store_bytes(
+            db, data=raw,
+            filename=meta.get("filename") or "attachment",
+            mime_type=meta.get("mime_type"),
+            source="gmail",
+        )
+        if stored:
+            out.append(stored)
+    return out
 
 
 def _header(headers: list[dict], name: str) -> str:
@@ -428,7 +467,7 @@ async def sync_inbox(db, inbox: dict) -> dict:
             continue
 
         try:
-            handled = await _handle_message(db, inbox, full)
+            handled = await _handle_message(db, inbox, full, service)
         except Exception as e:
             logger.exception(f"[gmail] handle message {msg_id} crashed: {e}")
             out["errors"] += 1
@@ -460,7 +499,7 @@ async def sync_inbox(db, inbox: dict) -> dict:
     return out
 
 
-async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
+async def _handle_message(db, inbox: dict, msg: dict, service) -> Optional[str]:
     """Convert one Gmail message into either a new ticket or a note on an
     existing ticket (matched by Gmail threadId). Returns 'created', 'updated',
     or None when skipped."""
@@ -474,8 +513,15 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
     thread_id = msg.get("threadId")
     msg_id = msg.get("id")
     snippet = (msg.get("snippet") or "").strip()
-    body_text, attachments = _extract_body(payload)
+    body_text, attachments_meta = _extract_body(payload)
     body_text = body_text or snippet
+
+    # Download + store attachment bytes (skips files > MAX_BYTES silently)
+    stored_attachments: list[dict] = []
+    if attachments_meta:
+        stored_attachments = await _download_gmail_attachments(
+            db, service, msg_id, attachments_meta,
+        )
 
     # Internal date
     try:
@@ -499,23 +545,23 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
 
     if existing:
         # Append to the existing ticket as a note (the actual reply text)
-        attach_suffix = ""
-        if attachments:
-            names = ", ".join(f"{a['filename']} ({a['size']}B)" for a in attachments)
-            attach_suffix = f"\n\nAttachments: {names}"
         note = {
             "id": str(uuid.uuid4()),
             "author_id": "_gmail",
             "author_name": f"{sender_name} <{sender_email}>",
-            "body": (body_text or "(empty body)") + attach_suffix,
+            "body": (body_text or "(empty body)"),
             "created_at": iso,
             "internal": True,
             "gmail_message_id": msg_id,
+            "attachments": stored_attachments,
         }
+        push: dict = {"notes": note}
+        if stored_attachments:
+            push["attachments"] = {"$each": stored_attachments}
         await db.tickets.update_one(
             {"id": existing["id"]},
             {
-                "$push": {"notes": note},
+                "$push": push,
                 "$set": {
                     "updated_at": iso,
                     # Bump status back to open if the ticket was waiting on student
@@ -533,9 +579,6 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
         short_subject = "Email support request"
 
     desc = body_text or "(empty body)"
-    if attachments:
-        names = ", ".join(f"{a['filename']} ({a['size']}B)" for a in attachments)
-        desc = f"{desc}\n\nAttachments: {names}"
 
     # Auto-assign by which inbox received the email
     auto_assignee = await _resolve_assignee_for_inbox(db, inbox.get("email") or "")
@@ -559,6 +602,7 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
         "updated_at": iso,
         "resolved_at": None,
         "notes": [],
+        "attachments": stored_attachments,
         "slack_urgent_sent": False,
     }
     await db.tickets.insert_one(ticket)
