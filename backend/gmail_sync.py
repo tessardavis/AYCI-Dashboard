@@ -104,6 +104,7 @@ async def start_oauth(
     )
     await db.gmail_oauth_states.insert_one({
         "state": state,
+        "code_verifier": flow.code_verifier,  # PKCE — required to redeem the code
         "return_to": return_to,
         "user_id": user_id,
         "ingest_inbound": bool(ingest_inbound),
@@ -128,6 +129,11 @@ async def complete_oauth(db, code: str, state: str) -> dict:
     import warnings
 
     flow = _flow()
+    # Restore the PKCE verifier from the start step — Google requires it to
+    # exchange the auth code we just received for tokens.
+    code_verifier = state_doc.get("code_verifier")
+    if code_verifier:
+        flow.code_verifier = code_verifier
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # scope-order warning
         flow.fetch_token(code=code)
