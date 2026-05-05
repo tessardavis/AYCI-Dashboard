@@ -380,18 +380,19 @@ async def _build_session_payload(
         })
 
     # Sort:
-    #   1. interview-soon first (smallest days_until wins; None goes after)
-    #   2. higher leaderboard score wins
-    #   3. eligible-on-time before late
-    #   4. earliest submission first
+    #   1. Eligible-on-time submissions ALWAYS rank above late/early ones
+    #      (per Tessa: late/early submitters belong at the bottom of the list)
+    #   2. Within each eligibility tier, interview-soon first
+    #   3. Higher leaderboard score wins
+    #   4. Earliest submission first
     def _sort_key(x):
         days = x.get("days_until_interview")
         score = x.get("leaderboard_score")
         return (
+            0 if x.get("eligible") else 1,
             0 if days is not None else 1,
             days if days is not None else 9999,
             -(score or 0),
-            0 if x.get("eligible") else 1,
             x.get("submitted_at") or "",
         )
 

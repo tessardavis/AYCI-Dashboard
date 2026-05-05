@@ -241,7 +241,7 @@ async def find_student_doc_link(db, student_name: str) -> dict:
         else:
             payload = {
                 "found": True,
-                "web_view_link": match.get("webViewLink"),
+                "web_view_link": match.get("web_view_link"),
                 "name": match.get("name"),
                 "match_reason": match.get("match_reason"),
                 "match_score": match.get("match_score"),

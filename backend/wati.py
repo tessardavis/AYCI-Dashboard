@@ -174,20 +174,50 @@ async def _fetch_wati_media(
 
 # -------------------------------------------------------- Webhook handling
 async def handle_webhook(db, payload: dict) -> dict:
-    """Process a single Wati webhook event. Returns {action, ticket_id|None}."""
+    """Process a single Wati webhook event. Returns {action, ticket_id|None}.
+
+    Every decision is logged at INFO level so we can debug missing replies via
+    the production logs (look for "[wati]" lines).
+    """
     event = (payload.get("eventType") or payload.get("event_type") or "").strip()
+    raw_wa = payload.get("waId") or payload.get("wa_id") or ""
+    raw_msg_id = payload.get("id") or payload.get("messageId") or payload.get("whatsappMessageId")
+
+    # Persist a slim trail of the last 200 webhook events so we can self-debug
+    # without grep'ing production logs. Stored under the cache collection.
+    try:
+        await db.wati_webhook_log.insert_one({
+            "received_at": _now_iso(),
+            "event": event,
+            "wa_id": raw_wa,
+            "message_id": raw_msg_id,
+            "owner": payload.get("owner"),
+            "type": payload.get("type"),
+            "text_preview": (payload.get("text") or payload.get("body") or "")[:200],
+            "operator_email": payload.get("operatorEmail"),
+            "raw_keys": sorted(list(payload.keys()))[:30],
+        })
+    except Exception:
+        pass
+
     # Only act on inbound user messages. Wati's terminology varies by version
-    # — `message` (received-from-customer) and `messageReceived` are common.
-    if event not in {"message", "messageReceived", "messageReceived_v2"}:
+    # — accept all known received-from-customer variants. We deliberately
+    # IGNORE other events (sessionMessageSent, statusUpdate, etc.) but log them.
+    inbound_events = {
+        "message", "messageReceived", "messageReceived_v2",
+        "newMessageReceived", "messageNew", "incoming_message",
+    }
+    if event not in inbound_events:
+        logger.info(f"[wati] ignored event={event!r} wa={raw_wa} msg_id={raw_msg_id}")
         return {"action": "ignored", "reason": f"event {event} not subscribed"}
 
     # In Wati's payload the message is at top level; body fields documented at
     # https://docs.wati.io/reference/message-received
     text = (payload.get("text") or payload.get("body") or "").strip()
     msg_type = (payload.get("type") or "text").lower()
-    wa_id = _normalise_phone(payload.get("waId") or payload.get("wa_id") or "")
+    wa_id = _normalise_phone(raw_wa)
     sender_name = (payload.get("senderName") or payload.get("contactName") or "").strip()
-    msg_id = payload.get("id") or payload.get("messageId") or payload.get("whatsappMessageId")
+    msg_id = raw_msg_id
     timestamp = payload.get("timestamp") or payload.get("created")
     operator_email = (payload.get("operatorEmail") or "").strip()
 
@@ -210,6 +240,7 @@ async def handle_webhook(db, payload: dict) -> dict:
     )
 
     if not wa_id:
+        logger.warning(f"[wati] ignored event={event!r} reason=no_waId payload_keys={list(payload.keys())[:15]}")
         return {"action": "ignored", "reason": "no waId"}
     if not msg_id:
         # Wati sometimes omits id on test events; synthesise one
@@ -224,12 +255,14 @@ async def handle_webhook(db, payload: dict) -> dict:
         {"_id": 1},
     )
     if dup:
+        logger.info(f"[wati] duplicate event={event!r} wa={wa_id} msg_id={msg_id}")
         return {"action": "duplicate", "message_id": msg_id}
 
     # Ignore outbound (operator) events that some Wati setups also fire as
     # `message` — these have an operatorEmail and `owner=true`.
     owner_flag = payload.get("owner")
     if owner_flag is True or (owner_flag == "true") or operator_email:
+        logger.info(f"[wati] ignored outbound wa={wa_id} owner={owner_flag} operator={operator_email}")
         return {"action": "ignored", "reason": "outbound event"}
 
     iso = _now_iso()
@@ -280,6 +313,7 @@ async def handle_webhook(db, payload: dict) -> dict:
                 "$set": {"updated_at": iso, "status": "open"},
             },
         )
+        logger.info(f"[wati] appended note ticket={existing['id']} wa={wa_id} msg_id={msg_id}")
         return {"action": "appended", "ticket_id": existing["id"]}
 
     # Brand-new ticket
@@ -321,6 +355,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         "slack_urgent_sent": False,
     }
     await db.tickets.insert_one(ticket)
+    logger.info(f"[wati] created ticket={ticket['id']} wa={wa_id} msg_id={msg_id} assigned_to={assignee_id}")
     return {"action": "created", "ticket_id": ticket["id"]}
 
 

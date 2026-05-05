@@ -15,6 +15,20 @@ async def status(admin: dict = Depends(require_admin)):
     return await wati.status()
 
 
+@router.get("/recent")
+async def recent_webhook_events(
+    limit: int = 30,
+    admin: dict = Depends(require_admin),
+):
+    """Return the last N raw Wati webhook events the server received, with the
+    decision we made on each (ignored / duplicate / appended / created). Lets
+    the admin self-diagnose missing replies without grep'ing logs."""
+    rows = await db.wati_webhook_log.find(
+        {}, {"_id": 0}
+    ).sort("received_at", -1).to_list(min(max(limit, 1), 200))
+    return {"events": rows}
+
+
 @router.post("/webhook")
 async def webhook(request: Request):
     """Public webhook endpoint Wati posts incoming messages to.
