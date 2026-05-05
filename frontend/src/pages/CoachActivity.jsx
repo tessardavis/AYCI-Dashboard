@@ -139,21 +139,66 @@ function CircleSpaceCard({ space, primaryNoun }) {
           testid="flag-rate-limited"
         >
           {space.rate_limited.map((rl) => (
-            <div key={`${rl.name}-${rl.week_start}`} className="text-sm py-1.5 border-b border-amber-100 last:border-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-display font-semibold text-[var(--ayci-ink)]">{rl.name}</div>
-                <span className="text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">
-                  {rl.count} videos
-                </span>
-              </div>
-              <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">Week of {fmtShortDate(rl.week_start)}</div>
-            </div>
+            <RateLimitedRow key={`${rl.name}-${rl.week_start}`} rl={rl} />
           ))}
         </FlagCard>
       </div>
     </Section>
   );
 }
+
+function RateLimitedRow({ rl }) {
+  const [expanded, setExpanded] = useState(false);
+  const posts = rl.posts || [];
+  return (
+    <div
+      className="text-sm py-1.5 border-b border-amber-100 last:border-0"
+      data-testid={`rate-limited-row-${rl.name}`}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 text-left hover:bg-amber-50/60 -mx-1 px-1 py-0.5 rounded"
+      >
+        <div className="font-display font-semibold text-[var(--ayci-ink)] flex items-center gap-1.5">
+          <span className={`text-amber-700 transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
+          {rl.name}
+        </div>
+        <span className="text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
+          {rl.count} videos
+        </span>
+      </button>
+      <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 ml-3">
+        Week of {fmtShortDate(rl.week_start)}
+      </div>
+      {expanded && posts.length > 0 && (
+        <ul className="ml-5 mt-2 mb-1 space-y-1 border-l-2 border-amber-200 pl-3">
+          {posts.map((p, i) => (
+            <li key={p.id || i} className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2">
+              <span className="font-mono text-[10px] text-amber-700 w-4">{i + 1}.</span>
+              <span className="flex-1 truncate">{p.title}</span>
+              <span className="text-[10px] tabular-nums whitespace-nowrap">
+                {fmtShortDate(p.created_at)}
+              </span>
+              {p.url && (
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-amber-700 hover:underline flex items-center gap-0.5 whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Open <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 
 function PrivateVideosCard({ data }) {
   if (!data || data.error) {

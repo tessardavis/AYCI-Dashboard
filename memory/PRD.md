@@ -13,6 +13,10 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Auditable rate-limit rows on Coach Activity
+- **Backend** (`coach_activity.analyse_circle_space`): each `rate_limited` entry now includes `posts: [{id, title, url, created_at}]` so the dashboard can show exactly which posts were counted.
+- **Frontend** (`CoachActivity.jsx → RateLimitedRow`): rate-limit rows are now click-to-expand. Reveals a numbered list of the counted posts with date + "Open ↗" Circle link per post — lets you audit a "wait, that's only 3 visible" discrepancy without leaving the dashboard.
+
 ### 2026-05-05 — Circle videos > 3/week → Slack alert
 - **`circle_video_alerts.check_and_send`** + 5-min APScheduler cron: scans Recorded Answer Review Circle space for any member with >3 posts in the current calendar week (Mon-Sun UK). Posts one-line Slack alert to `#circle-days`. Idempotent per (member, week) via `circle_video_alerts_sent` collection.
 - New env: `SLACK_CIRCLE_DAYS_WEBHOOK_URL` (falls back to `SLACK_WEBHOOK_URL`). Manual test endpoint: `POST /api/coach-activity/circle-video-alerts/test`.

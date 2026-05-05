@@ -285,7 +285,7 @@ async def analyse_circle_space(
     unanswered.sort(key=lambda x: x["hours_old"], reverse=True)
 
     # Rate-limit: any student with > 3 posts in a single calendar (Mon-Sun) week
-    by_author_week: dict[tuple[str, str], list[int]] = {}
+    by_author_week: dict[tuple[str, str], list[dict]] = {}
     for p in in_window:
         author = _post_author_name(p) or "Unknown"
         author_email = _post_author_email(p)
@@ -299,17 +299,23 @@ async def analyse_circle_space(
         # Monday of that week (ISO weekday: Mon=1)
         monday = d - timedelta(days=d.weekday())
         key = (author, monday.isoformat())
-        by_author_week.setdefault(key, []).append(p["id"])
+        by_author_week.setdefault(key, []).append({
+            "id": p["id"],
+            "title": p.get("name") or "(untitled)",
+            "url": _post_url(p),
+            "created_at": p.get("created_at"),
+        })
 
     rate_limited = [
         {
             "name": author,
             "week_start": wk_start,
-            "count": len(post_ids),
-            "post_ids": post_ids,
+            "count": len(post_entries),
+            "post_ids": [pe["id"] for pe in post_entries],
+            "posts": post_entries,
         }
-        for (author, wk_start), post_ids in by_author_week.items()
-        if len(post_ids) > WEEKLY_VIDEO_LIMIT
+        for (author, wk_start), post_entries in by_author_week.items()
+        if len(post_entries) > WEEKLY_VIDEO_LIMIT
     ]
     rate_limited.sort(key=lambda x: (x["count"], x["week_start"]), reverse=True)
 
