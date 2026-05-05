@@ -113,7 +113,7 @@ export default function AppShell() {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 space-y-1 min-h-0">
           {NAV.filter((item) => userCanAccess(user, item.board)).map(({ to, label, icon: Icon, testid }) => (
             <PrefetchNavLink
               key={to}
