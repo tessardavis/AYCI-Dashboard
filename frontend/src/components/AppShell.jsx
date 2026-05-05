@@ -5,8 +5,9 @@ import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
 
-// Sidebar information architecture — three collapsible groups + two
-// always-on items. Order: Community → Tickets → Growth → Settings.
+// Sidebar information architecture — collapsible groups at the top so they're
+// the primary navigation surface, then top-level items (Tickets, Settings)
+// underneath.
 const NAV_GROUPS = [
   {
     type: "group",
@@ -23,14 +24,6 @@ const NAV_GROUPS = [
     ],
   },
   {
-    type: "item",
-    to: "/tickets",
-    label: "Support Tickets",
-    icon: LifeBuoy,
-    testid: "sidebar-nav-tickets",
-    board: "tickets",
-  },
-  {
     type: "group",
     id: "growth",
     label: "Growth",
@@ -41,6 +34,14 @@ const NAV_GROUPS = [
       { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
       { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
     ],
+  },
+  {
+    type: "item",
+    to: "/tickets",
+    label: "Support Tickets",
+    icon: LifeBuoy,
+    testid: "sidebar-nav-tickets",
+    board: "tickets",
   },
   {
     type: "item",

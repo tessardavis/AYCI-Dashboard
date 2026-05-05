@@ -86,6 +86,39 @@ async def students_drive_summary(
     return await gdrive.summarise_student_doc(db, name, email)
 
 
+@router.get("/students/drive-diagnostic")
+async def students_drive_diagnostic(
+    user: dict = Depends(require_board("students")),
+):
+    """Returns how many files the configured Drive service account can see
+    in the private-tier folder. Useful when prod lookups silently return
+    'not found' due to folder-share or env-var drift."""
+    try:
+        files = await gdrive._list_docs()
+        return {
+            "ok": True,
+            "files_seen": len(files),
+            "sample": [{"name": f["name"], "modifiedTime": f.get("modifiedTime")} for f in files[:5]],
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/students/drive-cache/clear")
+async def students_drive_cache_clear(
+    name: str = "",
+    user: dict = Depends(require_board("students")),
+):
+    """Bust the per-student Drive lookup cache. With ?name=Foo Bar clears just
+    that student; without it clears every cached link."""
+    if name:
+        key = f"drive_link:{gdrive._normalise(name)}"
+        result = await db.cache.delete_one({"_id": key})
+        return {"cleared": result.deleted_count, "scope": "single", "name": name}
+    result = await db.cache.delete_many({"_id": {"$regex": "^drive_link:"}})
+    return {"cleared": result.deleted_count, "scope": "all"}
+
+
 @router.get("/students/at-risk")
 async def students_at_risk(
     refresh: bool = False,

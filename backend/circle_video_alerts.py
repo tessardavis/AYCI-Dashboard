@@ -19,7 +19,7 @@ import coach_activity as coach_act
 logger = logging.getLogger(__name__)
 
 
-def _webhook_url() -> str:
+def _webhook_url_env() -> str:
     """Channel-specific webhook for #circle-days. Falls back to the general
     `SLACK_WEBHOOK_URL` so the feature still works (in a wrong channel)
     until the team creates the dedicated webhook."""
@@ -30,8 +30,34 @@ def _webhook_url() -> str:
     ).strip()
 
 
-async def _post(text: str) -> dict:
-    url = _webhook_url()
+async def get_webhook_url(db) -> str:
+    """Read the configured webhook URL. Order of preference:
+       1. `app_settings.circle_days_webhook` (DB-stored, set via API)
+       2. env var `SLACK_CIRCLE_DAYS_WEBHOOK_URL`
+       3. env var `SLACK_WEBHOOK_URL` (general fallback — wrong channel)
+    Storing the URL in the DB lets non-technical admins set it without an
+    Emergent redeploy when new env-var slots can't be added."""
+    doc = await db.app_settings.find_one(
+        {"id": "circle_days_webhook"}, {"_id": 0, "url": 1}
+    )
+    db_url = (doc or {}).get("url") or ""
+    return (db_url.strip() or _webhook_url_env())
+
+
+async def set_webhook_url(db, url: str) -> dict:
+    url = (url or "").strip()
+    if url and not url.startswith("https://hooks.slack.com/"):
+        return {"ok": False, "error": "Doesn't look like a Slack webhook URL (must start with https://hooks.slack.com/)"}
+    await db.app_settings.update_one(
+        {"id": "circle_days_webhook"},
+        {"$set": {"id": "circle_days_webhook", "url": url}},
+        upsert=True,
+    )
+    return {"ok": True, "url_present": bool(url)}
+
+
+async def _post(db, text: str) -> dict:
+    url = await get_webhook_url(db)
     if not url:
         return {"sent": False, "reason": "no webhook configured"}
     try:
@@ -74,7 +100,7 @@ async def check_and_send(db) -> dict:
             skipped += 1
             continue
         text = f"🎬 *{name}* posted *{count} videos* this week (week of {week_start}) in Recorded Answer Review."
-        post_result = await _post(text)
+        post_result = await _post(db, text)
         if post_result.get("sent"):
             await db.circle_video_alerts_sent.insert_one({
                 "_id": key,

@@ -262,6 +262,33 @@ async def test_circle_video_alerts(admin: dict = Depends(require_admin)):
     return await cva.check_and_send(db)
 
 
+class CircleDaysWebhookPayload(BaseModel):
+    url: str = ""
+
+
+@api.get("/coach-activity/circle-video-alerts/webhook")
+async def get_circle_days_webhook(admin: dict = Depends(require_admin)):
+    """Returns whether the #circle-days webhook is configured + a masked preview."""
+    import circle_video_alerts as cva
+    url = await cva.get_webhook_url(db)
+    return {
+        "configured": bool(url),
+        "masked": (url[:36] + "…" + url[-6:]) if url and len(url) > 50 else (url or ""),
+    }
+
+
+@api.post("/coach-activity/circle-video-alerts/webhook")
+async def set_circle_days_webhook(
+    body: CircleDaysWebhookPayload,
+    admin: dict = Depends(require_admin),
+):
+    """Store the #circle-days Slack webhook URL in MongoDB so the alert works
+    on production without needing an env-var redeploy. Pass empty string to
+    clear."""
+    import circle_video_alerts as cva
+    return await cva.set_webhook_url(db, body.url)
+
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")

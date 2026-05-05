@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Slack webhook DB-backed + drive diagnostic + nav reorder
+- **Slack `#circle-days` webhook now DB-backed** (`circle_video_alerts.get_webhook_url` / `set_webhook_url`): reads from MongoDB `app_settings.circle_days_webhook` first, then env var. Lets non-technical admins configure on production via API call (no new env-var slot needed). Verified live on preview — test ping posted to the user's #circle-days channel successfully.
+- **New endpoints**: `GET/POST /api/coach-activity/circle-video-alerts/webhook` (admin-only) for set/get.
+- **Drive diagnostic endpoints** (`routes/students.py`): `GET /api/students/drive-diagnostic` returns how many files the service account sees + sample. `POST /api/students/drive-cache/clear?name=Foo` busts cached "not found" results from before a folder share.
+- **Sidebar reorder** (`AppShell.jsx`): collapsible groups (Community, Growth) now sit at the top — primary navigation surface — with top-level items (Support Tickets, Settings) underneath.
+
 ### 2026-05-05 — Sidebar grouped: Community / Tickets / Growth + ticket-detail fixes
 - **Sidebar restructure** (`AppShell.jsx`): three sections — collapsible **Community** (default open: Cohort Leaderboard, Coach Activity, Cohort Dashboard, Upcoming Interviews, Spotlight Coaching, Student Lookup) → **Support Tickets** (top-level, between groups) → collapsible **Growth** (default closed: Weekly Scorecard, Quarterly Rocks, Launch Dashboard, Students at Risk) → Settings stays bottom. Group state persists in `localStorage`. Groups auto-expand if user navigates to a route inside them.
 - **Internal note bug fixed** (`TicketDetailModal`): the modal kept stale local state, so notes/reassignments looked like they didn't save (server-side they did). Now refetches the ticket on every prop change AND optimistically merges PATCH responses, so changes appear instantly.
