@@ -18,6 +18,7 @@ import {
   Paperclip,
   FileText,
   Download,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
@@ -829,7 +830,9 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
   const [fullTicket, setFullTicket] = useState(ticket);
   const [matching, setMatching] = useState(false);
 
-  // Fetch the full ticket (triggers backend student-match lookup against Monday)
+  // Re-fetch the full ticket whenever the parent's ticket reference updates
+  // (covers: open, after PATCH/note add, after onRefresh from reply panels).
+  // Without this, local state goes stale and changes appear to "not save".
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -837,17 +840,25 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         const { data } = await apiClient.get(`/tickets/${ticket.id}`);
         if (!cancelled) setFullTicket(data);
       } catch {
-        // non-fatal — fall back to the list-view ticket
+        if (!cancelled) setFullTicket(ticket);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [ticket.id]);
+  }, [ticket.id, ticket.updated_at, ticket.assignee_id, ticket.status, ticket.priority, ticket.category, (ticket.notes || []).length]);
 
   const t = fullTicket || ticket;
 
-  const handleField = (field, value) => onUpdate(ticket.id, { [field]: value });
+  const handleField = async (field, value) => {
+    // Optimistically reflect the change locally so the dropdown doesn't snap
+    // back while the server PATCH is in flight.
+    setFullTicket((prev) => (prev ? { ...prev, [field]: value } : prev));
+    const updated = await onUpdate(ticket.id, { [field]: value });
+    if (updated) {
+      setFullTicket((prev) => ({ ...(prev || {}), ...updated }));
+    }
+  };
 
   const handleAddNote = async () => {
     const body = note.trim();
@@ -856,10 +867,17 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     try {
       await apiClient.post(`/tickets/${ticket.id}/notes`, { body, internal: true });
       setNote("");
-      await onRefresh();
-      toast.success("Note added");
+      // Optimistically refetch THIS ticket so the new note appears immediately
+      try {
+        const { data } = await apiClient.get(`/tickets/${ticket.id}`);
+        setFullTicket(data);
+      } catch {
+        // ignore — onRefresh will catch us up
+      }
+      onRefresh();
+      toast.success("Internal note saved");
     } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to add note");
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to save note");
     } finally {
       setPosting(false);
     }
@@ -1066,20 +1084,31 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <EmailReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
-        <div>
-          <Label>Internal notes ({(t.notes || []).length})</Label>
+        <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Lock className="w-3.5 h-3.5 text-amber-700" />
+            <Label className="text-amber-900 mb-0">
+              Internal notes ({(t.notes || []).length})
+            </Label>
+            <span className="text-[10px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-bold">
+              Team only · never sent to student
+            </span>
+          </div>
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
             {(t.notes || []).length === 0 ? (
-              <div className="text-xs text-[var(--ayci-ink-muted)] italic">No notes yet.</div>
+              <div className="text-xs text-[var(--ayci-ink-muted)] italic">No internal notes yet.</div>
             ) : (
               t.notes.map((n) => (
                 <div
                   key={n.id}
-                  className="border border-slate-200 bg-slate-50 rounded-md p-2.5 text-sm"
+                  className="border border-amber-200 bg-white rounded-md p-2.5 text-sm"
                   data-testid={`ticket-note-${n.id}`}
                 >
                   <div className="flex items-center justify-between text-[11px] text-[var(--ayci-ink-muted)] mb-1">
-                    <span className="font-semibold text-[var(--ayci-ink)]">{n.author_name}</span>
+                    <span className="font-semibold text-[var(--ayci-ink)] flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-amber-600" />
+                      {n.author_name}
+                    </span>
                     <span>{formatUk(n.created_at)}</span>
                   </div>
                   <div className="whitespace-pre-wrap">{n.body}</div>
@@ -1088,22 +1117,31 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
               ))
             )}
           </div>
-          <div className="flex items-end gap-2 mt-2">
+          <div className="flex items-end gap-2 mt-3">
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Add an internal note…"
+              placeholder="Write an internal note for the team — not sent to the student"
               rows={2}
-              className={inputCls}
+              className={inputCls + " bg-white"}
               data-testid="ticket-add-note-input"
             />
             <Button
               onClick={handleAddNote}
               disabled={!note.trim() || posting}
               size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-900 hover:bg-amber-100"
               data-testid="ticket-add-note-submit"
             >
-              {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {posting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5 mr-1" />
+                  Save note
+                </>
+              )}
             </Button>
           </div>
         </div>
