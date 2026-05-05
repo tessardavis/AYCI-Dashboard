@@ -397,6 +397,26 @@ async def _build_session_payload(
 
     in_window.sort(key=_sort_key)
 
+    # Compute leaderboard rank within this session — purely based on badge
+    # count (descending). Used by the UI to show "🏆 #1 leaderboard" chips so
+    # the team can SEE why the top rows are prioritised. Ties share a rank
+    # (standard competition ranking: 1, 2, 2, 4...).
+    by_score = sorted(
+        [s for s in in_window if (s.get("leaderboard_score") or 0) > 0],
+        key=lambda s: -(s.get("leaderboard_score") or 0),
+    )
+    rank_by_key: dict[str, int] = {}
+    last_score: Optional[int] = None
+    last_rank = 0
+    for idx, s in enumerate(by_score, start=1):
+        score = s.get("leaderboard_score") or 0
+        if score != last_score:
+            last_rank = idx
+            last_score = score
+        rank_by_key[s["name_key"]] = last_rank
+    for s in in_window:
+        s["leaderboard_rank"] = rank_by_key.get(s["name_key"])
+
     return {
         "id": event.get("id"),
         "name": event.get("name"),

@@ -13,6 +13,19 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Spotlight Coaching prioritisation visibility + instant marking
+- **Backend** (`spotlight._compose_session`): now computes per-session `leaderboard_rank` (standard competition ranking on badge count desc) so the UI can render gold/silver/bronze pills on top scorers.
+- **Frontend** (`SpotlightCoaching.jsx`):
+  - Top 3 rows of every session table now have a **gold left border + amber tint** so the priority three jump out at a glance.
+  - **🏆/🥈/🥉 "LEADERBOARD #N"** pill on top scorers, replacing the ambiguous bare badge count. Score appears next to the rank ("· 7") and tooltip explains the ranking causation.
+  - For non-top-3 scorers, badge chip now reads "X badges" instead of just "X" so unit is unambiguous.
+  - Italic "↑ Prioritised: Top of the leaderboard" / "Interview in 3 days" / "Earliest eligible submission" reason line under each top-3 student name closes the "I can't tell why this is at the top" loop.
+  - **"HOW THIS LIST IS PRIORITISED"** caption strip under each session header lists the three sort criteria explicitly.
+  - **Optimistic UI** in `OutcomePicker`: mark chip flips instantly without waiting for the Circle + Tally refetch. Network call still happens in background; reverts + reloads on failure.
+
+### 2026-05-05 — Production Gmail OAuth wired
+- User added `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_OAUTH_REDIRECT_URI` to Emergent Secrets (Custom keys) and added the production redirect URI to Google Cloud Console. Verified live: `/api/oauth/gmail/start` returns the correct prod `client_id` and `redirect_uri=https://ayci-dashboard.emergent.host/api/oauth/gmail/callback`. Coralie + others can now connect Gmail from production.
+
 ### 2026-05-05 — WhatsApp content-aware auto-assignment
 - **`wati.resolve_whatsapp_assignee`**: routes brand-new WhatsApp tickets at webhook ingestion time using the AYCI rules — prospect (no Monday match) → Arub; existing student + upgrade-intent body (keywords: upgrade/premium/tier/1-1/one-to-one/private coaching/etc.) → Arub; existing student + general question → Coralie. Resolves team-member ids by name lookup so it survives team changes.
 - Verified: synthetic prospect & "premium 1-1" messages on preview both routed to Arub. Shailaja's existing live production ticket manually reassigned to Arub via API PATCH.

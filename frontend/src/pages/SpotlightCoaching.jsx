@@ -156,6 +156,50 @@ function UpcomingView() {
     load();
   }, []);
 
+  // Optimistic local mutation for outcome marks — keeps the UI instant. The
+  // background POST still hits the server; on failure OutcomePicker calls
+  // `load` to resync.
+  const applyLocalUpdate = ({
+    sessionId, studentName, studentEmail, recordId, status, removed,
+  }) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      const nameKey = (studentName || "").trim().toLowerCase();
+      const emailKey = (studentEmail || "").trim().toLowerCase();
+      return {
+        ...prev,
+        sessions: (prev.sessions || []).map((s) => {
+          if (s.id !== sessionId) return s;
+          const students = (s.students || []).map((st) => {
+            const matchEmail =
+              emailKey && (st.email || "").toLowerCase() === emailKey;
+            const matchName = (st.name || "").trim().toLowerCase() === nameKey;
+            if (matchEmail || matchName) {
+              if (removed) {
+                return { ...st, record_status: null, record: null };
+              }
+              return {
+                ...st,
+                record_status: status,
+                record: { ...(st.record || {}), id: recordId, status },
+              };
+            }
+            return st;
+          });
+          let records = s.records || [];
+          if (removed) {
+            records = records.filter((r) => r.id !== recordId);
+          } else if (recordId) {
+            records = records.map((r) =>
+              r.id === recordId ? { ...r, status } : r,
+            );
+          }
+          return { ...s, students, records };
+        }),
+      };
+    });
+  };
+
   const sessions = data?.sessions || [];
 
   return (
@@ -190,13 +234,14 @@ function UpcomingView() {
           session={s}
           primary={idx === 0}
           onRecordsChange={load}
+          onLocalUpdate={applyLocalUpdate}
         />
       ))}
     </div>
   );
 }
 
-function SessionCard({ session, primary, onRecordsChange }) {
+function SessionCard({ session, primary, onRecordsChange, onLocalUpdate }) {
   const label = SESSION_LABEL[session.session_type] || "Session";
   const badge = SESSION_BADGE[session.session_type] || "bg-slate-50 text-slate-700 border-slate-200";
   const [sending, setSending] = useState(false);
@@ -329,40 +374,55 @@ function SessionCard({ session, primary, onRecordsChange }) {
           No spotlight submissions yet for this session.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] border-b border-[var(--ayci-border)]">
-                <th className="px-4 py-2 font-semibold w-[1%] whitespace-nowrap">#</th>
-                <th className="px-4 py-2 font-semibold">Student</th>
-                <th className="px-4 py-2 font-semibold">Topic</th>
-                <th className="px-3 py-2 font-semibold whitespace-nowrap">Interview</th>
-                <th className="px-3 py-2 font-semibold whitespace-nowrap">Submitted</th>
-                <th className="px-3 py-2 font-semibold whitespace-nowrap">Outcome</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(session.students || []).map((st, i) => (
-                <StudentRow
-                  key={`${st.name}-${st.submitted_at}-${i}`}
-                  student={st}
-                  index={i}
-                  session={session}
-                  onRecordsChange={onRecordsChange}
-                />
-              ))}
-              {manualRecords.map((r, i) => (
-                <ManualRow
-                  key={r.id}
-                  record={r}
-                  index={(session.students?.length || 0) + i}
-                  session={session}
-                  onRecordsChange={onRecordsChange}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div
+            className="px-4 py-2 bg-amber-50/40 border-b border-amber-100 text-[11px] text-[var(--ayci-ink-muted)] flex items-center gap-2 flex-wrap"
+            data-testid={`spotlight-priority-caption-${session.id}`}
+          >
+            <span className="font-semibold uppercase tracking-wider text-amber-800">
+              How this list is prioritised:
+            </span>
+            <span>
+              1. Interview soonest <span className="text-rose-600 font-semibold">·</span> 2. Most badges (leaderboard rank) <span className="text-rose-600 font-semibold">·</span> 3. Earliest eligible submission
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] border-b border-[var(--ayci-border)]">
+                  <th className="px-4 py-2 font-semibold w-[1%] whitespace-nowrap">#</th>
+                  <th className="px-4 py-2 font-semibold">Student</th>
+                  <th className="px-4 py-2 font-semibold">Topic</th>
+                  <th className="px-3 py-2 font-semibold whitespace-nowrap">Interview</th>
+                  <th className="px-3 py-2 font-semibold whitespace-nowrap">Submitted</th>
+                  <th className="px-3 py-2 font-semibold whitespace-nowrap">Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(session.students || []).map((st, i) => (
+                  <StudentRow
+                    key={`${st.name}-${st.submitted_at}-${i}`}
+                    student={st}
+                    index={i}
+                    session={session}
+                    onRecordsChange={onRecordsChange}
+                    onLocalUpdate={onLocalUpdate}
+                  />
+                ))}
+                {manualRecords.map((r, i) => (
+                  <ManualRow
+                    key={r.id}
+                    record={r}
+                    index={(session.students?.length || 0) + i}
+                    session={session}
+                    onRecordsChange={onRecordsChange}
+                    onLocalUpdate={onLocalUpdate}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <div className="px-4 py-3 border-t border-[var(--ayci-border)] bg-slate-50/40">
@@ -389,20 +449,34 @@ function SessionCard({ session, primary, onRecordsChange }) {
   );
 }
 
-function StudentRow({ student, index, session, onRecordsChange }) {
+function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate }) {
   const days = student.days_until_interview;
   const interviewSoon = days !== null && days !== undefined && days <= 7;
-  const rowClass = interviewSoon ? "bg-rose-50/40 hover:bg-rose-50/70" : "hover:bg-slate-50/50";
+  const lbRank = student.leaderboard_rank;
+  const topLeaderboard = lbRank && lbRank <= 3;
+  // Highlight top 3 rows of the table itself with a gold left-border so the
+  // priority is unmistakable at a glance.
+  const topPriority = index < 3;
+  const rowClass = interviewSoon
+    ? "bg-rose-50/40 hover:bg-rose-50/70"
+    : topPriority
+      ? "bg-amber-50/30 hover:bg-amber-50/50"
+      : "hover:bg-slate-50/50";
+  const borderClass = topPriority && !interviewSoon ? "border-l-4 border-l-amber-400" : "";
   return (
     <tr
-      className={`border-b border-[var(--ayci-border)] last:border-b-0 ${rowClass}`}
+      className={`border-b border-[var(--ayci-border)] last:border-b-0 ${rowClass} ${borderClass}`}
       data-testid={`spotlight-row-${session.id}-${index}`}
     >
       <td className="px-4 py-3 whitespace-nowrap">
         <div
           className={
             "inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold " +
-            (interviewSoon ? "bg-rose-600 text-white" : "bg-slate-100 text-[var(--ayci-ink)]")
+            (interviewSoon
+              ? "bg-rose-600 text-white"
+              : topPriority
+                ? "bg-amber-400 text-amber-950"
+                : "bg-slate-100 text-[var(--ayci-ink)]")
           }
         >
           {index + 1}
@@ -411,14 +485,18 @@ function StudentRow({ student, index, session, onRecordsChange }) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-[var(--ayci-ink)]">{student.name}</span>
-          {student.leaderboard_score != null && student.leaderboard_score > 0 && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold tabular-nums"
-              title="Number of Circle badges (cohort + private tier badges excluded)"
-            >
-              <Award className="w-3 h-3" />
-              {student.leaderboard_score}
-            </span>
+          {topLeaderboard ? (
+            <LeaderboardRankPill rank={lbRank} score={student.leaderboard_score} />
+          ) : (
+            student.leaderboard_score != null && student.leaderboard_score > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold tabular-nums"
+                title={`${student.leaderboard_score} Circle badges (cohort/tier badges excluded)`}
+              >
+                <Award className="w-3 h-3" />
+                {student.leaderboard_score} badges
+              </span>
+            )
           )}
           {student.spotlight_count > 0 && (
             <span
@@ -431,6 +509,9 @@ function StudentRow({ student, index, session, onRecordsChange }) {
             </span>
           )}
         </div>
+        {topPriority && (
+          <PriorityReason student={student} index={index} />
+        )}
         {!student.eligible && student.eligibility === "late" && (
           <span
             className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold mt-1"
@@ -484,6 +565,7 @@ function StudentRow({ student, index, session, onRecordsChange }) {
           recordId={student.record?.id}
           source="tally"
           onDone={onRecordsChange}
+          onLocalUpdate={onLocalUpdate}
           testid={`spotlight-outcome-${session.id}-${index}`}
         />
       </td>
@@ -491,7 +573,7 @@ function StudentRow({ student, index, session, onRecordsChange }) {
   );
 }
 
-function ManualRow({ record, index, session, onRecordsChange }) {
+function ManualRow({ record, index, session, onRecordsChange, onLocalUpdate }) {
   return (
     <tr
       className="border-b border-[var(--ayci-border)] last:border-b-0 bg-violet-50/30 hover:bg-violet-50/50"
@@ -524,6 +606,7 @@ function ManualRow({ record, index, session, onRecordsChange }) {
           source="manual"
           allowDelete
           onDone={onRecordsChange}
+          onLocalUpdate={onLocalUpdate}
           testid={`spotlight-outcome-manual-${session.id}-${index}`}
         />
       </td>
@@ -540,6 +623,7 @@ function OutcomePicker({
   source = "tally",
   allowDelete = false,
   onDone,
+  onLocalUpdate,
   testid,
 }) {
   const [saving, setSaving] = useState(false);
@@ -548,36 +632,80 @@ function OutcomePicker({
 
   const save = async (status) => {
     setSaving(true);
+    setOpen(false);
+    // Optimistic UI: flip the chip immediately so the team can move on. The
+    // network call still happens in the background; if it fails we revert and
+    // surface a toast.
+    const previousStatus = currentStatus;
+    onLocalUpdate?.({
+      sessionId,
+      studentName,
+      studentEmail,
+      recordId,
+      source,
+      status,
+    });
     try {
-      await apiClient.post(`/spotlight/records`, {
+      const { data } = await apiClient.post(`/spotlight/records`, {
         session_id: sessionId,
         student_name: studentName,
         student_email: studentEmail,
         status,
         source,
       });
+      // Confirm with the real recordId from the server (in case it was new)
+      if (data && data.id) {
+        onLocalUpdate?.({
+          sessionId,
+          studentName,
+          studentEmail,
+          recordId: data.id,
+          source,
+          status,
+          confirmed: true,
+        });
+      }
       toast.success(`Marked ${studentName} as ${STATUS_META[status].label.toLowerCase()}`);
-      onDone?.();
     } catch (e) {
+      // Revert
+      onLocalUpdate?.({
+        sessionId,
+        studentName,
+        studentEmail,
+        recordId,
+        source,
+        status: previousStatus,
+        revert: true,
+      });
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to save");
+      // Hard fallback — the parent wants a true reload
+      onDone?.();
     } finally {
       setSaving(false);
-      setOpen(false);
     }
   };
 
   const remove = async () => {
     if (!recordId) return;
     setSaving(true);
+    setOpen(false);
+    onLocalUpdate?.({
+      sessionId,
+      studentName,
+      studentEmail,
+      recordId,
+      source,
+      removed: true,
+    });
     try {
       await apiClient.delete(`/spotlight/records/${recordId}`);
       toast.success("Removed");
-      onDone?.();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to remove");
+      // Reload on failure to re-introduce the row
+      onDone?.();
     } finally {
       setSaving(false);
-      setOpen(false);
     }
   };
 
@@ -887,6 +1015,62 @@ function Stat({ label, value, tone = "slate", testid }) {
     >
       <div className="font-display font-bold text-2xl tabular-nums leading-none">{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-1">{label}</div>
+    </div>
+  );
+}
+
+
+// Gold/silver/bronze pill for the top-3 leaderboard scorers in a session.
+// Anchors the team's intuition that "the top of the table is here because
+// they have the most badges". Falls back to a plain count below.
+function LeaderboardRankPill({ rank, score }) {
+  const ordinal = rank === 1 ? "1st" : rank === 2 ? "2nd" : "3rd";
+  const tone =
+    rank === 1
+      ? "bg-amber-100 text-amber-900 border-amber-400"
+      : rank === 2
+        ? "bg-slate-200 text-slate-800 border-slate-400"
+        : "bg-orange-100 text-orange-900 border-orange-400";
+  const trophy = rank === 1 ? "🏆" : rank === 2 ? "🥈" : "🥉";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border-2 font-bold uppercase tracking-wider tabular-nums ${tone}`}
+      title={`Ranked ${ordinal} on the leaderboard for this session — ${score} Circle badges (cohort & private tier badges excluded). This is why they're prioritised at the top.`}
+      data-testid={`leaderboard-rank-${rank}`}
+    >
+      <span aria-hidden>{trophy}</span>
+      Leaderboard #{rank}
+      <span className="font-semibold opacity-70">· {score}</span>
+    </span>
+  );
+}
+
+// Small italic reason line under the name explaining why this row is in the
+// top 3. Closes the "I can't tell if it's prioritising" loop.
+function PriorityReason({ student, index }) {
+  const days = student.days_until_interview;
+  const interviewSoon = days !== null && days !== undefined && days <= 7;
+  let reason;
+  if (interviewSoon) {
+    reason =
+      days === 0
+        ? "Interview today"
+        : days === 1
+          ? "Interview tomorrow"
+          : `Interview in ${days} days`;
+  } else if (student.leaderboard_rank && student.leaderboard_rank <= 3) {
+    reason = `Top ${student.leaderboard_rank === 1 ? "of" : "3 on"} the leaderboard`;
+  } else if (index === 0) {
+    reason = "Earliest eligible submission";
+  } else {
+    return null;
+  }
+  return (
+    <div
+      className="text-[10px] text-amber-700 italic mt-1 font-medium"
+      data-testid="priority-reason"
+    >
+      ↑ Prioritised: {reason}
     </div>
   );
 }
