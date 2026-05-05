@@ -561,4 +561,17 @@ async def reconcile_open_tickets(db) -> dict:
                 appended += 1
                 seen_ids.add(mid)
                 logger.info(f"[wati-reconcile] appended ticket={t['id']} wa={wa} msg_id={mid}")
-    return {"ok": True, "scanned": scanned, "appended": appended, "errors": errors[:10]}
+    result = {
+        "ok": True,
+        "scanned": scanned,
+        "appended": appended,
+        "errors": errors[:10],
+        "ran_at": _now_iso(),
+    }
+    # Persist for the frontend health badge
+    await db.app_settings.update_one(
+        {"id": "wati_health"},
+        {"$set": {"id": "wati_health", **result}},
+        upsert=True,
+    )
+    return result

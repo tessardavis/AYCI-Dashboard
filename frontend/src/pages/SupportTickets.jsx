@@ -72,6 +72,96 @@ function relativeAge(iso) {
   return `${d}d ago`;
 }
 
+// Live Wati pipeline health indicator. Polls /api/wati/health every 60s,
+// shows a green/amber/grey dot + last-reconcile timestamp, with a "Sync now"
+// click action so the team can force a reconcile when they're worried.
+function WatiHealthBadge() {
+  const [health, setHealth] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const { data } = await apiClient.get("/wati/health");
+      setHealth(data);
+    } catch {
+      setHealth({ configured: false });
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const forceReconcile = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const { data } = await apiClient.post("/wati/reconcile");
+      toast.success(
+        data.appended
+          ? `Recovered ${data.appended} WhatsApp message${data.appended === 1 ? "" : "s"}`
+          : "WhatsApp inbox in sync — nothing missed",
+      );
+      await refresh();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Reconcile failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (!health) return null;
+  if (!health.configured) return null;
+
+  const ranAt = health.ran_at ? new Date(health.ran_at).getTime() : 0;
+  const ageMin = ranAt ? Math.round((Date.now() - ranAt) / 60_000) : null;
+  const errored = (health.errors?.length || 0) > 0;
+  const stale = ageMin == null || ageMin > 12;
+  const tone = errored
+    ? "bg-rose-50 text-rose-800 border-rose-200"
+    : stale
+      ? "bg-amber-50 text-amber-800 border-amber-200"
+      : "bg-emerald-50 text-emerald-800 border-emerald-200";
+  const dotTone = errored ? "bg-rose-500" : stale ? "bg-amber-500" : "bg-emerald-500";
+  const label = errored
+    ? "WhatsApp · errors"
+    : ranAt
+      ? `WhatsApp · synced ${ageMin <= 0 ? "just now" : `${ageMin}m ago`}`
+      : "WhatsApp · pending sync";
+  const tooltip = errored
+    ? `Last sync had errors: ${health.errors.join(", ")}`
+    : `Auto-reconciles every 5 min. Last run: ${
+        ranAt ? new Date(ranAt).toLocaleString("en-GB") : "—"
+      }. Click to sync now.`;
+
+  return (
+    <button
+      onClick={forceReconcile}
+      disabled={syncing}
+      title={tooltip}
+      data-testid="wati-health-badge"
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${tone} hover:shadow-sm transition-all disabled:opacity-50`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${dotTone} ${errored ? "" : "animate-pulse"}`} />
+      {syncing ? (
+        <>
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Syncing…
+        </>
+      ) : (
+        <>
+          <MessageCircle className="w-3 h-3" />
+          {label}
+        </>
+      )}
+    </button>
+  );
+}
+
 export default function SupportTickets() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
@@ -219,9 +309,12 @@ export default function SupportTickets() {
     <div className="p-4 lg:p-10 max-w-[1600px] mx-auto" data-testid="support-tickets-page">
       {/* Compact header: title + actions in one row, slim stat strip below */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)]">
-          Support Tickets
-        </h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)]">
+            Support Tickets
+          </h1>
+          <WatiHealthBadge />
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"

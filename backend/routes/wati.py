@@ -36,6 +36,18 @@ async def reconcile(user: dict = Depends(require_board("tickets"))):
     return await wati.reconcile_open_tickets(db)
 
 
+@router.get("/health")
+async def health(user: dict = Depends(require_board("tickets"))):
+    """Live health snapshot for the Wati pipeline. Used by the Support Tickets
+    page header to show a green/amber dot. Returns last reconcile run + a
+    rough configured/not flag."""
+    doc = await db.app_settings.find_one({"id": "wati_health"}, {"_id": 0, "id": 0}) or {}
+    return {
+        "configured": wati.is_configured(),
+        **doc,
+    }
+
+
 @router.post("/webhook")
 async def webhook(request: Request):
     """Public webhook endpoint Wati posts incoming messages to.
