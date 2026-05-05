@@ -51,8 +51,33 @@ TOKEN_URI = "https://oauth2.googleapis.com/token"
 # Inbound emails from these domains are TEAM mail, never tickets.
 INTERNAL_DOMAINS = {"medicalinterviewprep.com", "aycimedical.com"}
 
+# Auto-assignment: when an email lands in one of these inboxes, the new
+# ticket is auto-assigned to the matching team member by NAME (we resolve
+# the team_member_id at runtime so renames don't break us).
+# Maps a SET of inbox local-parts (everything before @) → team member name.
+INBOX_AUTO_ASSIGN = {
+    frozenset({"tessa", "arub"}): "Arub Yousuf",
+    frozenset({"oksana", "coralie"}): "Coralie Fairon",
+}
+
 # Cap per-inbox per-poll to avoid hammering the API on first sync.
 MAX_MESSAGES_PER_POLL = 50
+
+
+async def _resolve_assignee_for_inbox(db, inbox_email: str) -> Optional[str]:
+    """Return team_member_id to auto-assign for tickets landing in this inbox."""
+    if not inbox_email or "@" not in inbox_email:
+        return None
+    local = inbox_email.split("@", 1)[0].lower()
+    target_name: Optional[str] = None
+    for keys, name in INBOX_AUTO_ASSIGN.items():
+        if local in keys:
+            target_name = name
+            break
+    if not target_name:
+        return None
+    tm = await db.team_members.find_one({"name": target_name}, {"_id": 0, "id": 1})
+    return tm.get("id") if tm else None
 
 
 def _client_id() -> str:
@@ -495,6 +520,9 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
         names = ", ".join(f"{a['filename']} ({a['size']}B)" for a in attachments)
         desc = f"{desc}\n\nAttachments: {names}"
 
+    # Auto-assign by which inbox received the email
+    auto_assignee = await _resolve_assignee_for_inbox(db, inbox.get("email") or "")
+
     ticket = {
         "id": str(uuid.uuid4()),
         "student_name": sender_name,
@@ -504,7 +532,7 @@ async def _handle_message(db, inbox: dict, msg: dict) -> Optional[str]:
         "status": "open",
         "priority": "medium",
         "category": "other",
-        "assignee_id": None,
+        "assignee_id": auto_assignee,
         "source": "email",
         "source_ref": msg_id,
         "gmail_message_id": msg_id,
