@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Sidebar grouped: Community / Tickets / Growth + ticket-detail fixes
+- **Sidebar restructure** (`AppShell.jsx`): three sections — collapsible **Community** (default open: Cohort Leaderboard, Coach Activity, Cohort Dashboard, Upcoming Interviews, Spotlight Coaching, Student Lookup) → **Support Tickets** (top-level, between groups) → collapsible **Growth** (default closed: Weekly Scorecard, Quarterly Rocks, Launch Dashboard, Students at Risk) → Settings stays bottom. Group state persists in `localStorage`. Groups auto-expand if user navigates to a route inside them.
+- **Internal note bug fixed** (`TicketDetailModal`): the modal kept stale local state, so notes/reassignments looked like they didn't save (server-side they did). Now refetches the ticket on every prop change AND optimistically merges PATCH responses, so changes appear instantly.
+- **Internal note panel visually distinct**: amber background, `Lock` icon, "TEAM ONLY · NEVER SENT TO STUDENT" badge, button now reads "Save note" instead of paper-plane. Clearly differentiated from the Gmail / WhatsApp reply panels.
+- **Student Lookup link** now opens in a new tab (matches Monday link behaviour).
+
 ### 2026-05-05 — Hide rate-limit card on Specific Interview Support
 - `CircleSpaceCard` now accepts `showRateLimit` prop. Set to `false` for the Specific Interview Support space (students can post freely there). The remaining "Awaiting coach reply" card expands to full width when alone.
 - The Slack alert in `circle_video_alerts.py` is already scoped to Recorded Answer Review only.

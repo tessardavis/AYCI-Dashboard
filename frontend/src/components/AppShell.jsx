@@ -1,29 +1,158 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy } from "lucide-react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
 
-const NAV = [
-  { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard" },
-  { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks", board: "quarterly_rocks" },
-  { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
-  { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort", board: "cohort" },
-  { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews", board: "interviews" },
-  { to: "/coach-activity", label: "Coach Activity", icon: MessageCircle, testid: "sidebar-nav-coach-activity", board: "coach_activity" },
-  { to: "/spotlight", label: "Spotlight Coaching", icon: Sparkles, testid: "sidebar-nav-spotlight", board: "spotlight" },
-  { to: "/leaderboard", label: "Cohort Leaderboard", icon: Trophy, testid: "sidebar-nav-leaderboard", board: "leaderboard" },
-  { to: "/tickets", label: "Support Tickets", icon: LifeBuoy, testid: "sidebar-nav-tickets", board: "tickets" },
-  { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
-  { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
-  { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "sidebar-nav-settings", board: "settings" },
+// Sidebar information architecture — three collapsible groups + two
+// always-on items. Order: Community → Tickets → Growth → Settings.
+const NAV_GROUPS = [
+  {
+    type: "group",
+    id: "community",
+    label: "Community",
+    defaultOpen: true,
+    items: [
+      { to: "/leaderboard", label: "Cohort Leaderboard", icon: Trophy, testid: "sidebar-nav-leaderboard", board: "leaderboard" },
+      { to: "/coach-activity", label: "Coach Activity", icon: MessageCircle, testid: "sidebar-nav-coach-activity", board: "coach_activity" },
+      { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort", board: "cohort" },
+      { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews", board: "interviews" },
+      { to: "/spotlight", label: "Spotlight Coaching", icon: Sparkles, testid: "sidebar-nav-spotlight", board: "spotlight" },
+      { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
+    ],
+  },
+  {
+    type: "item",
+    to: "/tickets",
+    label: "Support Tickets",
+    icon: LifeBuoy,
+    testid: "sidebar-nav-tickets",
+    board: "tickets",
+  },
+  {
+    type: "group",
+    id: "growth",
+    label: "Growth",
+    defaultOpen: false,
+    items: [
+      { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard", end: true },
+      { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks", board: "quarterly_rocks" },
+      { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
+      { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
+    ],
+  },
+  {
+    type: "item",
+    to: "/settings",
+    label: "Settings",
+    icon: SettingsIcon,
+    testid: "sidebar-nav-settings",
+    board: "settings",
+  },
 ];
 
 export function userCanAccess(user, board) {
   if (!user) return false;
   if (user.role === "admin") return true;
   return (user.board_access || []).includes(board);
+}
+
+// Single nav row — used both for top-level items and inside groups.
+function NavItem({ item, indent = false }) {
+  const { to, label, icon: Icon, testid, end } = item;
+  return (
+    <PrefetchNavLink
+      to={to}
+      end={!!end || to === "/"}
+      data-testid={testid}
+      className={({ isActive }) =>
+        [
+          "group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all duration-200",
+          indent ? "pl-6" : "",
+          isActive
+            ? "bg-white/10 text-white font-medium"
+            : "text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5",
+        ].join(" ")
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className="w-0.5 h-5 rounded-full transition-all"
+            style={{ backgroundColor: isActive ? "var(--ayci-accent)" : "transparent" }}
+          />
+          <Icon className="w-4 h-4" />
+          <span>{label}</span>
+        </>
+      )}
+    </PrefetchNavLink>
+  );
+}
+
+// Collapsible nav group. Open/closed state persists in localStorage so the
+// sidebar feels stable across reloads.
+function NavGroup({ id, label, defaultOpen, items, currentPath }) {
+  const storageKey = `ayci.nav.group.${id}`;
+  const containsActive = items.some(
+    (it) => it.to === currentPath || (it.to !== "/" && currentPath.startsWith(it.to)),
+  );
+  const [open, setOpen] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw === "1") return true;
+      if (raw === "0") return false;
+    } catch {
+      // ignore
+    }
+    return defaultOpen;
+  });
+  // Auto-open the group if the user navigates to a route inside it (so the
+  // active row is never hidden behind a collapsed group).
+  useEffect(() => {
+    if (containsActive && !open) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containsActive]);
+
+  const toggle = () => {
+    setOpen((v) => {
+      const nv = !v;
+      try {
+        window.localStorage.setItem(storageKey, nv ? "1" : "0");
+      } catch {
+        // ignore quota / private mode
+      }
+      return nv;
+    });
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        data-testid={`sidebar-group-${id}`}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--ayci-sidebar-muted)] hover:text-white transition-colors"
+      >
+        <span>{label}</span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
+        />
+      </button>
+      <div
+        className={`overflow-hidden transition-[max-height,opacity] duration-200 ${
+          open ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="space-y-1 pb-1">
+          {items.map((it) => (
+            <NavItem key={it.to} item={it} indent />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AppShell() {
@@ -114,33 +243,25 @@ export default function AppShell() {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 space-y-1 min-h-0">
-          {NAV.filter((item) => userCanAccess(user, item.board)).map(({ to, label, icon: Icon, testid }) => (
-            <PrefetchNavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              data-testid={testid}
-              className={({ isActive }) =>
-                [
-                  "group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all duration-200",
-                  isActive
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5",
-                ].join(" ")
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span
-                    className="w-0.5 h-5 rounded-full transition-all"
-                    style={{ backgroundColor: isActive ? "var(--ayci-accent)" : "transparent" }}
-                  />
-                  <Icon className="w-4 h-4" />
-                  <span>{label}</span>
-                </>
-              )}
-            </PrefetchNavLink>
-          ))}
+          {NAV_GROUPS.map((node, i) => {
+            if (node.type === "item") {
+              if (!userCanAccess(user, node.board)) return null;
+              return <NavItem key={node.to} item={node} />;
+            }
+            // group
+            const visibleItems = node.items.filter((it) => userCanAccess(user, it.board));
+            if (visibleItems.length === 0) return null;
+            return (
+              <NavGroup
+                key={node.id}
+                id={node.id}
+                label={node.label}
+                defaultOpen={node.defaultOpen}
+                items={visibleItems}
+                currentPath={location.pathname}
+              />
+            );
+          })}
         </nav>
 
         <div className="px-3 pb-6 pt-4 border-t border-white/5 mx-3">
