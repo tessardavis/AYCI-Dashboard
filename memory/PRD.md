@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-05 — Spotlight late/early demoted + private-tier link bug + Wati safety-net
+- **Spotlight ordering** (`spotlight._sort_key`): late & early submissions now ALWAYS sit below eligible-on-time ones. Within each tier, sort still favours interview-soon → most badges → earliest submission. Verified live: Arpita (LATE) dropped from #2 to bottom of Curriculum 1.
+- **Private-tier doc lookup bug** (`google_drive.find_student_doc_link`): fixed snake_case/camelCase key mismatch — `web_view_link` was always returning `None` even when the doc was matched. Hector now resolves correctly to "Hector Garcia Moreno - VIP - Neuro (Movement Disorders)" with a valid Drive URL.
+- **Wati webhook safety net** (`wati.reconcile_open_tickets` + 5-min APScheduler cron + `POST /api/wati/reconcile` admin endpoint): polls Wati's `/api/v1/getMessages/{wa}` for every open WhatsApp ticket and appends any inbound messages we don't already have. Triggered after discovering Shailaja's "Thanks" reply was lost — Wati never fired the webhook for it (or fired before we'd updated the URL). Recovered 3 dropped messages in preview on first run.
+- **Wati webhook self-diagnostic** (`GET /api/wati/recent`): admin endpoint returns the last 200 raw webhook events with the action we took on each. Plus structured `[wati]` info logging on every decision (ignored / duplicate / appended / created). Live patch: Shailaja's "Thanks" reply replayed onto the production ticket.
+
 ### 2026-05-05 — Spotlight Coaching prioritisation visibility + instant marking
 - **Backend** (`spotlight._compose_session`): now computes per-session `leaderboard_rank` (standard competition ranking on badge count desc) so the UI can render gold/silver/bronze pills on top scorers.
 - **Frontend** (`SpotlightCoaching.jsx`):

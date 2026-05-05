@@ -1020,6 +1020,26 @@ async def on_startup():
         replace_existing=True,
     )
 
+    # Periodic Wati → Tickets reconcile (every 5 min). Belt-and-braces against
+    # webhook drops or webhook-URL drift between preview/production. Polls
+    # /api/v1/getMessages/{wa} for every open WhatsApp ticket and appends any
+    # inbound messages that aren't already on the ticket.
+    async def _wati_reconcile():
+        import wati as wati_mod
+        try:
+            res = await wati_mod.reconcile_open_tickets(db)
+            if res.get("appended"):
+                logger.info(f"[scheduler] wati reconcile: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] wati reconcile failed: {e}")
+
+    scheduler.add_job(
+        _wati_reconcile,
+        CronTrigger(minute="*/5", timezone=tz),
+        id="wati_reconcile",
+        replace_existing=True,
+    )
+
     # Gmail → Tickets sync every 15 min for every connected inbox. Skips
     # silently if GOOGLE_CLIENT_ID/SECRET aren't set (i.e. integration not
     # yet configured) — no inboxes possible.

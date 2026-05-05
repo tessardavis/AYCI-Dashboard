@@ -466,3 +466,99 @@ async def status() -> dict:
         "base_url": _base_url(),
         "phone": _phone(),
     }
+
+
+# -------------------------------------------------------- Reconciliation
+# Safety net: poll Wati for the latest inbound messages on every OPEN ticket
+# and append any we don't already have. Catches webhook drops + URL-config
+# drift (the exact bug that hid Shailaja's "Thanks" reply on 2026-05-05).
+async def reconcile_open_tickets(db) -> dict:
+    if not is_configured():
+        return {"ok": False, "reason": "wati not configured"}
+    tickets = await db.tickets.find(
+        {"source": "whatsapp", "status": {"$in": list(OPEN_STATUSES)}},
+        {"_id": 0, "id": 1, "wati_wa_id": 1, "student_name": 1, "wati_message_ids": 1},
+    ).to_list(500)
+    appended = 0
+    scanned = 0
+    errors: list[str] = []
+    base = _base_url()
+    headers = _headers()
+    async with httpx.AsyncClient(timeout=20) as client:
+        for t in tickets:
+            wa = (t.get("wati_wa_id") or "").strip()
+            if not wa:
+                continue
+            scanned += 1
+            try:
+                r = await client.get(
+                    f"{base}/api/v1/getMessages/{wa}",
+                    headers=headers,
+                    params={"pageSize": 30},
+                )
+                if r.status_code >= 300:
+                    errors.append(f"{wa}: HTTP {r.status_code}")
+                    continue
+                data = r.json() or {}
+                msgs_raw = data.get("messages") or {}
+                items = (
+                    msgs_raw.get("items")
+                    if isinstance(msgs_raw, dict)
+                    else (msgs_raw or data.get("items") or [])
+                ) or []
+            except Exception as e:
+                errors.append(f"{wa}: {e}")
+                continue
+
+            seen_ids = set(t.get("wati_message_ids") or [])
+            # Also check note-level message ids to be safe
+            ticket_full = await db.tickets.find_one(
+                {"id": t["id"]}, {"_id": 0, "notes.wati_message_id": 1},
+            )
+            for n in (ticket_full or {}).get("notes", []) or []:
+                if n.get("wati_message_id"):
+                    seen_ids.add(n["wati_message_id"])
+
+            for m in items:
+                if m.get("owner") is True or m.get("owner") == "true":
+                    continue  # outbound (operator) — already recorded when we sent it
+                # Only text + named media. Skip status-update sentinels (type 0/1, no text).
+                mtype = (m.get("type") or "").lower() if isinstance(m.get("type"), str) else None
+                text = (m.get("text") or "").strip()
+                if not text and mtype not in {"image", "document", "audio", "video", "voice"}:
+                    continue
+                mid = m.get("id") or m.get("messageId") or m.get("whatsappMessageId")
+                if not mid or mid in seen_ids:
+                    continue
+                # Append as a note + record the message id
+                created = m.get("created") or m.get("timestamp") or _now_iso()
+                if isinstance(created, (int, float)):
+                    try:
+                        created = datetime.fromtimestamp(int(created), tz=timezone.utc).isoformat()
+                    except Exception:
+                        created = _now_iso()
+                note = {
+                    "id": str(uuid.uuid4()),
+                    "author_id": "_whatsapp",
+                    "author_name": f"{t.get('student_name') or wa} (WhatsApp · reconciled)",
+                    "body": text or f"[{mtype} message — fetched via reconcile]",
+                    "created_at": str(created),
+                    "internal": True,
+                    "wati_message_id": mid,
+                    "attachments": [],
+                }
+                await db.tickets.update_one(
+                    {"id": t["id"]},
+                    {
+                        "$push": {"notes": note, "wati_message_ids": mid},
+                        "$set": {
+                            "updated_at": _now_iso(),
+                            "status": "open",
+                            "wati_last_inbound_at": str(created),
+                        },
+                    },
+                )
+                appended += 1
+                seen_ids.add(mid)
+                logger.info(f"[wati-reconcile] appended ticket={t['id']} wa={wa} msg_id={mid}")
+    return {"ok": True, "scanned": scanned, "appended": appended, "errors": errors[:10]}

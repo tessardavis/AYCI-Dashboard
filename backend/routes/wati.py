@@ -29,6 +29,13 @@ async def recent_webhook_events(
     return {"events": rows}
 
 
+@router.post("/reconcile")
+async def reconcile(user: dict = Depends(require_board("tickets"))):
+    """Force a reconciliation: poll Wati for fresh inbound messages on every
+    open WhatsApp ticket and append any we missed via webhook drops."""
+    return await wati.reconcile_open_tickets(db)
+
+
 @router.post("/webhook")
 async def webhook(request: Request):
     """Public webhook endpoint Wati posts incoming messages to.
