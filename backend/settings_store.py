@@ -103,3 +103,49 @@ async def set_active_quarter(db, quarter: str) -> str:
         upsert=True,
     )
     return quarter
+
+
+
+# ---- Gmail inbox → assignee auto-routing ---------------------------------
+DEFAULT_INBOX_ROUTING: list[dict] = [
+    # Each rule maps inbox local-parts (before @) to a team member name.
+    {"inbox_locals": ["tessa", "arub"], "team_member_name": "Arub Yousuf"},
+    {"inbox_locals": ["oksana", "coralie"], "team_member_name": "Coralie Fairon"},
+]
+
+
+async def get_inbox_routing(db) -> list[dict]:
+    """Return the current rule list. Each rule:
+        {inbox_locals: [str, …], team_member_name: str}
+    """
+    doc = await db.app_settings.find_one({"_id": "inbox_routing"}, {"_id": 0})
+    if not doc or not isinstance(doc.get("rules"), list):
+        return [dict(r) for r in DEFAULT_INBOX_ROUTING]
+    out: list[dict] = []
+    for r in doc["rules"]:
+        locals_ = [str(x).strip().lower() for x in (r.get("inbox_locals") or []) if str(x).strip()]
+        name = (r.get("team_member_name") or "").strip()
+        if locals_ and name:
+            out.append({"inbox_locals": locals_, "team_member_name": name})
+    return out
+
+
+async def set_inbox_routing(db, rules: list[dict]) -> list[dict]:
+    cleaned: list[dict] = []
+    for r in rules or []:
+        if not isinstance(r, dict):
+            continue
+        raw_locals = r.get("inbox_locals") or []
+        if isinstance(raw_locals, str):
+            raw_locals = [x for x in raw_locals.replace(",", " ").split() if x]
+        locals_ = [str(x).strip().lower().lstrip("@").split("@", 1)[0] for x in raw_locals]
+        locals_ = [x for x in locals_ if x]
+        name = (r.get("team_member_name") or "").strip()
+        if locals_ and name:
+            cleaned.append({"inbox_locals": locals_, "team_member_name": name})
+    await db.app_settings.update_one(
+        {"_id": "inbox_routing"},
+        {"$set": {"rules": cleaned}},
+        upsert=True,
+    )
+    return cleaned

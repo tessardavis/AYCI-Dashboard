@@ -78,11 +78,16 @@ export default function Settings() {
   );
 }
 
-function Panel({ children, title, action }) {
+function Panel({ children, title, action, description }) {
   return (
-    <div className="bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm">
+    <div className="bg-white border border-[var(--ayci-border)] rounded-lg shadow-sm mb-4">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--ayci-border)]">
-        <div className="font-display font-bold text-[var(--ayci-ink)]">{title}</div>
+        <div>
+          <div className="font-display font-bold text-[var(--ayci-ink)]">{title}</div>
+          {description && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-2xl">{description}</div>
+          )}
+        </div>
         {action}
       </div>
       <div>{children}</div>
@@ -124,6 +129,7 @@ function TeamSection({ isAdmin }) {
   };
 
   return (
+    <>
     <Panel
       title="Team members"
       action={isAdmin && (
@@ -166,6 +172,128 @@ function TeamSection({ isAdmin }) {
           </li>
         ))}
       </ul>
+    </Panel>
+    <InboxRoutingPanel isAdmin={isAdmin} team={team} />
+    </>
+  );
+}
+
+function InboxRoutingPanel({ isAdmin, team }) {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/team/inbox-routing");
+      setRules(
+        (data.rules || []).map((r) => ({
+          inbox_locals: (r.inbox_locals || []).join(", "),
+          team_member_name: r.team_member_name || "",
+        })),
+      );
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const update = (i, field, value) => {
+    setRules((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+  };
+  const addRule = () => setRules((p) => [...p, { inbox_locals: "", team_member_name: "" }]);
+  const removeRule = (i) => setRules((p) => p.filter((_, idx) => idx !== i));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        rules: rules
+          .map((r) => ({
+            inbox_locals: r.inbox_locals
+              .split(/[,\s]+/)
+              .map((x) => x.trim().toLowerCase())
+              .filter(Boolean),
+            team_member_name: r.team_member_name.trim(),
+          }))
+          .filter((r) => r.inbox_locals.length > 0 && r.team_member_name),
+      };
+      const { data } = await apiClient.put("/team/inbox-routing", payload);
+      setRules(
+        (data.rules || []).map((r) => ({
+          inbox_locals: (r.inbox_locals || []).join(", "),
+          team_member_name: r.team_member_name || "",
+        })),
+      );
+      toast.success("Inbox routing saved");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Inbox auto-assignment"
+      description="When an email lands in the listed inbox(es), the new ticket is auto-assigned to the chosen team member. Only the part before @ — comma-separated for multiple."
+      action={isAdmin && (
+        <Button size="sm" onClick={save} disabled={saving} data-testid="inbox-routing-save" style={{ backgroundColor: "var(--ayci-accent)" }}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      )}
+    >
+      {loading ? (
+        <div className="px-6 py-4 text-sm text-[var(--ayci-ink-muted)]">Loading…</div>
+      ) : (
+        <div className="px-6 py-4 space-y-3">
+          {rules.length === 0 && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] italic">No rules yet — add one below.</div>
+          )}
+          {rules.map((r, i) => (
+            <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`inbox-routing-row-${i}`}>
+              <div className="flex-1 min-w-[220px]">
+                <Label className="text-xs">Inbox local-parts</Label>
+                <Input
+                  value={r.inbox_locals}
+                  onChange={(e) => update(i, "inbox_locals", e.target.value)}
+                  placeholder="e.g. coralie, oksana"
+                  disabled={!isAdmin}
+                  data-testid={`inbox-routing-locals-${i}`}
+                />
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <Label className="text-xs">Assign to</Label>
+                <select
+                  value={r.team_member_name}
+                  onChange={(e) => update(i, "team_member_name", e.target.value)}
+                  disabled={!isAdmin}
+                  className="w-full h-9 px-3 text-sm border border-[var(--ayci-border)] rounded-md bg-white"
+                  data-testid={`inbox-routing-assignee-${i}`}
+                >
+                  <option value="">— pick a team member —</option>
+                  {team.map((t) => (
+                    <option key={t.id} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              {isAdmin && (
+                <Button variant="ghost" size="icon" onClick={() => removeRule(i)} data-testid={`inbox-routing-remove-${i}`}>
+                  <Trash2 className="w-4 h-4 text-slate-500" />
+                </Button>
+              )}
+            </div>
+          ))}
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={addRule} data-testid="inbox-routing-add">
+              <Plus className="w-4 h-4 mr-1" /> Add rule
+            </Button>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }

@@ -65,15 +65,32 @@ MAX_MESSAGES_PER_POLL = 50
 
 
 async def _resolve_assignee_for_inbox(db, inbox_email: str) -> Optional[str]:
-    """Return team_member_id to auto-assign for tickets landing in this inbox."""
+    """Return team_member_id to auto-assign for tickets landing in this inbox.
+
+    Reads the live mapping from `app_settings.inbox_routing` (admin-editable
+    in Settings → Team) and resolves the team_member_id at run-time so renames
+    don't break us. Falls back to the hardcoded `INBOX_AUTO_ASSIGN`."""
     if not inbox_email or "@" not in inbox_email:
         return None
     local = inbox_email.split("@", 1)[0].lower()
+
     target_name: Optional[str] = None
-    for keys, name in INBOX_AUTO_ASSIGN.items():
-        if local in keys:
-            target_name = name
-            break
+    try:
+        import settings_store
+        rules = await settings_store.get_inbox_routing(db)
+        for rule in rules:
+            if local in rule.get("inbox_locals", []):
+                target_name = rule.get("team_member_name")
+                break
+    except Exception as e:
+        logger.warning(f"[gmail] inbox routing lookup failed: {e}")
+
+    if not target_name:
+        for keys, name in INBOX_AUTO_ASSIGN.items():
+            if local in keys:
+                target_name = name
+                break
+
     if not target_name:
         return None
     tm = await db.team_members.find_one({"name": target_name}, {"_id": 0, "id": 1})

@@ -35,3 +35,22 @@ async def update_team_member(member_id: str, data: TeamMemberCreate, admin: dict
 async def delete_team_member(member_id: str, admin: dict = Depends(require_admin)):
     await db.team_members.delete_one({"id": member_id})
     return {"ok": True}
+
+
+
+# ---- Inbox auto-routing rules (Gmail → assignee) -------------------------
+import settings_store  # noqa: E402
+
+
+@router.get("/team/inbox-routing")
+async def get_inbox_routing(user: dict = Depends(get_current_user)):
+    return {"rules": await settings_store.get_inbox_routing(db)}
+
+
+@router.put("/team/inbox-routing")
+async def put_inbox_routing(payload: dict, admin: dict = Depends(require_admin)):
+    rules = payload.get("rules") or []
+    if not isinstance(rules, list):
+        raise HTTPException(400, "rules must be a list")
+    saved = await settings_store.set_inbox_routing(db, rules)
+    return {"rules": saved}
