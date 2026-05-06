@@ -156,6 +156,64 @@ async def maybe_send_urgent_slack(db, ticket: dict) -> None:
         ticket["slack_urgent_sent"] = True
 
 
+async def maybe_send_assignment_dm(
+    db, ticket: dict, assignee_team_id: str, actor_user_id: Optional[str] = None,
+) -> None:
+    """Slack-DM the assignee that a ticket has been assigned to them.
+    Skipped if:
+      - The Slack bot token isn't configured
+      - The team member has no email
+      - The assignee is the same person who made the change (self-assignment)
+    """
+    if not assignee_team_id:
+        return
+    member = await db.team_members.find_one(
+        {"id": assignee_team_id}, {"_id": 0, "email": 1, "name": 1}
+    )
+    if not member or not (member.get("email") or "").strip():
+        logger.info(f"[ticket-dm] no email for team member {assignee_team_id}")
+        return
+    # If the assignee is the user who triggered the change, skip — they
+    # already know they assigned it to themselves.
+    if actor_user_id:
+        actor = await db.users.find_one(
+            {"id": actor_user_id}, {"_id": 0, "team_member_id": 1}
+        )
+        if actor and actor.get("team_member_id") == assignee_team_id:
+            logger.info(f"[ticket-dm] self-assign by {actor_user_id} — skipping DM")
+            return
+
+    import slack_dm
+    base_url = (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
+    link_line = (
+        f"<{base_url}/tickets|Open Support Tickets board>" if base_url else "Open the Support Tickets board"
+    )
+    priority_label = (ticket.get("priority") or "medium").upper()
+    source_label = {
+        "tally": "Tally form",
+        "whatsapp": "WhatsApp",
+        "email": "Email",
+        "manual": "Manual entry",
+    }.get(ticket.get("source"), ticket.get("source") or "ticket")
+    student = ticket.get("student_name") or "Unknown student"
+    subject = (ticket.get("subject") or "(no subject)")[:120]
+    text = (
+        f":ticket: *Ticket assigned to you* — {source_label} · {priority_label}\n"
+        f"*{subject}*\n"
+        f"From: {student}\n"
+        f"{link_line}"
+    )
+    res = await slack_dm.dm_user(db, member["email"], text)
+    if res.get("ok"):
+        logger.info(
+            f"[ticket-dm] DM sent to {member.get('name')} <{member['email']}> for ticket {ticket['id']}"
+        )
+    else:
+        logger.warning(
+            f"[ticket-dm] DM failed to {member.get('name')} <{member.get('email')}>: {res.get('error')}"
+        )
+
+
 # -------------------------------------------------------- Tally ingestion
 async def _tally_fetch_submissions(form_id: str, *, max_pages: int = 5) -> list[dict]:
     """Fetch up to `max_pages * 100` submissions ordered newest first."""

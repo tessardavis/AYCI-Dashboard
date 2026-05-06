@@ -363,6 +363,13 @@ async def handle_webhook(db, payload: dict) -> dict:
     }
     await db.tickets.insert_one(ticket)
     logger.info(f"[wati] created ticket={ticket['id']} wa={wa_id} msg_id={msg_id} assigned_to={assignee_id}")
+    # Slack DM the auto-assigned coach so they don't have to refresh the board
+    if assignee_id:
+        try:
+            import tickets as tickets_mod
+            await tickets_mod.maybe_send_assignment_dm(db, ticket, assignee_id)
+        except Exception as e:
+            logger.warning(f"[wati] assignment DM failed: {e}")
     return {"action": "created", "ticket_id": ticket["id"]}
 
 

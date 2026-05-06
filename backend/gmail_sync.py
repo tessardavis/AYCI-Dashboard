@@ -613,6 +613,14 @@ async def _handle_message(db, inbox: dict, msg: dict, service) -> Optional[str]:
         "slack_urgent_sent": False,
     }
     await db.tickets.insert_one(ticket)
+    # Slack DM the auto-assigned coach (inbox-routing rules) so they don't
+    # have to refresh the board to see new email tickets land on their plate.
+    if auto_assignee:
+        try:
+            import tickets as tickets_mod
+            await tickets_mod.maybe_send_assignment_dm(db, ticket, auto_assignee)
+        except Exception as e:
+            logger.warning(f"[gmail] assignment DM failed: {e}")
     # Email tickets default to medium → no Slack on creation; if a coach
     # bumps to Urgent later, the regular escalation path will fire Slack.
     return "created"

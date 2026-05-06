@@ -179,6 +179,18 @@ async def update_ticket(
     await db.tickets.update_one({"id": ticket_id}, {"$set": update})
     fresh = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
 
+    # Send Slack DM if assignee changed (and is now someone). Skip if the user
+    # is assigning to themselves — they already know.
+    if (
+        data.assignee_id is not None
+        and update.get("assignee_id")
+        and update["assignee_id"] != t.get("assignee_id")
+    ):
+        background.add_task(
+            tickets_mod.maybe_send_assignment_dm,
+            db, fresh, update["assignee_id"], user.get("id"),
+        )
+
     # Send Slack if newly urgent (creation OR escalation)
     if fresh.get("priority") == "urgent" and not fresh.get("slack_urgent_sent"):
         background.add_task(tickets_mod.maybe_send_urgent_slack, db, fresh)

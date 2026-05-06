@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-06 — Slack-bot DMs on ticket assignment + welcome-back toast removed
+- **`slack_dm.py`** — bot-token-based 1:1 DMs via Slack Web API. DB-backed token storage (`app_settings.slack_bot_token`) so configurable on production without env-var slot. Cached email→user_id lookups in `slack_user_cache`.
+- **Ticket flows hooked**: PATCH endpoint when assignee changes; Wati ticket creation (auto-assigned); Gmail ticket creation (inbox routing). Self-assignment silenced. Email tickets via tally are unassigned at create — DM fires when manually assigned.
+- **Admin endpoints**: `GET/POST /api/slack/bot-token` (set/check) and `POST /api/slack/test-dm` (verify wiring).
+- **Welcome-back toast removed** — was blocking mobile view. Login is now silent.
+
 ### 2026-05-06 — Private-Tier Videos dashboard (Monday board mirror)
 - **`/private-videos` page**: editable table mirroring Monday board 5083952249. All 462 submissions live, 5-min cached, sortable+filterable by status/assignee, search across name/email/question. Each row shows status, student, submission count, question, assignee, submitted/replied dates, and quick links to Tally video, voicenote reply, Circle DM.
 - **Edit modal**: change Status / Assignee / Replied date / Reply link → writes back to Monday via `change_multiple_column_values` GraphQL mutation. Cache busts on save.

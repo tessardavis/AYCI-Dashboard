@@ -289,6 +289,46 @@ async def set_circle_days_webhook(
     return await cva.set_webhook_url(db, body.url)
 
 
+# -------------------------- Slack bot DM (assignee notifications) ----------
+class SlackBotTokenPayload(BaseModel):
+    value: str = ""
+
+
+class SlackTestDmPayload(BaseModel):
+    email: str
+    text: str = ":wave: Test DM from AYCI Dashboard — your Slack bot integration is wired correctly."
+
+
+@api.get("/slack/bot-token")
+async def get_slack_bot_token(admin: dict = Depends(require_admin)):
+    import slack_dm
+    val = await slack_dm.get_bot_token(db)
+    return {
+        "configured": bool(val),
+        "masked": (val[:8] + "…" + val[-4:]) if val else "",
+    }
+
+
+@api.post("/slack/bot-token")
+async def set_slack_bot_token(
+    body: SlackBotTokenPayload,
+    admin: dict = Depends(require_admin),
+):
+    """Save the Slack bot token (xoxb-...) to MongoDB. Pass empty to clear."""
+    import slack_dm
+    return await slack_dm.set_bot_token(db, body.value)
+
+
+@api.post("/slack/test-dm")
+async def slack_test_dm(
+    body: SlackTestDmPayload,
+    admin: dict = Depends(require_admin),
+):
+    """Verify the bot token + user lookup work by DMing the supplied email."""
+    import slack_dm
+    return await slack_dm.dm_user(db, body.email, body.text)
+
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
