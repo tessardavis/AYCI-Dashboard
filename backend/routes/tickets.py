@@ -198,6 +198,35 @@ async def update_ticket(
     return tickets_mod.enrich_ticket(fresh)
 
 
+@router.delete("/{ticket_id}/notes/{note_id}")
+async def delete_note(
+    ticket_id: str,
+    note_id: str,
+    user: dict = Depends(require_board("tickets")),
+):
+    """Delete a single note from a ticket — handy for cleaning up duplicate
+    inbound replies (e.g. when reconciliation races with webhook delivery)."""
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0, "notes": 1})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    note = next((n for n in (t.get("notes") or []) if n.get("id") == note_id), None)
+    if not note:
+        raise HTTPException(404, "Note not found")
+    # GC any GridFS attachments owned by this note
+    try:
+        import attachments as att_store
+        for att in note.get("attachments") or []:
+            await att_store.delete_attachment(db, att.get("id"))
+    except Exception:
+        pass
+    pull_ops = {"$pull": {"notes": {"id": note_id}}}
+    if note.get("wati_message_id"):
+        pull_ops["$pull"]["wati_message_ids"] = note["wati_message_id"]
+    pull_ops["$set"] = {"updated_at": _now_iso()}
+    await db.tickets.update_one({"id": ticket_id}, pull_ops)
+    return {"ok": True, "deleted_id": note_id}
+
+
 @router.delete("/{ticket_id}")
 async def delete_ticket(ticket_id: str, user: dict = Depends(require_board("tickets"))):
     t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})

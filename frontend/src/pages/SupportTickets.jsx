@@ -1096,7 +1096,15 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         </div>
         {/* Conversation thread — newest first so the latest reply is the
             first thing the team sees. The original message is shown last. */}
-        <ConversationThread ticket={t} />
+        <ConversationThread ticket={t} onRefresh={async () => {
+          try {
+            const { data } = await apiClient.get(`/tickets/${ticket.id}`);
+            setFullTicket(data);
+          } catch {
+            // ignore
+          }
+          onRefresh();
+        }} />
 
         {t.source === "whatsapp" && (
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
@@ -1211,7 +1219,24 @@ const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound
 // outbound replies from the team) in a chat-style timeline. The most recent
 // message is at the TOP — that's the whole point: the team always sees the
 // freshest student reply first, no scrolling required.
-function ConversationThread({ ticket }) {
+function ConversationThread({ ticket, onRefresh }) {
+  const [deletingId, setDeletingId] = useState(null);
+
+  const handleDelete = async (noteId) => {
+    if (!noteId || noteId.startsWith("__desc__")) return;
+    if (!window.confirm("Delete this message? It can't be undone.")) return;
+    setDeletingId(noteId);
+    try {
+      await apiClient.delete(`/tickets/${ticket.id}/notes/${noteId}`);
+      toast.success("Message deleted");
+      onRefresh?.();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const items = [];
 
   // Original incoming ticket body — modelled as the first message
@@ -1289,7 +1314,20 @@ function ConversationThread({ ticket }) {
                     </span>
                   )}
                 </span>
-                <span>{formatUk(m.created_at)}</span>
+                <span className="flex items-center gap-2">
+                  <span>{formatUk(m.created_at)}</span>
+                  {!m.id?.startsWith("__desc__") && (
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      disabled={deletingId === m.id}
+                      title="Delete this message (e.g. duplicate)"
+                      className="text-slate-400 hover:text-rose-600 disabled:opacity-40"
+                      data-testid={`thread-delete-${m.id}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </span>
               </div>
               <div className="whitespace-pre-wrap text-[var(--ayci-ink)]">{m.body}</div>
               <AttachmentList ticketId={ticket.id} attachments={m.attachments} compact />
