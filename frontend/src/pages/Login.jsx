@@ -19,8 +19,6 @@ export default function Login() {
       const res = await login(email, password);
       if (!res.ok) {
         toast.error(res.error || "Login failed");
-      } else {
-        toast.success("Welcome back");
       }
     } catch (err) {
       toast.error(err?.message || "Login failed");
