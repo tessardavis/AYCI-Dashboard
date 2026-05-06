@@ -32,7 +32,12 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Statuses that allow a NEW inbound reply to keep streaming into the same
+# ticket without creating a fresh one. Resolved tickets are included so a
+# follow-up auto-reopens the original conversation. `closed` is excluded —
+# closed = archived for good, so the next reply spins up a fresh ticket.
 OPEN_STATUSES = {"open", "in_progress", "waiting"}
+REOPENABLE_STATUSES = OPEN_STATUSES | {"resolved"}
 
 
 def _base_url() -> str:
@@ -282,14 +287,16 @@ async def handle_webhook(db, payload: dict) -> dict:
         if att:
             stored_attachments = [att]
 
-    # Find an existing open ticket for this WhatsApp number
+    # Find an existing reopenable ticket for this WhatsApp number. Includes
+    # `resolved` so a follow-up auto-reopens; `closed` is excluded so the
+    # next reply on a closed ticket creates a fresh one (per spec).
     existing = await db.tickets.find_one(
         {
             "source": "whatsapp",
             "wati_wa_id": wa_id,
-            "status": {"$in": list(OPEN_STATUSES)},
+            "status": {"$in": list(REOPENABLE_STATUSES)},
         },
-        {"_id": 0, "id": 1},
+        {"_id": 0, "id": 1, "status": 1},
     )
 
     if existing:

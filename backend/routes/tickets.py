@@ -50,9 +50,24 @@ async def list_tickets(
         ]
 
     rows = await db.tickets.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Build a map of (this user's last-viewed timestamp per ticket) so we can
+    # mark each card as having "new" activity since they last opened it.
+    views = await db.ticket_views.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "ticket_id": 1, "viewed_at": 1},
+    ).to_list(5000)
+    viewed_map = {v["ticket_id"]: v["viewed_at"] for v in views}
     now = datetime.now(timezone.utc)
     for r in rows:
         tickets_mod.enrich_ticket(r, now=now)
+        last_view = viewed_map.get(r["id"])
+        # Unread if the ticket has been updated since the user last opened it.
+        # Brand-new tickets (never viewed) count as unread too. We compare
+        # against `updated_at` which advances on every reply / note / status
+        # change.
+        upd = r.get("updated_at") or r.get("created_at") or ""
+        r["unread"] = (not last_view) or (last_view < upd)
+        r["last_viewed_at"] = last_view
     return {"tickets": rows}
 
 
@@ -93,6 +108,14 @@ async def get_ticket(ticket_id: str, user: dict = Depends(require_board("tickets
     t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not t:
         raise HTTPException(404, "Ticket not found")
+    # Mark this ticket as viewed by the current user so the "new" badge clears
+    # on the Kanban board next refresh.
+    now_iso = _now_iso()
+    await db.ticket_views.update_one(
+        {"user_id": user["id"], "ticket_id": ticket_id},
+        {"$set": {"user_id": user["id"], "ticket_id": ticket_id, "viewed_at": now_iso}},
+        upsert=True,
+    )
     # Lazy-match to Monday so the team sees student context without an extra round-trip
     try:
         import student_match as sm

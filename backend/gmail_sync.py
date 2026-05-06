@@ -537,10 +537,17 @@ async def _handle_message(db, inbox: dict, msg: dict, service) -> Optional[str]:
     sender_email = (sender_email or "").lower().strip()
     sender_name = (sender_name or "").strip() or (sender_email.split("@")[0] if sender_email else "Unknown")
 
-    # Match an existing ticket on the same Gmail thread
+    # Match an existing ticket on the same Gmail thread — but only if it's
+    # in a reopenable status (open / in_progress / waiting / resolved). A
+    # reply on a `closed` ticket spawns a fresh one.
+    REOPENABLE = ["open", "in_progress", "waiting", "resolved"]
     existing = await db.tickets.find_one(
-        {"gmail_thread_id": thread_id, "source": "email"} if thread_id else {"_id": "__never__"},
-        {"_id": 0, "id": 1, "notes": 1},
+        {
+            "gmail_thread_id": thread_id,
+            "source": "email",
+            "status": {"$in": REOPENABLE},
+        } if thread_id else {"_id": "__never__"},
+        {"_id": 0, "id": 1, "notes": 1, "status": 1},
     )
 
     if existing:

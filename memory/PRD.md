@@ -13,6 +13,11 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-06 — Resolved-reopens + per-user unread indicator + status semantics
+- **Closed vs Resolved semantics fixed** (`wati.py`, `gmail_sync.py`): a student reply on a `resolved` ticket now reopens it (status flips back to `open`, note appended, SLA timer effectively restarts). A reply on a `closed` ticket spawns a fresh ticket (per AYCI spec). Was a bug — both used to spawn new tickets.
+- **Per-user "unread" tracking** (`routes/tickets.py`): new `ticket_views` collection records each user's per-ticket viewed_at. List endpoint enriches every ticket with `unread = (no view OR view < updated_at)`. Reading a ticket auto-updates the view timestamp.
+- **Kanban "new activity" indicator** (`SupportTickets.jsx`): unread cards get a pulsing red dot in the top-right + a "NEW" badge next to priority + bold title + red border/ring. Card timestamp now shows last update (was create). Indicator is per-user — clears when you open the ticket but stays for everyone else.
+
 ### 2026-05-05 — Slack webhook DB-backed + drive diagnostic + nav reorder
 - **Slack `#circle-days` webhook now DB-backed** (`circle_video_alerts.get_webhook_url` / `set_webhook_url`): reads from MongoDB `app_settings.circle_days_webhook` first, then env var. Lets non-technical admins configure on production via API call (no new env-var slot needed). Verified live on preview — test ping posted to the user's #circle-days channel successfully.
 - **New endpoints**: `GET/POST /api/coach-activity/circle-video-alerts/webhook` (admin-only) for set/get.

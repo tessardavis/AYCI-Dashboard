@@ -586,29 +586,55 @@ function KanbanBoard({ grouped, teamById, onOpen, onUpdate }) {
 
 function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
   const assignee = ticket.assignee_id ? teamById[ticket.assignee_id] : null;
+  const unread = !!ticket.unread;
   return (
     <div
       onClick={onOpen}
       className={[
-        "bg-white border rounded-md p-2.5 cursor-pointer hover:shadow-md transition-shadow text-sm group",
-        ticket.overdue ? "border-rose-300 ring-1 ring-rose-200" : "border-slate-200",
+        "bg-white border rounded-md p-2.5 cursor-pointer hover:shadow-md transition-shadow text-sm group relative",
+        unread
+          ? "border-rose-400 ring-2 ring-rose-200/70 shadow-sm"
+          : ticket.overdue
+            ? "border-rose-300 ring-1 ring-rose-200"
+            : "border-slate-200",
       ].join(" ")}
       data-testid={`ticket-card-${ticket.id}`}
     >
+      {unread && (
+        <span
+          className="absolute -top-1 -right-1 flex items-center"
+          title="New activity since you last opened this ticket"
+          data-testid="ticket-unread-badge"
+        >
+          <span className="absolute inline-flex h-3 w-3 rounded-full bg-rose-500 opacity-60 animate-ping" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600 ring-2 ring-white" />
+        </span>
+      )}
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <PriorityChip priority={ticket.priority} />
+        <div className="flex items-center gap-1.5">
+          <PriorityChip priority={ticket.priority} />
+          {unread && (
+            <span className="inline-flex items-center text-[9px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded uppercase tracking-wider">
+              New
+            </span>
+          )}
+        </div>
         {ticket.overdue && (
           <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-700">
             <AlertTriangle className="w-3 h-3" /> SLA
           </span>
         )}
       </div>
-      <div className="font-semibold text-[var(--ayci-ink)] line-clamp-2 leading-snug">{ticket.subject}</div>
+      <div
+        className={`line-clamp-2 leading-snug ${unread ? "font-bold text-[var(--ayci-ink)]" : "font-semibold text-[var(--ayci-ink)]"}`}
+      >
+        {ticket.subject}
+      </div>
       <div className="text-xs text-[var(--ayci-ink-muted)] mt-1 truncate">{ticket.student_name}</div>
       <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-1.5 flex items-center justify-between gap-1">
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
-          {relativeAge(ticket.created_at)}
+          {relativeAge(ticket.updated_at || ticket.created_at)}
           {(ticket.attachments || []).length > 0 && (
             <span className="ml-1 inline-flex items-center gap-0.5 text-slate-600" title={`${ticket.attachments.length} attachment(s)`}>
               <Paperclip className="w-3 h-3" />
