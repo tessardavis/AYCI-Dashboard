@@ -883,6 +883,27 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     const updated = await onUpdate(ticket.id, { [field]: value });
     if (updated) {
       setFullTicket((prev) => ({ ...(prev || {}), ...updated }));
+      // Make status transitions obvious — the card moves out of the Open
+      // column into Resolved/Closed (which is often off-screen on narrow
+      // viewports), so without feedback users think the change didn't save.
+      if (field === "status") {
+        const LABEL = {
+          open: "Open",
+          in_progress: "In Progress",
+          waiting: "Waiting on Student",
+          resolved: "Resolved",
+          closed: "Closed",
+        };
+        toast.success(`Ticket marked ${LABEL[value] || value}`);
+        if (value === "closed" || value === "resolved") {
+          // Give the toast a moment to appear, then close the modal and
+          // refresh the parent list so the Kanban columns reflect the move.
+          setTimeout(() => {
+            onRefresh();
+            onClose();
+          }, 300);
+        }
+      }
     }
   };
 

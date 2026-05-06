@@ -29,6 +29,7 @@ import { formatValue } from "@/lib/format";
 import MetricSourceDialog from "@/components/MetricSourceDialog";
 import CohortMilestonesSection from "@/components/settings/CohortMilestonesSection";
 import ConnectedInboxesSection from "@/components/settings/ConnectedInboxesSection";
+import IntegrationsSection from "@/components/settings/IntegrationsSection";
 
 const CATEGORIES = [
   "GROWTH + INTEREST",
@@ -65,6 +66,7 @@ export default function Settings() {
           <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
           <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
           <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
+          <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>
         </TabsList>
         <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>
@@ -73,6 +75,7 @@ export default function Settings() {
         <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>
+        <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>
       </Tabs>
     </div>
   );

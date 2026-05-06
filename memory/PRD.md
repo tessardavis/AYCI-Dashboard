@@ -13,6 +13,10 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-06 — Settings → Integrations tab + ticket status feedback
+- **New Settings tab** (`/app/frontend/src/components/settings/IntegrationsSection.jsx`): admin-only UI to paste/save the **Slack Bot Token** (`xoxb-…`) and the **#circle-days Slack webhook URL** without touching env vars or DevTools console. Slack bot token card also has a "Send test DM" form that calls `POST /api/slack/test-dm` with the recipient email — confirms Slack lookup + delivery end-to-end. Wired into `Settings.jsx` as the 8th tab.
+- **Ticket status-change feedback** (`SupportTickets.jsx → handleField`): when a ticket status is changed, a toast now confirms ("Ticket marked Closed"). If the new status is `closed` or `resolved`, the modal auto-closes and the parent list refreshes after 300 ms so the card's move into the far-right Closed/Resolved column is visible + unambiguous. Fixes the "doesn't seem to save" confusion caused by the card silently sliding off the visible Kanban area.
+
 ### 2026-05-06 — Slack-bot DMs on ticket assignment + welcome-back toast removed
 - **`slack_dm.py`** — bot-token-based 1:1 DMs via Slack Web API. DB-backed token storage (`app_settings.slack_bot_token`) so configurable on production without env-var slot. Cached email→user_id lookups in `slack_user_cache`.
 - **Ticket flows hooked**: PATCH endpoint when assignee changes; Wati ticket creation (auto-assigned); Gmail ticket creation (inbox routing). Self-assignment silenced. Email tickets via tally are unassigned at create — DM fires when manually assigned.
