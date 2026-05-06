@@ -13,6 +13,17 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-06 — Private-Tier Videos dashboard (Monday board mirror)
+- **`/private-videos` page**: editable table mirroring Monday board 5083952249. All 462 submissions live, 5-min cached, sortable+filterable by status/assignee, search across name/email/question. Each row shows status, student, submission count, question, assignee, submitted/replied dates, and quick links to Tally video, voicenote reply, Circle DM.
+- **Edit modal**: change Status / Assignee / Replied date / Reply link → writes back to Monday via `change_multiple_column_values` GraphQL mutation. Cache busts on save.
+- **Backend** (`private_videos.py` + `routes/private_videos.py`): list/users/patch endpoints with `private_videos` board scope. Tessa (admin) auto-passes; Becky has explicit board access.
+- **Sidebar**: "Private-Tier Videos" added to Community group with `Video` icon.
+- **No duplicate automations**: Monday remains the source of truth (Tally → Monday + "Send reply (via Circle)" button stay on Monday). Dashboard is purely a faster UI.
+
+### 2026-05-06 — Conversation thread + latest-message-first + UX fixes
+- **Conversation thread** (`SupportTickets.jsx → ConversationThread`): ticket modal now leads with a chat-style timeline of all student replies + team replies sorted newest-first. The latest student message gets a prominent "LATEST FROM STUDENT" badge + ring around it. Student messages pink, team replies green. The original ticket body is part of the timeline, no longer dominating the top of the modal.
+- **Internal Notes panel** filters out auto-created WhatsApp/Gmail notes (those are now in the conversation thread). Only genuinely-internal team notes appear.
+
 ### 2026-05-06 — Resolved-reopens + per-user unread indicator + status semantics
 - **Closed vs Resolved semantics fixed** (`wati.py`, `gmail_sync.py`): a student reply on a `resolved` ticket now reopens it (status flips back to `open`, note appended, SLA timer effectively restarts). A reply on a `closed` ticket spawns a fresh ticket (per AYCI spec). Was a bug — both used to spawn new tickets.
 - **Per-user "unread" tracking** (`routes/tickets.py`): new `ticket_views` collection records each user's per-ticket viewed_at. List endpoint enriches every ticket with `unread = (no view OR view < updated_at)`. Reading a ticket auto-updates the view timestamp.

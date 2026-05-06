@@ -30,6 +30,7 @@ ALL_BOARDS = [
     "spotlight",
     "leaderboard",
     "tickets",
+    "private_videos",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]
 

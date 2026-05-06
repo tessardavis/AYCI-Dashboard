@@ -15,6 +15,7 @@ import CoachActivity from "@/pages/CoachActivity";
 import SpotlightCoaching from "@/pages/SpotlightCoaching";
 import CohortLeaderboard from "@/pages/CohortLeaderboard";
 import SupportTickets from "@/pages/SupportTickets";
+import PrivateVideos from "@/pages/PrivateVideos";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import NotAuthorized from "@/pages/NotAuthorized";
@@ -69,6 +70,7 @@ function App() {
                 <Route path="/spotlight" element={<BoardGuard board="spotlight"><SpotlightCoaching /></BoardGuard>} />
                 <Route path="/leaderboard" element={<BoardGuard board="leaderboard"><CohortLeaderboard /></BoardGuard>} />
                 <Route path="/tickets" element={<BoardGuard board="tickets"><SupportTickets /></BoardGuard>} />
+                <Route path="/private-videos" element={<BoardGuard board="private_videos"><PrivateVideos /></BoardGuard>} />
                 <Route path="/settings" element={<BoardGuard board="settings"><Settings /></BoardGuard>} />
                 <Route path="/profile" element={<Profile />} />
               </Route>

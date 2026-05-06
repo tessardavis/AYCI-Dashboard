@@ -1,0 +1,381 @@
+/* Private-Tier Video Submissions
+ *
+ * Mirrors Monday board 5083952249 (AYCI - Private video responses) so Tessa
+ * and Becky can do their daily review work without opening Monday. The
+ * Tally → Monday automation + Monday's "Send reply (via Circle)" button
+ * stay untouched on Monday — we just provide a faster, in-context UI.
+ */
+import { useState, useEffect, useMemo } from "react";
+import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X } from "lucide-react";
+import { toast } from "sonner";
+import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+
+const STATUS_OPTIONS = ["New", "Working on it", "Done", "Update name"];
+const STATUS_TONE = {
+  "New":            "bg-sky-100 text-sky-900 border-sky-300",
+  "Working on it":  "bg-amber-100 text-amber-900 border-amber-300",
+  "Done":           "bg-emerald-100 text-emerald-900 border-emerald-300",
+  "Update name":    "bg-rose-100 text-rose-900 border-rose-300",
+};
+
+function formatUkDate(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("en-GB", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  } catch {
+    return iso;
+  }
+}
+
+export default function PrivateVideos() {
+  const [items, setItems] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [editing, setEditing] = useState(null); // currently-edited row
+  const [fetchedAt, setFetchedAt] = useState(null);
+
+  const load = async (force = false) => {
+    setRefreshing(true);
+    try {
+      const [{ data: list }, { data: u }] = await Promise.all([
+        apiClient.get(`/private-videos${force ? "?force=true" : ""}`, { timeout: 60000 }),
+        apiClient.get("/private-videos/users", { timeout: 30000 }),
+      ]);
+      setItems(list.items || []);
+      setFetchedAt(list.fetched_at);
+      setUsers(u.users || []);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load private-tier videos");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (statusFilter && it.status !== statusFilter) return false;
+      if (assigneeFilter === "_unassigned" && it.assignee_id) return false;
+      if (assigneeFilter && assigneeFilter !== "_unassigned" && it.assignee_id !== assigneeFilter) return false;
+      if (q) {
+        const hay = `${it.first_name || ""} ${it.last_name || ""} ${it.email || ""} ${it.question || ""} ${it.name || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, search, statusFilter, assigneeFilter]);
+
+  const counts = useMemo(() => {
+    const c = { total: items.length, new: 0, working: 0, done: 0 };
+    for (const it of items) {
+      const s = (it.status || "").toLowerCase();
+      if (s === "new") c.new++;
+      else if (s === "working on it") c.working++;
+      else if (s === "done") c.done++;
+    }
+    return c;
+  }, [items]);
+
+  return (
+    <div className="p-4 lg:p-10 max-w-[1700px] mx-auto" data-testid="private-videos-page">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)]">
+          Private-Tier Videos
+        </h1>
+        <div className="flex items-center gap-2">
+          {fetchedAt && (
+            <span className="text-[11px] text-[var(--ayci-ink-muted)]">
+              Live from Monday · {formatUkDate(fetchedAt)}
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing} data-testid="pv-refresh">
+            {refreshing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <StatPill label="Total" value={counts.total} tone="slate" />
+        <StatPill label="New" value={counts.new} tone="sky" />
+        <StatPill label="Working" value={counts.working} tone="amber" />
+        <StatPill label="Done" value={counts.done} tone="emerald" />
+      </div>
+
+      <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-2.5 mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text" placeholder="Search name, email, question…"
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]"
+            data-testid="pv-search"
+          />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded text-sm" data-testid="pv-status-filter">
+          <option value="">All status</option>
+          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded text-sm" data-testid="pv-assignee-filter">
+          <option value="">All assignees</option>
+          <option value="_unassigned">Unassigned</option>
+          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-12 text-center text-[var(--ayci-ink-muted)]">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
+          Loading from Monday…
+        </div>
+      ) : (
+        <div className="bg-white border border-[var(--ayci-border)] rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)] border-b border-[var(--ayci-border)]">
+                <th className="px-3 py-2 font-semibold">Status</th>
+                <th className="px-3 py-2 font-semibold">Submission</th>
+                <th className="px-3 py-2 font-semibold">Question</th>
+                <th className="px-3 py-2 font-semibold whitespace-nowrap">Submitted</th>
+                <th className="px-3 py-2 font-semibold">Assignee</th>
+                <th className="px-3 py-2 font-semibold">Replied</th>
+                <th className="px-3 py-2 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-[var(--ayci-ink-muted)] italic">
+                    No submissions match the current filters.
+                  </td>
+                </tr>
+              ) : filtered.map((it) => (
+                <Row key={it.id} item={it} users={users} onEdit={() => setEditing(it)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editing && (
+        <EditModal
+          item={editing}
+          users={users}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            load(true);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StatPill({ label, value, tone }) {
+  const cls = {
+    slate: "bg-slate-100 border-slate-200 text-slate-800",
+    sky: "bg-sky-100 border-sky-200 text-sky-900",
+    amber: "bg-amber-100 border-amber-200 text-amber-900",
+    emerald: "bg-emerald-100 border-emerald-200 text-emerald-900",
+  }[tone];
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-full text-xs font-semibold ${cls}`}>
+      <span className="opacity-75">{label}</span>
+      <span className="text-sm font-bold">{value}</span>
+    </div>
+  );
+}
+
+function Row({ item, users, onEdit }) {
+  const assignee = item.assignee_name || (users.find((u) => u.id === item.assignee_id) || {}).name || null;
+  const tally = item.tally_video?.url || item.video?.url;
+  const reply = item.reply_link?.url;
+  const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name;
+  return (
+    <tr className="border-b border-slate-100 hover:bg-slate-50/40">
+      <td className="px-3 py-2.5">
+        <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_TONE[item.status] || "bg-slate-100 text-slate-800 border-slate-300"}`}>
+          {item.status || "—"}
+        </span>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="font-semibold text-[var(--ayci-ink)]">{studentName}</div>
+        <div className="text-[11px] text-[var(--ayci-ink-muted)]">
+          {item.submission_number}/{item.total_allowance} · {item.email || "no email"}
+        </div>
+      </td>
+      <td className="px-3 py-2.5 max-w-[300px]">
+        <div className="text-sm text-[var(--ayci-ink)] line-clamp-2">{item.question || "—"}</div>
+      </td>
+      <td className="px-3 py-2.5 text-[11px] text-[var(--ayci-ink-muted)] whitespace-nowrap">
+        {item.submitted ? formatUkDate(item.submitted) : "—"}
+      </td>
+      <td className="px-3 py-2.5">
+        {assignee ? (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-semibold">{assignee}</span>
+        ) : (
+          <span className="text-xs text-amber-700 italic">unassigned</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-[11px] text-[var(--ayci-ink-muted)] whitespace-nowrap">
+        {item.replied ? formatUkDate(item.replied) : "—"}
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {tally && (
+            <a href={tally} target="_blank" rel="noreferrer" className="text-xs text-rose-700 hover:underline flex items-center gap-0.5" title="Watch the student's video">
+              <Video className="w-3 h-3" /> Video
+            </a>
+          )}
+          {reply && (
+            <a href={reply} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 hover:underline flex items-center gap-0.5" title="Coach voicenote reply">
+              <MessageCircle className="w-3 h-3" /> Reply
+            </a>
+          )}
+          {item.private_chat && (
+            <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-xs text-sky-700 hover:underline flex items-center gap-0.5" title="Open Circle DM thread">
+              <ExternalLink className="w-3 h-3" /> Circle
+            </a>
+          )}
+          <button
+            onClick={onEdit}
+            className="text-xs px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 font-semibold text-slate-700"
+            data-testid={`pv-edit-${item.id}`}
+          >
+            Edit
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function EditModal({ item, users, onClose, onSaved }) {
+  const [statusLabel, setStatusLabel] = useState(item.status || "");
+  const [assigneeId, setAssigneeId] = useState(item.assignee_id || "");
+  const [replied, setReplied] = useState((item.replied || "").slice(0, 10));
+  const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiClient.patch(`/private-videos/${item.id}`, {
+        status_label: statusLabel,
+        assignee_id: assigneeId || "",
+        replied: replied || null,
+        reply_link: replyLink,
+      });
+      toast.success("Saved to Monday");
+      onSaved();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end lg:items-center justify-center p-2 lg:p-6" onClick={onClose}>
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-200 flex items-start justify-between gap-3">
+          <div>
+            <div className="font-display text-lg font-extrabold text-[var(--ayci-ink)]">{item.name}</div>
+            <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
+              {item.email} · video {item.submission_number}/{item.total_allowance}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-4">
+          {item.question && (
+            <div>
+              <Label>Question</Label>
+              <div className="text-sm bg-slate-50 border border-slate-200 rounded p-2.5 text-[var(--ayci-ink)]">
+                {item.question}
+              </div>
+            </div>
+          )}
+          {(item.tally_video?.url || item.video?.url) && (
+            <div>
+              <Label>Video link</Label>
+              <a href={item.tally_video?.url || item.video?.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold">
+                <Video className="w-4 h-4" /> Watch on Tally
+              </a>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label>Status</Label>
+              <select value={statusLabel} onChange={(e) => setStatusLabel(e.target.value)} className={inputCls} data-testid="pv-edit-status">
+                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Assignee</Label>
+              <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className={inputCls} data-testid="pv-edit-assignee">
+                <option value="">Unassigned</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Replied date</Label>
+              <input type="date" value={replied} onChange={(e) => setReplied(e.target.value)} className={inputCls} data-testid="pv-edit-replied" />
+            </div>
+            <div>
+              <Label>Reply link (voicenote URL)</Label>
+              <input
+                type="url"
+                value={replyLink}
+                onChange={(e) => setReplyLink(e.target.value)}
+                placeholder="https://www.voicenotes.com/s/…"
+                className={inputCls}
+                data-testid="pv-edit-reply"
+              />
+            </div>
+          </div>
+
+          {item.private_chat && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] bg-sky-50 border border-sky-200 rounded p-2 flex items-center gap-2">
+              <MessageCircle className="w-3.5 h-3.5 text-sky-700" />
+              After saving, click{" "}
+              <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-sky-700 font-semibold hover:underline">
+                this Circle thread
+              </a>{" "}
+              to send your voicenote URL to the student. (The Monday automation does this on a schedule.)
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button onClick={save} disabled={saving} data-testid="pv-edit-save">
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save to Monday
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Label({ children }) {
+  return <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">{children}</div>;
+}
+const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]";

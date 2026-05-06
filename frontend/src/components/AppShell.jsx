@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
@@ -20,6 +20,7 @@ const NAV_GROUPS = [
       { to: "/cohort", label: "Cohort Dashboard", icon: GraduationCap, testid: "sidebar-nav-cohort", board: "cohort" },
       { to: "/interviews", label: "Upcoming Interviews", icon: Calendar, testid: "sidebar-nav-interviews", board: "interviews" },
       { to: "/spotlight", label: "Spotlight Coaching", icon: Sparkles, testid: "sidebar-nav-spotlight", board: "spotlight" },
+      { to: "/private-videos", label: "Private-Tier Videos", icon: Video, testid: "sidebar-nav-private-videos", board: "private_videos" },
       { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
     ],
   },
