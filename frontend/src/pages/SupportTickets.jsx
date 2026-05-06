@@ -1094,13 +1094,9 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             </Field>
           </div>
         </div>
-        <div>
-          <Label>Description</Label>
-          <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-sm whitespace-pre-wrap text-[var(--ayci-ink)] max-h-[40vh] overflow-y-auto">
-            {t.description || <span className="text-[var(--ayci-ink-muted)] italic">(no description)</span>}
-          </div>
-          <AttachmentList ticketId={t.id} attachments={t.attachments} />
-        </div>
+        {/* Conversation thread — newest first so the latest reply is the
+            first thing the team sees. The original message is shown last. */}
+        <ConversationThread ticket={t} />
 
         {t.source === "whatsapp" && (
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
@@ -1111,20 +1107,33 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         )}
 
         <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Lock className="w-3.5 h-3.5 text-amber-700" />
-            <Label className="text-amber-900 mb-0">
-              Internal notes ({(t.notes || []).length})
-            </Label>
-            <span className="text-[10px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-bold">
-              Team only · never sent to student
-            </span>
-          </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-            {(t.notes || []).length === 0 ? (
-              <div className="text-xs text-[var(--ayci-ink-muted)] italic">No internal notes yet.</div>
-            ) : (
-              t.notes.map((n) => (
+          {(() => {
+            // Only show genuinely-internal notes here. Inbound replies from
+            // WhatsApp / Gmail and outbound replies are already rendered in
+            // the ConversationThread above.
+            const nonReplyAuthorIds = new Set([
+              "_whatsapp", "_whatsapp_outbound",
+              "_gmail", "_gmail_outbound",
+            ]);
+            const teamNotes = (t.notes || []).filter(
+              (n) => !nonReplyAuthorIds.has(n.author_id),
+            );
+            return (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-3.5 h-3.5 text-amber-700" />
+                  <Label className="text-amber-900 mb-0">
+                    Internal notes ({teamNotes.length})
+                  </Label>
+                  <span className="text-[10px] uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-bold">
+                    Team only · never sent to student
+                  </span>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {teamNotes.length === 0 ? (
+                    <div className="text-xs text-[var(--ayci-ink-muted)] italic">No internal notes yet.</div>
+                  ) : (
+                    teamNotes.map((n) => (
                 <div
                   key={n.id}
                   className="border border-amber-200 bg-white rounded-md p-2.5 text-sm"
@@ -1140,9 +1149,9 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
                   <div className="whitespace-pre-wrap">{n.body}</div>
                   <AttachmentList ticketId={t.id} attachments={n.attachments} compact />
                 </div>
-              ))
-            )}
-          </div>
+                    ))
+                  )}
+                </div>
           <div className="flex items-end gap-2 mt-3">
             <textarea
               value={note}
@@ -1170,6 +1179,9 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
               )}
             </Button>
           </div>
+              </>
+            );
+          })()}
         </div>
 
         <div className="flex justify-between items-center pt-3 border-t border-slate-100 text-[11px] text-[var(--ayci-ink-muted)]">
@@ -1189,6 +1201,107 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     </Modal>
   );
 }
+
+// -------------------- Conversation thread (newest-first) --------------------
+
+const STUDENT_AUTHOR_IDS = new Set(["_whatsapp", "_gmail"]);
+const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound"]);
+
+// Renders the entire ticket conversation (original message + every reply +
+// outbound replies from the team) in a chat-style timeline. The most recent
+// message is at the TOP — that's the whole point: the team always sees the
+// freshest student reply first, no scrolling required.
+function ConversationThread({ ticket }) {
+  const items = [];
+
+  // Original incoming ticket body — modelled as the first message
+  if (ticket.description) {
+    items.push({
+      kind: "student",
+      author: ticket.student_name || "Student",
+      body: ticket.description,
+      created_at: ticket.created_at,
+      attachments: ticket.attachments || [],
+      id: `__desc__${ticket.id}`,
+    });
+  }
+
+  for (const n of ticket.notes || []) {
+    let kind = "team-internal";
+    if (STUDENT_AUTHOR_IDS.has(n.author_id)) kind = "student";
+    else if (TEAM_OUTBOUND_AUTHOR_IDS.has(n.author_id)) kind = "team-reply";
+    if (kind === "team-internal") continue; // shown in the amber Internal Notes panel
+    items.push({
+      kind,
+      author: n.author_name,
+      body: n.body,
+      created_at: n.created_at,
+      attachments: n.attachments || [],
+      id: n.id,
+    });
+  }
+
+  // Newest first
+  items.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+
+  if (items.length === 0) {
+    return (
+      <div className="text-sm text-[var(--ayci-ink-muted)] italic">No messages yet.</div>
+    );
+  }
+
+  const latestStudentIdx = items.findIndex((i) => i.kind === "student");
+
+  return (
+    <div data-testid="conversation-thread">
+      <Label>Conversation ({items.length}) — newest first</Label>
+      <div className="space-y-2">
+        {items.map((m, i) => {
+          const isStudent = m.kind === "student";
+          const isLatestStudent = i === latestStudentIdx;
+          const tone = isStudent
+            ? isLatestStudent
+              ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200"
+              : "bg-rose-50 border-rose-200"
+            : "bg-emerald-50 border-emerald-200";
+          return (
+            <div
+              key={m.id}
+              className={`border rounded-md p-3 text-sm ${tone}`}
+              data-testid={`thread-message-${m.id}`}
+            >
+              <div className="flex items-center justify-between text-[11px] text-[var(--ayci-ink-muted)] mb-1.5">
+                <span className="font-semibold text-[var(--ayci-ink)] flex items-center gap-1.5">
+                  {isStudent ? (
+                    <span className="inline-flex items-center gap-1 text-rose-700">
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      {m.author}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <Send className="w-3.5 h-3.5" />
+                      {m.author}
+                    </span>
+                  )}
+                  {isLatestStudent && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-rose-700 bg-rose-200 px-1.5 py-0.5 rounded">
+                      Latest from student
+                    </span>
+                  )}
+                </span>
+                <span>{formatUk(m.created_at)}</span>
+              </div>
+              <div className="whitespace-pre-wrap text-[var(--ayci-ink)]">{m.body}</div>
+              <AttachmentList ticketId={ticket.id} attachments={m.attachments} compact />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 
 // -------------------- Email reply panel (Gmail two-way) --------------------
 
