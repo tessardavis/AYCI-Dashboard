@@ -13,6 +13,15 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-07 — Private-Tier doc summary: 15s click-wait → 0s perceived
+- **Problem**: `PrivateDocCard` on Student Lookup needed a click on "Load private-tier doc summary" → cold call took ~15s (Drive list 1-2s + doc fetch 1-2s + Claude Sonnet summarisation 10-12s). Felt sluggish even though warm-cache hits returned in 230ms.
+- **Fixed via 4 layers**:
+  1. **Pre-warm in background** during `/api/students/lookup` (`routes/students.py → _prewarm_drive_summary`): fires `asyncio.create_task(...)` so the AI summary is being fetched while the user reads other cards. Silent on failure.
+  2. **In-process Drive folder-list cache** (`google_drive.py → _list_docs_cached`): 30-min TTL on the 266-file folder listing, eliminates 1-2s of Drive API on every cold call. Bust hooks added to `/api/students/drive-cache/clear`.
+  3. **Inline cached summary in lookup response** (`routes/students.py → _get_inline_summary`): if the summary is already in `drive_doc_summaries` and within 24h TTL, return it on the lookup payload as `drive_summary` so the page renders the doc card with the summary already present — zero extra requests.
+  4. **Auto-load on render** (`PrivateDocCard.jsx`): removed the click-to-load button, added `useEffect` that auto-fetches if no `initialResult` was passed. Backwards-compatible.
+- **Result**: 1st visit → page renders in 4s, summary card shows a 1s spinner that resolves in 8-12s in the background while user reads other panels. Re-visit (within 24h) → summary appears inline immediately, no spinner. Verified live: warm-cache lookup returns the full summary inlined in 2.6s.
+
 ### 2026-05-07 — Private-Tier Videos: full Monday board replacement (Phases 1–3)
 - **DB-backed store** (`/app/backend/private_videos_store.py`): new `private_video_submissions` collection. Schema includes `tally_submission_id` (idempotency), `assignee_team_member_id` (now our internal team_member id, not Monday's user id), `submission_number` (auto-computed = N+1 prior submissions for this email), `total_allowance` + `private_chat_url` + `tier` (looked up from Monday Academy Members on ingest), plus all the legacy fields. Response decorator returns the legacy Monday shape so the existing frontend works unchanged.
 - **Migration endpoint** `POST /api/private-videos/migrate-from-monday` (admin-only): pulls all 471 rows from Monday board 5083952249 and upserts into the DB. Idempotent — re-runs update in place. Verified: 471 created on first run, 471 updated on re-run.

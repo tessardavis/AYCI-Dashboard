@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, FileText, ExternalLink, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 
-export default function PrivateDocCard({ email, name }) {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+export default function PrivateDocCard({ email, name, initialResult }) {
+  const [loading, setLoading] = useState(!initialResult);
+  const [result, setResult] = useState(initialResult || null);
   const [expanded, setExpanded] = useState(false);
 
   const load = async () => {
@@ -27,33 +26,30 @@ export default function PrivateDocCard({ email, name }) {
     }
   };
 
-  if (!result && !loading) {
+  // Auto-load on mount unless a pre-cached summary was passed in. Resets when
+  // the email changes (different student selected). Backend will pre-warm in
+  // parallel from the Student Lookup endpoint, so most of the time this hits
+  // a warm cache and returns in <300ms.
+  useEffect(() => {
+    if (initialResult) {
+      setResult(initialResult);
+      setLoading(false);
+      return;
+    }
+    if (email) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, initialResult]);
+
+  if (loading) {
     return (
-      <div className="bg-white border border-dashed border-[var(--ayci-border)] rounded-lg p-4 text-center">
-        <Button
-          onClick={load}
-          variant="outline"
-          className="text-sm"
-          data-testid="load-private-doc-btn"
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Load private-tier doc summary
-        </Button>
-        <div className="text-xs text-[var(--ayci-ink-muted)] mt-2">
-          Fetches from Google Drive + AI-summarises (Claude Sonnet 4.5).
-        </div>
+      <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 text-center text-sm text-[var(--ayci-ink-muted)]" data-testid="private-doc-loading">
+        <Loader2 className="w-4 h-4 animate-spin inline mr-2 text-[var(--ayci-teal)]" />
+        Loading private-tier doc summary…
       </div>
     );
   }
 
-  if (loading) {
-    return (
-      <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 text-center text-sm text-[var(--ayci-ink-muted)]">
-        <Loader2 className="w-4 h-4 animate-spin inline mr-2 text-[var(--ayci-teal)]" />
-        Fetching doc and generating summary…
-      </div>
-    );
-  }
+  if (!result) return null;
 
   if (!result.found) {
     return (

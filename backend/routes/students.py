@@ -1,5 +1,6 @@
 """Student Lookup, name search, at-risk dashboard, drive summary."""
 import asyncio
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,36 @@ from db import db
 from deps import require_board
 
 router = APIRouter(prefix="/api", tags=["students"])
+
+
+async def _get_inline_summary(email: str) -> Optional[dict]:
+    """If a fresh AI summary is already cached for this student, return it so
+    the Student Lookup page can render it inline (no extra round-trip)."""
+    if not email:
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=gdrive.SUMMARY_TTL_HOURS)
+    cached = await db.drive_doc_summaries.find_one(
+        {"_id": email.strip().lower()}, {"_id": 0}
+    )
+    if not cached:
+        return None
+    ca = cached.get("cached_at")
+    if isinstance(ca, datetime):
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        if ca > cutoff:
+            return {**cached, "cached": True}
+    return None
+
+
+async def _prewarm_drive_summary(student_name: str, email: str) -> None:
+    """Background task fired on every Student Lookup so by the time the user
+    clicks the doc card the AI summary is already in the DB cache. Silent on
+    failure — the user-facing endpoint will retry/show the error."""
+    try:
+        await gdrive.summarise_student_doc(db, student_name, email)
+    except Exception:
+        pass
 
 
 @router.get("/students/lookup")
@@ -44,12 +75,20 @@ async def students_lookup(
 
     monday_safe = _safe(monday_t)
     drive_link = None
+    drive_summary = None
     student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
     if student_name:
         try:
             drive_link = await gdrive.find_student_doc_link(db, student_name)
         except Exception as e:
             drive_link = {"found": False, "error": str(e)}
+        # If we already have a fresh AI summary cached, return it inline so the
+        # PrivateDocCard renders instantly instead of triggering a 2nd request.
+        drive_summary = await _get_inline_summary(email)
+        # If found a doc but no fresh summary yet, kick off the summary fetch
+        # in the background so it's hot the moment the coach clicks the card.
+        if (drive_link or {}).get("found") and not drive_summary:
+            asyncio.create_task(_prewarm_drive_summary(student_name, email))
 
     return {
         "email": email,
@@ -60,6 +99,7 @@ async def students_lookup(
         "calendly": _safe(calendly_t),
         "tally": _safe(tally_t),
         "drive": drive_link,
+        "drive_summary": drive_summary,
     }
 
 
@@ -110,12 +150,19 @@ async def students_drive_cache_clear(
     user: dict = Depends(require_board("students")),
 ):
     """Bust the per-student Drive lookup cache. With ?name=Foo Bar clears just
-    that student; without it clears every cached link."""
+    that student; without it clears every cached link. Also busts the in-process
+    folder-list cache so the next call sees newly-shared docs."""
+    gdrive._bust_doc_list_cache()
     if name:
         key = f"drive_link:{gdrive._normalise(name)}"
         result = await db.cache.delete_one({"_id": key})
+        # Also bust the summary cache (keyed by email or normalised name)
+        await db.drive_doc_summaries.delete_many(
+            {"_id": {"$regex": f"^{gdrive._normalise(name).replace(' ', '.*')}"}}
+        )
         return {"cleared": result.deleted_count, "scope": "single", "name": name}
     result = await db.cache.delete_many({"_id": {"$regex": "^drive_link:"}})
+    await db.drive_doc_summaries.delete_many({})
     return {"cleared": result.deleted_count, "scope": "all"}
 
 

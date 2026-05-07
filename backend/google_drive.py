@@ -235,6 +235,35 @@ async def _list_docs() -> list[dict]:
     return out
 
 
+# In-process cache of the Drive folder listing. The folder changes infrequently
+# (a few new docs per week) so caching for 30 min eliminates 1-2s of latency
+# on every cold drive-summary / find-link call.
+_DOC_LIST_CACHE: dict = {"files": None, "fetched_at": None}
+_DOC_LIST_TTL_SECONDS = 30 * 60
+
+
+async def _list_docs_cached() -> list[dict]:
+    """`_list_docs()` with a 30-min in-process cache. Use this for read paths
+    where seeing a brand-new doc within 30 min isn't critical."""
+    now = datetime.now(timezone.utc)
+    fetched = _DOC_LIST_CACHE.get("fetched_at")
+    if (
+        _DOC_LIST_CACHE.get("files") is not None
+        and fetched is not None
+        and (now - fetched).total_seconds() < _DOC_LIST_TTL_SECONDS
+    ):
+        return _DOC_LIST_CACHE["files"]
+    files = await _list_docs()
+    _DOC_LIST_CACHE["files"] = files
+    _DOC_LIST_CACHE["fetched_at"] = now
+    return files
+
+
+def _bust_doc_list_cache() -> None:
+    _DOC_LIST_CACHE["files"] = None
+    _DOC_LIST_CACHE["fetched_at"] = None
+
+
 async def find_student_doc_link(db, student_name: str) -> dict:
     """
     Lightweight: returns just the Drive web view link for the matched private-tier
@@ -254,7 +283,7 @@ async def find_student_doc_link(db, student_name: str) -> dict:
         if ca > cutoff:
             return cached["payload"]
     try:
-        files = await _list_docs()
+        files = await _list_docs_cached()
         match = _find_best_match(student_name, files)
         if not match:
             payload = {"found": False, "web_view_link": None, "name": None}
@@ -427,7 +456,7 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
                 if cached_at > cutoff:
                     return {**cached, "cached": True}
 
-        files = await _list_docs()
+        files = await _list_docs_cached()
         match = _find_best_match(student_name, files)
         if not match:
             result = {

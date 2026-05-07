@@ -323,6 +323,7 @@ export default function StudentLookup() {
             <PrivateDocCard
               email={result.email}
               name={header?.name || result.monday?.data?.name || query}
+              initialResult={result.drive_summary}
             />
           )}
 
