@@ -13,6 +13,14 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-07 — Private-Tier Videos Phase 4: "Send to Circle" via Zapier
+- **Backend** (`routes/private_videos.py`): new `POST /api/private-videos/{id}/send-to-circle` endpoint. Loads the row, validates `reply_link` is set, POSTs to the configured Zapier webhook with a payload that's BOTH legacy-Monday-shaped (`event.pulseId`, `event.pulseName`, `event.columnTitle = "Send reply (via Circle)"`) AND has all native fields inline (`student_email`, `student_name`, `voicenote_url`, `private_chat_url`, `submission_number`, `total_allowance`, `question`, `tally_video_url`, `assignee_name`, `tier`). On 2xx response from Zapier, stamps `replied_at = now` and flips status → Done.
+- **Webhook URL stored** in `app_settings.zapier_circle_reply_webhook` (DB-backed, same pattern as Slack). Endpoints `GET/POST /api/private-videos/zapier-webhook`. Tessa's URL pre-saved on preview: `https://hooks.zapier.com/hooks/catch/532155/u8m6s70/`.
+- **Frontend** (`PrivateVideos.jsx → EditModal`): green "Send to Circle" button next to Save. Disabled until Reply link has a URL. Click → confirm dialog → saves URL + posts → toast "Sent to Circle ✓ — marked Done" → modal closes + list refreshes. Replaced the old "click this Circle thread" hint with "Clicking Send to Circle posts the voicenote to this Circle Group DM via Zapier".
+- **Settings → Integrations**: added `ZapierCircleReplyCard` card so admins can update the webhook URL without touching env vars.
+- **Tests** (`/app/backend/tests/test_private_videos_store.py`): now 11/11 passing — added `test_send_to_circle_404`, `test_send_to_circle_400_no_reply_link`, `test_zapier_webhook_setting_validation`.
+- **Pending user action**: Tessa needs to **edit the existing zap** in Zapier so the Action steps read from the new inline fields (`student_email`, `voicenote_url`, etc.) rather than re-querying the Monday item by `pulseId` (which won't exist for native Tally-ingested rows). The legacy Monday-shaped fields are still in the payload as a backwards-compat bridge during transition.
+
 ### 2026-05-07 — Private-Tier doc summary: 15s click-wait → 0s perceived
 - **Problem**: `PrivateDocCard` on Student Lookup needed a click on "Load private-tier doc summary" → cold call took ~15s (Drive list 1-2s + doc fetch 1-2s + Claude Sonnet summarisation 10-12s). Felt sluggish even though warm-cache hits returned in 230ms.
 - **Fixed via 4 layers**:

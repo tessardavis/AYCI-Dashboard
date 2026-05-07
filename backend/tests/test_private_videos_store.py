@@ -151,3 +151,40 @@ def test_migrate_idempotent(admin):
     # Within +/- a small drift (a real Tally submission may land mid-test);
     # the headline guarantee is "no duplicates from re-running migration".
     assert after - before <= 5
+
+
+# -------------------------------------------- Send to Circle (Zapier webhook)
+def test_send_to_circle_404(admin):
+    r = admin.post(f"{BASE_URL}/api/private-videos/does-not-exist/send-to-circle")
+    assert r.status_code == 404
+
+
+def test_send_to_circle_400_no_reply_link(admin):
+    """If reply_link is empty, refuse to send (clearer than letting Zapier
+    receive a blank URL)."""
+    listed = admin.get(f"{BASE_URL}/api/private-videos").json()
+    target = next(
+        (i for i in listed["items"] if not (i.get("reply_link") or {}).get("url")),
+        None,
+    )
+    assert target is not None, "no item without a reply_link in DB"
+    r = admin.post(f"{BASE_URL}/api/private-videos/{target['id']}/send-to-circle")
+    assert r.status_code == 400
+    assert "voicenote url" in r.json()["detail"].lower()
+
+
+def test_zapier_webhook_setting_validation(admin):
+    """Validate that the Zapier webhook URL endpoint enforces the right format.
+    Doesn't overwrite an existing configured URL — just tests the validator."""
+    # Reject non-Zapier URL — returns 200 with ok:false (so the UI can toast)
+    r = admin.post(
+        f"{BASE_URL}/api/private-videos/zapier-webhook",
+        json={"url": "https://evil.test/post"},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is False
+
+    # GET shape
+    state = admin.get(f"{BASE_URL}/api/private-videos/zapier-webhook").json()
+    assert "configured" in state
+    assert "masked" in state

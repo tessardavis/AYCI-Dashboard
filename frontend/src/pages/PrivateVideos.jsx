@@ -8,7 +8,7 @@
  * /api/private-videos/tally-webhook) — no Monday automation involved.
  */
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -325,6 +325,7 @@ function EditModal({ item, users, onClose, onSaved }) {
   const [replied, setReplied] = useState((item.replied || "").slice(0, 10));
   const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const save = async () => {
     setSaving(true);
@@ -341,6 +342,34 @@ function EditModal({ item, users, onClose, onSaved }) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendToCircle = async () => {
+    const url = (replyLink || "").trim();
+    if (!url) {
+      toast.error("Add the voicenote URL first");
+      return;
+    }
+    if (!window.confirm(
+      `Post this voicenote to ${item.first_name || item.name}'s Circle Group DM via Zapier?\n\n${url}\n\nThis can't be undone.`
+    )) return;
+    setSending(true);
+    try {
+      // Save first so the URL is persisted on the row before the webhook fires
+      await apiClient.patch(`/private-videos/${item.id}`, {
+        status_label: statusLabel,
+        assignee_id: assigneeId || "",
+        replied: replied || null,
+        reply_link: url,
+      });
+      await apiClient.post(`/private-videos/${item.id}/send-to-circle`);
+      toast.success("Sent to Circle ✓ — marked Done");
+      onSaved();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Send failed");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -406,21 +435,38 @@ function EditModal({ item, users, onClose, onSaved }) {
           </div>
 
           {item.private_chat && (
-            <div className="text-xs text-[var(--ayci-ink-muted)] bg-sky-50 border border-sky-200 rounded p-2 flex items-center gap-2">
-              <MessageCircle className="w-3.5 h-3.5 text-sky-700" />
-              After saving, click{" "}
-              <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-sky-700 font-semibold hover:underline">
-                this Circle thread
-              </a>{" "}
-              to send your voicenote URL to the student. (The Monday automation does this on a schedule.)
+            <div className="text-xs text-[var(--ayci-ink-muted)] bg-sky-50 border border-sky-200 rounded p-2 flex items-start gap-2">
+              <MessageCircle className="w-3.5 h-3.5 text-sky-700 mt-0.5 shrink-0" />
+              <div>
+                Clicking <strong>Send to Circle</strong> below posts the voicenote to{" "}
+                <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-sky-700 font-semibold hover:underline">
+                  this Circle Group DM
+                </a>{" "}
+                via Zapier and marks the submission Done.
+              </div>
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-            <Button onClick={save} disabled={saving} data-testid="pv-edit-save">
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 flex-wrap">
+            <Button variant="outline" onClick={onClose} disabled={saving || sending}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={save}
+              disabled={saving || sending}
+              data-testid="pv-edit-save"
+            >
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               Save
+            </Button>
+            <Button
+              onClick={sendToCircle}
+              disabled={saving || sending || !replyLink.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="pv-edit-send-circle"
+              title={!replyLink.trim() ? "Add the voicenote URL first" : "Save + post to Circle Group DM via Zapier"}
+            >
+              {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Send to Circle
             </Button>
           </div>
         </div>

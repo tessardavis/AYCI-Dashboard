@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -20,6 +20,7 @@ export default function IntegrationsSection({ isAdmin }) {
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
+      <ZapierCircleReplyCard isAdmin={isAdmin} />
     </div>
   );
 }
@@ -321,6 +322,121 @@ function CircleDaysWebhookCard({ isAdmin }) {
               onClick={save}
               disabled={!isAdmin || saving || !value.trim()}
               data-testid="circle-days-webhook-save"
+            >
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+function ZapierCircleReplyCard({ isAdmin }) {
+  const [state, setState] = useState({ loading: true, configured: false, masked: "" });
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const { data } = await apiClient.get("/private-videos/zapier-webhook");
+      setState({ loading: false, configured: !!data?.configured, masked: data?.masked || "" });
+    } catch (err) {
+      setState({ loading: false, configured: false, masked: "" });
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const save = async () => {
+    if (!isAdmin) return;
+    const v = (value || "").trim();
+    if (v && !v.startsWith("https://hooks.zapier.com/")) {
+      toast.error("Expected a Zapier webhook URL starting with 'https://hooks.zapier.com/'");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await apiClient.post("/private-videos/zapier-webhook", { url: v });
+      if (data?.ok === false) {
+        toast.error(data.error || "Save failed");
+      } else {
+        toast.success(v ? "Zapier webhook saved" : "Zapier webhook cleared");
+        setValue("");
+        await load();
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="zapier-circle-reply-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+          <Zap className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Zapier — Send to Circle (Private-Tier Videos)
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            When a coach hits "Send to Circle" on a private-tier video, the
+            dashboard POSTs the voicenote URL + student details to this Zapier
+            webhook. The zap then posts a fixed message into the student's
+            Circle Group DM. Find the URL in the zap's "Catch Hook" trigger
+            (looks like <code className="text-xs bg-slate-100 px-1 rounded">https://hooks.zapier.com/hooks/catch/…</code>).
+          </p>
+        </div>
+      </div>
+
+      {state.loading ? (
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <>
+          <div
+            className="flex items-center gap-2 text-sm mb-4"
+            data-testid="zapier-circle-reply-status"
+          >
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                state.configured ? "bg-emerald-500" : "bg-slate-400"
+              }`}
+            />
+            {state.configured ? (
+              <span className="text-emerald-700 font-semibold break-all">
+                Configured — {state.masked}
+              </span>
+            ) : (
+              <span className="text-slate-500">Not configured</span>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="https://hooks.zapier.com/hooks/catch/…/…/"
+              disabled={!isAdmin || saving}
+              className="flex-1 font-mono text-xs"
+              data-testid="zapier-circle-reply-input"
+            />
+            <Button
+              onClick={save}
+              disabled={!isAdmin || saving || !value.trim()}
+              data-testid="zapier-circle-reply-save"
             >
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               Save

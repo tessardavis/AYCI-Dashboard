@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import logging
+import os
+from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -97,3 +100,150 @@ async def stats(user: dict = Depends(require_board("private_videos"))):
         {"tally_submission_id": {"$ne": None}}
     )
     return {"total": total, "from_monday": from_monday, "from_tally": from_tally}
+
+
+# -------------------------------------------- Zapier "Send to Circle" webhook
+# Storage pattern matches the Slack webhooks: DB first, env var fallback.
+async def _get_zapier_url() -> str:
+    doc = await db.app_settings.find_one(
+        {"id": "zapier_circle_reply_webhook"}, {"_id": 0, "value": 1}
+    )
+    db_val = (doc or {}).get("value") or ""
+    return (db_val.strip() or os.environ.get("ZAPIER_CIRCLE_REPLY_WEBHOOK") or "").strip()
+
+
+@router.get("/zapier-webhook")
+async def get_zapier_webhook(admin: dict = Depends(require_admin)):
+    url = await _get_zapier_url()
+    return {
+        "configured": bool(url),
+        "masked": (url[:38] + "…" + url[-6:]) if url and len(url) > 50 else (url or ""),
+    }
+
+
+class ZapierWebhookPayload(BaseModel):
+    url: str = ""
+
+
+@router.post("/zapier-webhook")
+async def set_zapier_webhook(
+    body: ZapierWebhookPayload,
+    admin: dict = Depends(require_admin),
+):
+    url = (body.url or "").strip()
+    if url and not url.startswith("https://hooks.zapier.com/"):
+        return {"ok": False, "error": "Expected a Zapier webhook URL starting with 'https://hooks.zapier.com/'"}
+    await db.app_settings.update_one(
+        {"id": "zapier_circle_reply_webhook"},
+        {"$set": {"id": "zapier_circle_reply_webhook", "value": url}},
+        upsert=True,
+    )
+    return {"ok": True, "configured": bool(url)}
+
+
+@router.post("/{item_id}/send-to-circle")
+async def send_to_circle(
+    item_id: str,
+    user: dict = Depends(require_board("private_videos")),
+):
+    """POST the voicenote URL to the configured Zapier webhook (which then
+    posts a fixed message into the student's Circle Group DM). On success,
+    stamp `replied_at = now` and flip status → Done."""
+    row = await db.private_video_submissions.find_one({"id": item_id}, {"_id": 0})
+    if not row:
+        raise HTTPException(404, "Submission not found")
+
+    reply_url = (row.get("reply_link") or "").strip()
+    if not reply_url:
+        raise HTTPException(400, "Add the voicenote URL first (Reply link field)")
+
+    zapier_url = await _get_zapier_url()
+    if not zapier_url:
+        raise HTTPException(
+            400,
+            "Zapier webhook not configured — set it in Settings → Integrations → 'Zapier Circle reply webhook'",
+        )
+
+    # Resolve assignee name for the payload
+    assignee_name = None
+    if row.get("assignee_team_member_id"):
+        tm = await db.team_members.find_one(
+            {"id": row["assignee_team_member_id"]}, {"_id": 0, "name": 1}
+        )
+        assignee_name = (tm or {}).get("name")
+
+    student_name = (
+        f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
+        or row.get("email")
+    )
+    sub_num = row.get("submission_number")
+    total = row.get("total_allowance")
+    pulse_name = student_name
+    if sub_num and total:
+        pulse_name = f"{student_name} video {sub_num} of {total}"
+
+    # Build a payload that's BOTH:
+    #   - Monday-mimicking (so any pre-existing zap steps reading
+    #     event.pulseId / event.pulseName / event.columnTitle keep working
+    #     for migrated rows)
+    #   - All native row data inline (so the zap can be rewired to read
+    #     student_email / voicenote_url / etc. directly instead of
+    #     re-querying Monday — needed for Tally-ingested rows where the
+    #     pulseId doesn't exist on Monday).
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "event": {
+            "app": "ayci-dashboard",
+            "type": "send_reply_via_circle",
+            "triggerTime": now_iso,
+            "boardId": 5083952249,
+            "pulseId": row.get("monday_item_id"),  # may be null for native rows
+            "pulseName": pulse_name,
+            "columnId": "button_mkxmqgxc",
+            "columnTitle": "Send reply (via Circle)",
+            "value": {"clicks": 1, "changedAt": now_iso},
+        },
+        # Native fields (inline; preferred — works for both migrated + native rows)
+        "submission_id": row.get("id"),
+        "student_email": row.get("email"),
+        "student_name": student_name,
+        "first_name": row.get("first_name"),
+        "last_name": row.get("last_name"),
+        "voicenote_url": reply_url,
+        "reply_link": reply_url,  # alias for zap convenience
+        "private_chat_url": row.get("private_chat_url"),
+        "submission_number": sub_num,
+        "total_allowance": total,
+        "question": row.get("question"),
+        "tally_video_url": row.get("tally_video_url"),
+        "assignee_name": assignee_name,
+        "tier": row.get("tier"),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(zapier_url, json=payload)
+    except Exception as e:
+        logger.warning(f"[private-videos] zapier send failed for {item_id}: {e}")
+        raise HTTPException(502, f"Failed to reach Zapier: {e}") from e
+
+    if r.status_code >= 300:
+        logger.warning(f"[private-videos] zapier returned {r.status_code}: {r.text[:200]}")
+        raise HTTPException(502, f"Zapier returned HTTP {r.status_code}")
+
+    # Mark replied + Done
+    update = {
+        "replied_at": now_iso,
+        "status": "done",
+        "updated_at": now_iso,
+    }
+    await db.private_video_submissions.update_one(
+        {"id": item_id}, {"$set": update}
+    )
+    fresh = await db.private_video_submissions.find_one({"id": item_id}, {"_id": 0})
+    team_by_id = await pv_store._team_members_by_id(db)
+    return {
+        "ok": True,
+        "item": pv_store._decorate(fresh, team_by_id),
+        "zapier_status": r.status_code,
+    }
