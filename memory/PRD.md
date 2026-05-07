@@ -13,6 +13,19 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-07 — Private-Tier Videos: full Monday board replacement (Phases 1–3)
+- **DB-backed store** (`/app/backend/private_videos_store.py`): new `private_video_submissions` collection. Schema includes `tally_submission_id` (idempotency), `assignee_team_member_id` (now our internal team_member id, not Monday's user id), `submission_number` (auto-computed = N+1 prior submissions for this email), `total_allowance` + `private_chat_url` + `tier` (looked up from Monday Academy Members on ingest), plus all the legacy fields. Response decorator returns the legacy Monday shape so the existing frontend works unchanged.
+- **Migration endpoint** `POST /api/private-videos/migrate-from-monday` (admin-only): pulls all 471 rows from Monday board 5083952249 and upserts into the DB. Idempotent — re-runs update in place. Verified: 471 created on first run, 471 updated on re-run.
+- **Tally webhook** `POST /api/private-videos/tally-webhook` (public): ingests new submissions from Tally form `0Qr5py` directly into the DB. Field IDs hard-coded after live discovery: `JzG2rX` (first), `gGg5VJ` (last), `yYglbd` (email), `pO1ObE` (question), `X09e7z` (video file), `1VxoPQ` (hidden URL-param fallback). Idempotent on `submissionId`. Falls back to hidden URL-params when visible inputs are blank. Auto-enriches with tier + allowance + Circle DM URL via Academy Members lookup.
+- **Routes swapped** (`routes/private_videos.py`): `GET ""`, `GET /users`, `PATCH /{id}` now read/write the DB. `/users` returns our internal team_members for the assignee dropdown. New `GET /stats` for admin diagnostics.
+- **Frontend** (`/app/frontend/src/pages/PrivateVideos.jsx`): UI is identical, just text-only changes ("Live from Monday" → "Updated", "Save to Monday" → "Save"). Empty-state shows a "Migrate from Monday" CTA button (calls the migration endpoint with a 3-min timeout).
+- **Tests** (`/app/backend/tests/test_private_videos_store.py`): 8/8 passing — list/users/stats endpoints, Tally webhook ingest + idempotency + form-id filter + email-required guard, PATCH assignee, migration idempotency.
+- **Pending**:
+  - Tessa to update Tally form `0Qr5py` webhook URL → `https://ayci-dashboard.emergent.host/api/private-videos/tally-webhook` (after redeploy).
+  - Tessa to disable the Tally → Monday automation in Monday so we don't get duplicate rows.
+  - Run migration on production after redeploy: `POST /api/private-videos/migrate-from-monday`.
+  - **Phase 4 (deferred)**: Circle DM auto-send when "Send reply" is clicked. Currently the dashboard shows a Circle DM link the coach clicks manually (same UX as today on Monday).
+
 ### 2026-05-06 — Settings → Integrations tab + ticket status feedback
 - **New Settings tab** (`/app/frontend/src/components/settings/IntegrationsSection.jsx`): admin-only UI to paste/save the **Slack Bot Token** (`xoxb-…`) and the **#circle-days Slack webhook URL** without touching env vars or DevTools console. Slack bot token card also has a "Send test DM" form that calls `POST /api/slack/test-dm` with the recipient email — confirms Slack lookup + delivery end-to-end. Wired into `Settings.jsx` as the 8th tab.
 - **Ticket status-change feedback** (`SupportTickets.jsx → handleField`): when a ticket status is changed, a toast now confirms ("Ticket marked Closed"). If the new status is `closed` or `resolved`, the modal auto-closes and the parent list refreshes after 300 ms so the card's move into the far-right Closed/Resolved column is visible + unambiguous. Fixes the "doesn't seem to save" confusion caused by the card silently sliding off the visible Kanban area.

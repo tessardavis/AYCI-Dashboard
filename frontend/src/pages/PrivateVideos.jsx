@@ -1,9 +1,11 @@
 /* Private-Tier Video Submissions
  *
- * Mirrors Monday board 5083952249 (AYCI - Private video responses) so Tessa
- * and Becky can do their daily review work without opening Monday. The
- * Tally → Monday automation + Monday's "Send reply (via Circle)" button
- * stay untouched on Monday — we just provide a faster, in-context UI.
+ * DB-backed (replaces Monday board 5083952249). Reads from
+ * `private_video_submissions` collection. Tessa and Becky review submissions
+ * and assign / reply / mark Done from this dashboard.
+ *
+ * New submissions arrive via Tally webhook (form 0Qr5py → POST
+ * /api/private-videos/tally-webhook) — no Monday automation involved.
  */
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X } from "lucide-react";
@@ -99,7 +101,7 @@ export default function PrivateVideos() {
         <div className="flex items-center gap-2">
           {fetchedAt && (
             <span className="text-[11px] text-[var(--ayci-ink-muted)]">
-              Live from Monday · {formatUkDate(fetchedAt)}
+              Updated · {formatUkDate(fetchedAt)}
             </span>
           )}
           <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing} data-testid="pv-refresh">
@@ -140,8 +142,10 @@ export default function PrivateVideos() {
       {loading ? (
         <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-12 text-center text-[var(--ayci-ink-muted)]">
           <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
-          Loading from Monday…
+          Loading…
         </div>
+      ) : items.length === 0 ? (
+        <EmptyStateMigrate onMigrated={() => load(true)} />
       ) : (
         <div className="bg-white border border-[var(--ayci-border)] rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
@@ -197,6 +201,56 @@ function StatPill({ label, value, tone }) {
     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-full text-xs font-semibold ${cls}`}>
       <span className="opacity-75">{label}</span>
       <span className="text-sm font-bold">{value}</span>
+    </div>
+  );
+}
+
+function EmptyStateMigrate({ onMigrated }) {
+  const [migrating, setMigrating] = useState(false);
+  const run = async () => {
+    if (!window.confirm("Pull all 462 submissions from the Monday board into the dashboard? Safe to re-run.")) return;
+    setMigrating(true);
+    try {
+      const { data } = await apiClient.post("/private-videos/migrate-from-monday", {}, { timeout: 180000 });
+      toast.success(`Migrated · created ${data.created} · updated ${data.updated}`);
+      onMigrated();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Migration failed");
+    } finally {
+      setMigrating(false);
+    }
+  };
+  return (
+    <div
+      className="bg-gradient-to-br from-violet-50 via-white to-sky-50 border-2 border-dashed border-violet-300 rounded-xl p-10 text-center"
+      data-testid="pv-empty-migrate"
+    >
+      <Video className="w-12 h-12 text-violet-500 mx-auto mb-4" />
+      <h2 className="font-display text-xl font-extrabold text-[var(--ayci-ink)] mb-2">
+        No submissions yet
+      </h2>
+      <p className="text-sm text-[var(--ayci-ink-muted)] max-w-md mx-auto mb-6">
+        Pull existing private-tier video submissions from the Monday board into
+        this dashboard. After migrating, point the Tally webhook here and the
+        Monday board can be retired.
+      </p>
+      <Button
+        onClick={run}
+        disabled={migrating}
+        data-testid="pv-migrate-btn"
+      >
+        {migrating ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Migrating from Monday…
+          </>
+        ) : (
+          <>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Migrate from Monday board
+          </>
+        )}
+      </Button>
     </div>
   );
 }
@@ -281,7 +335,7 @@ function EditModal({ item, users, onClose, onSaved }) {
         replied: replied || null,
         reply_link: replyLink,
       });
-      toast.success("Saved to Monday");
+      toast.success("Saved");
       onSaved();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
@@ -366,7 +420,7 @@ function EditModal({ item, users, onClose, onSaved }) {
             <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
             <Button onClick={save} disabled={saving} data-testid="pv-edit-save">
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save to Monday
+              Save
             </Button>
           </div>
         </div>
