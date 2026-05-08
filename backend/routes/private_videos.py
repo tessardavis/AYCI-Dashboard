@@ -28,6 +28,89 @@ async def list_submissions(
     return await pv_store.list_submissions(db, force=force)
 
 
+# Proxy the Tally-hosted video through our backend so we can serve it with
+# proper HTTP Range support. Tally's CDN returns 200 for Range requests
+# (full body) and uses chunked transfer (no Content-Length), which makes
+# iOS Safari refuse to play `<video>` inline — it requires 206 Partial
+# Content + a known total size to seek/play. We cache each video to local
+# disk on first access (one-time ~30s for a 400 MB file) and serve every
+# subsequent read straight from disk where Range support is native.
+@router.get("/{item_id}/video")
+async def stream_video(
+    item_id: str,
+    request: Request,
+    user: dict = Depends(require_board("private_videos")),
+):
+    row = await db.private_video_submissions.find_one(
+        {"id": item_id}, {"_id": 0, "tally_video_url": 1},
+    )
+    if not row:
+        raise HTTPException(404, "Submission not found")
+    src = row.get("tally_video_url")
+    if not src:
+        raise HTTPException(404, "No video on this submission")
+
+    import private_video_cache as pv_cache
+    try:
+        path = await pv_cache.ensure_cached(item_id, src)
+    except Exception as e:
+        logger.warning(f"[private-videos] cache miss + fetch failed: {e}")
+        raise HTTPException(502, "Upstream video fetch failed")
+
+    total = path.stat().st_size
+
+    # Parse Range: bytes=START-END (END optional)
+    range_header = request.headers.get("range") or ""
+    start = 0
+    end = total - 1
+    is_range = False
+    if range_header.startswith("bytes="):
+        is_range = True
+        try:
+            spec = range_header.split("=", 1)[1].split(",")[0].strip()
+            s, _, e = spec.partition("-")
+            if s:
+                start = int(s)
+            if e:
+                end = int(e)
+            if end >= total:
+                end = total - 1
+            if start < 0 or start > end:
+                raise HTTPException(416, "Requested range not satisfiable")
+        except (ValueError, IndexError):
+            raise HTTPException(416, "Invalid Range header")
+
+    bytes_to_read = end - start + 1
+
+    def _iter_file():
+        with path.open("rb") as f:
+            f.seek(start)
+            remaining = bytes_to_read
+            while remaining > 0:
+                chunk = f.read(min(64 * 1024, remaining))
+                if not chunk:
+                    return
+                remaining -= len(chunk)
+                yield chunk
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(bytes_to_read),
+        "Content-Type": "video/mp4",
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": "inline",
+    }
+    from fastapi.responses import StreamingResponse
+    if is_range:
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        return StreamingResponse(
+            _iter_file(), status_code=206, headers=headers, media_type="video/mp4",
+        )
+    return StreamingResponse(
+        _iter_file(), status_code=200, headers=headers, media_type="video/mp4",
+    )
+
+
 @router.get("/users")
 async def assignable_users(
     user: dict = Depends(require_board("private_videos")),

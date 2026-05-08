@@ -10,7 +10,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 const STATUS_OPTIONS = ["New", "Working on it", "Done", "Update name"];
@@ -424,7 +424,7 @@ function EditModal({ item, users, onClose, onSaved }) {
           {(item.tally_video?.url || item.video?.url) && (
             <div>
               <Label>Student video</Label>
-              <InlineVideo url={item.tally_video?.url || item.video?.url} />
+              <InlineVideo itemId={item.id} fallbackUrl={item.tally_video?.url || item.video?.url} />
             </div>
           )}
 
@@ -506,17 +506,42 @@ function Label({ children }) {
 const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]";
 
 // Inline `<video>` so coaches can watch on mobile without leaving the app.
-// Tally hosts the file directly and content-types are set correctly, so a
-// plain `<video src>` works on iOS Safari + Chrome. `playsInline` keeps it
-// embedded rather than fullscreen-hijacking iOS. Falls back to "Open in new
-// tab" if the format isn't natively playable.
-function InlineVideo({ url }) {
+// Backend caches the file to disk on first hit so we can serve proper
+// 206 Partial Content with a known total size — required by iOS Safari to
+// play `<video>` inline. The first request is slow (~10-30s) while the
+// cache fills; we show a Loader skeleton during that warm-up so it doesn't
+// look like the page is hanging.
+function InlineVideo({ itemId, fallbackUrl }) {
   const [errored, setErrored] = useState(false);
-  if (!url) return null;
-  if (errored) {
+  const [warmed, setWarmed] = useState(false);
+  const [warmError, setWarmError] = useState(false);
+  const proxyUrl = `${API}/private-videos/${itemId}/video`;
+
+  // Pre-warm the cache with a 1KB Range probe so the user sees a clear
+  // "Preparing video…" state instead of a black `<video>` element that
+  // takes 20s to populate metadata. After the probe returns we know the
+  // file is on disk and the inline player will start instantly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await apiClient.get(`/private-videos/${itemId}/video`, {
+          headers: { Range: "bytes=0-1023" },
+          responseType: "blob",
+          timeout: 60000,
+        });
+        if (!cancelled) setWarmed(true);
+      } catch {
+        if (!cancelled) setWarmError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [itemId]);
+
+  if (errored || warmError) {
     return (
       <a
-        href={url}
+        href={fallbackUrl}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold"
@@ -526,10 +551,24 @@ function InlineVideo({ url }) {
       </a>
     );
   }
+
+  if (!warmed) {
+    return (
+      <div
+        className="w-full aspect-video rounded-md bg-slate-100 border border-slate-200 flex flex-col items-center justify-center gap-2 text-[var(--ayci-ink-muted)]"
+        data-testid="pv-video-warming"
+      >
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--ayci-accent)]" />
+        <div className="text-xs font-semibold">Preparing video…</div>
+        <div className="text-[10px]">First load can take 10-20s</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1.5">
       <video
-        src={url}
+        src={proxyUrl}
         controls
         playsInline
         preload="metadata"
@@ -540,7 +579,7 @@ function InlineVideo({ url }) {
         Your browser can't play this video.
       </video>
       <a
-        href={url}
+        href={fallbackUrl}
         target="_blank"
         rel="noreferrer"
         className="text-[11px] text-[var(--ayci-ink-muted)] hover:text-rose-700 hover:underline inline-flex items-center gap-1"
