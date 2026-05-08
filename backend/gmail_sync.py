@@ -471,14 +471,29 @@ async def sync_inbox(db, inbox: dict) -> dict:
         logger.warning(f"[gmail] {inbox.get('email')} labels list failed: {e}")
     label_routing = await _build_label_routing(db)
 
-    # Search query: inbox messages PLUS any thread tagged with a team-name
-    # label, so threads moved out of the inbox but tagged still get ingested
-    # and re-routed to the right person.
+    # Search query semantics:
+    # - If `ingest_inbound` is True on the inbox doc → pull every inbound mail
+    #   (the original behaviour for support-desk style accounts).
+    # - If `ingest_inbound` is False → label-only mode: ONLY threads the user
+    #   has explicitly tagged with a team-member name become tickets. This
+    #   lets a coach connect their personal inbox without every email turning
+    #   into noise.
     label_clauses = [f'label:"{n}"' for n in label_routing.keys()]
-    if label_clauses:
+    ingest_inbound = bool(inbox.get("ingest_inbound"))
+    if ingest_inbound and label_clauses:
         q = f"newer_than:{lookback_days}d (in:inbox OR {' OR '.join(label_clauses)})"
-    else:
+    elif ingest_inbound:
         q = f"in:inbox newer_than:{lookback_days}d"
+    elif label_clauses:
+        # Label-only: pull threads tagged with any team-name label.
+        q = f"newer_than:{lookback_days}d ({' OR '.join(label_clauses)})"
+    else:
+        # Nothing to do — no inbox ingestion AND no team labels exist yet.
+        await db.gmail_inboxes.update_one(
+            {"id": inbox["id"]},
+            {"$set": {"last_sync_at": datetime.now(timezone.utc), "last_sync_status": "ok_label_only_no_labels"}},
+        )
+        return out
 
     try:
         result = service.users().messages().list(
@@ -700,10 +715,15 @@ async def _handle_message(
 
 
 async def sync_all(db) -> dict:
-    """Iterate every connected inbox flagged `ingest_inbound` and sync."""
+    """Iterate every connected inbox and sync.
+
+    All inboxes are polled — `ingest_inbound` only decides whether to also
+    pull every inbox message, or just team-labelled threads (label-only
+    mode). See `sync_inbox` for the query construction.
+    """
     if not is_configured():
         return {"skipped": "not_configured"}
-    inboxes = await db.gmail_inboxes.find({"ingest_inbound": True}, {"_id": 0}).to_list(50)
+    inboxes = await db.gmail_inboxes.find({}, {"_id": 0}).to_list(50)
     totals = {"inboxes": len(inboxes), "created": 0, "updated": 0, "scanned": 0, "errors": 0}
     for inb in inboxes:
         try:
