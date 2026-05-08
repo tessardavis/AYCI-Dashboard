@@ -1,8 +1,9 @@
 """Support Tickets — REST endpoints + Tally webhook + sync."""
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 import tickets as tickets_mod
 from db import db
@@ -10,6 +11,10 @@ from deps import get_current_user, require_board
 from models import (
     Ticket, TicketCreate, TicketUpdate, TicketNote, TicketNoteCreate,
 )
+
+
+class BulkCloseRequest(BaseModel):
+    ids: List[str] = Field(..., min_length=1, max_length=500)
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
 
@@ -134,6 +139,25 @@ async def match_student_now(ticket_id: str, user: dict = Depends(require_board("
     import student_match as sm
     match = await sm.ensure_ticket_student_match(db, t, force=True)
     return match
+
+
+@router.post("/bulk-close")
+async def bulk_close_tickets(
+    payload: BulkCloseRequest,
+    user: dict = Depends(require_board("tickets")),
+):
+    """Close many tickets in one shot. Used by the bulk action toolbar on
+    the Support Tickets board so the team can clear backlog quickly."""
+    now = _now_iso()
+    res = await db.tickets.update_many(
+        {"id": {"$in": payload.ids}, "status": {"$ne": "closed"}},
+        {"$set": {
+            "status": "closed",
+            "resolved_at": now,
+            "updated_at": now,
+        }},
+    )
+    return {"ok": True, "closed": res.modified_count, "requested": len(payload.ids)}
 
 
 @router.patch("/{ticket_id}")

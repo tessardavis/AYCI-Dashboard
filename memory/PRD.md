@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-08 — Bulk Close Support Tickets + Gmail label-based routing
+- **Bulk Close** (`routes/tickets.py` → `POST /api/tickets/bulk-close`): closes many tickets in one shot, sets `resolved_at = now`, only modifies non-closed rows so it's safely idempotent. Validates `1 ≤ len(ids) ≤ 500`.
+- **Frontend** (`SupportTickets.jsx`): per-card checkboxes on Kanban with per-column "select all" (indeterminate aware), per-row checkboxes on Table with master "select all visible", sticky bottom action pill "N selected • Close tickets • Clear", confirm dialog before closing, success toast + refresh.
+- **Gmail label-based routing** (`gmail_sync.py`): every poll now also queries `label:"<first_name>"` for each team member, so threads labelled `coralie`, `arub`, etc. in Gmail are picked up even if moved out of the inbox. Routing precedence: **label always wins** over inbox-mapping. Handles nested labels (`Support/Coralie` → `coralie`). Routing map is built live from `team_members` so adding a person automatically supports their first-name label.
+- **Tests** (`/app/backend/tests/test_tickets_bulk_close.py`): 7/7 passing — bulk-close happy path, idempotency, empty-list 422, unknown ids no-op, plus 4 unit tests on `_resolve_label_assignee` (match, nested, no-match, empty inputs).
+
 ### 2026-05-07 — Private-Tier Videos Phase 4: "Send to Circle" via Zapier
 - **Backend** (`routes/private_videos.py`): new `POST /api/private-videos/{id}/send-to-circle` endpoint. Loads the row, validates `reply_link` is set, POSTs to the configured Zapier webhook with a payload that's BOTH legacy-Monday-shaped (`event.pulseId`, `event.pulseName`, `event.columnTitle = "Send reply (via Circle)"`) AND has all native fields inline (`student_email`, `student_name`, `voicenote_url`, `private_chat_url`, `submission_number`, `total_allowance`, `question`, `tally_video_url`, `assignee_name`, `tier`). On 2xx response from Zapier, stamps `replied_at = now` and flips status → Done.
 - **Webhook URL stored** in `app_settings.zapier_circle_reply_webhook` (DB-backed, same pattern as Slack). Endpoints `GET/POST /api/private-videos/zapier-webhook`. Tessa's URL pre-saved on preview: `https://hooks.zapier.com/hooks/catch/532155/u8m6s70/`.

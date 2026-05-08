@@ -97,6 +97,40 @@ async def _resolve_assignee_for_inbox(db, inbox_email: str) -> Optional[str]:
     return tm.get("id") if tm else None
 
 
+async def _build_label_routing(db) -> dict[str, str]:
+    """Map first-name (lowercase) → team_member_id for every active team
+    member. Threads tagged in Gmail with a label matching a first name route
+    to that person, e.g. label `coralie` → Coralie Fairon's tickets."""
+    out: dict[str, str] = {}
+    cursor = db.team_members.find({}, {"_id": 0, "id": 1, "name": 1})
+    async for tm in cursor:
+        name = (tm.get("name") or "").strip()
+        if not name:
+            continue
+        first = name.split()[0].lower()
+        if first and first not in out:
+            out[first] = tm["id"]
+    return out
+
+
+def _resolve_label_assignee(
+    label_ids: list[str],
+    label_id_to_name: dict[str, str],
+    label_routing: dict[str, str],
+) -> Optional[str]:
+    """If the message carries a label whose name matches a team member's
+    first name, return that team_member_id. Returns None if no match."""
+    for lid in label_ids or []:
+        name = (label_id_to_name.get(lid) or "").strip().lower()
+        if not name:
+            continue
+        # Strip any nesting like "Support/coralie" → "coralie"
+        leaf = name.rsplit("/", 1)[-1].strip()
+        if leaf in label_routing:
+            return label_routing[leaf]
+    return None
+
+
 def _client_id() -> str:
     return os.environ.get("GOOGLE_CLIENT_ID", "")
 
@@ -424,7 +458,27 @@ async def sync_inbox(db, inbox: dict) -> dict:
         lookback_days = 7  # safety overlap
     else:
         lookback_days = 1
-    q = f"in:inbox newer_than:{lookback_days}d"
+
+    # Label-based routing: pull labels for this account and build
+    #   a) id → name map (so we can read labels off each message)
+    #   b) name → team_member_id map (so a `coralie` label routes to Coralie)
+    label_id_to_name: dict[str, str] = {}
+    try:
+        labels_resp = service.users().labels().list(userId="me").execute()
+        for lbl in labels_resp.get("labels") or []:
+            label_id_to_name[lbl.get("id") or ""] = lbl.get("name") or ""
+    except HttpError as e:
+        logger.warning(f"[gmail] {inbox.get('email')} labels list failed: {e}")
+    label_routing = await _build_label_routing(db)
+
+    # Search query: inbox messages PLUS any thread tagged with a team-name
+    # label, so threads moved out of the inbox but tagged still get ingested
+    # and re-routed to the right person.
+    label_clauses = [f'label:"{n}"' for n in label_routing.keys()]
+    if label_clauses:
+        q = f"newer_than:{lookback_days}d (in:inbox OR {' OR '.join(label_clauses)})"
+    else:
+        q = f"in:inbox newer_than:{lookback_days}d"
 
     try:
         result = service.users().messages().list(
@@ -467,7 +521,11 @@ async def sync_inbox(db, inbox: dict) -> dict:
             continue
 
         try:
-            handled = await _handle_message(db, inbox, full, service)
+            handled = await _handle_message(
+                db, inbox, full, service,
+                label_id_to_name=label_id_to_name,
+                label_routing=label_routing,
+            )
         except Exception as e:
             logger.exception(f"[gmail] handle message {msg_id} crashed: {e}")
             out["errors"] += 1
@@ -499,10 +557,17 @@ async def sync_inbox(db, inbox: dict) -> dict:
     return out
 
 
-async def _handle_message(db, inbox: dict, msg: dict, service) -> Optional[str]:
+async def _handle_message(
+    db, inbox: dict, msg: dict, service,
+    *,
+    label_id_to_name: Optional[dict[str, str]] = None,
+    label_routing: Optional[dict[str, str]] = None,
+) -> Optional[str]:
     """Convert one Gmail message into either a new ticket or a note on an
     existing ticket (matched by Gmail threadId). Returns 'created', 'updated',
     or None when skipped."""
+    label_id_to_name = label_id_to_name or {}
+    label_routing = label_routing or {}
     payload = msg.get("payload") or {}
     headers = payload.get("headers") or []
     from_h = _header(headers, "From")
@@ -587,8 +652,16 @@ async def _handle_message(db, inbox: dict, msg: dict, service) -> Optional[str]:
 
     desc = body_text or "(empty body)"
 
-    # Auto-assign by which inbox received the email
-    auto_assignee = await _resolve_assignee_for_inbox(db, inbox.get("email") or "")
+    # Auto-assign: label-based routing wins over inbox-based routing. This
+    # lets the team override default routing by tagging a thread (e.g. an
+    # email landing in arub@ but tagged `coralie` goes straight to Coralie).
+    label_assignee = _resolve_label_assignee(
+        msg.get("labelIds") or [], label_id_to_name, label_routing,
+    )
+    if label_assignee:
+        auto_assignee = label_assignee
+    else:
+        auto_assignee = await _resolve_assignee_for_inbox(db, inbox.get("email") or "")
 
     ticket = {
         "id": str(uuid.uuid4()),

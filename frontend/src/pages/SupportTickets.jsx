@@ -19,6 +19,7 @@ import {
   FileText,
   Download,
   Lock,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
@@ -178,6 +179,9 @@ export default function SupportTickets() {
   const [activeId, setActiveId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [showOlder, setShowOlder] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [confirmBulkClose, setConfirmBulkClose] = useState(false);
+  const [bulkClosing, setBulkClosing] = useState(false);
 
   // Hide historical Tally noise: only show tickets created on/after this cutoff
   // unless the user explicitly toggles "Show older".
@@ -305,6 +309,49 @@ export default function SupportTickets() {
   };
 
   const activeTicket = tickets.find((t) => t.id === activeId);
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Add/remove a whole list of ids at once. `nextChecked` is the desired state.
+  const toggleSelectMany = (ids, nextChecked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (nextChecked) ids.forEach((id) => next.add(id));
+      else ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkClose = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkClosing(true);
+    try {
+      const { data } = await apiClient.post("/tickets/bulk-close", { ids });
+      const closed = data?.closed ?? 0;
+      toast.success(
+        closed === 0
+          ? "Nothing to close — selected tickets were already closed"
+          : `Closed ${closed} ticket${closed === 1 ? "" : "s"}`,
+      );
+      setConfirmBulkClose(false);
+      clearSelection();
+      await load();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Bulk close failed");
+    } finally {
+      setBulkClosing(false);
+    }
+  };
 
   return (
     <div className="p-4 lg:p-10 max-w-[1600px] mx-auto" data-testid="support-tickets-page">
@@ -469,9 +516,35 @@ export default function SupportTickets() {
           teamById={teamById}
           onOpen={setActiveId}
           onUpdate={updateTicket}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectMany={toggleSelectMany}
         />
       ) : (
-        <TicketTable rows={filtered} teamById={teamById} onOpen={setActiveId} />
+        <TicketTable
+          rows={filtered}
+          teamById={teamById}
+          onOpen={setActiveId}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectMany={toggleSelectMany}
+        />
+      )}
+
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          onClose={() => setConfirmBulkClose(true)}
+          onClear={clearSelection}
+        />
+      )}
+      {confirmBulkClose && (
+        <BulkCloseConfirmModal
+          count={selectedIds.size}
+          submitting={bulkClosing}
+          onCancel={() => setConfirmBulkClose(false)}
+          onConfirm={handleBulkClose}
+        />
       )}
 
       {createOpen && (
@@ -554,37 +627,60 @@ function StatusChip({ status }) {
   );
 }
 
-function KanbanBoard({ grouped, teamById, onOpen, onUpdate }) {
+function KanbanBoard({ grouped, teamById, onOpen, onUpdate, selectedIds, onToggleSelect, onToggleSelectMany }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3" data-testid="tickets-kanban">
-      {STATUSES.map((s) => (
-        <div key={s.value} className="bg-slate-50 border border-slate-200 rounded-lg flex flex-col min-h-[300px]">
-          <div className={`px-3 py-2 border-b border-slate-200 flex items-center justify-between rounded-t-lg ${s.chip}`}>
-            <span className="text-xs font-semibold uppercase tracking-wider">{s.label}</span>
-            <span className="text-xs font-bold">{grouped[s.value].length}</span>
+      {STATUSES.map((s) => {
+        const colTickets = grouped[s.value];
+        const colIds = colTickets.map((t) => t.id);
+        const selectedInCol = colIds.filter((id) => selectedIds.has(id)).length;
+        const allSelected = colIds.length > 0 && selectedInCol === colIds.length;
+        const someSelected = selectedInCol > 0 && !allSelected;
+        return (
+          <div key={s.value} className="bg-slate-50 border border-slate-200 rounded-lg flex flex-col min-h-[300px]">
+            <div className={`px-3 py-2 border-b border-slate-200 flex items-center justify-between rounded-t-lg ${s.chip}`}>
+              <div className="flex items-center gap-2">
+                {colIds.length > 0 && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select all ${s.label}`}
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                    onChange={(e) => onToggleSelectMany(colIds, e.target.checked)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-3.5 h-3.5 rounded border-slate-400 text-[var(--ayci-accent)] focus:ring-1 focus:ring-[var(--ayci-accent)] cursor-pointer"
+                    data-testid={`tickets-kanban-select-all-${s.value}`}
+                  />
+                )}
+                <span className="text-xs font-semibold uppercase tracking-wider">{s.label}</span>
+              </div>
+              <span className="text-xs font-bold">{colTickets.length}</span>
+            </div>
+            <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[70vh]">
+              {colTickets.length === 0 ? (
+                <div className="text-center text-xs text-slate-400 py-6">—</div>
+              ) : (
+                colTickets.map((t) => (
+                  <KanbanCard
+                    key={t.id}
+                    ticket={t}
+                    teamById={teamById}
+                    onOpen={() => onOpen(t.id)}
+                    onUpdate={onUpdate}
+                    selected={selectedIds.has(t.id)}
+                    onToggleSelect={() => onToggleSelect(t.id)}
+                  />
+                ))
+              )}
+            </div>
           </div>
-          <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[70vh]">
-            {grouped[s.value].length === 0 ? (
-              <div className="text-center text-xs text-slate-400 py-6">—</div>
-            ) : (
-              grouped[s.value].map((t) => (
-                <KanbanCard
-                  key={t.id}
-                  ticket={t}
-                  teamById={teamById}
-                  onOpen={() => onOpen(t.id)}
-                  onUpdate={onUpdate}
-                />
-              ))
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
+function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSelect }) {
   const assignee = ticket.assignee_id ? teamById[ticket.assignee_id] : null;
   const unread = !!ticket.unread;
   return (
@@ -592,14 +688,30 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
       onClick={onOpen}
       className={[
         "bg-white border rounded-md p-2.5 cursor-pointer hover:shadow-md transition-shadow text-sm group relative",
-        unread
-          ? "border-rose-400 ring-2 ring-rose-200/70 shadow-sm"
-          : ticket.overdue
-            ? "border-rose-300 ring-1 ring-rose-200"
-            : "border-slate-200",
+        selected
+          ? "border-[var(--ayci-accent)] ring-2 ring-[var(--ayci-accent)]/40 shadow-sm"
+          : unread
+            ? "border-rose-400 ring-2 ring-rose-200/70 shadow-sm"
+            : ticket.overdue
+              ? "border-rose-300 ring-1 ring-rose-200"
+              : "border-slate-200",
       ].join(" ")}
       data-testid={`ticket-card-${ticket.id}`}
     >
+      <div
+        className="absolute top-2 left-2 z-10"
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select ticket ${ticket.subject}`}
+          className="w-3.5 h-3.5 rounded border-slate-300 text-[var(--ayci-accent)] focus:ring-1 focus:ring-[var(--ayci-accent)] cursor-pointer"
+          data-testid={`ticket-card-select-${ticket.id}`}
+        />
+      </div>
       {unread && (
         <span
           className="absolute -top-1 -right-1 flex items-center"
@@ -610,7 +722,7 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
           <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600 ring-2 ring-white" />
         </span>
       )}
-      <div className="flex items-start justify-between gap-2 mb-1.5">
+      <div className="flex items-start justify-between gap-2 mb-1.5 pl-5">
         <div className="flex items-center gap-1.5">
           <PriorityChip priority={ticket.priority} />
           {unread && (
@@ -654,7 +766,7 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate }) {
   );
 }
 
-function TicketTable({ rows, teamById, onOpen }) {
+function TicketTable({ rows, teamById, onOpen, selectedIds, onToggleSelect, onToggleSelectMany }) {
   if (rows.length === 0) {
     return (
       <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-12 text-center text-sm text-[var(--ayci-ink-muted)]">
@@ -662,12 +774,27 @@ function TicketTable({ rows, teamById, onOpen }) {
       </div>
     );
   }
+  const visibleIds = rows.map((r) => r.id);
+  const selectedVisible = visibleIds.filter((id) => selectedIds.has(id)).length;
+  const allChecked = selectedVisible === visibleIds.length;
+  const someChecked = selectedVisible > 0 && !allChecked;
   return (
     <div className="bg-white border border-[var(--ayci-border)] rounded-lg overflow-hidden" data-testid="tickets-table">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] font-semibold">
             <tr>
+              <th className="px-3 py-2.5 w-8">
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible"
+                  checked={allChecked}
+                  ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                  onChange={(e) => onToggleSelectMany(visibleIds, e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-400 text-[var(--ayci-accent)] focus:ring-1 focus:ring-[var(--ayci-accent)] cursor-pointer"
+                  data-testid="tickets-table-select-all"
+                />
+              </th>
               <th className="text-left px-3 py-2.5">Priority</th>
               <th className="text-left px-3 py-2.5">Status</th>
               <th className="text-left px-3 py-2.5">Subject</th>
@@ -680,13 +807,27 @@ function TicketTable({ rows, teamById, onOpen }) {
           <tbody className="divide-y divide-slate-100">
             {rows.map((t) => {
               const assignee = t.assignee_id ? teamById[t.assignee_id] : null;
+              const isSelected = selectedIds.has(t.id);
               return (
                 <tr
                   key={t.id}
                   onClick={() => onOpen(t.id)}
-                  className={`hover:bg-slate-50 cursor-pointer ${t.overdue ? "bg-rose-50/40" : ""}`}
+                  className={[
+                    "hover:bg-slate-50 cursor-pointer",
+                    isSelected ? "bg-[var(--ayci-accent)]/5" : t.overdue ? "bg-rose-50/40" : "",
+                  ].join(" ")}
                   data-testid={`ticket-row-${t.id}`}
                 >
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(t.id)}
+                      aria-label={`Select ticket ${t.subject}`}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-[var(--ayci-accent)] focus:ring-1 focus:ring-[var(--ayci-accent)] cursor-pointer"
+                      data-testid={`ticket-row-select-${t.id}`}
+                    />
+                  </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       <PriorityChip priority={t.priority} />
@@ -716,6 +857,85 @@ function TicketTable({ rows, teamById, onOpen }) {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function BulkActionBar({ count, onClose, onClear }) {
+  return (
+    <div
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[var(--ayci-ink)] text-white rounded-full shadow-lg shadow-slate-900/30 pl-5 pr-2 py-2 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4"
+      data-testid="tickets-bulk-action-bar"
+    >
+      <span className="text-sm font-semibold" data-testid="tickets-bulk-count">
+        {count} selected
+      </span>
+      <span className="h-5 w-px bg-white/20" />
+      <button
+        onClick={onClose}
+        className="text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500 hover:bg-rose-600 transition-colors"
+        data-testid="tickets-bulk-close-button"
+      >
+        <XCircle className="w-3.5 h-3.5" /> Close tickets
+      </button>
+      <button
+        onClick={onClear}
+        className="text-xs font-medium px-3 py-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+        data-testid="tickets-bulk-clear"
+      >
+        Clear
+      </button>
+    </div>
+  );
+}
+
+function BulkCloseConfirmModal({ count, submitting, onCancel, onConfirm }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+      onClick={onCancel}
+      data-testid="tickets-bulk-confirm-modal"
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-display text-lg font-bold text-[var(--ayci-ink)] mb-1">
+          Close {count} ticket{count === 1 ? "" : "s"}?
+        </h3>
+        <p className="text-sm text-[var(--ayci-ink-muted)] mb-4">
+          Selected tickets will be marked <strong>closed</strong> and removed
+          from active queues. This won't notify the students.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            disabled={submitting}
+            data-testid="tickets-bulk-confirm-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={onConfirm}
+            disabled={submitting}
+            className="bg-rose-600 hover:bg-rose-700 text-white"
+            data-testid="tickets-bulk-confirm-submit"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Closing…
+              </>
+            ) : (
+              <>
+                <XCircle className="w-4 h-4 mr-1.5" /> Close {count}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
