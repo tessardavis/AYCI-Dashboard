@@ -58,16 +58,18 @@ export default function Settings() {
       )}
 
       <Tabs defaultValue="team" className="w-full">
-        <TabsList className="mb-6">
-          <TabsTrigger value="team" data-testid="settings-tab-team">Team</TabsTrigger>
-          <TabsTrigger value="users" data-testid="settings-tab-users">Users</TabsTrigger>
-          <TabsTrigger value="metrics" data-testid="settings-tab-metrics">Metrics</TabsTrigger>
-          <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>
-          <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
-          <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
-          <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
-          <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1 mb-6">
+          <TabsList className="w-max">
+            <TabsTrigger value="team" data-testid="settings-tab-team">Team</TabsTrigger>
+            <TabsTrigger value="users" data-testid="settings-tab-users">Users</TabsTrigger>
+            <TabsTrigger value="metrics" data-testid="settings-tab-metrics">Metrics</TabsTrigger>
+            <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>
+            <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
+            <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
+            <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
+            <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="metrics"><MetricsSection isAdmin={isAdmin} /></TabsContent>

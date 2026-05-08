@@ -208,8 +208,10 @@ export default function AppShell() {
           "shrink-0 flex flex-col",
           // Desktop: sticky 256px column
           "lg:w-64 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
-          // Mobile: fixed slide-in drawer
-          "fixed lg:static top-0 left-0 h-screen w-64 z-50 transition-transform duration-200",
+          // Mobile: fixed slide-in drawer. Use dynamic viewport units (dvh)
+          // so iOS Safari's URL bar doesn't push the bottom buttons (My
+          // profile / Sign out) below the visible area.
+          "fixed lg:static top-0 left-0 h-[100dvh] w-64 z-50 transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
         style={{ backgroundColor: "var(--ayci-sidebar)" }}
