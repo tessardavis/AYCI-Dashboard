@@ -505,43 +505,50 @@ function Label({ children }) {
 }
 const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]";
 
-// Inline `<video>` so coaches can watch on mobile without leaving the app.
-// Backend caches the file to disk on first hit so we can serve proper
-// 206 Partial Content with a known total size — required by iOS Safari to
-// play `<video>` inline. The first request is slow (~10-30s) while the
-// cache fills; we show a Loader skeleton during that warm-up so it doesn't
-// look like the page is hanging.
+// Inline `<video>` so coaches can watch on mobile + desktop without
+// leaving the app. Backend pipeline:
+//   1. download from Tally → disk
+//   2. detect codec; if HEVC (iPhone default), transcode → H.264
+//   3. serve from disk with proper Range support
+// First load takes ~30-90s (download + transcode); we poll the status
+// endpoint and show progress so the user knows it's working.
 function InlineVideo({ itemId, fallbackUrl }) {
   const [errored, setErrored] = useState(false);
-  const [warmed, setWarmed] = useState(false);
-  const [warmError, setWarmError] = useState(false);
+  const [status, setStatus] = useState("loading");
   const proxyUrl = `${API}/private-videos/${itemId}/video`;
 
-  // Pre-warm the cache with a 1KB Range probe so the user sees a clear
-  // "Preparing video…" state instead of a black `<video>` element that
-  // takes 20s to populate metadata. After the probe returns we know the
-  // file is on disk and the inline player will start instantly.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let pollTimer = null;
+    const poll = async () => {
       try {
-        await apiClient.get(`/private-videos/${itemId}/video`, {
-          headers: { Range: "bytes=0-1023" },
-          responseType: "blob",
-          timeout: 60000,
-        });
-        if (!cancelled) setWarmed(true);
+        const { data } = await apiClient.get(`/private-videos/${itemId}/video/status`);
+        if (cancelled) return;
+        setStatus(data.status);
+        if (data.status === "ready") return;
+        if (data.status === "error" || data.status === "no_video") return;
+        pollTimer = setTimeout(poll, 3000);
       } catch {
-        if (!cancelled) setWarmError(true);
+        if (!cancelled) {
+          setStatus("error");
+        }
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    poll();
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [itemId]);
 
-  if (errored || warmError) {
+  if (errored || status === "error" || status === "no_video") {
+    // Fallback when the inline `<video>` can't decode (rare — old browser
+    // missing codecs). The proxy URL works as a navigation target since
+    // the file's already cached + transcoded server-side.
+    const downloadUrl = errored ? proxyUrl : fallbackUrl;
     return (
       <a
-        href={fallbackUrl}
+        href={downloadUrl}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold"
@@ -552,15 +559,23 @@ function InlineVideo({ itemId, fallbackUrl }) {
     );
   }
 
-  if (!warmed) {
+  if (status !== "ready") {
+    const labels = {
+      loading: { title: "Loading…", sub: "" },
+      missing: { title: "Preparing video…", sub: "Starting download from Tally" },
+      downloading: { title: "Downloading from Tally…", sub: "First load only — usually 10-30s" },
+      downloaded: { title: "Almost ready…", sub: "Optimising for your browser" },
+      transcoding: { title: "Optimising for your browser…", sub: "Converting iPhone HEVC → universal H.264 (~60-90s)" },
+    };
+    const l = labels[status] || labels.loading;
     return (
       <div
-        className="w-full aspect-video rounded-md bg-slate-100 border border-slate-200 flex flex-col items-center justify-center gap-2 text-[var(--ayci-ink-muted)]"
+        className="w-full aspect-video rounded-md bg-slate-100 border border-slate-200 flex flex-col items-center justify-center gap-2 text-[var(--ayci-ink-muted)] px-4 text-center"
         data-testid="pv-video-warming"
       >
         <Loader2 className="w-6 h-6 animate-spin text-[var(--ayci-accent)]" />
-        <div className="text-xs font-semibold">Preparing video…</div>
-        <div className="text-[10px]">First load can take 10-20s</div>
+        <div className="text-xs font-semibold text-[var(--ayci-ink)]">{l.title}</div>
+        {l.sub && <div className="text-[10px]">{l.sub}</div>}
       </div>
     );
   }
@@ -584,7 +599,7 @@ function InlineVideo({ itemId, fallbackUrl }) {
         rel="noreferrer"
         className="text-[11px] text-[var(--ayci-ink-muted)] hover:text-rose-700 hover:underline inline-flex items-center gap-1"
       >
-        <ExternalLink className="w-3 h-3" /> Open original
+        <ExternalLink className="w-3 h-3" /> Open original (HEVC)
       </a>
     </div>
   );

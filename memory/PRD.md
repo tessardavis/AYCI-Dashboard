@@ -13,7 +13,25 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
-### 2026-05-08 — Bulk Close Support Tickets + Gmail label-based routing
+### 2026-05-08 — Private-Tier Videos: mobile/Chrome inline playback + UX
+- **3 quick wins** (`PrivateVideos.jsx`):
+  - Done hidden by default; click the `Done · hidden N` pill to reveal
+  - Sorted oldest-submitted first (longest-waiting student rises to the top)
+  - Inline `<video>` player on the Edit modal so coaches can watch on mobile + desktop without leaving the app
+- **Backend video proxy + cache + transcode** (`private_video_cache.py`, `routes/private_videos.py`):
+  - Tally's CDN doesn't honour HTTP Range or expose Content-Length, breaking `<video>` playback (esp. iOS Safari)
+  - On first `/api/private-videos/{id}/video` request: download to `/tmp/private_video_cache/{id}.bin`, detect codec via ffmpeg
+  - If codec is HEVC (iPhone default), transcode to H.264 (`{id}.h264.mp4`) — universal compatibility with Chrome/Firefox/Edge
+  - Subsequent requests serve from disk with proper 206 Partial Content + real `Content-Range: bytes X-Y/total`
+  - Returns plain `Response` (not `StreamingResponse`) so we don't get Transfer-Encoding: chunked confusing some demuxers
+  - Open-ended ranges capped at 8 MB per response so browsers stream in manageable chunks
+  - 10 GB LRU cache cap with atime-based eviction
+  - ffmpeg via `imageio-ffmpeg` package (bundled binary, no system dep)
+  - Concurrent transcodes limited to 1 (semaphore) to avoid CPU thrash
+- **Status endpoint** (`GET /video/status`): frontend polls every 3s and shows progress copy ("Downloading from Tally…", "Optimising for your browser…") so first-time loads (~30-90s) feel intentional, not broken
+- **Improved fallback**: if `<video>` element errors out, link points to our proxy URL (Chrome plays via direct navigation) instead of the raw Tally URL
+
+
 - **Bulk Close** (`routes/tickets.py` → `POST /api/tickets/bulk-close`): closes many tickets in one shot, sets `resolved_at = now`, only modifies non-closed rows so it's safely idempotent. Validates `1 ≤ len(ids) ≤ 500`.
 - **Frontend** (`SupportTickets.jsx`): per-card checkboxes on Kanban with per-column "select all" (indeterminate aware), per-row checkboxes on Table with master "select all visible", sticky bottom action pill "N selected • Close tickets • Clear", confirm dialog before closing, success toast + refresh.
 - **Gmail label-based routing** (`gmail_sync.py`): every poll now also queries `label:"<first_name>"` for each team member, so threads labelled `coralie`, `arub`, `tessa`, `oksana` etc. become tickets assigned to that person — even if they live outside the inbox. Routing precedence: **label always wins** over inbox-mapping. Handles nested labels (`Support/Coralie` → `coralie`). Routing map built live from `team_members`.
@@ -22,6 +40,8 @@ A single-page view where the team searches a student by email and sees a unified
   - `ingest_inbound: false` → **label-only mode**: only threads tagged with a team-member name become tickets (clean for personal inboxes — exactly what Tessa wanted)
   - `sync_all` now polls every connected inbox, not just `ingest_inbound: true` ones
 - **Tests** (`/app/backend/tests/test_tickets_bulk_close.py`): 7/7 passing — bulk-close happy path, idempotency, empty-list 422, unknown ids no-op, plus 4 unit tests on `_resolve_label_assignee`.
+
+## Implemented (older entries)
 
 
 ### 2026-05-07 — Private-Tier Videos Phase 4: "Send to Circle" via Zapier
