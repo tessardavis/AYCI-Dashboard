@@ -44,6 +44,9 @@ export default function PrivateVideos() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [editing, setEditing] = useState(null); // currently-edited row
   const [fetchedAt, setFetchedAt] = useState(null);
+  // Hide "Done" by default — clears the active backlog so the team only
+  // sees what still needs attention. Toggleable.
+  const [showDone, setShowDone] = useState(false);
 
   const load = async (force = false) => {
     setRefreshing(true);
@@ -69,7 +72,11 @@ export default function PrivateVideos() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter((it) => {
+    const rows = items.filter((it) => {
+      // Hide Done by default — user can toggle the chip below to bring them
+      // back when searching historical submissions. Explicit status filter
+      // (e.g. user picks "Done") always wins.
+      if (!statusFilter && !showDone && (it.status || "").toLowerCase() === "done") return false;
       if (statusFilter && it.status !== statusFilter) return false;
       if (assigneeFilter === "_unassigned" && it.assignee_id) return false;
       if (assigneeFilter && assigneeFilter !== "_unassigned" && it.assignee_id !== assigneeFilter) return false;
@@ -79,7 +86,15 @@ export default function PrivateVideos() {
       }
       return true;
     });
-  }, [items, search, statusFilter, assigneeFilter]);
+    // Oldest submission first — the longest-waiting student rises to the top
+    // so the team naturally clears the queue in fairness order.
+    rows.sort((a, b) => {
+      const ax = a.submitted ? new Date(a.submitted).getTime() : 0;
+      const bx = b.submitted ? new Date(b.submitted).getTime() : 0;
+      return ax - bx;
+    });
+    return rows;
+  }, [items, search, statusFilter, assigneeFilter, showDone]);
 
   const counts = useMemo(() => {
     const c = { total: items.length, new: 0, working: 0, done: 0 };
@@ -115,7 +130,19 @@ export default function PrivateVideos() {
         <StatPill label="Total" value={counts.total} tone="slate" />
         <StatPill label="New" value={counts.new} tone="sky" />
         <StatPill label="Working" value={counts.working} tone="amber" />
-        <StatPill label="Done" value={counts.done} tone="emerald" />
+        <button
+          type="button"
+          onClick={() => setShowDone((v) => !v)}
+          title={showDone ? "Hide Done from the list" : "Show Done in the list"}
+          className="focus:outline-none"
+          data-testid="pv-toggle-done"
+        >
+          <StatPill
+            label={showDone ? "Done · shown" : "Done · hidden"}
+            value={counts.done}
+            tone={showDone ? "emerald" : "slate"}
+          />
+        </button>
       </div>
 
       <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-2.5 mb-4 flex flex-wrap items-center gap-2">
@@ -396,10 +423,8 @@ function EditModal({ item, users, onClose, onSaved }) {
           )}
           {(item.tally_video?.url || item.video?.url) && (
             <div>
-              <Label>Video link</Label>
-              <a href={item.tally_video?.url || item.video?.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold">
-                <Video className="w-4 h-4" /> Watch on Tally
-              </a>
+              <Label>Student video</Label>
+              <InlineVideo url={item.tally_video?.url || item.video?.url} />
             </div>
           )}
 
@@ -479,3 +504,49 @@ function Label({ children }) {
   return <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">{children}</div>;
 }
 const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]";
+
+// Inline `<video>` so coaches can watch on mobile without leaving the app.
+// Tally hosts the file directly and content-types are set correctly, so a
+// plain `<video src>` works on iOS Safari + Chrome. `playsInline` keeps it
+// embedded rather than fullscreen-hijacking iOS. Falls back to "Open in new
+// tab" if the format isn't natively playable.
+function InlineVideo({ url }) {
+  const [errored, setErrored] = useState(false);
+  if (!url) return null;
+  if (errored) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold"
+        data-testid="pv-video-fallback"
+      >
+        <Video className="w-4 h-4" /> Open video in new tab
+      </a>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <video
+        src={url}
+        controls
+        playsInline
+        preload="metadata"
+        className="w-full max-h-[60vh] rounded-md bg-black"
+        onError={() => setErrored(true)}
+        data-testid="pv-video-player"
+      >
+        Your browser can't play this video.
+      </video>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-[11px] text-[var(--ayci-ink-muted)] hover:text-rose-700 hover:underline inline-flex items-center gap-1"
+      >
+        <ExternalLink className="w-3 h-3" /> Open original
+      </a>
+    </div>
+  );
+}
