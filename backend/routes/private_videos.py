@@ -204,11 +204,11 @@ async def migrate_from_monday(admin: dict = Depends(require_admin)):
 
 @router.post("/sync-from-monday")
 async def sync_from_monday(user: dict = Depends(require_board("private_videos"))):
-    """Pull new + updated submissions from the Monday board, preserving any
-    work the team has done on existing rows in this dashboard (status,
-    assignee, replied_at, reply_link). Use this regularly while Monday is
-    still the source of truth for replies."""
-    return await pv_store.sync_from_monday(db, preserve_team_edits=True)
+    """Pull new + updated submissions from the Monday board. Mirrors
+    everything (status, assignee, reply_link, replied_at) so anything you
+    mark Done in Monday flips to Done here on the next sync. Use this
+    while Monday is the source of truth for replies."""
+    return await pv_store.sync_from_monday(db, preserve_team_edits=False)
 
 
 @router.get("/stats")

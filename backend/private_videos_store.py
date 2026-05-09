@@ -387,17 +387,18 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
 
 
 # ------------------------------------------------------------- Migration
-async def sync_from_monday(db, *, preserve_team_edits: bool = True) -> dict:
+async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
     """Periodic sync: pull every row from Monday board 5083952249 and upsert
     into our DB. Idempotent.
 
-    `preserve_team_edits=True` (default) — only update the Tally-source
-    fields (name, email, video URL, question, submission_number, etc.) on
-    existing rows. Status/assignee/replied/reply_link are NEVER overwritten
-    so coaches' work in our dashboard isn't blown away.
+    `preserve_team_edits=False` (default) — full mirror. Status, assignee,
+    replied_at, reply_link from Monday all overwrite our row. This is what
+    you want while Monday is the source of truth (the team replies there).
 
-    `preserve_team_edits=False` — full mirror (used by the original
-    one-shot migration; not for routine sync).
+    `preserve_team_edits=True` — only Tally-source fields get refreshed
+    (name, email, video URL, question). Status / assignee / reply stays as
+    we have it. Use this once the team transitions to replying from THIS
+    dashboard so a stray sync doesn't undo their work.
     """
     import private_videos as monday_pv
     monday_data = await monday_pv.list_submissions(db, force=True)
