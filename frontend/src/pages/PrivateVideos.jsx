@@ -39,6 +39,7 @@ export default function PrivateVideos() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncingMonday, setSyncingMonday] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
@@ -69,6 +70,25 @@ export default function PrivateVideos() {
   useEffect(() => {
     load();
   }, []);
+
+  const syncFromMonday = async () => {
+    setSyncingMonday(true);
+    try {
+      const { data } = await apiClient.post("/private-videos/sync-from-monday", {}, { timeout: 180000 });
+      const created = data?.created ?? 0;
+      const updated = data?.updated ?? 0;
+      toast.success(
+        created === 0 && updated === 0
+          ? "Already in sync with Monday"
+          : `Synced from Monday — ${created} new, ${updated} updated`,
+      );
+      await load(true);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Sync from Monday failed");
+    } finally {
+      setSyncingMonday(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -119,6 +139,10 @@ export default function PrivateVideos() {
               Updated · {formatUkDate(fetchedAt)}
             </span>
           )}
+          <Button variant="outline" size="sm" onClick={syncFromMonday} disabled={syncingMonday} data-testid="pv-sync-monday" title="Pull new submissions from the Monday board (preserves your edits in this dashboard)">
+            {syncingMonday ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+            Sync from Monday
+          </Button>
           <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing} data-testid="pv-refresh">
             {refreshing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
             Refresh

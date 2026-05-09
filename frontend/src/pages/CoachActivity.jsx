@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, AlertTriangle, Video, MessageSquare, Users2, Clock, ExternalLink, BadgeCheck, Inbox } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, Video, MessageSquare, Users2, Clock, ExternalLink, BadgeCheck, Inbox, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -71,8 +71,8 @@ export default function CoachActivity() {
 
       {data && (
         <>
-          <CircleSpaceCard space={data.recorded_answers} primaryNoun="video" showRateLimit />
-          <CircleSpaceCard space={data.interview_support} primaryNoun="post" showRateLimit={false} />
+          <CircleSpaceCard space={data.recorded_answers} primaryNoun="video" showRateLimit onDismiss={() => load(true)} />
+          <CircleSpaceCard space={data.interview_support} primaryNoun="post" showRateLimit={false} onDismiss={() => load(true)} />
           <PrivateVideosCard data={data.private_videos} />
         </>
       )}
@@ -80,7 +80,25 @@ export default function CoachActivity() {
   );
 }
 
-function CircleSpaceCard({ space, primaryNoun, showRateLimit = true }) {
+// Helper for rate-limit dedup key — must match backend `coach_activity_dismissals.rate_limit_key`
+function _normName(name) {
+  return (name || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+function rateLimitKey(name, weekStart) {
+  return `${_normName(name)}::${(weekStart || "").trim()}`;
+}
+
+async function dismissAlert({ alert_type, key, onSuccess }) {
+  try {
+    await apiClient.post("/coach-activity/dismiss", { alert_type, key });
+    toast.success("Dismissed — won't show again");
+    onSuccess?.();
+  } catch (err) {
+    toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't dismiss");
+  }
+}
+
+function CircleSpaceCard({ space, primaryNoun, showRateLimit = true, onDismiss }) {
   if (!space || space.error) {
     return (
       <Section title="Circle space" subtitle="">
@@ -122,11 +140,22 @@ function CircleSpaceCard({ space, primaryNoun, showRateLimit = true }) {
                   "{u.name}" · posted {fmtShortDate(u.created_at)} · <strong className="text-rose-700">{u.hours_old}h ago</strong>
                 </div>
               </div>
-              {u.url && (
-                <a href={u.url} target="_blank" rel="noreferrer" className="text-xs text-rose-700 hover:underline shrink-0 flex items-center gap-1">
-                  Open <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {u.url && (
+                  <a href={u.url} target="_blank" rel="noreferrer" className="text-xs text-rose-700 hover:underline flex items-center gap-1">
+                    Open <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  title="Mark as not needed"
+                  onClick={() => dismissAlert({ alert_type: "unanswered", key: String(u.id), onSuccess: onDismiss })}
+                  className="text-xs text-[var(--ayci-ink-muted)] hover:text-rose-700 hover:bg-rose-50 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 border border-transparent hover:border-rose-200"
+                  data-testid={`dismiss-unanswered-${u.id}`}
+                >
+                  <X className="w-3 h-3" /> Dismiss
+                </button>
+              </div>
             </div>
           ))}
         </FlagCard>
@@ -140,7 +169,7 @@ function CircleSpaceCard({ space, primaryNoun, showRateLimit = true }) {
             testid="flag-rate-limited"
           >
             {space.rate_limited.map((rl) => (
-              <RateLimitedRow key={`${rl.name}-${rl.week_start}`} rl={rl} />
+              <RateLimitedRow key={`${rl.name}-${rl.week_start}`} rl={rl} onDismiss={onDismiss} />
             ))}
           </FlagCard>
         )}
@@ -149,7 +178,7 @@ function CircleSpaceCard({ space, primaryNoun, showRateLimit = true }) {
   );
 }
 
-function RateLimitedRow({ rl }) {
+function RateLimitedRow({ rl, onDismiss }) {
   const [expanded, setExpanded] = useState(false);
   const posts = rl.posts || [];
   return (
@@ -157,19 +186,34 @@ function RateLimitedRow({ rl }) {
       className="text-sm py-1.5 border-b border-amber-100 last:border-0"
       data-testid={`rate-limited-row-${rl.name}`}
     >
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 text-left hover:bg-amber-50/60 -mx-1 px-1 py-0.5 rounded"
-      >
-        <div className="font-display font-semibold text-[var(--ayci-ink)] flex items-center gap-1.5">
-          <span className={`text-amber-700 transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
-          {rl.name}
-        </div>
-        <span className="text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
-          {rl.count} videos
-        </span>
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex-1 flex items-center justify-between gap-2 text-left hover:bg-amber-50/60 -mx-1 px-1 py-0.5 rounded min-w-0"
+        >
+          <div className="font-display font-semibold text-[var(--ayci-ink)] flex items-center gap-1.5 min-w-0">
+            <span className={`text-amber-700 transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
+            <span className="truncate">{rl.name}</span>
+          </div>
+          <span className="text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
+            {rl.count} videos
+          </span>
+        </button>
+        <button
+          type="button"
+          title="Mark as seen — won't ping Slack again for this week"
+          onClick={() => dismissAlert({
+            alert_type: "rate_limited",
+            key: rateLimitKey(rl.name, rl.week_start),
+            onSuccess: onDismiss,
+          })}
+          className="text-xs text-[var(--ayci-ink-muted)] hover:text-amber-800 hover:bg-amber-100 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 border border-transparent hover:border-amber-300 shrink-0"
+          data-testid={`dismiss-rate-limited-${rl.name}`}
+        >
+          <X className="w-3 h-3" /> Dismiss
+        </button>
+      </div>
       <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 ml-3">
         Week of {fmtShortDate(rl.week_start)}
       </div>

@@ -13,7 +13,20 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
-### 2026-05-08 — Private-Tier Videos: mobile/Chrome inline playback + UX
+### 2026-05-09 — Coach Activity dismissals + periodic Monday→Mongo sync
+- **Dismissable alerts** (`coach_activity_dismissals.py`, `routes/coach.py`, `CoachActivity.jsx`):
+  - Per-row "Dismiss" button on every "Awaiting coach reply" card and every "Posting > 3 videos / week" card
+  - Dismissals are stored in `coach_activity_dismissed` (shared across the team, persist forever)
+  - Same dedup key also suppresses future Slack pings — once Tessa dismisses Eitan's rate-limit flag, no more rate-limit DMs about that week
+  - SWR cache busted on dismiss → flag disappears immediately
+  - Endpoints: `POST /api/coach-activity/dismiss` and `POST /api/coach-activity/undismiss`
+- **Stricter rate-limit dedup** (`circle_video_alerts.py`): keys are now whitespace-collapsed + lowercased so subtle drift in author name spelling doesn't double-fire alerts. Dismissed keys are also treated as "already-sent" so the same flag never re-pings even if state somehow resets.
+- **`Sync from Monday` button** (`PrivateVideos.jsx` → `routes/private_videos.py` → `private_videos_store.py`):
+  - New endpoint `POST /api/private-videos/sync-from-monday` — pulls every row from the Monday board and **preserves team edits** (status, assignee, replied_at, reply_link) on existing rows; only Tally-source fields (name, email, video URL, question, submission_number) are refreshed
+  - One-click button on the Private Videos page; verified live: pulled 14 new + updated 471 from Monday board, test-edited row's `In progress` / assignee / reply_link survived
+  - The original `/migrate-from-monday` endpoint still exists (full mirror) for the one-off historical migration
+
+
 - **3 quick wins** (`PrivateVideos.jsx`):
   - Done hidden by default; click the `Done · hidden N` pill to reveal
   - Sorted oldest-submitted first (longest-waiting student rises to the top)

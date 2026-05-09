@@ -202,6 +202,15 @@ async def migrate_from_monday(admin: dict = Depends(require_admin)):
     return await pv_store.migrate_from_monday(db)
 
 
+@router.post("/sync-from-monday")
+async def sync_from_monday(user: dict = Depends(require_board("private_videos"))):
+    """Pull new + updated submissions from the Monday board, preserving any
+    work the team has done on existing rows in this dashboard (status,
+    assignee, replied_at, reply_link). Use this regularly while Monday is
+    still the source of truth for replies."""
+    return await pv_store.sync_from_monday(db, preserve_team_edits=True)
+
+
 @router.get("/stats")
 async def stats(user: dict = Depends(require_board("private_videos"))):
     """Quick health check for the admin: how many rows in DB, and how many of

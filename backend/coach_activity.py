@@ -19,6 +19,7 @@ and the data is fine to be a few minutes stale.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timezone, timedelta, date
 from difflib import SequenceMatcher
@@ -27,6 +28,8 @@ from typing import Any
 import httpx
 
 from connectors import CIRCLE_BASE, _circle_headers, MONDAY_URL, _monday_headers, TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 
 # Circle space IDs for the April 26 cohort.
@@ -190,6 +193,7 @@ async def analyse_circle_space(
     space_id: int,
     start_date: date,
     label: str,
+    db=None,
 ) -> dict:
     """
     Aggregate post + comment activity in one Circle space since `start_date`.
@@ -318,6 +322,25 @@ async def analyse_circle_space(
         if len(post_entries) > WEEKLY_VIDEO_LIMIT
     ]
     rate_limited.sort(key=lambda x: (x["count"], x["week_start"]), reverse=True)
+
+    # Apply user-driven dismissals so cards the team has marked "not needed"
+    # disappear from the board (and from Slack pings — same dedup key).
+    if db is not None:
+        try:
+            from coach_activity_dismissals import (
+                list_dismissed_keys, rate_limit_key, unanswered_key,
+            )
+            unanswered_dismissed = await list_dismissed_keys(db, "unanswered")
+            rate_dismissed = await list_dismissed_keys(db, "rate_limited")
+            unanswered = [
+                u for u in unanswered if unanswered_key(u["id"]) not in unanswered_dismissed
+            ]
+            rate_limited = [
+                r for r in rate_limited
+                if rate_limit_key(r["name"], r["week_start"]) not in rate_dismissed
+            ]
+        except Exception as e:
+            logger.warning(f"[coach-activity] dismissal filter failed: {e}")
 
     # Distinct authors (students)
     student_authors = {(_post_author_name(p) or "Unknown") for p in in_window if not _is_coach(_post_author_name(p), _post_author_email(p))}
@@ -476,8 +499,8 @@ async def fetch_coach_activity_summary(db=None) -> dict:
         recorded_space, interview_space = RECORDED_ANSWER_SPACE_ID, INTERVIEW_SUPPORT_SPACE_ID
         recorded_start, interview_start = RECORDED_ANSWERS_START, INTERVIEW_SUPPORT_START
 
-    recorded_task = analyse_circle_space(recorded_space, recorded_start, "Recorded Answer Review")
-    interview_task = analyse_circle_space(interview_space, interview_start, "Specific Interview Support")
+    recorded_task = analyse_circle_space(recorded_space, recorded_start, "Recorded Answer Review", db=db)
+    interview_task = analyse_circle_space(interview_space, interview_start, "Specific Interview Support", db=db)
     private_task = fetch_private_video_submissions()
     recorded, interview, private = await asyncio.gather(
         recorded_task, interview_task, private_task, return_exceptions=True,

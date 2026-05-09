@@ -387,9 +387,18 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
 
 
 # ------------------------------------------------------------- Migration
-async def migrate_from_monday(db) -> dict:
-    """One-off: pull every row from Monday board 5083952249 and upsert into the
-    DB. Idempotent — re-running updates rows in place rather than duplicating."""
+async def sync_from_monday(db, *, preserve_team_edits: bool = True) -> dict:
+    """Periodic sync: pull every row from Monday board 5083952249 and upsert
+    into our DB. Idempotent.
+
+    `preserve_team_edits=True` (default) — only update the Tally-source
+    fields (name, email, video URL, question, submission_number, etc.) on
+    existing rows. Status/assignee/replied/reply_link are NEVER overwritten
+    so coaches' work in our dashboard isn't blown away.
+
+    `preserve_team_edits=False` — full mirror (used by the original
+    one-shot migration; not for routine sync).
+    """
     import private_videos as monday_pv
     monday_data = await monday_pv.list_submissions(db, force=True)
     items = monday_data.get("items") or []
@@ -400,7 +409,8 @@ async def migrate_from_monday(db) -> dict:
         monday_id = str(it.get("id"))
         tally_url = (it.get("tally_video") or {}).get("url") or (it.get("video") or {}).get("url")
         reply_url = (it.get("reply_link") or {}).get("url")
-        row = {
+        # Tally-source fields — always safe to overwrite from Monday
+        tally_fields = {
             "first_name": (it.get("first_name") or "").strip(),
             "last_name": (it.get("last_name") or "").strip(),
             "email": (it.get("email") or "").strip().lower(),
@@ -409,25 +419,30 @@ async def migrate_from_monday(db) -> dict:
             "tally_video_url": tally_url,
             "total_allowance": _to_int(it.get("total_allowance")),
             "submission_number": _to_int(it.get("submission_number")),
+            "interview_date": it.get("interview_date"),
+            "updated_at": now,
+        }
+        # Team-edit fields — only set on insert (or when preserve=False)
+        team_fields = {
             "status": _norm_status(it.get("status")),
-            # Don't auto-map Monday user_id → team_member_id (different uuids).
-            # Migration leaves assignee blank; the team will reassign in the dashboard.
             "assignee_team_member_id": None,
             "replied_at": it.get("replied"),
             "reply_link": reply_url,
             "private_chat_url": it.get("private_chat"),
-            "interview_date": it.get("interview_date"),
-            "updated_at": now,
         }
         existing = await db.private_video_submissions.find_one(
             {"monday_item_id": monday_id}, {"_id": 0, "id": 1}
         )
         if existing:
+            update_doc = dict(tally_fields)
+            if not preserve_team_edits:
+                update_doc.update(team_fields)
             await db.private_video_submissions.update_one(
-                {"monday_item_id": monday_id}, {"$set": row}
+                {"monday_item_id": monday_id}, {"$set": update_doc}
             )
             updated += 1
         else:
+            row = {**tally_fields, **team_fields}
             row["id"] = str(uuid.uuid4())
             row["monday_item_id"] = monday_id
             row["tally_submission_id"] = None
@@ -439,5 +454,11 @@ async def migrate_from_monday(db) -> dict:
         "created": created,
         "updated": updated,
         "total_in_monday": len(items),
+        "preserve_team_edits": preserve_team_edits,
         "ran_at": now,
     }
+
+
+async def migrate_from_monday(db) -> dict:
+    """Original one-off full mirror. Kept for backwards compat."""
+    return await sync_from_monday(db, preserve_team_edits=False)
