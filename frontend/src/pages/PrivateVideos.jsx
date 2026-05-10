@@ -241,7 +241,7 @@ export default function PrivateVideos() {
                   </td>
                 </tr>
               ) : filtered.map((it) => (
-                <Row key={it.id} item={it} users={users} onEdit={() => setEditing(it)} />
+                <Row key={it.id} item={it} users={users} onEdit={() => setEditing(it)} onSaved={() => load(true)} />
               ))}
             </tbody>
           </table>
@@ -328,11 +328,12 @@ function EmptyStateMigrate({ onMigrated }) {
   );
 }
 
-function Row({ item, users, onEdit }) {
+function Row({ item, users, onEdit, onSaved }) {
   const assignee = item.assignee_name || (users.find((u) => u.id === item.assignee_id) || {}).name || null;
   const tally = item.tally_video?.url || item.video?.url;
   const reply = item.reply_link?.url;
   const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name;
+  const hasCount = item.submission_number && item.total_allowance;
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50/40">
       <td className="px-3 py-2.5">
@@ -341,9 +342,19 @@ function Row({ item, users, onEdit }) {
         </span>
       </td>
       <td className="px-3 py-2.5">
-        <div className="font-semibold text-[var(--ayci-ink)]">{studentName}</div>
+        <div className="font-semibold text-[var(--ayci-ink)] flex items-center gap-2">
+          <span>{studentName}</span>
+          {hasCount && (
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 whitespace-nowrap"
+              title={`Video ${item.submission_number} of ${item.total_allowance}`}
+            >
+              {item.submission_number}/{item.total_allowance}
+            </span>
+          )}
+        </div>
         <div className="text-[11px] text-[var(--ayci-ink-muted)]">
-          {item.submission_number}/{item.total_allowance} · {item.email || "no email"}
+          {item.email || "no email"}
         </div>
       </td>
       <td className="px-3 py-2.5 max-w-[300px]">
@@ -353,11 +364,7 @@ function Row({ item, users, onEdit }) {
         {item.submitted ? formatUkDate(item.submitted) : "—"}
       </td>
       <td className="px-3 py-2.5">
-        {assignee ? (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-semibold">{assignee}</span>
-        ) : (
-          <span className="text-xs text-amber-700 italic">unassigned</span>
-        )}
+        <InlineAssignee item={item} users={users} onSaved={onSaved} />
       </td>
       <td className="px-3 py-2.5 text-[11px] text-[var(--ayci-ink-muted)] whitespace-nowrap">
         {item.replied ? formatUkDate(item.replied) : "—"}
@@ -369,11 +376,7 @@ function Row({ item, users, onEdit }) {
               <Video className="w-3 h-3" /> Video
             </a>
           )}
-          {reply && (
-            <a href={reply} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 hover:underline flex items-center gap-0.5" title="Coach voicenote reply">
-              <MessageCircle className="w-3 h-3" /> Reply
-            </a>
-          )}
+          <InlineReplyLink item={item} onSaved={onSaved} />
           {item.private_chat && (
             <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-xs text-sky-700 hover:underline flex items-center gap-0.5" title="Open Circle DM thread">
               <ExternalLink className="w-3 h-3" /> Circle
@@ -389,6 +392,156 @@ function Row({ item, users, onEdit }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+// Click an assignee chip → dropdown → patch in place. No modal, no scroll.
+function InlineAssignee({ item, users, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const currentName = item.assignee_name
+    || (users.find((u) => u.id === item.assignee_id) || {}).name
+    || null;
+
+  const save = async (newId) => {
+    setSaving(true);
+    try {
+      await apiClient.patch(`/private-videos/${item.id}`, {
+        assignee_id: newId || "",
+      });
+      toast.success(newId ? "Assigned" : "Unassigned");
+      onSaved?.();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't assign");
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue={item.assignee_id || ""}
+        disabled={saving}
+        onChange={(e) => save(e.target.value)}
+        onBlur={() => setEditing(false)}
+        className="text-xs px-1.5 py-0.5 rounded border border-[var(--ayci-accent)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]/30 max-w-[160px]"
+        data-testid={`pv-inline-assignee-${item.id}`}
+      >
+        <option value="">— unassigned —</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>{u.name}</option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className={`text-xs px-1.5 py-0.5 rounded font-semibold border transition-colors ${currentName ? "bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-200" : "bg-amber-50 text-amber-700 border-amber-200 italic hover:bg-amber-100"}`}
+      title="Click to change assignee"
+      data-testid={`pv-inline-assignee-button-${item.id}`}
+    >
+      {currentName || "unassigned"}
+    </button>
+  );
+}
+
+// Click "+ Reply" / pencil → tiny inline input → patch in place. The same
+// PATCH endpoint also auto-flips status to Done and stamps `replied` so the
+// row immediately moves out of the active queue.
+function InlineReplyLink({ item, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(item.reply_link?.url || "");
+  const [saving, setSaving] = useState(false);
+  const reply = item.reply_link?.url;
+
+  const save = async () => {
+    const url = value.trim();
+    setSaving(true);
+    try {
+      await apiClient.patch(`/private-videos/${item.id}`, {
+        reply_link: url,
+        replied: url ? new Date().toISOString().slice(0, 10) : null,
+        status_label: url ? "Done" : item.status,
+      });
+      toast.success(url ? "Reply saved · marked Done" : "Reply cleared");
+      onSaved?.();
+      setEditing(false);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input
+          autoFocus
+          type="url"
+          value={value}
+          placeholder="https://voicenotes.com/s/…"
+          disabled={saving}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") { setValue(item.reply_link?.url || ""); setEditing(false); }
+          }}
+          className="text-xs px-1.5 py-0.5 rounded border border-[var(--ayci-accent)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]/30 w-[200px]"
+          data-testid={`pv-inline-reply-input-${item.id}`}
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="text-xs px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+          data-testid={`pv-inline-reply-save-${item.id}`}
+        >
+          {saving ? "…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setValue(item.reply_link?.url || ""); setEditing(false); }}
+          className="text-xs px-1 py-0.5 text-slate-500 hover:text-slate-700"
+        >
+          ✕
+        </button>
+      </span>
+    );
+  }
+
+  if (reply) {
+    return (
+      <span className="inline-flex items-center gap-0.5">
+        <a href={reply} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 hover:underline flex items-center gap-0.5" title="Coach voicenote reply">
+          <MessageCircle className="w-3 h-3" /> Reply
+        </a>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-[10px] text-slate-400 hover:text-slate-700 px-0.5"
+          title="Edit reply link"
+          data-testid={`pv-inline-reply-edit-${item.id}`}
+        >
+          ✎
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="text-xs text-emerald-700 hover:bg-emerald-50 px-1.5 py-0.5 rounded border border-dashed border-emerald-300 hover:border-emerald-500 inline-flex items-center gap-0.5 font-medium"
+      data-testid={`pv-inline-reply-add-${item.id}`}
+    >
+      <MessageCircle className="w-3 h-3" /> + Reply
+    </button>
   );
 }
 
