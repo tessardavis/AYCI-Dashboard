@@ -130,6 +130,22 @@ function CallRow({ call, onDelete }) {
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
             {call.student_name || call.student_email}
+            {call.tier && (
+              <span
+                className={
+                  "text-[9px] uppercase tracking-wider font-bold px-1.5 py-0 rounded border whitespace-nowrap " +
+                  (
+                    String(call.tier).toLowerCase().includes("vip")
+                      ? "bg-violet-100 text-violet-800 border-violet-200"
+                      : "bg-sky-100 text-sky-800 border-sky-200"
+                  )
+                }
+                title={call.tier + (call.speciality ? " · " + call.speciality : "")}
+                data-testid={`today-call-tier-${call.id}`}
+              >
+                {call.tier}
+              </span>
+            )}
             {isManual && (
               <span className="text-[10px] uppercase tracking-wider font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1 py-0 rounded">
                 manual

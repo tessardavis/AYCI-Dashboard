@@ -104,14 +104,15 @@ async def _calendly_today_events(now_utc: datetime) -> list[dict]:
 
 
 async def list_today_calls(db, *, now_utc: datetime | None = None) -> list[dict]:
-    """Merge Calendly + manual_calls, sorted by start time (asc)."""
+    """Merge Calendly + manual_calls, sorted by start time (asc), enriched
+    with tier/speciality/interview-date pulled from the upcoming_interviews
+    feed so the UI can show a VIP/Academy badge per row."""
     now_utc = now_utc or datetime.now(timezone.utc)
     today_uk = now_utc.astimezone(LONDON).date()
     start_uk = datetime.combine(today_uk, datetime.min.time(), tzinfo=LONDON)
     end_uk = start_uk + timedelta(days=1)
 
     cal = await _calendly_today_events(now_utc)
-    # manual_calls: any row whose `starts_at` is within today (UK)
     manual_cursor = db.manual_calls.find(
         {
             "starts_at": {
@@ -128,6 +129,29 @@ async def list_today_calls(db, *, now_utc: datetime | None = None) -> list[dict]
 
     everything = cal + manual
     everything.sort(key=lambda x: x.get("starts_at") or "")
+
+    # Enrich with tier / speciality / interview date from the upcoming_interviews
+    # feed (sourced from Monday). Single fetch covers academy + private tiers.
+    try:
+        import upcoming_interviews as upc
+        roster = await upc.fetch_upcoming_interviews(db=db, days=60)
+        tier_by_email: dict[str, dict] = {}
+        for s in (roster.get("academy") or []) + (roster.get("private") or []):
+            em = (s.get("email") or "").strip().lower()
+            if em:
+                tier_by_email[em] = {
+                    "tier": s.get("tier"),
+                    "tier_group": s.get("tier_group"),
+                    "speciality": s.get("speciality"),
+                    "interview_date": s.get("interview_date"),
+                }
+        for c in everything:
+            extra = tier_by_email.get((c.get("student_email") or "").lower())
+            if extra:
+                c.update(extra)
+    except Exception as e:
+        logger.info(f"[today-calls] tier enrichment skipped: {e}")
+
     return everything
 
 
