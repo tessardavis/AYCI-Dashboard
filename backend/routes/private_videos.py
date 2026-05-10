@@ -299,11 +299,51 @@ async def send_to_circle(
         f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
         or row.get("email")
     )
+    first_name = (row.get("first_name") or "").strip() or student_name.split()[0]
     sub_num = row.get("submission_number")
     total = row.get("total_allowance")
     pulse_name = student_name
     if sub_num and total:
         pulse_name = f"{student_name} video {sub_num} of {total}"
+
+    # Resolve tier on the fly if the row doesn't have it (e.g. older
+    # Monday-migrated rows). This makes total_allowance more reliable.
+    tier = row.get("tier")
+    if not total or not tier:
+        try:
+            academy = await pv_store._academy_lookup(db, row.get("email") or "")
+            if academy:
+                tier = tier or academy.get("tier")
+                total = total or academy.get("total_allowance")
+        except Exception as e:
+            logger.info(f"[private-videos] academy lookup skipped for {item_id}: {e}")
+
+    coach_name = assignee_name or "Your AYCI coach"
+    topic = (row.get("question") or "").strip() or "your latest submission"
+    video_url = row.get("tally_video_url") or ""
+
+    # Compose the full message body. Zapier just relays `message_text` into
+    # the Circle DM; copy lives in code so we can iterate without re-wiring
+    # the Zap. Falls back gracefully when count or video URL is missing.
+    msg_lines = [
+        f"Hi {first_name},",
+        "",
+        f"{coach_name} just responded to your video submission.",
+        "",
+    ]
+    if video_url:
+        msg_lines.append(f"This is the video you submitted on the topic '{topic}':")
+        msg_lines.append(video_url)
+    else:
+        msg_lines.append(f"Topic: {topic}")
+    msg_lines += [
+        "",
+        "Click here to listen to their feedback:",
+        reply_url,
+    ]
+    if sub_num and total:
+        msg_lines += ["", f"For your reference, this was submission {sub_num} out of {total}"]
+    message_text = "\n".join(msg_lines)
 
     # Build a payload that's BOTH:
     #   - Monday-mimicking (so any pre-existing zap steps reading
@@ -338,9 +378,16 @@ async def send_to_circle(
         "submission_number": sub_num,
         "total_allowance": total,
         "question": row.get("question"),
+        "topic": topic,
         "tally_video_url": row.get("tally_video_url"),
+        "video_url": video_url,  # alias for zap convenience
         "assignee_name": assignee_name,
-        "tier": row.get("tier"),
+        "coach_name": coach_name,
+        "tier": tier,
+        # Pre-formatted Circle DM body — Zapier just relays this so the
+        # template lives in code (one place) and we can iterate quickly.
+        "message_text": message_text,
+        "message": message_text,  # alias
     }
 
     try:

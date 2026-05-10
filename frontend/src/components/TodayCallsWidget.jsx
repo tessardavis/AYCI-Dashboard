@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Plus, X, Calendar, Clock, ExternalLink, Trash2, Sparkles } from "lucide-react";
+import { Loader2, Plus, X, Calendar, Clock, ExternalLink, Trash2, Sparkles, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
@@ -24,6 +24,13 @@ function relativeWhen(iso) {
   if (Math.abs(min) < 60) return min < 0 ? `${-min}m ago` : `in ${min}m`;
   const h = Math.round(min / 60);
   return h < 0 ? `${-h}h ago` : `in ${h}h`;
+}
+
+// A call is "done" once its end time (start + duration) is in the past.
+function isDone(call) {
+  if (!call?.starts_at) return false;
+  const endMs = new Date(call.starts_at).getTime() + (Number(call.duration_min) || 30) * 60000;
+  return endMs < Date.now();
 }
 
 export default function TodayCallsWidget() {
@@ -55,13 +62,15 @@ export default function TodayCallsWidget() {
     }
   };
 
+  const doneCount = items.filter(isDone).length;
+
   return (
     <div className="bg-white border border-[var(--ayci-border)] rounded-xl shadow-sm" data-testid="today-calls-widget">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
         <h2 className="font-display font-bold text-[var(--ayci-ink)] flex items-center gap-2 text-base">
           <Calendar className="w-4 h-4 text-[var(--ayci-accent)]" /> Today's calls
           <span className="text-xs font-normal text-[var(--ayci-ink-muted)]">
-            ({items.length})
+            ({items.length}{items.length > 0 && doneCount > 0 ? <> · <span className="text-emerald-700 font-semibold">{doneCount} done</span></> : null})
           </span>
           <span className="ml-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5">
             <Sparkles className="w-3 h-3" /> Pre-warmed
@@ -133,6 +142,7 @@ function InterviewFlag({ days }) {
 
 function CallRow({ call, onDelete }) {
   const isManual = call.source === "manual";
+  const done = isDone(call);
   const [brief, setBrief] = useState(null);
   const [loadingBrief, setLoadingBrief] = useState(false);
 
@@ -154,15 +164,24 @@ function CallRow({ call, onDelete }) {
   }, [call.student_email, call.student_name]);
 
   return (
-    <div className="px-4 py-2.5 hover:bg-slate-50/50" data-testid={`today-call-${call.id}`}>
+    <div className={`px-4 py-2.5 hover:bg-slate-50/50 ${done ? "bg-emerald-50/30" : ""}`} data-testid={`today-call-${call.id}`}>
       <div className="flex items-center gap-3">
-        <div className="text-sm font-mono font-bold text-[var(--ayci-ink)] w-14 shrink-0">
-          {fmtTime(call.starts_at)}
-        </div>
+        {done ? (
+          <div className="w-14 shrink-0 flex items-center gap-1">
+            <Check className="w-4 h-4 text-emerald-600 stroke-[3]" data-testid={`today-call-done-${call.id}`} />
+            <span className="text-sm font-mono font-bold text-emerald-700">
+              {fmtTime(call.starts_at)}
+            </span>
+          </div>
+        ) : (
+          <div className="text-sm font-mono font-bold text-[var(--ayci-ink)] w-14 shrink-0">
+            {fmtTime(call.starts_at)}
+          </div>
+        )}
         <div className="text-[10px] text-[var(--ayci-ink-muted)] w-12 shrink-0">
           {call.duration_min}m
         </div>
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 ${done ? "opacity-60" : ""}`}>
           <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5 flex-wrap">
             {call.student_name || call.student_email}
             <InterviewFlag days={daysToInterview(call.interview_date)} />
