@@ -1079,10 +1079,11 @@ async def on_startup():
         replace_existing=True,
     )
     # Fire once shortly after startup so we don't wait an hour on first deploy
+    from zoneinfo import ZoneInfo
     scheduler.add_job(
         _hourly_prewarm_upcoming_calls,
         "date",
-        run_date=datetime.now(tz) + timedelta(seconds=60),
+        run_date=datetime.now(ZoneInfo(tz)) + timedelta(seconds=60),
         id="prewarm_upcoming_calls_initial",
         replace_existing=True,
     )
@@ -1320,6 +1321,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     oauth_gmail as routes_oauth_gmail,
     wati as routes_wati,
     private_videos as routes_private_videos,
+    today_calls as routes_today_calls,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1327,7 +1329,7 @@ for _r in (
     routes_coach.router, routes_cohorts.router, routes_launches.router,
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
-    routes_wati.router, routes_private_videos.router,
+    routes_wati.router, routes_private_videos.router, routes_today_calls.router,
 ):
     app.include_router(_r)
 
