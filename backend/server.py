@@ -1061,6 +1061,32 @@ async def on_startup():
         replace_existing=True,
     )
 
+    async def _hourly_prewarm_upcoming_calls():
+        # Pre-fetch Drive doc summaries for every student with a Calendly
+        # call in the next 36h, so when the team opens Student Lookup
+        # right before the call the AI summary renders instantly.
+        import upcoming_call_prewarm
+        try:
+            res = await upcoming_call_prewarm.prewarm_upcoming_calls(db)
+            logger.info(f"[scheduler] prewarm upcoming calls: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] prewarm upcoming calls failed: {e}")
+
+    scheduler.add_job(
+        _hourly_prewarm_upcoming_calls,
+        CronTrigger(minute=5, timezone=tz),
+        id="prewarm_upcoming_calls",
+        replace_existing=True,
+    )
+    # Fire once shortly after startup so we don't wait an hour on first deploy
+    scheduler.add_job(
+        _hourly_prewarm_upcoming_calls,
+        "date",
+        run_date=datetime.now(tz) + timedelta(seconds=60),
+        id="prewarm_upcoming_calls_initial",
+        replace_existing=True,
+    )
+
     async def _daily_leaderboard_snapshot():
         import leaderboard_snapshots
         try:
