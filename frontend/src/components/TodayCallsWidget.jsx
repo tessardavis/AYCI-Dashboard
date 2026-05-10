@@ -98,48 +98,92 @@ export default function TodayCallsWidget() {
 
 function CallRow({ call, onDelete }) {
   const isManual = call.source === "manual";
+  const [brief, setBrief] = useState(null);
+  const [loadingBrief, setLoadingBrief] = useState(false);
+
+  // Lazy-load on mount — backend is cached per (email, UK-date) so this is
+  // a no-op after the first call.
+  useEffect(() => {
+    if (!call.student_email) return;
+    let cancelled = false;
+    setLoadingBrief(true);
+    apiClient
+      .get(`/today-calls/brief?email=${encodeURIComponent(call.student_email)}&name=${encodeURIComponent(call.student_name || "")}`)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setBrief(data?.lines || []);
+      })
+      .catch(() => { if (!cancelled) setBrief([]); })
+      .finally(() => { if (!cancelled) setLoadingBrief(false); });
+    return () => { cancelled = true; };
+  }, [call.student_email, call.student_name]);
+
   return (
-    <div className="px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50/50" data-testid={`today-call-${call.id}`}>
-      <div className="text-sm font-mono font-bold text-[var(--ayci-ink)] w-14 shrink-0">
-        {fmtTime(call.starts_at)}
-      </div>
-      <div className="text-[10px] text-[var(--ayci-ink-muted)] w-12 shrink-0">
-        {call.duration_min}m
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
-          {call.student_name || call.student_email}
-          {isManual && (
-            <span className="text-[10px] uppercase tracking-wider font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1 py-0 rounded">
-              manual
-            </span>
-          )}
+    <div className="px-4 py-2.5 hover:bg-slate-50/50" data-testid={`today-call-${call.id}`}>
+      <div className="flex items-center gap-3">
+        <div className="text-sm font-mono font-bold text-[var(--ayci-ink)] w-14 shrink-0">
+          {fmtTime(call.starts_at)}
         </div>
-        <div className="text-[11px] text-[var(--ayci-ink-muted)] truncate">
-          with <span className="font-medium text-[var(--ayci-ink)]">{call.host}</span>
-          {call.event_type && <> · {call.event_type}</>}
-          {call.notes && <> · {call.notes}</>}
+        <div className="text-[10px] text-[var(--ayci-ink-muted)] w-12 shrink-0">
+          {call.duration_min}m
         </div>
-      </div>
-      <div className="text-[10px] text-[var(--ayci-ink-muted)] shrink-0 hidden sm:block">
-        {relativeWhen(call.starts_at)}
-      </div>
-      <Link
-        to={`/students?email=${encodeURIComponent(call.student_email)}&name=${encodeURIComponent(call.student_name || "")}`}
-        className="text-xs text-[var(--ayci-accent)] font-semibold hover:underline shrink-0 inline-flex items-center gap-0.5"
-        data-testid={`today-call-lookup-${call.id}`}
-      >
-        Lookup <ExternalLink className="w-3 h-3" />
-      </Link>
-      {isManual && (
-        <button
-          onClick={() => onDelete(call.id)}
-          title="Remove manual call"
-          className="text-slate-400 hover:text-rose-700 shrink-0"
-          data-testid={`today-call-delete-${call.id}`}
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
+            {call.student_name || call.student_email}
+            {isManual && (
+              <span className="text-[10px] uppercase tracking-wider font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1 py-0 rounded">
+                manual
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-[var(--ayci-ink-muted)] truncate">
+            with <span className="font-medium text-[var(--ayci-ink)]">{call.host}</span>
+            {call.event_type && <> · {call.event_type}</>}
+            {call.notes && <> · {call.notes}</>}
+          </div>
+        </div>
+        <div className="text-[10px] text-[var(--ayci-ink-muted)] shrink-0 hidden sm:block">
+          {relativeWhen(call.starts_at)}
+        </div>
+        <Link
+          to={`/students?email=${encodeURIComponent(call.student_email)}&name=${encodeURIComponent(call.student_name || "")}`}
+          className="text-xs text-[var(--ayci-accent)] font-semibold hover:underline shrink-0 inline-flex items-center gap-0.5"
+          data-testid={`today-call-lookup-${call.id}`}
         >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+          Lookup <ExternalLink className="w-3 h-3" />
+        </Link>
+        {isManual && (
+          <button
+            onClick={() => onDelete(call.id)}
+            title="Remove manual call"
+            className="text-slate-400 hover:text-rose-700 shrink-0"
+            data-testid={`today-call-delete-${call.id}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {/* AI brief — 3 short lines, lazily fetched + cached server-side */}
+      {(loadingBrief || (brief && brief.length > 0)) && (
+        <div className="ml-[88px] mt-1.5 pl-2 border-l-2 border-emerald-200/70">
+          {loadingBrief && !brief && (
+            <div className="text-[11px] text-[var(--ayci-ink-muted)] flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3 text-emerald-600 animate-pulse" />
+              Building brief…
+            </div>
+          )}
+          {brief && brief.map((line, i) => (
+            <div
+              key={i}
+              className="text-[11.5px] text-[var(--ayci-ink-muted)] leading-relaxed flex items-start gap-1.5"
+              data-testid={`today-call-brief-line-${i}-${call.id}`}
+            >
+              {i === 0 && <Sparkles className="w-3 h-3 text-emerald-600 mt-0.5 shrink-0" />}
+              {i !== 0 && <span className="w-3 shrink-0" />}
+              <span>{line}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+import call_briefs as briefs
 import today_calls as tc
 from db import db
 from deps import require_board
@@ -48,3 +49,16 @@ async def delete_manual(
     user: dict = Depends(require_board("coach_activity")),
 ):
     return await tc.delete_manual_call(db, call_id)
+
+
+@router.get("/brief")
+async def call_brief(
+    email: str,
+    name: str = "",
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """3-line AI briefing for the given student. Cached per (email, UK-date)
+    so it's free on subsequent renders within the same day."""
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email required")
+    return await briefs.get_brief(db, email, name)
