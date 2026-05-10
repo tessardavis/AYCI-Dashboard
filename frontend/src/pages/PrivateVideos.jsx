@@ -68,7 +68,29 @@ export default function PrivateVideos() {
   };
 
   useEffect(() => {
-    load();
+    // First load: show whatever's in our DB instantly, then quietly sync
+    // from Monday in the background so the count stays in lock-step with
+    // the Monday board (which is the source of truth for replies right
+    // now). The team gets a fresh-from-Monday view every time they open
+    // this page, no manual button click needed.
+    (async () => {
+      await load();
+      try {
+        setSyncingMonday(true);
+        const { data } = await apiClient.post(
+          "/private-videos/sync-from-monday",
+          {},
+          { timeout: 180000 },
+        );
+        if ((data?.created ?? 0) > 0 || (data?.updated ?? 0) > 0) {
+          await load(true);
+        }
+      } catch {
+        // Silent — initial load was already successful, this is just a refresh
+      } finally {
+        setSyncingMonday(false);
+      }
+    })();
   }, []);
 
   const syncFromMonday = async () => {
