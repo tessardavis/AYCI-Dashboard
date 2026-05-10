@@ -96,6 +96,41 @@ export default function TodayCallsWidget() {
   );
 }
 
+// Days from now (UK calendar day) until the interview. Returns null if no
+// date or the interview is already in the past.
+function daysToInterview(iso) {
+  if (!iso) return null;
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const interview = new Date(iso);
+    interview.setHours(0, 0, 0, 0);
+    const days = Math.round((interview - today) / 86400000);
+    if (Number.isNaN(days) || days < 0) return null;
+    return days;
+  } catch {
+    return null;
+  }
+}
+
+function InterviewFlag({ days }) {
+  if (days === null || days > 7) return null;
+  let label, tone;
+  if (days === 0) { label = "INTERVIEW TODAY"; tone = "bg-rose-600 text-white animate-pulse"; }
+  else if (days === 1) { label = "INTERVIEW TOMORROW"; tone = "bg-rose-600 text-white"; }
+  else if (days <= 3) { label = `INTERVIEW IN ${days}D`; tone = "bg-rose-100 text-rose-800 border border-rose-300"; }
+  else { label = `INTERVIEW IN ${days}D`; tone = "bg-amber-100 text-amber-800 border border-amber-300"; }
+  return (
+    <span
+      className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0 rounded whitespace-nowrap ${tone}`}
+      data-testid="today-call-interview-flag"
+    >
+      {label}
+    </span>
+  );
+}
+
+
 function CallRow({ call, onDelete }) {
   const isManual = call.source === "manual";
   const [brief, setBrief] = useState(null);
@@ -128,8 +163,9 @@ function CallRow({ call, onDelete }) {
           {call.duration_min}m
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
+          <div className="font-semibold text-sm text-[var(--ayci-ink)] truncate flex items-center gap-1.5 flex-wrap">
             {call.student_name || call.student_email}
+            <InterviewFlag days={daysToInterview(call.interview_date)} />
             {call.tier && (
               <span
                 className={
