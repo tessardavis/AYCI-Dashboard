@@ -116,51 +116,85 @@ async def convertkit_weekly_subscribers(params: dict, start_iso: str, end_iso: s
 
 async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_iso: str) -> float:
     """
-    params: {"tag_id": 12345} or {"tag_name": "..."}
-    Count of subscribers NEWLY tagged in the window. Paginates newest-first and
-    stops once we've passed start_iso (v3 `from`/`to` params on this endpoint are
-    unreliable, so we filter client-side on each subscription's created_at).
-    """
-    tag_id = params.get("tag_id")
-    tag_name = params.get("tag_name")
-    if not tag_id and tag_name:
-        tags = await convertkit_list_tags()
-        match = next((t for t in tags if t["name"].strip().lower() == tag_name.strip().lower()), None)
-        if not match:
-            raise ValueError(f"ConvertKit tag not found: {tag_name!r}")
-        tag_id = match["id"]
-    if not tag_id:
-        raise ValueError("ConvertKit tag connector needs tag_name or tag_id")
+    params: {"tag_id": 12345}  or  {"tag_name": "..."}
+         or {"tag_ids": [12345, 67890]}     # union of multiple tags
+    Count of UNIQUE subscribers NEWLY tagged on any of the given tags in the
+    window. Paginates newest-first and stops once we've passed start_iso (v3
+    `from`/`to` params on this endpoint are unreliable, so we filter
+    client-side on each subscription's created_at).
 
-    count = 0
-    page = 1
+    Behaviour:
+      • If a subscriber appears on multiple tags during the window, we keep
+        their *earliest* timestamp (matching the AYCI Waitlist CRM spreadsheet).
+      • Mass re-tag bursts (>= BURST_THRESHOLD subscriptions sharing the same
+        minute timestamp on a single tag) are stripped — those are
+        launch-automation imports or sheet/CSV bulk-tags rather than organic
+        waitlist joins.
+    """
+    BURST_THRESHOLD = 10  # 10+ subs in the same minute = automation, not organic
+
+    # Resolve tag list (singular `tag_id`, plural `tag_ids`, or `tag_name`)
+    tag_ids: list[int] = []
+    if params.get("tag_ids"):
+        tag_ids = [int(t) for t in params["tag_ids"] if t]
+    elif params.get("tag_id"):
+        tag_ids = [int(params["tag_id"])]
+    elif params.get("tag_name"):
+        tags = await convertkit_list_tags()
+        match = next(
+            (t for t in tags if t["name"].strip().lower() == params["tag_name"].strip().lower()),
+            None,
+        )
+        if not match:
+            raise ValueError(f"ConvertKit tag not found: {params['tag_name']!r}")
+        tag_ids = [int(match["id"])]
+    if not tag_ids:
+        raise ValueError("ConvertKit tag connector needs tag_id, tag_ids, or tag_name")
+
+    from collections import Counter
+
+    # Fetch all in-window rows per tag, applying burst filter per tag (a burst
+    # on one tag shouldn't suppress organic joins on another).
+    earliest_per_email: dict[str, str] = {}
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        while True:
-            r = await c.get(
-                f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions",
-                params={"api_secret": _ck_secret(), "page": page, "sort_order": "desc"},
-            )
-            r.raise_for_status()
-            body = r.json()
-            subs = body.get("subscriptions", [])
-            if not subs:
-                break
-            oldest_on_page = None
-            for s in subs:
-                created = str(s.get("created_at") or "")
-                oldest_on_page = created
-                if start_iso <= created <= end_iso:
-                    count += 1
-            # Stop when page's oldest item predates the window
-            if oldest_on_page and oldest_on_page < start_iso:
-                break
-            total_pages = body.get("total_pages", 1)
-            if page >= total_pages:
-                break
-            page += 1
-            if page > 200:  # safety guard
-                break
-    return float(count)
+        for tag_id in tag_ids:
+            in_window: list[tuple[str, str]] = []
+            page = 1
+            while page <= 200:
+                r = await c.get(
+                    f"{CONVERTKIT_V3}/tags/{tag_id}/subscriptions",
+                    params={"api_secret": _ck_secret(), "page": page, "sort_order": "desc"},
+                )
+                r.raise_for_status()
+                body = r.json()
+                subs = body.get("subscriptions", [])
+                if not subs:
+                    break
+                oldest = None
+                for s in subs:
+                    created = str(s.get("created_at") or "")
+                    oldest = created
+                    if start_iso <= created <= end_iso:
+                        em = ((s.get("subscriber") or {}).get("email_address") or "").strip().lower()
+                        if em:
+                            in_window.append((created, em))
+                if oldest and oldest < start_iso:
+                    break
+                total_pages = body.get("total_pages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+
+            # Per-tag burst filter
+            minute_counts = Counter(ts[:16] for ts, _ in in_window)
+            organic = [(ts, em) for ts, em in in_window if minute_counts[ts[:16]] < BURST_THRESHOLD]
+
+            # Merge into the cross-tag map, keeping earliest timestamp
+            for ts, em in organic:
+                if em not in earliest_per_email or ts < earliest_per_email[em]:
+                    earliest_per_email[em] = ts
+
+    return float(len(earliest_per_email))
 
 
 async def convertkit_weekly_broadcast_ctr(params: dict, start_iso: str, end_iso: str) -> float:
