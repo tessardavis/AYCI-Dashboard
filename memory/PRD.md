@@ -13,7 +13,14 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
-### 2026-05-11 — Fixed "24H WINDOW EXPIRED" lying on Wati threads with recent replies
+### 2026-05-11 — Live "Xh Ym left" countdown on Wati reply panel
+- **Frontend** (`SupportTickets.jsx → WhatsAppReplyPanel`): replaced the binary "24H WINDOW EXPIRED" badge with a live countdown chip. Shows `"Xh YYm left"` (emerald) when the 24h Wati session window is still open, or `"24H WINDOW EXPIRED"` (amber, unchanged) when closed. Chip turns amber when <2h remaining ("closing soon"). Ticks every 60s via `setInterval`. Hover tooltip shows the exact last-inbound timestamp. Test-ids: `wa-window-countdown-chip`, `wa-window-expired-chip`.
+- **Earlier same-day fix**: webhook + reconcile paths now correctly maintain `wati_last_inbound_at` (was previously stuck on first-message timestamp, making the chip lie). Self-heal via reconcile derives the newest inbound-note timestamp and `$max`-bumps the field, fixing pre-existing tickets without a migration.
+- Verified: Shailaja's expired ticket shows red chip; with `wati_last_inbound_at` temporarily set to 7h ago, chip rendered "16h 36m left" in green with the free-text reply textarea enabled.
+- Files: `/app/frontend/src/pages/SupportTickets.jsx`, `/app/backend/wati.py`.
+
+
+### 2026-05-11 — WhatsApp 24h window: live countdown chip on reply panel
 - **Root cause** (`wati.py → handle_incoming_message`): when a student sent a follow-up WhatsApp message on an existing open ticket, the inbound handler appended a note + bumped `updated_at`/`status` but **never updated `wati_last_inbound_at`**. So the dashboard kept computing the 24h session window from the *first* message the student ever sent, displaying "24H WINDOW EXPIRED" even on threads where the student had just replied minutes ago.
 - **Fix 1 (webhook path)**: webhook handler now `$set`s `wati_last_inbound_at` to the incoming message timestamp on every existing-ticket append.
 - **Fix 2 (reconcile path)**: poll-based reconcile (`reconcile_open_tickets`) now uses `$max` instead of `$set` on `wati_last_inbound_at` so out-of-order messages from Wati's `getMessages` API can't regress the value.

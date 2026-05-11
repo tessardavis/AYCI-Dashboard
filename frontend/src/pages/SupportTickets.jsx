@@ -1801,6 +1801,18 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
   const lastInbound = ticket.wati_last_inbound_at || ticket.created_at;
   const hoursSince = lastInbound ? (Date.now() - new Date(lastInbound).getTime()) / 3600000 : Infinity;
   const outOfWindow = hoursSince >= 24;
+  // Live countdown — ticks every minute so the chip stays accurate without re-fetching.
+  const [, _tickNow] = useState(0);
+  useEffect(() => {
+    if (outOfWindow || !lastInbound) return;
+    const t = setInterval(() => _tickNow((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, [outOfWindow, lastInbound]);
+  const hoursLeft = Math.max(0, 24 - hoursSince);
+  const hh = Math.floor(hoursLeft);
+  const mm = Math.floor((hoursLeft - hh) * 60);
+  const closingSoon = !outOfWindow && hoursLeft < 2;
+  const countdownLabel = `${hh}h ${mm.toString().padStart(2, "0")}m left`;
 
   const loadTemplates = async () => {
     if (templatesLoaded) return;
@@ -1858,11 +1870,26 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
         <span className="text-[11px] uppercase tracking-wider font-semibold text-emerald-800">
           WhatsApp reply · {ticket.wati_wa_id}
         </span>
-        {outOfWindow && (
-          <span className="ml-auto text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded border border-amber-200">
+        {outOfWindow ? (
+          <span
+            className="ml-auto text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded border border-amber-200"
+            data-testid="wa-window-expired-chip"
+          >
             24H WINDOW EXPIRED
           </span>
-        )}
+        ) : lastInbound ? (
+          <span
+            className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+              closingSoon
+                ? "bg-amber-50 text-amber-800 border-amber-200"
+                : "bg-emerald-50 text-emerald-800 border-emerald-200"
+            }`}
+            title={`Last inbound: ${new Date(lastInbound).toLocaleString("en-GB")}`}
+            data-testid="wa-window-countdown-chip"
+          >
+            {countdownLabel}
+          </span>
+        ) : null}
       </div>
 
       {!outOfWindow ? (
