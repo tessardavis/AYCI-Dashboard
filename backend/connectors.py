@@ -825,14 +825,22 @@ async def _ck_tag_emails(tag_id: int) -> set[str]:
 async def stripe_new_signups_from_waitlist(params: dict, start_iso: str, end_iso: str) -> float:
     """
     params: {"waitlist_tag_id": 14407524}
-    Count of Stripe first-charge customers in window whose email is on the given
-    ConvertKit waitlist tag.
+         or {"waitlist_tag_ids": [14407524, 19213962]}   # union of multiple tags
+    Count of Stripe first-charge customers in window whose email is on ANY of
+    the given ConvertKit waitlist tags. The union form lets us keep counting
+    late converters from previous launch waitlists alongside the current one.
     """
-    tag_id = params.get("waitlist_tag_id")
-    if not tag_id:
-        raise ValueError("waitlist signups connector needs waitlist_tag_id")
+    tag_ids: list[int] = []
+    if params.get("waitlist_tag_ids"):
+        tag_ids = [int(t) for t in params["waitlist_tag_ids"] if t]
+    elif params.get("waitlist_tag_id"):
+        tag_ids = [int(params["waitlist_tag_id"])]
+    if not tag_ids:
+        raise ValueError("waitlist signups connector needs waitlist_tag_id or waitlist_tag_ids")
 
-    waitlist_emails = await _ck_tag_emails(int(tag_id))
+    waitlist_emails: set[str] = set()
+    for tid in tag_ids:
+        waitlist_emails |= await _ck_tag_emails(tid)
     if not waitlist_emails:
         return 0.0
 

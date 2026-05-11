@@ -13,6 +13,16 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-11 — "Joined Waitlist" + "Signups From Waitlist" metrics flipped to JUN-26 launch
+- **Root cause**: both metrics' `source_params` still pointed at ConvertKit tag `14407524` = `[AYCI APR-26] Waitlist - All`. APR-26 hasn't received new joiners since 4 May (campaign ended), while the new JUN-26 launch tag `19213962` = `[AYCI JUN-26] Waitlist - All` has been collecting (89 subs, 84 in w/c 4 May alone). Scorecard was reading 4 instead of the real ~84.
+- **People Joined The Waitlist** (`metrics.source_params.tag_id`): `14407524 → 19213962`.
+- **New Signups From The Waitlist** (`stripe_new_signups_from_waitlist` connector): now accepts a `waitlist_tag_ids: [int]` list and unions the email sets across all listed tags. Metric updated to track BOTH `[14407524, 19213962]` so late APR-26 converters still count alongside the new JUN-26 cohort. `waitlist_tag_id` (singular) still supported for backwards compatibility.
+- **Re-synced** w/c 2026-05-04 and current week w/c 2026-05-11 via `POST /api/sync/run` with overwrite=true:
+  - People Joined: 84 (was 4), current week so far: 7
+  - New Signups From Waitlist: 7 (was 3) via the unioned email set, current week so far: 0
+- Files: `/app/backend/connectors.py` (`stripe_new_signups_from_waitlist`).
+
+
 ### 2026-05-11 — Timeline tooltip on past coach chips (Upcoming Interviews)
 - **Per-session date tooltip** (`UpcomingInterviews.jsx → PastCoaches`): each "Spoke with: <coach>" chip now ends with a small `Clock` icon. On hover (native HTML `title`), it shows the full list of past Calendly session dates for that coach with that student (newest first, deduped, formatted as "DD MMM YYYY"). Chips without any dated sessions (Monday-only / future-booked entries) omit the icon.
 - **Cache invalidation** (`upcoming_interviews.py → fetch_past_coaches_bulk`): the per-email `calendly_past_hosts:{email}` cache is now treated as stale when any entry has `last_at` populated but `dates` is missing/None — ensures pre-`dates`-field cached records get refreshed automatically without a manual purge.
