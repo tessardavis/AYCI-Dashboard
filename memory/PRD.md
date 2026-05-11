@@ -13,14 +13,15 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
-### 2026-05-11 — Over-allowance booking alerts (Oksana real-time DM + UI)
+### 2026-05-11 — Over-allowance booking alerts (Oksana real-time DM + UI + Acknowledge)
 - **Detection** (`over_allowance_alerts.py`): for every Private Plus / VIP row on the Monday Academy Members board (no interview-date filter, all active students), counts Calendly **all-time** scheduled events matching `PRIVATE_CALL_NAMES` per invitee email, then flags `calendly_count > monday_total_allowance` (`calls + mocks + bonus` columns combined).
 - **Slack DM**: scheduled job `over_allowance_check` runs every 5 min, DMs Oksana the moment a new student crosses over. Deduped via `over_allowance_alerts_sent` collection — re-DMs only when `over_by` grows further (so 1→2 over triggers a fresh ping, but a stale 1-over student does not).
+- **Acknowledge** (`POST /api/coach-activity/over-allowance/ack` + `over_allowance_acks` collection): one-click button on each widget row records the current `over_by` and immediately removes the row from the cached snapshot. Row re-appears only if the student goes further over (acked at +1, returns at +2). Snapshot filter is also applied in `find_over_allowance_students` so subsequent Slack DMs respect the ack.
 - **UI surfaces**:
-  - New "Over-allowance bookings" panel on `/coach-activity` (`OverAllowanceWidget.jsx`) — tier badge, breakdown of allowance, `+N over` chip, link to Monday row.
+  - "Over-allowance bookings" panel on `/coach-activity` (`OverAllowanceWidget.jsx`) — tier badge, breakdown of allowance, `+N over` chip, Acknowledge button, link to Monday row.
   - Inline `+N over allowance` chip on `/interviews` student cards (Academy + Private), tooltip explains Slack notification.
-- **Endpoints**: `GET /api/coach-activity/over-allowance` (cached snapshot, `?refresh=true` to recompute) and `POST /api/coach-activity/over-allowance/notify` (force a Slack notify cycle).
-- **Verified live**: 5 students flagged — Fiona Sutton (VIP, 7/6, +1), Nalaayeni Kanesan (Private Plus, 9/1, +8), Amal Hashi, Laura Ah-Kye, Rajdip Dulai. Fiona's chip rendered on `/interviews` with tooltip "Booked 7 Calendly calls vs Monday allowance of 6. Oksana has been DM'd in Slack."
+- **Endpoints**: `GET /api/coach-activity/over-allowance` (cached snapshot, `?refresh=true` to recompute), `POST .../notify` (force Slack cycle), `POST .../ack` (acknowledge).
+- **Verified live**: 5 students flagged (Nalaayeni +8, Fiona/Amal/Laura/Rajdip +1). Ack flow tested end-to-end — clicking Fiona's button dropped her row instantly while leaving the other 4. Other 4 still flagged.
 - Files: `/app/backend/over_allowance_alerts.py`, `/app/backend/routes/coach.py`, `/app/backend/routes/interviews.py`, `/app/backend/server.py`, `/app/frontend/src/components/OverAllowanceWidget.jsx`, `/app/frontend/src/pages/CoachActivity.jsx`, `/app/frontend/src/pages/UpcomingInterviews.jsx`.
 
 ### 2026-05-11 — Waitlist scorecard: match Waitlist CRM sheet exactly

@@ -101,3 +101,28 @@ async def coach_activity_over_allowance_notify(
     """Force the over-allowance check + Slack DM to Oksana right now.
     Useful for testing or after a manual Monday-allowance fix."""
     return await over_alerts.notify_over_allowance_breaches(db)
+
+
+
+class OverAllowanceAckRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=200)
+    over_by: int = Field(..., ge=1)
+
+
+@router.post("/coach-activity/over-allowance/ack")
+async def coach_activity_over_allowance_ack(
+    body: OverAllowanceAckRequest,
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """Acknowledge a specific (student, over_by) breach so the widget hides
+    the row. Re-surfaces if the student goes further over (+1 → +2)."""
+    res = await over_alerts.acknowledge_over_allowance(
+        db,
+        email=body.email,
+        over_by=body.over_by,
+        by_user_id=user.get("id"),
+        by_name=user.get("name"),
+    )
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "ack failed")
+    return res

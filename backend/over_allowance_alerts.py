@@ -190,22 +190,76 @@ async def _count_calendly_alltime(emails: list[str]) -> dict[str, int]:
 
 async def find_over_allowance_students(db) -> dict:
     """Returns {"computed_at", "students": [...]} for students whose
-    Calendly all-time private-call count exceeds Monday's total allowance."""
+    Calendly all-time private-call count exceeds Monday's total allowance.
+    Excludes (email, over_by) pairs that the team has acknowledged — the row
+    re-appears if `over_by` grows further (e.g. +1 → +2 over)."""
     students = await _fetch_all_private_students()
     emails = [s["email"] for s in students if s.get("email")]
     counts = await _count_calendly_alltime(emails)
+
+    # Acknowledgements: per-email max over_by that was acked. A row stays
+    # hidden until the student goes over by more than the acked count.
+    acked: dict[str, int] = {}
+    async for d in db.over_allowance_acks.find({}, {"_id": 0, "email": 1, "over_by": 1}):
+        em = (d.get("email") or "").lower()
+        n = int(d.get("over_by") or 0)
+        if not em:
+            continue
+        acked[em] = max(acked.get(em, 0), n)
+
     over: list[dict] = []
     for s in students:
         used = counts.get(s["email"], 0)
         allow = s["monday_total_allowance"]
         if used > allow:
+            over_by = used - allow
+            if over_by <= acked.get(s["email"], 0):
+                continue  # already acknowledged at this severity
             over.append({
                 **s,
                 "calendly_calls_used": used,
-                "over_by": used - allow,
+                "over_by": over_by,
             })
     over.sort(key=lambda r: (-r["over_by"], r["name"] or ""))
     return {"computed_at": datetime.now(timezone.utc).isoformat(), "students": over}
+
+
+async def acknowledge_over_allowance(
+    db, *, email: str, over_by: int, by_user_id: str | None, by_name: str | None,
+) -> dict:
+    """Record an acknowledgement. The widget hides this student until their
+    `over_by` exceeds `over_by` again (e.g. acked at +1, re-surfaces at +2)."""
+    email = (email or "").strip().lower()
+    over_by = int(over_by or 0)
+    if not email or over_by <= 0:
+        return {"ok": False, "error": "email and over_by required"}
+    now = datetime.now(timezone.utc).isoformat()
+    await db.over_allowance_acks.update_one(
+        {"email": email},
+        {"$set": {
+            "email": email,
+            "over_by": over_by,
+            "acked_at": now,
+            "acked_by_user_id": by_user_id,
+            "acked_by_name": by_name,
+        }},
+        upsert=True,
+    )
+    # Update the cached snapshot in-place: filter out the acked row so the
+    # UI's next GET immediately reflects the change, without waiting for the
+    # 5-min recompute cycle.
+    cached = await db.fn_cache.find_one({"_id": OVER_ALLOWANCE_CACHE_KEY}, {"_id": 0, "value": 1})
+    snapshot = (cached or {}).get("value") or {}
+    students = snapshot.get("students") or []
+    filtered = [s for s in students if not (s.get("email", "").lower() == email and int(s.get("over_by", 0)) <= over_by)]
+    if filtered != students:
+        snapshot["students"] = filtered
+        await db.fn_cache.update_one(
+            {"_id": OVER_ALLOWANCE_CACHE_KEY},
+            {"$set": {"value": snapshot, "computed_at": snapshot.get("computed_at")}},
+            upsert=True,
+        )
+    return {"ok": True, "email": email, "over_by": over_by}
 
 
 # ---------- Slack alerting ----------------------------------------------------

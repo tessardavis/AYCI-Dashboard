@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertOctagon, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { AlertOctagon, Check, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -9,11 +9,15 @@ import { apiClient, formatApiErrorDetail } from "@/lib/api";
  * their Monday total allowance (calls + mocks + bonus columns).
  * Auto-refreshes every 5 min via the backend's `over_allowance_check`
  * scheduled job; this widget just polls the cached snapshot.
+ *
+ * Each row has an Acknowledge button — clicking it records the current
+ * `over_by` and hides the row until the student goes further over.
  */
 export default function OverAllowanceWidget() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [acking, setAcking] = useState({}); // email -> bool
 
   const load = async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -30,6 +34,28 @@ export default function OverAllowanceWidget() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const ack = async (s) => {
+    setAcking((m) => ({ ...m, [s.email]: true }));
+    try {
+      await apiClient.post("/coach-activity/over-allowance/ack", {
+        email: s.email,
+        over_by: s.over_by,
+      });
+      toast.success(`Acknowledged ${s.name}`, {
+        description: `Hidden unless they go over by more than ${s.over_by}.`,
+      });
+      // Optimistic: drop the row locally; backend already busted the cache
+      setData((prev) => prev && {
+        ...prev,
+        students: (prev.students || []).filter((r) => r.email !== s.email),
+      });
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Acknowledge failed");
+    } finally {
+      setAcking((m) => ({ ...m, [s.email]: false }));
     }
   };
 
@@ -58,7 +84,7 @@ export default function OverAllowanceWidget() {
               )}
             </h3>
             <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
-              Calendly bookings exceed Monday slot allowance. Oksana is DM'd in Slack the moment a student crosses over.
+              Calendly bookings exceed Monday slot allowance. Oksana is DM'd in Slack the moment a student crosses over. Acknowledge to hide a row until the breach grows further.
             </p>
           </div>
         </div>
@@ -111,10 +137,20 @@ export default function OverAllowanceWidget() {
                   &nbsp;<span className="opacity-60">({s.monday_calls_total} calls + {s.monday_mocks_total} mock + {s.monday_bonus_total} bonus)</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-100 text-rose-900 border border-rose-200 text-[11px] font-bold">
                   +{s.over_by} over
                 </span>
+                <button
+                  onClick={() => ack(s)}
+                  disabled={!!acking[s.email]}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-white border border-[var(--ayci-border)] text-[var(--ayci-ink)] hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-50 transition-colors"
+                  title={`Acknowledge — hide until they go over by more than ${s.over_by}`}
+                  data-testid={`over-allowance-ack-${s.email}`}
+                >
+                  {acking[s.email] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Acknowledge
+                </button>
                 {s.monday_url && (
                   <a
                     href={s.monday_url}
