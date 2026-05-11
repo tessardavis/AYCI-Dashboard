@@ -271,16 +271,85 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
             past_by_email = await fetch_past_coaches_bulk(db, all_emails)
             for s in academy + private:
                 em = (s.get("email") or "").lower().strip()
-                s["past_coaches"] = past_by_email.get(em, [])
+                # Merge two sources:
+                #   1) Calendly past events (accurate `last_at`, only completed)
+                #   2) Monday "Booked - <name>" tags (authoritative for what's
+                #      been agreed, includes future-scheduled calls)
+                cal = past_by_email.get(em, []) or []
+                mon = _coaches_from_monday_items(s)
+                s["past_coaches"] = _merge_coach_lists(cal, mon)
         except Exception:
             for s in academy + private:
-                s.setdefault("past_coaches", [])
+                s.setdefault("past_coaches", _coaches_from_monday_items(s))
 
     return {
         "window": {"start": start_str, "end": end_str, "days": days},
         "academy": academy,
         "private": private,
     }
+
+
+def _coaches_from_monday_items(student: dict) -> list[dict]:
+    """Parse 'Booked - <name>' (or 'Used - <name>') labels out of the call /
+    mock / bonus column items, return [{name, count, last_at: None}, ...].
+    Calendly tells us *when*; Monday tells us *which*. Combining both gives
+    the full picture so a student who's booked 4 calls but only had 1 yet
+    isn't shown as 'spoke with 1 coach'."""
+    import re
+    out: dict[str, dict] = {}
+    sections = [
+        (student.get("calls_30min") or {}).get("items") or [],
+        (student.get("mock_interviews") or {}).get("items") or [],
+        (student.get("bonus_calls") or {}).get("items") or [],
+    ]
+    for items in sections:
+        for it in items:
+            txt = (it.get("text") or "").strip()
+            if not txt:
+                continue
+            # Match "Booked - Tessa", "Used - Anoop", "Booked: Becky Platt"
+            m = re.match(r"^(?:booked|used|completed|done)\s*[-:]\s*(.+)$", txt, re.I)
+            if not m:
+                continue
+            name = m.group(1).strip()
+            # Drop trailing parens / dates if present
+            name = re.split(r"\s[\(\d]", name)[0].strip()
+            if not name:
+                continue
+            key = name.lower()
+            entry = out.get(key)
+            if entry is None:
+                out[key] = {"name": name, "count": 1, "last_at": None}
+            else:
+                entry["count"] += 1
+    return list(out.values())
+
+
+def _merge_coach_lists(calendly: list[dict], monday: list[dict]) -> list[dict]:
+    """Merge two coach lists by lowercased first-token. Monday tells us a
+    coach is involved; Calendly tells us actual call dates. Whichever has
+    the higher count wins (so we don't double-count when both sources see
+    the same call). `last_at` always comes from Calendly when available."""
+    def _key(name: str) -> str:
+        return (name or "").strip().split()[0].lower() if name else ""
+
+    merged: dict[str, dict] = {}
+    for c in (calendly or []) + (monday or []):
+        k = _key(c.get("name"))
+        if not k:
+            continue
+        e = merged.get(k)
+        if e is None:
+            merged[k] = dict(c)
+        else:
+            e["count"] = max(int(e.get("count") or 0), int(c.get("count") or 0))
+            # Prefer the longer / more-canonical name (usually Calendly's
+            # full name vs Monday's first-name only)
+            if len((c.get("name") or "")) > len(e.get("name") or ""):
+                e["name"] = c["name"]
+            if c.get("last_at") and (not e.get("last_at") or c["last_at"] > e["last_at"]):
+                e["last_at"] = c["last_at"]
+    return sorted(merged.values(), key=lambda x: (-(x.get("count") or 0), x.get("last_at") or ""), reverse=False)
 
 
 # ---- Calendly past-coaches enrichment -------------------------------------
