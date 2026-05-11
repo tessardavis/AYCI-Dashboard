@@ -584,20 +584,27 @@ async def reconcile_open_tickets(db) -> dict:
                 logger.info(f"[wati-reconcile] appended ticket={t['id']} wa={wa} msg_id={mid}")
 
             # Self-heal: derive `wati_last_inbound_at` from the newest inbound
-            # note attached to this ticket. Earlier code paths only set this
-            # field on first creation; replies appended afterwards left it
-            # stuck on the original timestamp, causing the "24h WINDOW EXPIRED"
-            # banner to lie even after a fresh student message. `$max` ensures
-            # we never regress.
-            ticket_notes = await db.tickets.find_one(
+            # signal we have on this ticket. Two sources count as inbound:
+            #   1) Notes authored by `_whatsapp` (every reply Wati pushed in)
+            #   2) The ticket's own `created_at` (for whatsapp tickets, the
+            #      opening message lives in `description` rather than a note,
+            #      so the creation moment IS an inbound event)
+            # Earlier code paths only set this field on first creation, and
+            # reconcile previously overwrote it with arbitrarily-ordered
+            # historical messages — both made the "24H WINDOW EXPIRED" banner
+            # lie. `$max` ensures we never regress.
+            ticket_full2 = await db.tickets.find_one(
                 {"id": t["id"]},
-                {"_id": 0, "notes.author_id": 1, "notes.created_at": 1},
-            )
-            inbound_times = [
+                {"_id": 0, "created_at": 1,
+                 "notes.author_id": 1, "notes.created_at": 1},
+            ) or {}
+            inbound_times: list[str] = [
                 str(n.get("created_at"))
-                for n in (ticket_notes or {}).get("notes", []) or []
+                for n in (ticket_full2.get("notes") or [])
                 if n.get("author_id") == "_whatsapp" and n.get("created_at")
             ]
+            if ticket_full2.get("created_at"):
+                inbound_times.append(str(ticket_full2["created_at"]))
             if inbound_times:
                 latest_inbound = max(inbound_times)
                 await db.tickets.update_one(
