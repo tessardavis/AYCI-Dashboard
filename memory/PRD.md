@@ -13,6 +13,14 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-11 — Fixed "24H WINDOW EXPIRED" lying on Wati threads with recent replies
+- **Root cause** (`wati.py → handle_incoming_message`): when a student sent a follow-up WhatsApp message on an existing open ticket, the inbound handler appended a note + bumped `updated_at`/`status` but **never updated `wati_last_inbound_at`**. So the dashboard kept computing the 24h session window from the *first* message the student ever sent, displaying "24H WINDOW EXPIRED" even on threads where the student had just replied minutes ago.
+- **Fix 1 (webhook path)**: webhook handler now `$set`s `wati_last_inbound_at` to the incoming message timestamp on every existing-ticket append.
+- **Fix 2 (reconcile path)**: poll-based reconcile (`reconcile_open_tickets`) now uses `$max` instead of `$set` on `wati_last_inbound_at` so out-of-order messages from Wati's `getMessages` API can't regress the value.
+- **Self-heal**: every reconcile run now derives the newest inbound-note timestamp per open whatsapp ticket and `$max`-bumps `wati_last_inbound_at` to it. Backfills historical tickets without needing a separate migration. Verified live on the preview backend — Tessa's ticket auto-moved from `2026-02-03T19:19` → `2026-02-04T17:22` after one reconcile.
+- Files: `/app/backend/wati.py`.
+
+
 ### 2026-05-11 — "Joined Waitlist" + "Signups From Waitlist" metrics flipped to JUN-26 launch
 - **Root cause**: both metrics' `source_params` still pointed at ConvertKit tag `14407524` = `[AYCI APR-26] Waitlist - All`. APR-26 hasn't received new joiners since 4 May (campaign ended), while the new JUN-26 launch tag `19213962` = `[AYCI JUN-26] Waitlist - All` has been collecting (89 subs, 84 in w/c 4 May alone). Scorecard was reading 4 instead of the real ~84.
 - **People Joined The Waitlist** (`metrics.source_params.tag_id`): `14407524 → 19213962`.

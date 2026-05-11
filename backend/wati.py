@@ -317,7 +317,11 @@ async def handle_webhook(db, payload: dict) -> dict:
             {"id": existing["id"]},
             {
                 "$push": push,
-                "$set": {"updated_at": iso, "status": "open"},
+                "$set": {
+                    "updated_at": iso,
+                    "wati_last_inbound_at": iso,
+                    "status": "open",
+                },
             },
         )
         logger.info(f"[wati] appended note ticket={existing['id']} wa={wa_id} msg_id={msg_id}")
@@ -568,13 +572,38 @@ async def reconcile_open_tickets(db) -> dict:
                         "$set": {
                             "updated_at": _now_iso(),
                             "status": "open",
-                            "wati_last_inbound_at": str(created),
                         },
+                        # `$max` guarantees we only move the inbound timestamp
+                        # forward — items can arrive in any order from Wati,
+                        # so $set would otherwise regress the value.
+                        "$max": {"wati_last_inbound_at": str(created)},
                     },
                 )
                 appended += 1
                 seen_ids.add(mid)
                 logger.info(f"[wati-reconcile] appended ticket={t['id']} wa={wa} msg_id={mid}")
+
+            # Self-heal: derive `wati_last_inbound_at` from the newest inbound
+            # note attached to this ticket. Earlier code paths only set this
+            # field on first creation; replies appended afterwards left it
+            # stuck on the original timestamp, causing the "24h WINDOW EXPIRED"
+            # banner to lie even after a fresh student message. `$max` ensures
+            # we never regress.
+            ticket_notes = await db.tickets.find_one(
+                {"id": t["id"]},
+                {"_id": 0, "notes.author_id": 1, "notes.created_at": 1},
+            )
+            inbound_times = [
+                str(n.get("created_at"))
+                for n in (ticket_notes or {}).get("notes", []) or []
+                if n.get("author_id") == "_whatsapp" and n.get("created_at")
+            ]
+            if inbound_times:
+                latest_inbound = max(inbound_times)
+                await db.tickets.update_one(
+                    {"id": t["id"]},
+                    {"$max": {"wati_last_inbound_at": latest_inbound}},
+                )
     result = {
         "ok": True,
         "scanned": scanned,
