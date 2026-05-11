@@ -396,11 +396,13 @@ async def _fetch_past_coaches_one(client: httpx.AsyncClient, org: str, email: st
             start = ev.get("start_time") or ""
             entry = by_host.get(host)
             if entry is None:
-                by_host[host] = {"name": host, "count": 1, "last_at": start}
+                by_host[host] = {"name": host, "count": 1, "last_at": start, "dates": [start] if start else []}
             else:
                 entry["count"] += 1
-                if start > (entry.get("last_at") or ""):
-                    entry["last_at"] = start
+                if start:
+                    entry.setdefault("dates", []).append(start)
+                    if start > (entry.get("last_at") or ""):
+                        entry["last_at"] = start
         page_token = (body.get("pagination") or {}).get("next_page_token")
         pages += 1
         if not page_token:
