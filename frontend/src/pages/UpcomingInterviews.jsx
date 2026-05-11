@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, AlertOctagon, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -354,6 +354,16 @@ function AcademyRow({ student, today }) {
           {student.tally_history_count > 0 && (
             <HistoryBadge count={student.tally_history_count} />
           )}
+          {student.over_allowance && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
+              title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. Oksana has been DM'd in Slack.`}
+              data-testid={`over-allowance-chip-${student.email}`}
+            >
+              <AlertOctagon className="w-3 h-3" />
+              +{student.over_allowance.over_by} over
+            </span>
+          )}
         </div>
         <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex flex-wrap gap-x-3">
           <span>{student.speciality || "—"}</span>
@@ -403,6 +413,16 @@ function PrivateCard({ student, today }) {
             )}
             {student.tally_history_count > 0 && (
               <HistoryBadge count={student.tally_history_count} />
+            )}
+            {student.over_allowance && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
+                title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. Oksana has been DM'd in Slack.`}
+                data-testid={`over-allowance-chip-${student.email}`}
+              >
+                <AlertOctagon className="w-3 h-3" />
+                +{student.over_allowance.over_by} over allowance
+              </span>
             )}
           </div>
           <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">

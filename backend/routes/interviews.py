@@ -30,6 +30,24 @@ async def upcoming_interviews(
     today = datetime.now(timezone.utc).date()
     academy_cutoff = (today + timedelta(days=academy_days)).isoformat()
     academy = [s for s in data["academy"] if s["interview_date"] <= academy_cutoff]
+    # Enrich every student with the over-allowance snapshot (no extra fetch —
+    # uses the cached map written by the over_allowance_check scheduled job).
+    import over_allowance_alerts as oaa
+    over_snapshot = await oaa.get_cached_over_allowance(db)
+    over_by_email = {
+        (s.get("email") or "").lower(): s
+        for s in (over_snapshot.get("students") or [])
+    }
+    for bucket in (academy, data["private"]):
+        for s in bucket:
+            em = (s.get("email") or "").lower()
+            o = over_by_email.get(em)
+            if o:
+                s["over_allowance"] = {
+                    "calendly_calls_used": o["calendly_calls_used"],
+                    "monday_total_allowance": o["monday_total_allowance"],
+                    "over_by": o["over_by"],
+                }
     return {
         "academy_window": {"days": academy_days, "end": academy_cutoff},
         "private_window": {"days": private_days, "end": data["window"]["end"]},

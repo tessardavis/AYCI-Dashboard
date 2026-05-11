@@ -6,6 +6,7 @@ from typing import Literal
 import coach_activity as coach_act
 import coach_activity_dismissals as dismissals
 import launches as launches_mod
+import over_allowance_alerts as over_alerts
 
 from db import db
 from deps import require_board
@@ -68,3 +69,35 @@ async def coach_activity_undismiss(
     )
     await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
     return res
+
+
+
+# -- Over-allowance bookings ------------------------------------------------
+@router.get("/coach-activity/over-allowance")
+async def coach_activity_over_allowance(
+    refresh: bool = False,
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """List of currently over-booked students (Calendly all-time private
+    calls > Monday total allowance). Cached snapshot is refreshed by the
+    5-min scheduled job; set `refresh=true` to recompute immediately."""
+    if refresh:
+        snapshot = await over_alerts.find_over_allowance_students(db)
+        await db.fn_cache.update_one(
+            {"_id": over_alerts.OVER_ALLOWANCE_CACHE_KEY},
+            {"$set": {"_id": over_alerts.OVER_ALLOWANCE_CACHE_KEY,
+                      "value": snapshot,
+                      "computed_at": snapshot["computed_at"]}},
+            upsert=True,
+        )
+        return snapshot
+    return await over_alerts.get_cached_over_allowance(db)
+
+
+@router.post("/coach-activity/over-allowance/notify")
+async def coach_activity_over_allowance_notify(
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """Force the over-allowance check + Slack DM to Oksana right now.
+    Useful for testing or after a manual Monday-allowance fix."""
+    return await over_alerts.notify_over_allowance_breaches(db)

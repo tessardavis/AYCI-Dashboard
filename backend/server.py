@@ -1161,6 +1161,26 @@ async def on_startup():
         replace_existing=True,
     )
 
+    # Over-allowance booking detector (every 5 min). For every Private Plus /
+    # VIP student on Monday, compare all-time Calendly private-call count
+    # against Monday's total slot allowance. Slack-DMs Oksana the first time
+    # a student goes over, and re-DMs only when `over_by` grows further.
+    async def _over_allowance_check():
+        import over_allowance_alerts as oaa
+        try:
+            res = await oaa.notify_over_allowance_breaches(db)
+            if res.get("notified"):
+                logger.info(f"[scheduler] over-allowance: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] over-allowance check failed: {e}")
+
+    scheduler.add_job(
+        _over_allowance_check,
+        CronTrigger(minute="*/5", timezone=tz),
+        id="over_allowance_check",
+        replace_existing=True,
+    )
+
     # Gmail → Tickets sync every 15 min for every connected inbox. Skips
     # silently if GOOGLE_CLIENT_ID/SECRET aren't set (i.e. integration not
     # yet configured) — no inboxes possible.
