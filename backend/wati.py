@@ -508,6 +508,37 @@ async def reconcile_open_tickets(db) -> dict:
             if not wa:
                 continue
             scanned += 1
+
+            # Self-heal `wati_last_inbound_at` from the data we already have on
+            # this ticket BEFORE attempting any Wati API call. This way even if
+            # Wati is down / rate-limits us / 4xx-es for this number, the
+            # countdown chip still gets repaired from existing notes +
+            # creation timestamp. Two sources count as inbound:
+            #   1) Notes authored by `_whatsapp`
+            #   2) The ticket's own `created_at` (opening message lives in
+            #      `description` for whatsapp tickets, so creation IS inbound)
+            # `$max` ensures we never regress.
+            try:
+                ticket_meta = await db.tickets.find_one(
+                    {"id": t["id"]},
+                    {"_id": 0, "created_at": 1,
+                     "notes.author_id": 1, "notes.created_at": 1},
+                ) or {}
+                inbound_times: list[str] = [
+                    str(n.get("created_at"))
+                    for n in (ticket_meta.get("notes") or [])
+                    if n.get("author_id") == "_whatsapp" and n.get("created_at")
+                ]
+                if ticket_meta.get("created_at"):
+                    inbound_times.append(str(ticket_meta["created_at"]))
+                if inbound_times:
+                    await db.tickets.update_one(
+                        {"id": t["id"]},
+                        {"$max": {"wati_last_inbound_at": max(inbound_times)}},
+                    )
+            except Exception as e:
+                logger.warning(f"[wati-reconcile] self-heal failed for {wa}: {e}")
+
             try:
                 r = await client.get(
                     f"{base}/api/v1/getMessages/{wa}",
@@ -582,35 +613,6 @@ async def reconcile_open_tickets(db) -> dict:
                 appended += 1
                 seen_ids.add(mid)
                 logger.info(f"[wati-reconcile] appended ticket={t['id']} wa={wa} msg_id={mid}")
-
-            # Self-heal: derive `wati_last_inbound_at` from the newest inbound
-            # signal we have on this ticket. Two sources count as inbound:
-            #   1) Notes authored by `_whatsapp` (every reply Wati pushed in)
-            #   2) The ticket's own `created_at` (for whatsapp tickets, the
-            #      opening message lives in `description` rather than a note,
-            #      so the creation moment IS an inbound event)
-            # Earlier code paths only set this field on first creation, and
-            # reconcile previously overwrote it with arbitrarily-ordered
-            # historical messages — both made the "24H WINDOW EXPIRED" banner
-            # lie. `$max` ensures we never regress.
-            ticket_full2 = await db.tickets.find_one(
-                {"id": t["id"]},
-                {"_id": 0, "created_at": 1,
-                 "notes.author_id": 1, "notes.created_at": 1},
-            ) or {}
-            inbound_times: list[str] = [
-                str(n.get("created_at"))
-                for n in (ticket_full2.get("notes") or [])
-                if n.get("author_id") == "_whatsapp" and n.get("created_at")
-            ]
-            if ticket_full2.get("created_at"):
-                inbound_times.append(str(ticket_full2["created_at"]))
-            if inbound_times:
-                latest_inbound = max(inbound_times)
-                await db.tickets.update_one(
-                    {"id": t["id"]},
-                    {"$max": {"wati_last_inbound_at": latest_inbound}},
-                )
     result = {
         "ok": True,
         "scanned": scanned,
