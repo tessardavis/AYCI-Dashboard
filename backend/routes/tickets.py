@@ -404,3 +404,27 @@ async def tally_webhook(request: Request, background: BackgroundTasks):
         ticket["attachments"] = await tickets_mod._fetch_tally_attachments(db, pending_files)
     await db.tickets.insert_one(ticket)
     return {"ok": True, "ticket_id": ticket["id"]}
+
+
+
+# -------------------------------------------------------- AI reply suggestion
+@router.post("/{ticket_id}/suggest-reply")
+async def suggest_reply(
+    ticket_id: str,
+    user: dict = Depends(require_board("tickets")),
+):
+    """Claude-drafted reply for the assigned coach to edit + send. Reads the
+    full ticket thread, tone-matches to channel (email vs WhatsApp), never
+    sends. See `/app/backend/ticket_triage.py` for prompt details."""
+    import ticket_triage
+
+    ticket = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+    try:
+        res = await ticket_triage.suggest_reply_for_ticket(ticket)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"AI draft failed: {e}")
+    return res

@@ -20,6 +20,8 @@ import {
   Download,
   Lock,
   XCircle,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
@@ -1347,6 +1349,8 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           onRefresh();
         }} />
 
+        <AIReplyDraftPanel ticket={t} />
+
         {t.source === "whatsapp" && (
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
@@ -1584,9 +1588,110 @@ function ConversationThread({ ticket, onRefresh }) {
 
 // -------------------- Email reply panel (Gmail two-way) --------------------
 
+function AIReplyDraftPanel({ ticket }) {
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [meta, setMeta] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  // Hide entirely if there's no student message to reply to.
+  const hasStudentMessage = !!ticket.description || (ticket.notes || []).some((n) =>
+    ["_email", "_whatsapp", "_tally"].includes((n.author_id || "").toLowerCase())
+  );
+  if (!hasStudentMessage) return null;
+
+  const handleSuggest = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.post(`/tickets/${ticket.id}/suggest-reply`, {}, { timeout: 60000 });
+      setDraft(data.draft || "");
+      setMeta({ channel: data.channel, threadSize: data.thread_size });
+      if (!data.draft) toast.error("AI returned an empty draft");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "AI draft failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      toast.success("Draft copied");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  return (
+    <div
+      className="border border-violet-200 bg-violet-50/40 rounded-md p-3"
+      data-testid="ai-reply-draft-panel"
+    >
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <Sparkles className="w-4 h-4 text-violet-700" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-violet-800">
+          AI Draft Reply
+        </span>
+        {meta && (
+          <span className="text-[10px] text-violet-700 opacity-80">
+            · {meta.channel} · thread of {meta.threadSize}
+          </span>
+        )}
+        <Button
+          onClick={handleSuggest}
+          disabled={loading}
+          size="sm"
+          variant="outline"
+          className="ml-auto border-violet-300 text-violet-700 hover:bg-violet-100 h-7"
+          data-testid="ai-reply-draft-suggest"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+          {draft ? "Regenerate" : "Draft with AI"}
+        </Button>
+      </div>
+      {draft && (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={Math.min(12, Math.max(4, draft.split("\n").length + 1))}
+            className={inputCls + " bg-white"}
+            data-testid="ai-reply-draft-textarea"
+          />
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={handleCopy}
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] border-violet-300 text-violet-700 hover:bg-violet-100"
+              data-testid="ai-reply-draft-copy"
+            >
+              {copied ? <Check className="w-3 h-3 mr-1" /> : <FileText className="w-3 h-3 mr-1" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <span className="text-[10px] text-[var(--ayci-ink-muted)]">
+              {draft.length} characters · paste into the reply box below to send
+            </span>
+          </div>
+        </>
+      )}
+      {!draft && !loading && (
+        <p className="text-xs text-[var(--ayci-ink-muted)]">
+          Click <em>Draft with AI</em> to generate a reply suggestion based on the full conversation. Always edit before sending.
+        </p>
+      )}
+    </div>
+  );
+}
+
+
 function EmailReplyPanel({ ticket, onSent }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [inboxes, setInboxes] = useState([]);
   const [selectedInbox, setSelectedInbox] = useState("");
   const [loadingInboxes, setLoadingInboxes] = useState(false);
@@ -1594,6 +1699,24 @@ function EmailReplyPanel({ ticket, onSent }) {
 
   const originalInbox = ticket.gmail_inbox_email;
   const needsPicker = !originalInbox; // non-email tickets need to choose
+
+  const handleSuggest = async () => {
+    setDrafting(true);
+    try {
+      const { data } = await apiClient.post(`/tickets/${ticket.id}/suggest-reply`, {}, { timeout: 60000 });
+      if (data.draft) {
+        // Don't clobber an in-progress draft silently — append instead.
+        setBody((prev) => prev.trim() ? `${prev}\n\n${data.draft}` : data.draft);
+        toast.success("AI draft inserted — edit before sending");
+      } else {
+        toast.error("AI returned an empty draft");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "AI draft failed");
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   // Load gmail status + inboxes once
   useEffect(() => {
@@ -1700,15 +1823,28 @@ function EmailReplyPanel({ ticket, onSent }) {
           className={inputCls}
           data-testid="email-reply-input"
         />
-        <Button
-          onClick={handleSend}
-          disabled={!body.trim() || sending}
-          size="sm"
-          data-testid="email-reply-send"
-          className="bg-sky-600 hover:bg-sky-700"
-        >
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={handleSuggest}
+            disabled={sending || drafting}
+            size="sm"
+            variant="outline"
+            data-testid="email-reply-suggest"
+            title="Draft a reply with AI (you can edit before sending)"
+            className="border-violet-200 text-violet-700 hover:bg-violet-50"
+          >
+            {drafting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          </Button>
+          <Button
+            onClick={handleSend}
+            disabled={!body.trim() || sending}
+            size="sm"
+            data-testid="email-reply-send"
+            className="bg-sky-600 hover:bg-sky-700"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -1825,6 +1961,25 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
     }
   };
 
+  const [drafting, setDrafting] = useState(false);
+
+  const handleSuggest = async () => {
+    setDrafting(true);
+    try {
+      const { data } = await apiClient.post(`/tickets/${ticket.id}/suggest-reply`, {}, { timeout: 60000 });
+      if (data.draft) {
+        setBody((prev) => prev.trim() ? `${prev}\n\n${data.draft}` : data.draft);
+        toast.success("AI draft inserted — edit before sending");
+      } else {
+        toast.error("AI returned an empty draft");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "AI draft failed");
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   const handleSend = async () => {
     const text = body.trim();
     if (!text) return;
@@ -1902,15 +2057,28 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
             className={inputCls}
             data-testid="whatsapp-reply-input"
           />
-          <Button
-            onClick={handleSend}
-            disabled={!body.trim() || sending}
-            size="sm"
-            data-testid="whatsapp-reply-send"
-            className="bg-emerald-600 hover:bg-emerald-700"
-          >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={handleSuggest}
+              disabled={sending || drafting}
+              size="sm"
+              variant="outline"
+              data-testid="whatsapp-reply-suggest"
+              title="Draft a reply with AI (you can edit before sending)"
+              className="border-violet-200 text-violet-700 hover:bg-violet-50"
+            >
+              {drafting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            </Button>
+            <Button
+              onClick={handleSend}
+              disabled={!body.trim() || sending}
+              size="sm"
+              data-testid="whatsapp-reply-send"
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

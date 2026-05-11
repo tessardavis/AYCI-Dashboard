@@ -126,3 +126,15 @@ async def coach_activity_over_allowance_ack(
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "ack failed")
     return res
+
+
+@router.get("/coach-activity/over-allowance/acks")
+async def coach_activity_over_allowance_acks(
+    user: dict = Depends(require_board("coach_activity")),
+):
+    """Recent over-allowance acknowledgements (newest first) — used for the
+    audit-trail footer on the widget."""
+    rows = await db.over_allowance_acks.find(
+        {}, {"_id": 0},
+    ).sort("acked_at", -1).limit(50).to_list(50)
+    return {"acks": rows}

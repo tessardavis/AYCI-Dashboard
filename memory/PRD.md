@@ -13,6 +13,29 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-11 — Auto-rotate waitlist tag, Acknowledgement log, AI ticket triage
+
+**(d) Auto-rotate waitlist cohort tag** (`connectors.py`):
+- New `_resolve_ayci_cohort_tags(suffix, carry_over)` helper that parses ConvertKit tag names matching `^\[AYCI <MONTH-YY>\] <suffix>$`, sorts by cohort date, and returns the newest tag IDs (optionally union'd with `N` previous cohorts).
+- `convertkit_weekly_tag_subscribers` now accepts `{"tag_pattern": "Waitlist - All", "carry_over": 1}` — auto-rotates each launch.
+- `stripe_new_signups_from_waitlist` accepts `{"waitlist_tag_pattern", "waitlist_carry_over"}` similarly.
+- Both metrics in production flipped to pattern mode → 37 / 7 for w/c 4 May (matches CRM sheet exactly).
+
+**(e) Acknowledgement log footer** (`OverAllowanceWidget.jsx → AcknowledgementLog`, `routes/coach.py`):
+- New collapsible "Acknowledgement log (N)" section at the bottom of the over-allowance widget.
+- Lists last 50 acks newest-first: `email — acked at +N over by <name> · DD MMM, HH:MM`.
+- Backend: `GET /api/coach-activity/over-allowance/acks`.
+
+**(i) AI Ticket triage — draft replies** (`ticket_triage.py`, `routes/tickets.py`, `SupportTickets.jsx → AIReplyDraftPanel`):
+- New `POST /api/tickets/{id}/suggest-reply` that reads ticket subject + description + ordered conversation thread (clips quoted reply chains and email signatures to stay token-efficient), then asks Claude Sonnet 4.5 for a channel-appropriate reply draft.
+- WhatsApp drafts: ≤500 chars, no greeting prefix, warm/direct tone.
+- Email drafts: greeting + paragraphs + warm sign-off, ≤1800 chars.
+- Both system prompts forbid fabricating facts and explicitly handle escalation cases (refunds/complaints) by drafting a holding reply.
+- New universal `AIReplyDraftPanel` between the conversation thread and reply panels — works regardless of Gmail/Wati integration state. Has "Draft with AI" / "Regenerate" / inline-edit / "Copy" actions. Hidden if there's no student message yet.
+- Verified live on a real Tally ticket: 743-char draft generated in ~10s, correctly addressed the student by first name, asked the right clarifying question, and didn't invent facts.
+
+Files: `connectors.py`, `over_allowance_alerts.py`, `ticket_triage.py`, `routes/coach.py`, `routes/tickets.py`, `components/OverAllowanceWidget.jsx`, `pages/SupportTickets.jsx`.
+
 ### 2026-05-11 — Over-allowance booking alerts (Oksana real-time DM + UI + Acknowledge)
 - **Detection** (`over_allowance_alerts.py`): for every Private Plus / VIP row on the Monday Academy Members board (no interview-date filter, all active students), counts Calendly **all-time** scheduled events matching `PRIVATE_CALL_NAMES` per invitee email, then flags `calendly_count > monday_total_allowance` (`calls + mocks + bonus` columns combined).
 - **Slack DM**: scheduled job `over_allowance_check` runs every 5 min, DMs Oksana the moment a new student crosses over. Deduped via `over_allowance_alerts_sent` collection — re-DMs only when `over_by` grows further (so 1→2 over triggers a fresh ping, but a stale 1-over student does not).

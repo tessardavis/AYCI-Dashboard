@@ -114,14 +114,69 @@ async def convertkit_weekly_subscribers(params: dict, start_iso: str, end_iso: s
     return float(count)
 
 
+async def _resolve_ayci_cohort_tags(suffix: str, carry_over: int = 0) -> list[int]:
+    """Resolve `[AYCI <MONTH-YY>] <suffix>` cohort tags newest-first.
+
+    `suffix` matches the bit after the bracketed cohort prefix (e.g.
+    "Waitlist - All", "Waitlist - Website"). Case-insensitive, ignores
+    whitespace differences.
+
+    `carry_over` is the number of previous cohorts to also include — useful
+    for waitlist signup conversion metrics where late converters from the
+    previous cohort still count. `0` = newest cohort only.
+
+    Cohort order is determined by parsing `<MONTH-YY>` as a date (e.g.
+    `APR-26` < `JUN-26`). Returns at most `1 + carry_over` tag IDs.
+    """
+    import re
+    from datetime import datetime as _dt
+
+    PATTERN = re.compile(
+        r"^\s*\[AYCI\s+([A-Z]{3,4})-(\d{2})\]\s*(.+?)\s*$",
+        re.IGNORECASE,
+    )
+    MONTHS = {m: i for i, m in enumerate(
+        ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+         "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"], start=1)}
+
+    suffix_norm = re.sub(r"\s+", " ", suffix.strip().lower())
+
+    matches: list[tuple[_dt, int, str]] = []
+    for t in await convertkit_list_tags():
+        m = PATTERN.match(t.get("name") or "")
+        if not m:
+            continue
+        mon_str, yr_str, tag_suffix = m.groups()
+        if re.sub(r"\s+", " ", tag_suffix.strip().lower()) != suffix_norm:
+            continue
+        mon = MONTHS.get(mon_str.upper()[:3])
+        if not mon:
+            continue
+        try:
+            cohort = _dt(2000 + int(yr_str), mon, 1)
+        except ValueError:
+            continue
+        matches.append((cohort, int(t["id"]), t["name"]))
+
+    matches.sort(key=lambda x: x[0], reverse=True)
+    keep = max(1, 1 + max(0, carry_over))
+    return [tid for _, tid, _ in matches[:keep]]
+
+
 async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_iso: str) -> float:
     """
     params: {"tag_id": 12345}  or  {"tag_name": "..."}
-         or {"tag_ids": [12345, 67890]}     # union of multiple tags
+         or {"tag_ids": [12345, 67890]}              # union of multiple tags
+         or {"tag_pattern": "Waitlist - All",        # auto-rotate every launch
+             "carry_over": 1}                         # +N previous cohorts
     Count of UNIQUE subscribers NEWLY tagged on any of the given tags in the
     window. Paginates newest-first and stops once we've passed start_iso (v3
     `from`/`to` params on this endpoint are unreliable, so we filter
     client-side on each subscription's created_at).
+
+    `tag_pattern` mode resolves the newest "[AYCI <MONTH-YY>] <pattern>" tag
+    at sync time (optionally plus the N previous cohorts via `carry_over`),
+    so the scorecard never needs to be flipped manually each launch.
 
     Behaviour:
       • If a subscriber appears on multiple tags during the window, we keep
@@ -133,12 +188,23 @@ async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_is
     """
     BURST_THRESHOLD = 10  # 10+ subs in the same minute = automation, not organic
 
-    # Resolve tag list (singular `tag_id`, plural `tag_ids`, or `tag_name`)
+    # Resolve tag list (singular `tag_id`, plural `tag_ids`, `tag_name`,
+    # or `tag_pattern` which auto-detects the newest "[AYCI <MONTH-YY>]
+    # <suffix>" cohort tag — see _resolve_ayci_cohort_tags below).
     tag_ids: list[int] = []
     if params.get("tag_ids"):
         tag_ids = [int(t) for t in params["tag_ids"] if t]
     elif params.get("tag_id"):
         tag_ids = [int(params["tag_id"])]
+    elif params.get("tag_pattern"):
+        tag_ids = await _resolve_ayci_cohort_tags(
+            suffix=params["tag_pattern"],
+            carry_over=int(params.get("carry_over", 0) or 0),
+        )
+        if not tag_ids:
+            raise ValueError(
+                f"No ConvertKit tags matched pattern '[AYCI <MONTH-YY>] {params['tag_pattern']}'"
+            )
     elif params.get("tag_name"):
         tags = await convertkit_list_tags()
         match = next(
@@ -149,7 +215,7 @@ async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_is
             raise ValueError(f"ConvertKit tag not found: {params['tag_name']!r}")
         tag_ids = [int(match["id"])]
     if not tag_ids:
-        raise ValueError("ConvertKit tag connector needs tag_id, tag_ids, or tag_name")
+        raise ValueError("ConvertKit tag connector needs tag_id, tag_ids, tag_pattern, or tag_name")
 
     from collections import Counter
 
@@ -860,17 +926,29 @@ async def stripe_new_signups_from_waitlist(params: dict, start_iso: str, end_iso
     """
     params: {"waitlist_tag_id": 14407524}
          or {"waitlist_tag_ids": [14407524, 19213962]}   # union of multiple tags
+         or {"waitlist_tag_pattern": "Waitlist - All",   # auto-rotate per launch
+             "waitlist_carry_over": 1}                   # +N previous cohorts
     Count of Stripe first-charge customers in window whose email is on ANY of
     the given ConvertKit waitlist tags. The union form lets us keep counting
     late converters from previous launch waitlists alongside the current one.
+    `waitlist_tag_pattern` mode resolves "[AYCI <MONTH-YY>] <pattern>" tags
+    newest-first so no manual flip is needed each launch.
     """
     tag_ids: list[int] = []
     if params.get("waitlist_tag_ids"):
         tag_ids = [int(t) for t in params["waitlist_tag_ids"] if t]
     elif params.get("waitlist_tag_id"):
         tag_ids = [int(params["waitlist_tag_id"])]
+    elif params.get("waitlist_tag_pattern"):
+        tag_ids = await _resolve_ayci_cohort_tags(
+            suffix=params["waitlist_tag_pattern"],
+            carry_over=int(params.get("waitlist_carry_over", 0) or 0),
+        )
     if not tag_ids:
-        raise ValueError("waitlist signups connector needs waitlist_tag_id or waitlist_tag_ids")
+        raise ValueError(
+            "waitlist signups connector needs waitlist_tag_id, "
+            "waitlist_tag_ids, or waitlist_tag_pattern",
+        )
 
     waitlist_emails: set[str] = set()
     for tid in tag_ids:

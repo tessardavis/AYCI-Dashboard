@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
-import { AlertOctagon, Check, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { AlertOctagon, Check, ChevronDown, ChevronUp, ExternalLink, History, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+
+const fmtAckTime = (iso) => {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+};
 
 /**
  * Shows students whose Calendly all-time private-call count exceeds
@@ -168,6 +178,80 @@ export default function OverAllowanceWidget() {
           ))}
         </div>
       )}
+
+      <AcknowledgementLog />
     </section>
+  );
+}
+
+function AcknowledgementLog() {
+  const [open, setOpen] = useState(false);
+  const [acks, setAcks] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/coach-activity/over-allowance/acks");
+      setAcks(data.acks || []);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load log");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && acks === null) load();
+  };
+
+  const count = acks?.length;
+
+  return (
+    <div className="mt-3 border-t border-[var(--ayci-border)] pt-3" data-testid="over-allowance-ack-log">
+      <button
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-[11px] text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)] transition-colors"
+        data-testid="over-allowance-ack-log-toggle"
+      >
+        <History className="w-3 h-3" />
+        Acknowledgement log
+        {count !== undefined && (
+          <span className="opacity-70">({count})</span>
+        )}
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      {open && (
+        <div className="mt-2" data-testid="over-allowance-ack-log-body">
+          {loading && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+            </div>
+          )}
+          {!loading && acks && acks.length === 0 && (
+            <div className="text-xs text-[var(--ayci-ink-muted)]">No acknowledgements yet.</div>
+          )}
+          {!loading && acks && acks.length > 0 && (
+            <ul className="text-[11px] space-y-1 text-[var(--ayci-ink-muted)]">
+              {acks.map((a) => (
+                <li
+                  key={a.email + a.acked_at}
+                  className="flex items-center justify-between gap-2 px-2 py-1 bg-slate-50/60 rounded border border-[var(--ayci-border)]"
+                  data-testid={`over-allowance-ack-log-row-${a.email}`}
+                >
+                  <span className="truncate">
+                    <span className="font-semibold text-[var(--ayci-ink)]">{a.email}</span>
+                    <span className="opacity-70"> — acked at +{a.over_by} over by {a.acked_by_name || "?"}</span>
+                  </span>
+                  <span className="text-[10px] flex-shrink-0 opacity-70">{fmtAckTime(a.acked_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
