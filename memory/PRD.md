@@ -13,6 +13,12 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
+### 2026-05-11 — Timeline tooltip on past coach chips (Upcoming Interviews)
+- **Per-session date tooltip** (`UpcomingInterviews.jsx → PastCoaches`): each "Spoke with: <coach>" chip now ends with a small `Clock` icon. On hover (native HTML `title`), it shows the full list of past Calendly session dates for that coach with that student (newest first, deduped, formatted as "DD MMM YYYY"). Chips without any dated sessions (Monday-only / future-booked entries) omit the icon.
+- **Cache invalidation** (`upcoming_interviews.py → fetch_past_coaches_bulk`): the per-email `calendly_past_hosts:{email}` cache is now treated as stale when any entry has `last_at` populated but `dates` is missing/None — ensures pre-`dates`-field cached records get refreshed automatically without a manual purge.
+- Verified: API returns 22/22 coaches with `dates` populated; UI rendered 15 timeline icons across visible cards (e.g. Becky Platt × 4 sessions for henry689@hotmail.com showing 4 distinct dates).
+
+
 ### 2026-05-09 — Coach Activity dismissals + periodic Monday→Mongo sync
 - **Dismissable alerts** (`coach_activity_dismissals.py`, `routes/coach.py`, `CoachActivity.jsx`):
   - Per-row "Dismiss" button on every "Awaiting coach reply" card and every "Posting > 3 videos / week" card

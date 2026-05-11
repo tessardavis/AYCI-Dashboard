@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -60,6 +60,14 @@ function PastCoaches({ coaches }) {
   // Show top 3 by recency, summarise the rest
   const top = coaches.slice(0, 3);
   const extra = coaches.length - top.length;
+  const fmtSessionDate = (iso) => {
+    if (!iso) return null;
+    try {
+      return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return null;
+    }
+  };
   return (
     <div
       className="mt-2 flex items-center gap-1.5 flex-wrap text-[11px] text-[var(--ayci-ink-muted)]"
@@ -69,18 +77,36 @@ function PastCoaches({ coaches }) {
       <span className="uppercase tracking-wider font-semibold text-[10px]">
         Spoke with
       </span>
-      {top.map((c) => (
-        <span
-          key={c.name}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full font-medium"
-          title={`${c.count} call${c.count > 1 ? "s" : ""}${c.last_at ? ` — last ${new Date(c.last_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`}
-        >
-          {cleanCoachName(c.name)}
-          {c.count > 1 && (
-            <span className="text-[9px] opacity-70">×{c.count}</span>
-          )}
-        </span>
-      ))}
+      {top.map((c) => {
+        const dates = (c.dates || [])
+          .map(fmtSessionDate)
+          .filter(Boolean);
+        // De-dup while preserving most-recent-first ordering
+        const uniqueDates = Array.from(new Set(dates));
+        const timelineTitle = uniqueDates.length
+          ? `Past sessions:\n• ${uniqueDates.join("\n• ")}`
+          : null;
+        return (
+          <span
+            key={c.name}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full font-medium"
+            title={`${c.count} call${c.count > 1 ? "s" : ""}${c.last_at ? ` — last ${new Date(c.last_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`}
+            data-testid={`past-coach-chip-${cleanCoachName(c.name).replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            {cleanCoachName(c.name)}
+            {c.count > 1 && (
+              <span className="text-[9px] opacity-70">×{c.count}</span>
+            )}
+            {timelineTitle && (
+              <Clock
+                className="w-3 h-3 ml-0.5 text-sky-600 cursor-help opacity-80 hover:opacity-100"
+                title={timelineTitle}
+                data-testid="past-coach-timeline-icon"
+              />
+            )}
+          </span>
+        );
+      })}
       {extra > 0 && (
         <span className="text-[10px] opacity-70">+{extra} more</span>
       )}

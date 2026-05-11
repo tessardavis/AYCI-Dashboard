@@ -429,8 +429,17 @@ async def fetch_past_coaches_bulk(db, emails: list[str]) -> dict[str, list[dict]
             continue
         seen.add(em)
         doc = await db.cache.find_one({"key": f"calendly_past_hosts:{em}"})
-        if doc and doc.get("computed_at", "") >= cutoff and isinstance(doc.get("value"), list):
-            out[em] = doc["value"]
+        cached_value = doc.get("value") if doc else None
+        cache_stale = False
+        if isinstance(cached_value, list):
+            # Invalidate pre-`dates`-field cache entries so chips can show
+            # the timeline tooltip with per-session dates.
+            for c in cached_value:
+                if isinstance(c, dict) and c.get("last_at") and not c.get("dates"):
+                    cache_stale = True
+                    break
+        if doc and doc.get("computed_at", "") >= cutoff and isinstance(cached_value, list) and not cache_stale:
+            out[em] = cached_value
         else:
             needed.append(em)
     if not needed:
