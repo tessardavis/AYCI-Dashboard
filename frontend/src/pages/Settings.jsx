@@ -1245,6 +1245,8 @@ function CoachPlaybookSection({ isAdmin }) {
   const [resetting, setResetting] = useState(null);
   const [editingCoaches, setEditingCoaches] = useState(false);
   const [coachEmailsInput, setCoachEmailsInput] = useState("");
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagsInput, setTagsInput] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggs, setLoadingSuggs] = useState(false);
   const [suggAnswers, setSuggAnswers] = useState({});  // ticket_id -> draft answer
@@ -1355,6 +1357,18 @@ function CoachPlaybookSection({ isAdmin }) {
     }
   };
 
+  const saveExcludedTags = async () => {
+    const list = tagsInput.split(",").map((s) => s.trim()).filter(Boolean);
+    try {
+      await apiClient.put("/circle/bot/config", { excluded_member_tags: list });
+      toast.success(`${list.length} excluded tag${list.length === 1 ? "" : "s"} saved`);
+      setEditingTags(false);
+      loadBot();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
   const loadSuggestions = async () => {
     setLoadingSuggs(true);
     try {
@@ -1459,10 +1473,11 @@ function CoachPlaybookSection({ isAdmin }) {
           </div>
           {/* Counters from last poll */}
           {bot?.last_poll_summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-[11px]">
               {[
                 ["Replied", bot.last_poll_summary.replied, "bg-blue-50 border-blue-200 text-blue-900"],
                 ["Escalated", bot.last_poll_summary.escalated, "bg-amber-50 border-amber-200 text-amber-900"],
+                ["Tag-excluded", bot.last_poll_summary.tag_excluded, "bg-pink-50 border-pink-200 text-pink-900"],
                 ["Seeded", bot.last_poll_summary.seeded, "bg-slate-100 border-slate-300 text-slate-800"],
                 ["Human takeover", bot.last_poll_summary.human_takeover, "bg-violet-50 border-violet-200 text-violet-900"],
                 ["Skipped", bot.last_poll_summary.skipped, "bg-slate-50 border-slate-200 text-slate-700"],
@@ -1477,6 +1492,50 @@ function CoachPlaybookSection({ isAdmin }) {
           {(bot?.last_poll_summary?.errors || []).length > 0 && (
             <div className="mt-2 text-[11px] bg-rose-50 border border-rose-200 text-rose-900 rounded px-2 py-1">
               <b>Errors:</b> {bot.last_poll_summary.errors.join(" • ")}
+            </div>
+          )}
+
+          {/* Excluded member tags */}
+          {bot && (
+            <div className="mt-3 pt-3 border-t border-slate-200">
+              <div className="flex items-start justify-between gap-2 flex-wrap mb-1.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">Excluded member tags</div>
+                  <div className="text-[10px] text-[var(--ayci-ink-muted)]">If a student has any of these tags, the bot stays silent (no reply, no ticket) — the coach handles it themselves in Circle.</div>
+                </div>
+                {isAdmin && !editingTags && (
+                  <Button
+                    onClick={() => { setTagsInput((bot.config.excluded_member_tags || []).join(", ")); setEditingTags(true); }}
+                    variant="outline" size="sm"
+                    data-testid="bot-edit-excluded-tags-btn"
+                  >
+                    Edit tags
+                  </Button>
+                )}
+              </div>
+              {editingTags ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="text" value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    placeholder="Circle Member, Autoreply hold, Interview week, AYGI 25/26"
+                    className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1 flex-1 min-w-[280px]"
+                    data-testid="bot-excluded-tags-input"
+                  />
+                  <Button size="sm" onClick={saveExcludedTags} data-testid="bot-excluded-tags-save">Save</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingTags(false)} data-testid="bot-excluded-tags-cancel">Cancel</Button>
+                </div>
+              ) : (
+                <div className="flex gap-1.5 flex-wrap" data-testid="bot-excluded-tags-list">
+                  {(bot.config.excluded_member_tags || []).length === 0 ? (
+                    <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No tags excluded — bot will reply to everyone.</span>
+                  ) : (bot.config.excluded_member_tags || []).map((t) => (
+                    <span key={t} className="text-[11px] bg-pink-50 border border-pink-200 text-pink-900 rounded px-2 py-0.5 font-medium">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1496,11 +1555,15 @@ function CoachPlaybookSection({ isAdmin }) {
                           t.state === "active" ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
                           t.state === "escalated" ? "bg-amber-50 border-amber-200 text-amber-800" :
                           t.state === "human_takeover" ? "bg-violet-50 border-violet-200 text-violet-800" :
+                          t.state === "tag_excluded" ? "bg-pink-50 border-pink-200 text-pink-800" :
                           "bg-slate-100 border-slate-300 text-slate-700"
                         }`}
                       >{t.state}</span>
                       {t.escalation_reason && (
                         <span className="text-[10px] text-amber-700">({t.escalation_reason})</span>
+                      )}
+                      {t.matched_excluded_tags?.length > 0 && (
+                        <span className="text-[10px] text-pink-700">({t.matched_excluded_tags.join(", ")})</span>
                       )}
                       {t.ai_reply_count_today ? (
                         <span className="text-[10px] text-slate-600">{t.ai_reply_count_today} reply{t.ai_reply_count_today > 1 ? "ies" : ""} today</span>
@@ -1515,7 +1578,7 @@ function CoachPlaybookSection({ isAdmin }) {
                       {t.last_activity_at ? `Last activity: ${new Date(t.last_activity_at).toLocaleString("en-GB")}` : ""}
                     </div>
                   </div>
-                  {isAdmin && (t.state === "escalated" || t.state === "human_takeover") && (
+                  {isAdmin && (t.state === "escalated" || t.state === "human_takeover" || t.state === "tag_excluded") && (
                     <Button
                       onClick={() => resetThread(t.thread_uuid)}
                       variant="outline" size="sm"

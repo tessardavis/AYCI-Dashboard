@@ -84,7 +84,7 @@ async def _get_access_token(db, admin_email: str) -> Optional[str]:
 
 
 async def fetch_member(member_id: int | str) -> dict | None:
-    """Return basic member info: {name, email, first_name, profile_url}."""
+    """Return basic member info + tags: {name, email, first_name, profile_url, tags}."""
     async with httpx.AsyncClient(timeout=15) as c:
         try:
             r = await c.get(f"{ADMIN_BASE}/community_members/{member_id}", headers=_admin_headers())
@@ -96,13 +96,47 @@ async def fetch_member(member_id: int | str) -> dict | None:
         name = (d.get("name")
                 or " ".join(filter(None, [d.get("first_name"), d.get("last_name")])).strip()
                 or d.get("public_uid"))
+        tags = [t.get("name") for t in (d.get("member_tags") or []) if t.get("name")]
         return {
             "id": d.get("id"),
             "name": name,
             "first_name": d.get("first_name") or (name or "").split(" ")[0],
             "email": (d.get("email") or "").lower(),
             "profile_url": d.get("profile_url"),
+            "tags": tags,
         }
+
+
+async def fetch_member_cached(db, member_id: int | str, max_age_hours: int = 6) -> dict | None:
+    """`fetch_member` with a MongoDB cache so we don't re-call Circle Admin
+    API for every poll cycle. Cache key: `circle_members_cache.{member_id}`."""
+    try:
+        mid_int = int(member_id)
+    except (TypeError, ValueError):
+        return None
+    doc = await db.circle_members_cache.find_one(
+        {"id": f"member:{mid_int}"}, {"_id": 0, "data": 1, "cached_at": 1},
+    )
+    if doc and doc.get("data") and doc.get("cached_at"):
+        try:
+            cached_at = datetime.fromisoformat(doc["cached_at"])
+            if (datetime.now(timezone.utc) - cached_at).total_seconds() < max_age_hours * 3600:
+                return doc["data"]
+        except Exception:
+            pass
+    data = await fetch_member(mid_int)
+    if data:
+        await db.circle_members_cache.update_one(
+            {"id": f"member:{mid_int}"},
+            {"$set": {
+                "id": f"member:{mid_int}",
+                "member_id": mid_int,
+                "data": data,
+                "cached_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    return data
 
 
 async def fetch_latest_dm_message(db, admin_email: str, sender_id: int) -> Optional[str]:

@@ -66,18 +66,26 @@ async def get_config(db) -> dict:
             os.environ.get("CIRCLE_BOT_DEFAULT_COACH_EMAIL")
             or "tessa@medicalinterviewprep.com",
         ],
+        "excluded_member_tags": doc.get("excluded_member_tags") or [
+            "Circle Member", "Autoreply hold", "Interview week", "AYGI 25/26",
+        ],
         "last_poll_at": doc.get("last_poll_at"),
         "last_poll_summary": doc.get("last_poll_summary") or {},
     }
 
 
 async def set_config(db, *, enabled: Optional[bool] = None,
-                     coach_emails: Optional[list[str]] = None) -> dict:
+                     coach_emails: Optional[list[str]] = None,
+                     excluded_member_tags: Optional[list[str]] = None) -> dict:
     update = {}
     if enabled is not None:
         update["enabled"] = bool(enabled)
     if coach_emails is not None:
         update["coach_emails"] = [e.strip().lower() for e in coach_emails if e.strip()]
+    if excluded_member_tags is not None:
+        # Preserve original casing for display, but the match below is
+        # case-insensitive so casing doesn't actually matter at runtime.
+        update["excluded_member_tags"] = [t.strip() for t in excluded_member_tags if t.strip()]
     if update:
         update["id"] = _settings_id()
         await db.app_settings.update_one(
@@ -182,7 +190,7 @@ def _holding_handoff(student_first: str, coach_name: str) -> str:
 # --------------------------------------------------------- Per-thread processor
 async def _process_thread(
     db, *, admin_email: str, admin_member_id: int, coach_name: str,
-    thread: dict,
+    thread: dict, excluded_tags_lower: set[str],
 ) -> dict:
     """Returns a small dict for the poll summary."""
     chat_room_uuid = thread.get("chat_room_uuid")
@@ -195,8 +203,8 @@ async def _process_thread(
 
     state = await _get_thread_state(db, chat_room_uuid)
 
-    # Already escalated / human took over — silent.
-    if state and state.get("state") in ("escalated", "human_takeover"):
+    # Already escalated / human took over / tag-excluded — silent.
+    if state and state.get("state") in ("escalated", "human_takeover", "tag_excluded"):
         return {"skipped": state["state"]}
 
     # Fast-path: skip threads with no new messages.
@@ -283,6 +291,23 @@ async def _process_thread(
             "last_seen_message_id": latest_id,
         })
         return {"skipped": "empty_body"}
+
+    # ---- Tag exclusion check ---------------------------------------------
+    # If the student carries any excluded member tag (e.g. "Interview week",
+    # "Autoreply hold"), the bot stays completely silent — no reply, no
+    # ticket, no Slack. The coach handles it themselves in Circle.
+    if excluded_tags_lower:
+        member = await circle_api.fetch_member_cached(db, student_id)
+        student_tags = [(t or "").lower() for t in (member or {}).get("tags") or []]
+        matched = [t for t in student_tags if t in excluded_tags_lower]
+        if matched:
+            await _save_thread_state(db, chat_room_uuid, {
+                "state": "tag_excluded",
+                "last_seen_message_id": latest_id,
+                "matched_excluded_tags": matched,
+                "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return {"tag_excluded": chat_room_uuid, "tags": matched}
 
     first = (student_name or "there").split(" ")[0]
     today = _today_str()
@@ -442,11 +467,12 @@ async def _escalate_and_reply(
 async def poll_once(db) -> dict:
     """Single poll cycle across all enabled coach admins."""
     cfg = await get_config(db)
+    excluded_tags_lower = {(t or "").lower() for t in cfg.get("excluded_member_tags") or []}
     summary = {
         "started_at": datetime.now(timezone.utc).isoformat(),
         "enabled": cfg["enabled"],
         "coaches": [], "replied": 0, "escalated": 0, "seeded": 0,
-        "human_takeover": 0, "skipped": 0, "errors": [],
+        "human_takeover": 0, "skipped": 0, "tag_excluded": 0, "errors": [],
     }
     if not cfg["enabled"]:
         return summary
@@ -487,6 +513,7 @@ async def poll_once(db) -> dict:
                         db, admin_email=admin_email,
                         admin_member_id=admin_member_id,
                         coach_name=coach_name, thread=t,
+                        excluded_tags_lower=excluded_tags_lower,
                     )
                     per_coach["actions"].append(res)
                     if res.get("replied"):
@@ -497,6 +524,8 @@ async def poll_once(db) -> dict:
                         summary["seeded"] += 1
                     if res.get("human_takeover"):
                         summary["human_takeover"] += 1
+                    if res.get("tag_excluded"):
+                        summary["tag_excluded"] += 1
                     if res.get("skipped"):
                         summary["skipped"] += 1
                 except Exception as e:

@@ -121,6 +121,7 @@ async def list_dm_events(admin: dict = Depends(require_admin), limit: int = 30):
 class BotConfigUpdate(BaseModel):
     enabled: bool | None = None
     coach_emails: list[str] | None = None
+    excluded_member_tags: list[str] | None = None
 
 
 @router.get("/bot/status")
@@ -132,7 +133,7 @@ async def bot_status(admin: dict = Depends(require_admin)):
         {}, {"_id": 0},
     ).sort("last_activity_at", -1).limit(50).to_list(50)
     return {
-        "config": {k: cfg.get(k) for k in ("enabled", "coach_emails")},
+        "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags")},
         "last_poll_at": cfg.get("last_poll_at"),
         "last_poll_summary": cfg.get("last_poll_summary") or {},
         "threads": threads,
@@ -144,8 +145,9 @@ async def bot_config_update(body: BotConfigUpdate, admin: dict = Depends(require
     import circle_dm_poll
     cfg = await circle_dm_poll.set_config(
         db, enabled=body.enabled, coach_emails=body.coach_emails,
+        excluded_member_tags=body.excluded_member_tags,
     )
-    return {"ok": True, "config": {k: cfg.get(k) for k in ("enabled", "coach_emails")}}
+    return {"ok": True, "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags")}}
 
 
 @router.post("/bot/poll-now")

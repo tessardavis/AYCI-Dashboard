@@ -12,6 +12,12 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-12 — Tag-based exclusion (mirrors Circle workflow audience filter)
+- **New behaviour:** When a Circle DM arrives from a member who has any tag in the configured `excluded_member_tags` list, the bot stays completely silent — no reply, no ticket, no Slack. Thread state recorded as `tag_excluded`. Mirrors the user's existing Circle workflow audience filter (which excludes audiences tagged "Circle Member", "Autoreply hold", "Interview week", "AYGI 25/26").
+- **Member tag lookup**: extended `circle_api.fetch_member` to also return `tags` (from `member_tags[].name`). Added `fetch_member_cached(db, member_id)` with a 6-hour `circle_members_cache` cache so we don't slam the Admin API every poll cycle.
+- **Bot config**: new field `excluded_member_tags` (defaults to the 4 tags from the user's Circle workflow screenshot). Editable via `PUT /api/circle/bot/config` and surfaced in Settings → Bot with chip display + comma-separated editor. Case-insensitive matching.
+- **UI**: New "Excluded member tags" section below the polling status, with chips for each excluded tag and Edit/Save inline. Watched-threads list now shows `tag_excluded` pink pill state + matched tags. New `tag_excluded` counter in the last-poll summary grid. Tag-excluded threads can be re-armed (drop the state doc) just like escalated/human_takeover.
+
 ### 2026-05-12 — Circle DM Bot: playbook suggestions, coach config UI, starter playbook
 - **Self-improving playbook (`/bot/playbook-suggestions`)**: Whenever the bot escalates a Circle DM with reason=`playbook_miss`, the student's question surfaces in **Settings → Bot → Playbook suggestions** with their name, timestamp, and a textarea to write the answer. Clicking "Add to playbook" appends `- **{question}** {answer}` to the coach playbook and marks the ticket `suggestion_status: added`. Clicking "Dismiss" stores `suggestion_status: dismissed`. Two endpoints: `GET /api/circle/bot/playbook-suggestions`, `POST /api/circle/bot/playbook-suggestions/{ticket_id}/handle`.
 - **Per-coach config UI**: New "Edit coaches" button in **Settings → Bot → Polling status** lets the admin update `coach_emails` (comma-separated). Backed by existing `PUT /api/circle/bot/config`. Lays groundwork for extending the bot to Coralie + other coaches.
