@@ -42,8 +42,10 @@ function PublicOnly() {
 
 function BoardGuard({ board, children }) {
   const { user } = useAuth();
-  if (!userCanAccess(user, board)) {
-    return <NotAuthorized board={board} />;
+  // Accept a list of acceptable boards (any one grants access)
+  const boards = Array.isArray(board) ? board : [board];
+  if (!boards.some((b) => userCanAccess(user, b))) {
+    return <NotAuthorized board={boards.join(" / ")} />;
   }
   return children;
 }
@@ -71,7 +73,7 @@ function App() {
                 <Route path="/leaderboard" element={<BoardGuard board="leaderboard"><CohortLeaderboard /></BoardGuard>} />
                 <Route path="/tickets" element={<BoardGuard board="tickets"><SupportTickets /></BoardGuard>} />
                 <Route path="/private-videos" element={<BoardGuard board="private_videos"><PrivateVideos /></BoardGuard>} />
-                <Route path="/settings" element={<BoardGuard board="settings"><Settings /></BoardGuard>} />
+                <Route path="/settings" element={<BoardGuard board={["settings","bot"]}><Settings /></BoardGuard>} />
                 <Route path="/profile" element={<Profile />} />
               </Route>
             </Route>

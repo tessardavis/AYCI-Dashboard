@@ -79,7 +79,7 @@ class PlaybookUpdate(BaseModel):
 
 
 @router.get("/coach-playbook")
-async def get_coach_playbook(admin: dict = Depends(require_admin)):
+async def get_coach_playbook(user: dict = Depends(require_board("bot"))):
     doc = await db.app_settings.find_one({"id": "coach_playbook"}, {"_id": 0, "text": 1, "updated_at": 1, "updated_by_name": 1})
     return {
         "text": (doc or {}).get("text") or circle_dm_bot.DEFAULT_PLAYBOOK,
@@ -91,7 +91,7 @@ async def get_coach_playbook(admin: dict = Depends(require_admin)):
 
 @router.put("/coach-playbook")
 async def update_coach_playbook(
-    body: PlaybookUpdate, admin: dict = Depends(require_admin),
+    body: PlaybookUpdate, user: dict = Depends(require_board("bot")),
 ):
     await db.app_settings.update_one(
         {"id": "coach_playbook"},
@@ -99,7 +99,7 @@ async def update_coach_playbook(
             "id": "coach_playbook",
             "text": body.text.strip(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            "updated_by_name": admin.get("name"),
+            "updated_by_name": user.get("name"),
         }},
         upsert=True,
     )
@@ -108,7 +108,7 @@ async def update_coach_playbook(
 
 # --- Recent DM events (admin debug view) ------------------------------------
 @router.get("/dm-events")
-async def list_dm_events(admin: dict = Depends(require_admin), limit: int = 30):
+async def list_dm_events(user: dict = Depends(require_board("bot")), limit: int = 30):
     """Last N raw webhook payloads we received from Circle. Useful for
     debugging the Workflow setup and seeing exactly what Circle sends us."""
     rows = await db.circle_dm_events.find(
@@ -122,10 +122,11 @@ class BotConfigUpdate(BaseModel):
     enabled: bool | None = None
     coach_emails: list[str] | None = None
     excluded_member_tags: list[str] | None = None
+    tag_exclusion_coach_emails: list[str] | None = None
 
 
 @router.get("/bot/status")
-async def bot_status(admin: dict = Depends(require_admin)):
+async def bot_status(user: dict = Depends(require_board("bot"))):
     """Polling bot status + recent thread state. Used by Settings → Bot tab."""
     import circle_dm_poll
     cfg = await circle_dm_poll.get_config(db)
@@ -133,7 +134,7 @@ async def bot_status(admin: dict = Depends(require_admin)):
         {}, {"_id": 0},
     ).sort("last_activity_at", -1).limit(50).to_list(50)
     return {
-        "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags")},
+        "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags", "tag_exclusion_coach_emails")},
         "last_poll_at": cfg.get("last_poll_at"),
         "last_poll_summary": cfg.get("last_poll_summary") or {},
         "threads": threads,
@@ -141,24 +142,25 @@ async def bot_status(admin: dict = Depends(require_admin)):
 
 
 @router.put("/bot/config")
-async def bot_config_update(body: BotConfigUpdate, admin: dict = Depends(require_admin)):
+async def bot_config_update(body: BotConfigUpdate, user: dict = Depends(require_board("bot"))):
     import circle_dm_poll
     cfg = await circle_dm_poll.set_config(
         db, enabled=body.enabled, coach_emails=body.coach_emails,
         excluded_member_tags=body.excluded_member_tags,
+        tag_exclusion_coach_emails=body.tag_exclusion_coach_emails,
     )
-    return {"ok": True, "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags")}}
+    return {"ok": True, "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags", "tag_exclusion_coach_emails")}}
 
 
 @router.post("/bot/poll-now")
-async def bot_poll_now(admin: dict = Depends(require_admin)):
+async def bot_poll_now(user: dict = Depends(require_board("bot"))):
     """Force a single poll cycle for testing without waiting for the cron."""
     import circle_dm_poll
     return await circle_dm_poll.poll_once(db)
 
 
 @router.post("/bot/reset-thread/{thread_uuid}")
-async def bot_reset_thread(thread_uuid: str, admin: dict = Depends(require_admin)):
+async def bot_reset_thread(thread_uuid: str, user: dict = Depends(require_board("bot"))):
     """Drop the state doc for a thread so the bot re-engages on the next poll
     (seeds fresh — doesn't reply to backlog, only to new messages)."""
     import circle_dm_poll
@@ -167,7 +169,7 @@ async def bot_reset_thread(thread_uuid: str, admin: dict = Depends(require_admin
 
 
 @router.get("/bot/diagnose")
-async def bot_diagnose(admin: dict = Depends(require_admin)):
+async def bot_diagnose(user: dict = Depends(require_board("bot"))):
     """Read-only snapshot of every coach admin's DM inbox as Circle's
     Headless API sees it. Use this to verify a test DM actually landed in
     the right inbox before troubleshooting the bot itself."""
@@ -296,7 +298,7 @@ async def reply_to_circle_ticket(
 
 # --- Playbook suggestions (self-improving bot) -----------------------------
 @router.get("/bot/playbook-suggestions")
-async def list_playbook_suggestions(admin: dict = Depends(require_admin), limit: int = 30):
+async def list_playbook_suggestions(user: dict = Depends(require_board("bot")), limit: int = 30):
     """Tickets the bot escalated with reason=playbook_miss that haven't been
     dismissed yet. These are real student questions the playbook could be
     extended to cover. Returns the question, ticket id, student name, and
@@ -335,7 +337,7 @@ class PlaybookSuggestionAction(BaseModel):
 @router.post("/bot/playbook-suggestions/{ticket_id}/handle")
 async def handle_playbook_suggestion(
     ticket_id: str, body: PlaybookSuggestionAction,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(require_board("bot")),
 ):
     """Either dismiss the suggestion (no playbook change), or accept it by
     appending a new Q/A pair to the coach playbook and marking the ticket
@@ -376,8 +378,8 @@ async def handle_playbook_suggestion(
             "id": "coach_playbook",
             "text": new_text,
             "updated_at": now,
-            "updated_by": admin.get("id"),
-            "updated_by_name": admin.get("name") or admin.get("email"),
+            "updated_by": user.get("id"),
+            "updated_by_name": user.get("name") or user.get("email"),
         }},
         upsert=True,
     )

@@ -12,6 +12,13 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-12 — Per-coach scoped tag exclusion + Coralie bot access
+- **Tessa-only tag exclusion (default):** New config field `tag_exclusion_coach_emails` (defaults to `[tessa@medicalinterviewprep.com]`). The excluded_member_tags list only applies to coaches in this list — other coaches auto-reply to everyone regardless of tags. Editable via `PUT /api/circle/bot/config` + a new editor in Settings → Bot. Implemented by passing `excluded_tags_lower` set to `_poll_one_coach` only when the coach is in the scope list.
+- **New `bot` board permission** added to `ALL_BOARDS`. All Circle bot endpoints (`/circle/bot/*`, `/circle/coach-playbook` GET/PUT, `/circle/dm-events`) switched from `require_admin` → `require_board("bot")`. Admins still pass (role-bypass in `user_has_board`).
+- **Settings page** now accessible to users with `bot` OR `settings` board (was admin-only). Non-admins see only the Bot tab; admin sees all 9 tabs. Default tab = `bot` for non-admins. `BoardGuard` extended to accept a list of acceptable boards (any-match grants access). `userCanAccess` extended likewise.
+- **Coralie** (`coralie@medicalinterviewprep.com`) granted the `bot` board so she can now see Settings → Bot, edit the Coach Playbook, view bot status, handle playbook suggestions, and toggle the bot — without admin access to other settings.
+- **Files:** `backend/deps.py` (+`bot` board), `backend/routes/circle.py` (auth guards), `backend/circle_dm_poll.py` (`tag_exclusion_coach_emails` config field + scoped exclusion), `frontend/src/App.js` (`BoardGuard` array support), `frontend/src/components/AppShell.jsx` (`userCanAccess` array support, `/settings` accessible via `bot`), `frontend/src/pages/Settings.jsx` (tab visibility + new editor), `frontend/src/pages/Settings.jsx` (CoachPlaybookSection `tag_exclusion_coach_emails` editor).
+
 ### 2026-05-12 — 5-coach rollout: Tessa + Coralie + Oksana + Becky + Anoop
 - **Bot now watches 5 admin inboxes:** `tessa@medicalinterviewprep.com`, `coralie.fairon@yahoo.co.uk`, `oksana.demchenko.2000@ukr.net`, `becky.platt2@nhs.net`, `anoop.chidam@gmail.com`. Each got an authorised Headless API token via the existing `CIRCLE_HEADLESS_TOKEN` exchange. All 5 token caches succeeded; 0 errors on first poll.
 - **Initial seed:** ~1,341 DM threads recorded across the 5 coaches (state=active, last_seen=latest_message_id) so the bot doesn't auto-reply to historical backlog. Future polls only act on truly-new student messages.

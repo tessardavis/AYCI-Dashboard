@@ -69,6 +69,9 @@ async def get_config(db) -> dict:
         "excluded_member_tags": doc.get("excluded_member_tags") or [
             "Circle Member", "Autoreply hold", "Interview week", "AYGI 25/26",
         ],
+        "tag_exclusion_coach_emails": doc.get("tag_exclusion_coach_emails") or [
+            "tessa@medicalinterviewprep.com",
+        ],
         "last_poll_at": doc.get("last_poll_at"),
         "last_poll_summary": doc.get("last_poll_summary") or {},
     }
@@ -76,16 +79,17 @@ async def get_config(db) -> dict:
 
 async def set_config(db, *, enabled: Optional[bool] = None,
                      coach_emails: Optional[list[str]] = None,
-                     excluded_member_tags: Optional[list[str]] = None) -> dict:
+                     excluded_member_tags: Optional[list[str]] = None,
+                     tag_exclusion_coach_emails: Optional[list[str]] = None) -> dict:
     update = {}
     if enabled is not None:
         update["enabled"] = bool(enabled)
     if coach_emails is not None:
         update["coach_emails"] = [e.strip().lower() for e in coach_emails if e.strip()]
     if excluded_member_tags is not None:
-        # Preserve original casing for display, but the match below is
-        # case-insensitive so casing doesn't actually matter at runtime.
         update["excluded_member_tags"] = [t.strip() for t in excluded_member_tags if t.strip()]
+    if tag_exclusion_coach_emails is not None:
+        update["tag_exclusion_coach_emails"] = [e.strip().lower() for e in tag_exclusion_coach_emails if e.strip()]
     if update:
         update["id"] = _settings_id()
         await db.app_settings.update_one(
@@ -516,6 +520,7 @@ async def poll_once(db) -> dict:
     import asyncio
     cfg = await get_config(db)
     excluded_tags_lower = {(t or "").lower() for t in cfg.get("excluded_member_tags") or []}
+    tag_excl_coaches_lower = {(e or "").lower() for e in cfg.get("tag_exclusion_coach_emails") or []}
     summary = {
         "started_at": datetime.now(timezone.utc).isoformat(),
         "enabled": cfg["enabled"],
@@ -526,7 +531,10 @@ async def poll_once(db) -> dict:
         return summary
 
     results = await asyncio.gather(
-        *[_poll_one_coach(db, e, excluded_tags_lower) for e in cfg["coach_emails"]],
+        *[_poll_one_coach(
+            db, e,
+            excluded_tags_lower if e.lower() in tag_excl_coaches_lower else set(),
+        ) for e in cfg["coach_emails"]],
         return_exceptions=True,
     )
     for admin_email, per_coach in zip(cfg["coach_emails"], results):

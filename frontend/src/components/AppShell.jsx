@@ -50,13 +50,16 @@ const NAV_GROUPS = [
     label: "Settings",
     icon: SettingsIcon,
     testid: "sidebar-nav-settings",
-    board: "settings",
+    board: ["settings", "bot"],
   },
 ];
 
 export function userCanAccess(user, board) {
   if (!user) return false;
   if (user.role === "admin") return true;
+  if (Array.isArray(board)) {
+    return board.some((b) => (user.board_access || []).includes(b));
+  }
   return (user.board_access || []).includes(board);
 }
 

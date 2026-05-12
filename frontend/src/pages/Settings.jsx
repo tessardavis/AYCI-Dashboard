@@ -42,44 +42,45 @@ const CATEGORIES = [
 export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const hasBot = isAdmin || (user?.board_access || []).includes("bot");
 
   return (
     <div className="p-4 sm:p-6 lg:p-12 ayci-fade-up">
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description={isAdmin ? "Manage team members, scorecard metrics, rocks and launches." : "View workspace configuration."}
+        description={isAdmin ? "Manage team members, scorecard metrics, rocks and launches." : "Manage the Circle DM bot and its playbook."}
       />
 
       {!isAdmin && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-4 py-3 mb-6">
-          Admin access is required to modify settings. Ask your admin for changes.
+          You have access to the Bot tab only. Ask an admin if you need access to other settings.
         </div>
       )}
 
-      <Tabs defaultValue="team" className="w-full">
+      <Tabs defaultValue={isAdmin ? "team" : "bot"} className="w-full">
         <div className="overflow-x-auto -mx-1 px-1 mb-6">
           <TabsList className="w-max">
-            <TabsTrigger value="team" data-testid="settings-tab-team">Team</TabsTrigger>
-            <TabsTrigger value="users" data-testid="settings-tab-users">Users</TabsTrigger>
-            <TabsTrigger value="metrics" data-testid="settings-tab-metrics">Metrics</TabsTrigger>
-            <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>
-            <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>
-            <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
-            <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
-            <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="bot" data-testid="settings-tab-bot">Bot</TabsTrigger>
+            {isAdmin && <TabsTrigger value="team" data-testid="settings-tab-team">Team</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="users" data-testid="settings-tab-users">Users</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="metrics" data-testid="settings-tab-metrics">Metrics</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="rocks" data-testid="settings-tab-rocks">Rocks</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>}
+            {hasBot && <TabsTrigger value="bot" data-testid="settings-tab-bot">Bot</TabsTrigger>}
           </TabsList>
         </div>
-        <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="metrics"><MetricsSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="rocks"><RocksSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="bot"><CoachPlaybookSection isAdmin={isAdmin} /></TabsContent>
+        {isAdmin && <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="users"><UsersSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="metrics"><MetricsSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="rocks"><RocksSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>}
+        {hasBot && <TabsContent value="bot"><CoachPlaybookSection isAdmin={hasBot} /></TabsContent>}
       </Tabs>
     </div>
   );
@@ -314,6 +315,7 @@ const BOARD_LABELS = {
   interviews: "Upcoming Interviews",
   students: "Student Lookup",
   at_risk: "Students at Risk",
+  bot: "Circle DM Bot",
 };
 
 function UsersSection({ isAdmin }) {
@@ -1247,6 +1249,8 @@ function CoachPlaybookSection({ isAdmin }) {
   const [coachEmailsInput, setCoachEmailsInput] = useState("");
   const [editingTags, setEditingTags] = useState(false);
   const [tagsInput, setTagsInput] = useState("");
+  const [editingExclCoaches, setEditingExclCoaches] = useState(false);
+  const [exclCoachesInput, setExclCoachesInput] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggs, setLoadingSuggs] = useState(false);
   const [suggAnswers, setSuggAnswers] = useState({});  // ticket_id -> draft answer
@@ -1363,6 +1367,18 @@ function CoachPlaybookSection({ isAdmin }) {
       await apiClient.put("/circle/bot/config", { excluded_member_tags: list });
       toast.success(`${list.length} excluded tag${list.length === 1 ? "" : "s"} saved`);
       setEditingTags(false);
+      loadBot();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const saveExclCoaches = async () => {
+    const list = exclCoachesInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    try {
+      await apiClient.put("/circle/bot/config", { tag_exclusion_coach_emails: list });
+      toast.success(`Tag exclusion applies to ${list.length} coach${list.length === 1 ? "" : "es"}`);
+      setEditingExclCoaches(false);
       loadBot();
     } catch (err) {
       toast.error("Save failed: " + (err.response?.data?.detail || err.message));
@@ -1536,6 +1552,47 @@ function CoachPlaybookSection({ isAdmin }) {
                   ))}
                 </div>
               )}
+              {/* Which coaches the exclusion applies to */}
+              <div className="mt-2 pt-2 border-t border-slate-100">
+                <div className="flex items-start justify-between gap-2 flex-wrap mb-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">Exclusion applies to</div>
+                    <div className="text-[10px] text-[var(--ayci-ink-muted)]">Coaches whose DMs respect the excluded tags above. Other coaches get auto-replies for everyone.</div>
+                  </div>
+                  {isAdmin && !editingExclCoaches && (
+                    <Button
+                      onClick={() => { setExclCoachesInput((bot.config.tag_exclusion_coach_emails || []).join(", ")); setEditingExclCoaches(true); }}
+                      variant="outline" size="sm"
+                      data-testid="bot-edit-excl-coaches-btn"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {editingExclCoaches ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="text" value={exclCoachesInput}
+                      onChange={(e) => setExclCoachesInput(e.target.value)}
+                      placeholder="tessa@…"
+                      className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1 flex-1 min-w-[280px]"
+                      data-testid="bot-excl-coaches-input"
+                    />
+                    <Button size="sm" onClick={saveExclCoaches} data-testid="bot-excl-coaches-save">Save</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingExclCoaches(false)} data-testid="bot-excl-coaches-cancel">Cancel</Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5 flex-wrap" data-testid="bot-excl-coaches-list">
+                    {(bot.config.tag_exclusion_coach_emails || []).length === 0 ? (
+                      <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No coaches selected — exclusion currently disabled.</span>
+                    ) : (bot.config.tag_exclusion_coach_emails || []).map((e) => (
+                      <span key={e} className="text-[11px] bg-slate-100 border border-slate-300 text-slate-700 rounded px-2 py-0.5 font-medium">
+                        {e}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
