@@ -28,16 +28,16 @@ A single-page view where the team searches a student by email and sees a unified
 - Backend: `GET /api/coach-activity/over-allowance/acks`.
 
 ### 2026-05-12 — Circle DM Bot (AI auto-responder for community DMs)
-- **What it does**: when a student DMs a coach on Circle, instead of the canned "we don't check DMs" message they get either (a) a helpful AI reply drawn from the Coach Playbook, signed with the coach's name and an AI-disclosure prefix; or (b) a "passed to the team — they'll respond within 24h" holding reply with a ticket auto-created and routed to Coralie.
-- **Sensitive-topic escalation**: messages containing words like `refund / complaint / urgent / lawyer / scam` skip the AI resolve entirely → holding reply + `urgent`-priority ticket + Slack DM to Coralie.
-- **Tickets**: every DM creates a `source: "circle_dm"` ticket with `circle_dm_meta.{coach_name, escalation_reason, ai_resolved}`. AI-resolved tickets auto-close as `low / resolved` (audit only); escalations stay `open` for the team.
-- **Knowledge base**: admin-editable plain-text "Coach Playbook" stored in `app_settings.coach_playbook` (max 8000 chars), edited in Settings → Bot. Default playbook seeded with the FAQ items the team already uses. Sensitive topics never go in here — they're always escalated regardless.
-- **Webhook**: `POST /api/circle/dm-webhook` returns `{reply_text, escalated, ai_resolved, ticket_id}` synchronously so Circle's workflow can pick up the AI text in the next "Send DM" step. HMAC-SHA256-signed via `X-Circle-Signature` if `CIRCLE_DM_WEBHOOK_SECRET` env var is set; falls open without one for dev.
-- **Debug**: `GET /api/circle/dm-events` (last 30 raw payloads) lets admin inspect what Circle is sending. Visible in Settings → Bot tab via "Load latest 20".
-- **Audit log**: every webhook payload is persisted to `circle_dm_events` collection for replay.
-- **Setup**: documented in Settings → Bot tab with the live webhook URL + example JSON body + 4-step Circle Workflow wiring instructions. User has to do this once on Circle's side; everything else is code-driven.
-- **Verified**: 3 e2e test cases passed — FAQ resolve (Tally form question → AI answer with disclosure), refund escalation (`reason: "refund"` + urgent ticket), off-playbook CV question (clean handoff). All three created tickets with the right priority/status/assignee.
-- Files: `/app/backend/circle_dm_bot.py`, `/app/backend/routes/circle.py`, `/app/backend/server.py` (router registration), `/app/frontend/src/pages/Settings.jsx` (Bot tab + `CoachPlaybookSection`).
+- **Problem unpacked**: Circle's "Send to webhook" action sends a lean payload (`{type, data: {community_id, admin_community_member_id, sender_community_member_id}}`) with **no names, no email, no message body**. Body access requires the Headless API on Plus tier.
+- **Solution shipped**: graceful two-mode operation. Without `CIRCLE_HEADLESS_TOKEN`, the bot resolves both members from Admin API (names + emails come through fine), creates an urgent ticket auto-assigned to Coralie with `escalation_reason: "no_message_body"`, Slack-DMs Coralie immediately, and sends a holding reply to the student. With a Headless token added, the bot ALSO fetches the latest message body for the AI resolve attempt.
+- **Stack**: `circle_api.py` (member lookup + headless message fetch helper), `circle_dm_bot.py` (orchestration + AI logic), `routes/circle.py` (webhook + playbook admin endpoints), Settings → Bot tab (`CoachPlaybookSection`).
+- **Sensitive-topic escalation**: messages containing `refund / complaint / urgent / lawyer / scam` skip AI resolve → holding reply + urgent ticket + Slack DM.
+- **Tickets**: `source: "circle_dm"` with `circle_dm_meta.{coach_name, escalation_reason, ai_resolved}`. AI-resolved tickets auto-close as `low / resolved` (audit only).
+- **Knowledge base**: admin-editable plain-text Coach Playbook in `app_settings.coach_playbook` (max 8000 chars). Default playbook seeded.
+- **Webhook URL**: `POST /api/circle/dm-webhook`. HMAC-SHA256-signed via `X-Circle-Signature` if `CIRCLE_DM_WEBHOOK_SECRET` env var is set; falls open without one.
+- **Audit log**: every webhook payload persisted to `circle_dm_events`.
+- **Verified live** with the real Circle production payload (community_id=125595): resolved Tessa Davis as the coach + Testing as the sender, created urgent ticket assigned to Coralie, generated the correct holding reply.
+- Files: `circle_api.py`, `circle_dm_bot.py`, `routes/circle.py`, `Settings.jsx` (Bot tab + `CoachPlaybookSection`).
 
 ### 2026-05-12 — Reverted AI Draft Reply + Private Video count transparency
 - **Reverted** the AI Draft Reply feature (user reconsidered): removed `ticket_triage.py`, `POST /tickets/{id}/suggest-reply`, `AIReplyDraftPanel`, and the inline Sparkle buttons from both reply panels. Tickets UI is back to its pre-feature state.

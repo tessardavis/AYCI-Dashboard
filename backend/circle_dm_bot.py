@@ -278,18 +278,67 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
     `background` is FastAPI's BackgroundTasks — anything that can wait
     until after the HTTP response (Slack pings, secondary writes) goes here.
 
-    Circle's basic "Send to webhook" action doesn't let us customise the
-    payload, so we accept ANY shape and try to find the relevant fields by
-    duck-typing. Common Circle payload shapes we know about:
-      • Flat: {sender_name, sender_email, coach_name, message}
-      • Nested under `data`: {data: {member: {...}, admin: {...}, message: {...}}}
-      • Workflow context: {member_name, member_email, admin_name, message_body}
-      • DM-specific: {chat_thread: {...}, message_body, sender: {...}}
+    Circle's "Send to webhook" action sends a minimal payload by default:
+        {
+          "type": "community_member_sent_dm_to_admin",
+          "data": {
+            "community_id": ...,
+            "admin_community_member_id": ...,
+            "sender_community_member_id": ...
+          }
+        }
+    No names, no email, no message body. So we:
+      1. Look up both members via the Admin API for names/emails
+      2. Try the Headless API (if CIRCLE_HEADLESS_TOKEN is set) for the
+         message body. If that fails or isn't configured, we skip AI resolve
+         and fall back to a holding reply + Coralie-routed ticket.
     """
+    import circle_api
+
     sender_name, sender_email, coach_name, message = _extract_dm_fields(payload)
+
+    # If the webhook used only IDs, hydrate names/emails from the Admin API.
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else None
+    sender_id = (data or payload).get("sender_community_member_id") or (data or payload).get("sender_id")
+    admin_id = (data or payload).get("admin_community_member_id") or (data or payload).get("admin_id")
+    if sender_id and (sender_name == "there" or not sender_email):
+        m = await circle_api.fetch_member(sender_id)
+        if m:
+            sender_name = m["name"] or sender_name
+            sender_email = m["email"] or sender_email
+    if admin_id and coach_name == "the team":
+        m = await circle_api.fetch_member(admin_id)
+        if m:
+            coach_name = m["name"] or coach_name
+
+    # If we still don't have the message body, try Headless (Plus-tier).
+    if not message and sender_id and admin_id:
+        body = await circle_api.fetch_latest_dm_message(int(admin_id), int(sender_id))
+        if body:
+            message = body
     if not message:
-        return {"reply_text": _holding_reply(sender_name, coach_name),
-                "escalated": False, "ai_resolved": False, "ticket_id": None}
+        # No body to act on — could be a Circle test fire (empty `data`), or
+        # we couldn't reach the Headless API. Create a "team should pick this
+        # up" ticket if we at least know who DM'd whom, otherwise just
+        # acknowledge so Circle's workflow can proceed.
+        if not (sender_id or admin_id):
+            return {"reply_text": _holding_reply("there", coach_name),
+                    "escalated": False, "ai_resolved": False, "ticket_id": None}
+        reply = _holding_reply(sender_name.split(" ")[0], coach_name)
+        ticket_id = await _create_ticket_from_dm(
+            db, sender_name=sender_name, sender_email=sender_email,
+            coach_name=coach_name,
+            message=("(message body not available — open Circle to read)" if not message else message),
+            ai_reply=reply, escalation_reason="no_message_body",
+        )
+        background.add_task(
+            _slack_notify_coralie_urgent, db,
+            sender_name=sender_name, coach_name=coach_name,
+            message="(message body not available — open Circle to read)",
+            ticket_id=ticket_id,
+        )
+        return {"reply_text": reply, "escalated": True, "ai_resolved": False,
+                "ticket_id": ticket_id, "reason": "no_message_body"}
 
     # First-name only, for friendlier salutation
     first = sender_name.split(" ")[0]
