@@ -1342,6 +1342,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     wati as routes_wati,
     private_videos as routes_private_videos,
     today_calls as routes_today_calls,
+    circle as routes_circle,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1350,6 +1351,7 @@ for _r in (
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
     routes_wati.router, routes_private_videos.router, routes_today_calls.router,
+    routes_circle.router,
 ):
     app.include_router(_r)
 

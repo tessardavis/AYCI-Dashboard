@@ -68,6 +68,7 @@ export default function Settings() {
             <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>
             <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>
             <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="bot" data-testid="settings-tab-bot">Bot</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="team"><TeamSection isAdmin={isAdmin} /></TabsContent>
@@ -78,6 +79,7 @@ export default function Settings() {
         <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>
         <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>
+        <TabsContent value="bot"><CoachPlaybookSection isAdmin={isAdmin} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -1223,6 +1225,135 @@ function LaunchesSection({ isAdmin }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </Panel>
+  );
+}
+
+
+
+// ---------------------------------------------------------------- Bot section
+function CoachPlaybookSection({ isAdmin }) {
+  const [text, setText] = useState("");
+  const [meta, setMeta] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/circle/coach-playbook");
+      setText(data.text || "");
+      setMeta({ isDefault: data.is_default, updatedAt: data.updated_at, updatedBy: data.updated_by_name });
+    } catch (err) {
+      toast.error("Failed to load coach playbook");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadEvents = async () => {
+    setLoadingEvents(true);
+    try {
+      const { data } = await apiClient.get("/circle/dm-events", { params: { limit: 20 } });
+      setEvents(data.events || []);
+    } catch (err) {
+      toast.error("Failed to load events");
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiClient.put("/circle/coach-playbook", { text });
+      toast.success("Playbook saved");
+      load();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <Panel
+      title="Circle DM Bot — Coach Playbook"
+      description="Plain text the AI references when answering student DMs on Circle. Keep it concise and factual. The AI will reply NEEDS_HUMAN (i.e. hand off to the team) on anything not clearly covered here, so leaving sensitive topics out is a feature, not a bug. Sensitive keywords (refund, complaint, urgent, etc.) always escalate regardless of playbook."
+    >
+      <div className="p-6 space-y-4">
+        {!isAdmin && (
+          <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+            Only admins can edit the playbook.
+          </div>
+        )}
+        {meta && (
+          <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2 flex-wrap">
+            {meta.isDefault ? (
+              <span className="bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Using default</span>
+            ) : (
+              <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Custom</span>
+            )}
+            {meta.updatedAt && (
+              <span>Last edited {new Date(meta.updatedAt).toLocaleString("en-GB")} by {meta.updatedBy || "—"}</span>
+            )}
+          </div>
+        )}
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={!isAdmin || loading}
+          rows={18}
+          placeholder="Markdown-style FAQ. One topic per line / paragraph."
+          className="w-full font-mono text-xs border border-[var(--ayci-border)] rounded-md px-3 py-2 focus:border-[var(--ayci-teal)] focus:outline-none disabled:opacity-50"
+          data-testid="coach-playbook-textarea"
+        />
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-[11px] text-[var(--ayci-ink-muted)]">{text.length}/8000 chars</span>
+          <Button
+            onClick={save}
+            disabled={!isAdmin || saving || loading || text.trim().length < 10}
+            style={{ backgroundColor: "var(--ayci-accent)" }}
+            data-testid="coach-playbook-save"
+          >
+            {saving ? "Saving…" : "Save playbook"}
+          </Button>
+        </div>
+        <div className="border-t border-[var(--ayci-border)] pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Recent DM events (debug)</h4>
+            <Button onClick={loadEvents} variant="outline" size="sm" data-testid="coach-playbook-load-events">
+              {loadingEvents ? "Loading…" : "Load latest 20"}
+            </Button>
+          </div>
+          {events.length === 0 && !loadingEvents && (
+            <div className="text-xs text-[var(--ayci-ink-muted)]">No events loaded yet — click "Load latest 20" to see what Circle has sent us recently.</div>
+          )}
+          {events.length > 0 && (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto" data-testid="coach-playbook-events">
+              {events.map((e, i) => (
+                <div key={i} className="text-[11px] bg-slate-50 border border-[var(--ayci-border)] rounded px-2 py-1.5">
+                  <div className="opacity-70">{new Date(e.received_at).toLocaleString("en-GB")}</div>
+                  <pre className="whitespace-pre-wrap break-words text-[10px] mt-0.5 font-mono">{JSON.stringify(e.payload, null, 2).slice(0, 600)}</pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-violet-50/60 border border-violet-200 rounded-md p-3 text-[11px] text-violet-900 space-y-1">
+          <div className="font-semibold">Circle Workflow setup (one-time):</div>
+          <ol className="list-decimal pl-4 space-y-0.5">
+            <li>In Circle admin, open the existing "Admin received a direct message" workflow.</li>
+            <li>Replace the canned reply action with a <b>Webhook</b> action: POST to <code>{(window.location.origin || "https://your-dashboard").toString()}/api/circle/dm-webhook</code> with JSON body <code>{`{"sender_name":"{{member.name}}","sender_email":"{{member.email}}","coach_name":"{{admin.name}}","message":"{{message.body}}"}`}</code></li>
+            <li>Add a <b>Send a direct message</b> action right after, body = <code>{`{{webhook.response.reply_text}}`}</code></li>
+            <li>(Optional) Set env var <code>CIRCLE_DM_WEBHOOK_SECRET</code> + sign requests with HMAC SHA-256 as <code>X-Circle-Signature</code> header for security.</li>
+          </ol>
+        </div>
+      </div>
     </Panel>
   );
 }
