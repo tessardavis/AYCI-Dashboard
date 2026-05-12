@@ -162,3 +162,52 @@ async def bot_reset_thread(thread_uuid: str, admin: dict = Depends(require_admin
     import circle_dm_poll
     ok = await circle_dm_poll.reset_thread(db, thread_uuid)
     return {"ok": ok}
+
+
+@router.get("/bot/diagnose")
+async def bot_diagnose(admin: dict = Depends(require_admin)):
+    """Read-only snapshot of every coach admin's DM inbox as Circle's
+    Headless API sees it. Use this to verify a test DM actually landed in
+    the right inbox before troubleshooting the bot itself."""
+    import circle_api
+    import circle_dm_poll
+    cfg = await circle_dm_poll.get_config(db)
+    out = {"coaches": []}
+    for admin_email in cfg["coach_emails"]:
+        admin_id = await circle_api.get_cached_admin_member_id(db, admin_email)
+        if not admin_id:
+            tok = await circle_api._get_access_token(db, admin_email)
+            if tok:
+                admin_id = await circle_api.get_cached_admin_member_id(db, admin_email)
+        threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
+        dms = [t for t in threads if (t.get("chat_room") or {}).get("kind") == "direct"]
+        rows = []
+        for t in dms:
+            pm = t.get("parent_message") or {}
+            participants = pm.get("thread_participants_preview") or []
+            other = next(
+                (p for p in participants
+                 if p.get("community_member_id") and int(p["community_member_id"]) != int(admin_id or 0)),
+                None,
+            )
+            # If admin not in participants, parent_message.sender IS the other party
+            if not other:
+                s = pm.get("sender") or {}
+                if s.get("community_member_id") and int(s["community_member_id"]) != int(admin_id or 0):
+                    other = s
+            rows.append({
+                "uuid": pm.get("chat_room_uuid"),
+                "with": (other or {}).get("name"),
+                "with_member_id": (other or {}).get("community_member_id"),
+                "last_activity_at": pm.get("last_reply_at") or pm.get("sent_at"),
+                "parent_sender": (pm.get("sender") or {}).get("name"),
+            })
+        rows.sort(key=lambda r: r["last_activity_at"] or "", reverse=True)
+        out["coaches"].append({
+            "admin_email": admin_email,
+            "admin_member_id": admin_id,
+            "total_threads": len(threads),
+            "dm_threads": len(dms),
+            "recent_dms": rows[:15],
+        })
+    return out

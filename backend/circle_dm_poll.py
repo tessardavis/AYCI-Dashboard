@@ -452,7 +452,7 @@ async def poll_once(db) -> dict:
                 (coach_info or {}).get("name")
                 or admin_email.split("@")[0].title()
             )
-            threads = await circle_api.list_dm_threads(db, admin_email, per_page=30)
+            threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
             # Only watch 1:1 DMs (not group chats / space chats).
             dm_threads = [
                 t for t in threads

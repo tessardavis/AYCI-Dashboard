@@ -214,24 +214,35 @@ async def get_cached_admin_member_id(db, admin_email: str) -> Optional[int]:
 
 
 async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict]:
-    """All Direct-Message chat threads visible to `admin_email`."""
+    """All Direct-Message chat threads visible to `admin_email`.
+
+    Pages through Circle's results so we don't miss threads. Circle defaults
+    to ~30 per page but the user typically has 50-100+ direct threads.
+    """
     access_token = await _get_access_token(db, admin_email)
     if not access_token:
         return []
+    all_records: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as c:
-        try:
-            r = await c.get(
-                f"{HEADLESS_BASE}/chat_threads",
-                headers={"Authorization": f"Bearer {access_token}"},
-                params={"per_page": per_page},
-            )
-            if r.status_code != 200:
-                logger.warning(f"[circle-api] list_dm_threads failed: {r.status_code} {r.text[:160]}")
-                return []
-            return r.json().get("records") or []
-        except Exception as e:
-            logger.warning(f"[circle-api] list_dm_threads errored: {e}")
-            return []
+        for page in range(1, 6):  # safety cap at 5 pages = 500 threads
+            try:
+                r = await c.get(
+                    f"{HEADLESS_BASE}/chat_threads",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"per_page": min(per_page, 100), "page": page},
+                )
+                if r.status_code != 200:
+                    logger.warning(f"[circle-api] list_dm_threads p{page} failed: {r.status_code} {r.text[:120]}")
+                    break
+                body = r.json()
+                recs = body.get("records") or []
+                all_records.extend(recs)
+                if not body.get("has_next_page"):
+                    break
+            except Exception as e:
+                logger.warning(f"[circle-api] list_dm_threads errored: {e}")
+                break
+    return all_records
 
 
 async def list_thread_messages_for_admin(
