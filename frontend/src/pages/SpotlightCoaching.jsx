@@ -453,7 +453,11 @@ function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate })
   const days = student.days_until_interview;
   const interviewSoon = days !== null && days !== undefined && days <= 7;
   const lbRank = student.leaderboard_rank;
-  const topLeaderboard = lbRank && lbRank <= 3;
+  const cohortRank = student.cohort_leaderboard_rank;
+  // Only flag as "top of leaderboard" when they're genuinely in the cohort
+  // top 10 — earlier this was using session-local rank which gave misleading
+  // "#1 leaderboard" chips for students who were actually rank #33 cohort-wide.
+  const topLeaderboard = cohortRank && cohortRank <= 3;
   // Highlight top 3 rows of the table itself with a gold left-border so the
   // priority is unmistakable at a glance.
   const topPriority = index < 3;
@@ -486,7 +490,7 @@ function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate })
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-[var(--ayci-ink)]">{student.name}</span>
           {topLeaderboard ? (
-            <LeaderboardRankPill rank={lbRank} score={student.leaderboard_score} />
+            <LeaderboardRankPill rank={cohortRank} score={student.leaderboard_score} />
           ) : (
             student.leaderboard_score != null && student.leaderboard_score > 0 && (
               <span
@@ -1024,21 +1028,23 @@ function Stat({ label, value, tone = "slate", testid }) {
 // Anchors the team's intuition that "the top of the table is here because
 // they have the most badges". Falls back to a plain count below.
 function LeaderboardRankPill({ rank, score }) {
-  const ordinal = rank === 1 ? "1st" : rank === 2 ? "2nd" : "3rd";
+  const ordinal = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : `${rank}th`;
   const tone =
     rank === 1
       ? "bg-amber-100 text-amber-900 border-amber-400"
       : rank === 2
         ? "bg-slate-200 text-slate-800 border-slate-400"
-        : "bg-orange-100 text-orange-900 border-orange-400";
-  const trophy = rank === 1 ? "🏆" : rank === 2 ? "🥈" : "🥉";
+        : rank === 3
+          ? "bg-orange-100 text-orange-900 border-orange-400"
+          : "bg-slate-100 text-slate-700 border-slate-300";
+  const trophy = rank === 1 ? "🏆" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
   return (
     <span
       className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border-2 font-bold uppercase tracking-wider tabular-nums ${tone}`}
-      title={`Ranked ${ordinal} on the leaderboard for this session — ${score} Circle badges (cohort & private tier badges excluded). This is why they're prioritised at the top.`}
+      title={`Ranked ${ordinal} on the cohort leaderboard — ${score} Circle badges (cohort & private tier badges excluded). Matches the Leaderboard tab.`}
       data-testid={`leaderboard-rank-${rank}`}
     >
-      <span aria-hidden>{trophy}</span>
+      {trophy && <span aria-hidden>{trophy}</span>}
       Leaderboard #{rank}
       <span className="font-semibold opacity-70">· {score}</span>
     </span>
@@ -1058,8 +1064,11 @@ function PriorityReason({ student, index }) {
         : days === 1
           ? "Interview tomorrow"
           : `Interview in ${days} days`;
-  } else if (student.leaderboard_rank && student.leaderboard_rank <= 3) {
-    reason = `Top ${student.leaderboard_rank === 1 ? "of" : "3 on"} the leaderboard`;
+  } else if (student.cohort_leaderboard_rank && student.cohort_leaderboard_rank <= 3) {
+    reason = `Top ${student.cohort_leaderboard_rank === 1 ? "of" : "3 on"} the cohort leaderboard`;
+  } else if (student.leaderboard_rank && student.leaderboard_rank <= 3 && (student.leaderboard_score || 0) > 0) {
+    // Session-local: they have the most badges among today's submitters
+    reason = "Most badges among today's submitters";
   } else if (index === 0) {
     reason = "Earliest eligible submission";
   } else {

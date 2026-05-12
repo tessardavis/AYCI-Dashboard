@@ -299,6 +299,7 @@ async def _build_session_payload(
     db, event: dict, form_id: str, interview_index: dict[str, dict],
     cycle_start_iso: Optional[str],
     leaderboard_index: dict[str, int],
+    cohort_rank_by_score: dict[int, int],
 ) -> dict:
     """Compose one session block: header + eligible students.
 
@@ -399,7 +400,7 @@ async def _build_session_payload(
     in_window.sort(key=_sort_key)
 
     # Compute leaderboard rank within this session — purely based on badge
-    # count (descending). Used by the UI to show "🏆 #1 leaderboard" chips so
+    # count (descending). Used by the UI to show "🏆 top eligible" chips so
     # the team can SEE why the top rows are prioritised. Ties share a rank
     # (standard competition ranking: 1, 2, 2, 4...).
     by_score = sorted(
@@ -415,8 +416,17 @@ async def _build_session_payload(
             last_rank = idx
             last_score = score
         rank_by_key[s["name_key"]] = last_rank
+
+    # Map session badge-score → cohort-wide leaderboard rank, using the
+    # pre-computed `cohort_rank_by_score` (built from get_top_leaderboard
+    # so it uses proper standard competition ranking and counts each member
+    # exactly once).
     for s in in_window:
         s["leaderboard_rank"] = rank_by_key.get(s["name_key"])
+        ls = s.get("leaderboard_score") or 0
+        s["cohort_leaderboard_rank"] = (
+            cohort_rank_by_score.get(ls) if ls > 0 else None
+        )
 
     return {
         "id": event.get("id"),
@@ -496,6 +506,16 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
 
     interview_index = await _interview_lookup_by_name(db)
     leaderboard_index = await leaderboard_mod.build_leaderboard_index(db, cohort_tag="Apr '26")
+    # Pre-compute the cohort-wide score → rank map (standard competition
+    # ranking) by walking the actual ranked leaderboard once. Counting via
+    # leaderboard_index would double-count (it stores full name + first
+    # name keys), so we use the canonical get_top_leaderboard result.
+    full_lb = await leaderboard_mod.get_top_leaderboard(db, cohort_tag="Apr '26", limit=500)
+    cohort_rank_by_score: dict[int, int] = {}
+    for idx, row in enumerate(full_lb, start=1):
+        sc = row.get("score") or 0
+        if sc > 0 and sc not in cohort_rank_by_score:
+            cohort_rank_by_score[sc] = idx
 
     # Build a per-(form_id) timeline of past events so we can derive the cycle
     # start (when the *previous* same-type session ran) for each upcoming
@@ -528,7 +548,7 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
         candidate_starts = [s for s in candidate_starts if s and s < (event.get("starts_at") or "")]
         cycle_start_iso = max(candidate_starts) if candidate_starts else None
         sessions.append(
-            await _build_session_payload(db, event, form_id, interview_index, cycle_start_iso, leaderboard_index)
+            await _build_session_payload(db, event, form_id, interview_index, cycle_start_iso, leaderboard_index, cohort_rank_by_score)
         )
         seen_for_cycle[form_id] = event.get("starts_at") or seen_for_cycle.get(form_id, "")
     return {
