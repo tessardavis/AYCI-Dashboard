@@ -1,8 +1,18 @@
-"""Helpers for Circle.so Admin/Headless API lookups used by the DM bot."""
+"""Helpers for Circle.so Admin/Headless API lookups used by the DM bot.
+
+Auth model:
+  • CIRCLE_API_TOKEN — Admin API v2 token, used for member lookups by ID.
+  • CIRCLE_HEADLESS_TOKEN — Headless parent token. Exchanged for per-member
+    access tokens via POST /api/v1/headless/auth_token (Bearer + email).
+    Per-member access_tokens are short-lived; we cache them in MongoDB
+    `app_settings.circle_headless_tokens` keyed by community_member_id and
+    refresh proactively before expiry.
+"""
 from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -11,17 +21,66 @@ logger = logging.getLogger(__name__)
 
 ADMIN_BASE = "https://app.circle.so/api/admin/v2"
 HEADLESS_BASE = "https://app.circle.so/api/headless/v1"
+HEADLESS_AUTH = "https://app.circle.so/api/v1/headless/auth_token"
 
 
 def _admin_headers() -> dict:
     return {"Authorization": f"Token {os.environ.get('CIRCLE_API_TOKEN', '')}"}
 
 
-def _headless_headers() -> Optional[dict]:
-    tok = (os.environ.get("CIRCLE_HEADLESS_TOKEN") or "").strip()
-    if not tok:
+def _headless_parent_token() -> Optional[str]:
+    return (os.environ.get("CIRCLE_HEADLESS_TOKEN") or "").strip() or None
+
+
+async def _get_access_token(db, admin_email: str) -> Optional[str]:
+    """Return a Bearer access_token for the given admin's Headless session.
+
+    Caches in MongoDB and refreshes when within 60s of expiry. Returns None
+    if no parent token is configured or the auth call failed.
+    """
+    if not _headless_parent_token():
         return None
-    return {"Authorization": f"Bearer {tok}"}
+    now = datetime.now(timezone.utc)
+    cache_id = f"circle_headless_token:{admin_email.lower()}"
+    cached = await db.app_settings.find_one({"id": cache_id}, {"_id": 0})
+    if cached:
+        expires_at = cached.get("expires_at")
+        try:
+            if expires_at and datetime.fromisoformat(expires_at.replace("Z", "+00:00")) - now > timedelta(seconds=60):
+                return cached.get("access_token")
+        except Exception:
+            pass
+
+    async with httpx.AsyncClient(timeout=15) as c:
+        try:
+            r = await c.post(
+                HEADLESS_AUTH,
+                headers={
+                    "Authorization": f"Bearer {_headless_parent_token()}",
+                    "Content-Type": "application/json",
+                },
+                json={"email": admin_email},
+            )
+            if r.status_code != 200:
+                logger.warning(f"[circle-api] headless auth_token({admin_email}) failed: {r.status_code} {r.text[:160]}")
+                return None
+            body = r.json()
+        except Exception as e:
+            logger.warning(f"[circle-api] headless auth_token errored: {e}")
+            return None
+
+    await db.app_settings.update_one(
+        {"id": cache_id},
+        {"$set": {
+            "id": cache_id,
+            "access_token": body.get("access_token"),
+            "expires_at": body.get("access_token_expires_at"),
+            "community_member_id": body.get("community_member_id"),
+            "cached_at": now.isoformat(),
+        }},
+        upsert=True,
+    )
+    return body.get("access_token")
 
 
 async def fetch_member(member_id: int | str) -> dict | None:
@@ -46,24 +105,19 @@ async def fetch_member(member_id: int | str) -> dict | None:
         }
 
 
-async def fetch_latest_dm_message(admin_id: int, sender_id: int) -> Optional[str]:
-    """Fetch the most recent DM message body from `sender_id` to `admin_id`.
-
-    Returns None if Headless API is unconfigured or the message isn't
-    available — the caller is expected to fall back to a "passed to team"
-    holding reply when this happens.
-
-    Requires `CIRCLE_HEADLESS_TOKEN` env var (Headless Member Token from
-    Circle Settings → Developers, typically Plus-tier or above).
+async def fetch_latest_dm_message(db, admin_email: str, sender_id: int) -> Optional[str]:
+    """Fetch the most recent DM message body from `sender_id` to the admin
+    identified by `admin_email`. Returns None if Headless API is
+    unconfigured, the access-token exchange failed, or no matching thread
+    was found — caller falls back to a "passed to team" holding reply.
     """
-    headers = _headless_headers()
-    if not headers:
+    access_token = await _get_access_token(db, admin_email)
+    if not access_token:
         return None
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     async with httpx.AsyncClient(timeout=15) as c:
         try:
-            # 1. List the admin's chat threads, looking for the one with this
-            # sender as participant. Circle returns `records` sorted newest-first.
             r = await c.get(
                 f"{HEADLESS_BASE}/chat_threads",
                 headers=headers,
@@ -77,41 +131,67 @@ async def fetch_latest_dm_message(admin_id: int, sender_id: int) -> Optional[str
             logger.warning(f"[circle-api] /chat_threads errored: {e}")
             return None
 
-        # Find the DM thread (1:1) with our sender. Circle marks DMs with
-        # `chat_type == "direct"` and `chat_thread_members` lists everyone.
-        target = None
+        target_uuid = None
+        target_pm_body = None  # short-circuit if the parent_message is the one we want
         for t in threads:
-            if (t.get("chat_type") or "").lower() != "direct":
-                continue
-            members = t.get("chat_thread_members") or t.get("members") or []
-            ids = {m.get("community_member_id") or m.get("id") for m in members if isinstance(m, dict)}
-            if int(sender_id) in {int(x) for x in ids if x is not None}:
-                target = t
+            pm = t.get("parent_message") or {}
+            sender = pm.get("sender") or {}
+            pm_sender_id = sender.get("community_member_id") or sender.get("id")
+            if pm_sender_id and int(pm_sender_id) == int(sender_id):
+                target_uuid = pm.get("chat_room_uuid") or t.get("chat_room_uuid")
+                target_pm_body = (
+                    pm.get("body")
+                    or (pm.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+                )
                 break
-        if not target:
-            logger.info(f"[circle-api] no direct thread found for sender={sender_id}")
+            # Also check via participants list in case the parent_message
+            # was authored by the admin (i.e. admin DM'd the student first).
+            participants = t.get("chat_room_participants") or t.get("participants") or []
+            for p in participants:
+                pid = p.get("community_member_id") or (p.get("community_member") or {}).get("id")
+                if pid and int(pid) == int(sender_id):
+                    target_uuid = pm.get("chat_room_uuid") or t.get("chat_room_uuid") or t.get("uuid")
+                    break
+            if target_uuid:
+                break
+
+        if not target_uuid:
+            logger.info(f"[circle-api] no direct chat room found for sender={sender_id}")
             return None
 
-        thread_id = target.get("id") or target.get("uuid")
+        # If we already grabbed the body from parent_message and the latest
+        # message in the thread is from the sender (replies_count is 0 or
+        # last_reply timestamp matches the parent), return it. Otherwise we
+        # need to pull /messages to find their newest reply.
         try:
             r2 = await c.get(
-                f"{HEADLESS_BASE}/chat_threads/{thread_id}/messages",
+                f"{HEADLESS_BASE}/chat_rooms/{target_uuid}/messages",
                 headers=headers,
-                params={"per_page": 5, "sort": "-created_at"},
+                params={"per_page": 10},
             )
             if r2.status_code != 200:
-                logger.warning(f"[circle-api] thread messages failed: {r2.status_code} {r2.text[:120]}")
-                return None
+                # Fallback to parent_message body if available
+                return target_pm_body
             msgs = r2.json().get("records") or []
         except Exception as e:
-            logger.warning(f"[circle-api] thread messages errored: {e}")
-            return None
+            logger.warning(f"[circle-api] chat_room messages errored: {e}")
+            return target_pm_body
 
-        # Newest message FROM the sender (not echoed admin replies)
-        for m in msgs:
-            author_id = m.get("community_member_id") or (m.get("sender") or {}).get("id")
+        # Newest-first: find first message FROM the sender
+        for m in sorted(msgs, key=lambda x: x.get("created_at") or "", reverse=True):
+            sender_obj = m.get("sender") or {}
+            author_id = (
+                sender_obj.get("community_member_id")
+                or sender_obj.get("id")
+                or m.get("community_member_id")
+            )
             if author_id and int(author_id) == int(sender_id):
-                body = m.get("body") or m.get("plain_text") or m.get("text")
+                body = (
+                    m.get("body")
+                    or m.get("plain_text")
+                    or (m.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+                    or m.get("text")
+                )
                 if body:
                     return str(body).strip()
         return None

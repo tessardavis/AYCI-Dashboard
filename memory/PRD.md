@@ -27,16 +27,18 @@ A single-page view where the team searches a student by email and sees a unified
 - Lists last 50 acks newest-first: `email — acked at +N over by <name> · DD MMM, HH:MM`.
 - Backend: `GET /api/coach-activity/over-allowance/acks`.
 
-### 2026-05-12 — Circle DM Bot (AI auto-responder for community DMs)
-- **Problem unpacked**: Circle's "Send to webhook" action sends a lean payload (`{type, data: {community_id, admin_community_member_id, sender_community_member_id}}`) with **no names, no email, no message body**. Body access requires the Headless API on Plus tier.
-- **Solution shipped**: graceful two-mode operation. Without `CIRCLE_HEADLESS_TOKEN`, the bot resolves both members from Admin API (names + emails come through fine), creates an urgent ticket auto-assigned to Coralie with `escalation_reason: "no_message_body"`, Slack-DMs Coralie immediately, and sends a holding reply to the student. With a Headless token added, the bot ALSO fetches the latest message body for the AI resolve attempt.
-- **Stack**: `circle_api.py` (member lookup + headless message fetch helper), `circle_dm_bot.py` (orchestration + AI logic), `routes/circle.py` (webhook + playbook admin endpoints), Settings → Bot tab (`CoachPlaybookSection`).
-- **Sensitive-topic escalation**: messages containing `refund / complaint / urgent / lawyer / scam` skip AI resolve → holding reply + urgent ticket + Slack DM.
-- **Tickets**: `source: "circle_dm"` with `circle_dm_meta.{coach_name, escalation_reason, ai_resolved}`. AI-resolved tickets auto-close as `low / resolved` (audit only).
-- **Knowledge base**: admin-editable plain-text Coach Playbook in `app_settings.coach_playbook` (max 8000 chars). Default playbook seeded.
-- **Webhook URL**: `POST /api/circle/dm-webhook`. HMAC-SHA256-signed via `X-Circle-Signature` if `CIRCLE_DM_WEBHOOK_SECRET` env var is set; falls open without one.
-- **Audit log**: every webhook payload persisted to `circle_dm_events`.
-- **Verified live** with the real Circle production payload (community_id=125595): resolved Tessa Davis as the coach + Testing as the sender, created urgent ticket assigned to Coralie, generated the correct holding reply.
+### 2026-05-12 — Circle DM Bot (AI auto-responder for community DMs) — FULL Headless flow working
+- **Problem unpacked**: Circle's "Send to webhook" action sends a lean payload (`{type, data: {community_id, admin_community_member_id, sender_community_member_id}}`) with **no names, no email, no message body**. The body needs the Headless API.
+- **Auth chain implemented** (`circle_api.py`):
+  - `CIRCLE_API_TOKEN` (Admin v2) → member lookups by ID (names, emails).
+  - `CIRCLE_HEADLESS_TOKEN` (Headless parent) → exchanged for per-admin `access_token` via `POST /api/v1/headless/auth_token` with `{"email":"<admin email>"}`. Cached in `app_settings.circle_headless_token:<email>` with `expires_at`, auto-refreshed 60s before expiry.
+  - Per-admin access_token → `GET /api/headless/v1/chat_threads` and short-circuits on `parent_message.body` (avoids extra round-trip), falls back to `GET /chat_rooms/<uuid>/messages` for replies.
+- **Bot flow** (`circle_dm_bot.py`): webhook → look up both members → fetch message body via Headless → run sensitive-keyword check → either AI-resolve via Coach Playbook OR escalate to a Coralie-assigned ticket + Slack DM.
+- **Verified live** against the real Circle community: webhook with payload `{sender_community_member_id: 40276640, admin_community_member_id: 20557969}` correctly resolved "Arzoo Amin → Tessa Davis" + fetched her actual presentation-feedback DM body, AI judged it off-playbook (correct — that's a real coach question, not FAQ), created a `normal` priority ticket for Coralie.
+- **Tickets**: `source: "circle_dm"` with `circle_dm_meta.{coach_name, escalation_reason, ai_resolved}`. AI-resolved → `low / resolved`; escalations → `open` (and `urgent` if sensitive keyword matched).
+- **Coach Playbook**: editable in Settings → Bot. Max 8000 chars. Defaults seeded; sensitive topics (refund/complaint/urgent) escalate regardless.
+- **Webhook URL**: `POST /api/circle/dm-webhook`. HMAC-signed via `X-Circle-Signature` if `CIRCLE_DM_WEBHOOK_SECRET` env var set; falls open without.
+- **Audit log**: every webhook payload persisted to `circle_dm_events`; viewable in Settings → Bot.
 - Files: `circle_api.py`, `circle_dm_bot.py`, `routes/circle.py`, `Settings.jsx` (Bot tab + `CoachPlaybookSection`).
 
 ### 2026-05-12 — Reverted AI Draft Reply + Private Video count transparency

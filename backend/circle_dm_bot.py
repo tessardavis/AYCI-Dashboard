@@ -301,19 +301,23 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
     data = payload.get("data") if isinstance(payload.get("data"), dict) else None
     sender_id = (data or payload).get("sender_community_member_id") or (data or payload).get("sender_id")
     admin_id = (data or payload).get("admin_community_member_id") or (data or payload).get("admin_id")
+    admin_email: Optional[str] = None
     if sender_id and (sender_name == "there" or not sender_email):
         m = await circle_api.fetch_member(sender_id)
         if m:
             sender_name = m["name"] or sender_name
             sender_email = m["email"] or sender_email
-    if admin_id and coach_name == "the team":
+    if admin_id:
         m = await circle_api.fetch_member(admin_id)
         if m:
-            coach_name = m["name"] or coach_name
+            if coach_name == "the team":
+                coach_name = m["name"] or coach_name
+            admin_email = m.get("email")
 
-    # If we still don't have the message body, try Headless (Plus-tier).
-    if not message and sender_id and admin_id:
-        body = await circle_api.fetch_latest_dm_message(int(admin_id), int(sender_id))
+    # If we still don't have the message body, try Headless (requires
+    # CIRCLE_HEADLESS_TOKEN + a valid admin email).
+    if not message and sender_id and admin_email:
+        body = await circle_api.fetch_latest_dm_message(db, admin_email, int(sender_id))
         if body:
             message = body
     if not message:
