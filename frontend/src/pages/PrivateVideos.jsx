@@ -8,7 +8,7 @@
  * /api/private-videos/tally-webhook) — no Monday automation involved.
  */
 import { useState, useEffect, useMemo } from "react";
-import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -139,12 +139,16 @@ export default function PrivateVideos() {
   }, [items, search, statusFilter, assigneeFilter, showDone]);
 
   const counts = useMemo(() => {
-    const c = { total: items.length, new: 0, working: 0, done: 0 };
+    const c = { total: items.length, new: 0, working: 0, done: 0,
+                tally: 0, monday: 0, hasAllowance: 0 };
     for (const it of items) {
       const s = (it.status || "").toLowerCase();
       if (s === "new") c.new++;
       else if (s === "working on it") c.working++;
       else if (s === "done") c.done++;
+      if (it.data_source === "tally") c.tally++;
+      else if (it.data_source === "monday") c.monday++;
+      if (it.total_allowance) c.hasAllowance++;
     }
     return c;
   }, [items]);
@@ -152,8 +156,9 @@ export default function PrivateVideos() {
   return (
     <div className="p-4 lg:p-10 max-w-[1700px] mx-auto" data-testid="private-videos-page">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)]">
+        <h1 className="font-display text-2xl lg:text-3xl font-extrabold tracking-tight text-[var(--ayci-ink)] flex items-center gap-2">
           Private-Tier Videos
+          <DataSourceInfo counts={counts} />
         </h1>
         <div className="flex items-center gap-2">
           {fetchedAt && (
@@ -189,6 +194,15 @@ export default function PrivateVideos() {
             tone={showDone ? "emerald" : "slate"}
           />
         </button>
+        <div className="ml-auto flex items-center gap-1.5" title="Where these rows came from. Migrate everyone to Tally to retire the Monday board.">
+          <span className="text-[10px] text-[var(--ayci-ink-muted)] uppercase tracking-wider font-semibold">Source</span>
+          <span className="text-[11px] bg-sky-50 border border-sky-200 text-sky-800 px-1.5 py-0.5 rounded font-semibold" data-testid="pv-source-tally-count">
+            Tally · {counts.tally}
+          </span>
+          <span className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-semibold" data-testid="pv-source-monday-count">
+            Monday · {counts.monday}
+          </span>
+        </div>
       </div>
 
       <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-2.5 mb-4 flex flex-wrap items-center gap-2">
@@ -278,6 +292,65 @@ function StatPill({ label, value, tone }) {
   );
 }
 
+
+function DataSourceInfo({ counts }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-teal)] transition-colors"
+        title="Where do these counts come from?"
+        data-testid="pv-data-source-info"
+      >
+        <Info className="w-4 h-4" />
+      </button>
+      {open && (
+        <div
+          className="absolute top-7 left-0 z-20 w-[420px] bg-white border border-[var(--ayci-border)] rounded-lg shadow-xl p-4 text-xs text-[var(--ayci-ink-muted)] space-y-2"
+          data-testid="pv-data-source-popover"
+        >
+          <div className="font-semibold text-[var(--ayci-ink)] text-sm">How the counts are calculated</div>
+          <ul className="space-y-1.5 list-disc pl-4">
+            <li>
+              <span className="font-semibold text-[var(--ayci-ink)]">Submission # (X/Y)</span> — the chip on each row.
+              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li><b>X</b> = count of prior submissions for that email + 1, computed locally.</li>
+                <li><b>Y</b> = video allowance for that student, looked up from the Monday <i>Academy Members</i> board (column <code>numeric_mkxfvz1k</code>). Falls back to baseline by tier if missing.</li>
+              </ul>
+            </li>
+            <li>
+              <span className="font-semibold text-[var(--ayci-ink)]">Source chip</span> — every row is tagged at ingest:
+              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li><b>Tally</b>: created natively here when the student submitted the Tally form.</li>
+                <li><b>Monday</b>: migrated from the Monday board sync (legacy rows + anything edited there).</li>
+              </ul>
+            </li>
+          </ul>
+          <div className="border-t border-[var(--ayci-border)] pt-2 mt-2">
+            <div className="font-semibold text-[var(--ayci-ink)] mb-1">This run</div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <span>Total: <b>{counts.total}</b></span>
+              <span>From Tally: <b className="text-sky-700">{counts.tally}</b></span>
+              <span>From Monday: <b className="text-amber-700">{counts.monday}</b></span>
+              <span>With allowance: <b>{counts.hasAllowance}</b></span>
+            </div>
+            <p className="text-[10px] opacity-70 mt-2">
+              The 493 "Monday" rows are <b>historical</b> — they were bulk-migrated when this dashboard was first wired up.
+              Going forward, <b>every new submission lands as "Tally"</b> via the Tally webhook (no Monday round-trip).
+              So you can already retire the Monday board for new work; the legacy column attribution just stays for reference.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 function EmptyStateMigrate({ onMigrated }) {
   const [migrating, setMigrating] = useState(false);
   const run = async () => {
@@ -333,7 +406,10 @@ function Row({ item, users, onEdit, onSaved }) {
   const tally = item.tally_video?.url || item.video?.url;
   const reply = item.reply_link?.url;
   const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name;
-  const hasCount = item.submission_number && item.total_allowance;
+  const subNum = item.submission_number;
+  const total = item.total_allowance;
+  const hasCount = subNum !== null && subNum !== undefined && subNum !== "";
+  const source = item.data_source; // "tally" | "monday" | null
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50/40">
       <td className="px-3 py-2.5">
@@ -342,14 +418,36 @@ function Row({ item, users, onEdit, onSaved }) {
         </span>
       </td>
       <td className="px-3 py-2.5">
-        <div className="font-semibold text-[var(--ayci-ink)] flex items-center gap-2">
+        <div className="font-semibold text-[var(--ayci-ink)] flex items-center gap-2 flex-wrap">
           <span>{studentName}</span>
           {hasCount && (
             <span
               className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 whitespace-nowrap"
-              title={`Video ${item.submission_number} of ${item.total_allowance}`}
+              title={
+                total
+                  ? `Submission #${subNum} of ${total} for this student.\nSubmission # = count of prior submissions + 1 (computed locally).\nAllowance = from the Monday Academy Members board for this email.`
+                  : `Submission #${subNum} for this student. Total allowance unknown (not on Monday Academy Members).`
+              }
+              data-testid={`pv-count-${item.id}`}
             >
-              {item.submission_number}/{item.total_allowance}
+              {subNum}/{total || "—"}
+            </span>
+          )}
+          {source && (
+            <span
+              className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
+                source === "tally"
+                  ? "bg-sky-50 text-sky-700 border-sky-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}
+              title={
+                source === "tally"
+                  ? "Native ingest: this row was created by the Tally webhook on submission."
+                  : "Migrated row: this came from the Monday board sync."
+              }
+              data-testid={`pv-source-${item.id}`}
+            >
+              {source === "tally" ? "Tally" : "Monday"}
             </span>
           )}
         </div>

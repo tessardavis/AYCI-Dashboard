@@ -13,7 +13,27 @@ A single-page view where the team searches a student by email and sees a unified
 
 ## Implemented
 
-### 2026-05-11 — Auto-rotate waitlist tag, Acknowledgement log, AI ticket triage
+
+### 2026-05-11 — Auto-rotate waitlist tag, Acknowledgement log
+
+**Auto-rotate waitlist cohort tag** (`connectors.py`):
+- New `_resolve_ayci_cohort_tags(suffix, carry_over)` helper that parses ConvertKit tag names matching `^\[AYCI <MONTH-YY>\] <suffix>$`, sorts by cohort date, and returns the newest tag IDs (optionally union'd with `N` previous cohorts).
+- `convertkit_weekly_tag_subscribers` now accepts `{"tag_pattern": "Waitlist - All", "carry_over": 1}` — auto-rotates each launch.
+- `stripe_new_signups_from_waitlist` accepts `{"waitlist_tag_pattern", "waitlist_carry_over"}` similarly.
+- Both metrics in production flipped to pattern mode → 37 / 7 for w/c 4 May (matches CRM sheet exactly).
+
+**Acknowledgement log footer** (`OverAllowanceWidget.jsx → AcknowledgementLog`, `routes/coach.py`):
+- New collapsible "Acknowledgement log (N)" section at the bottom of the over-allowance widget.
+- Lists last 50 acks newest-first: `email — acked at +N over by <name> · DD MMM, HH:MM`.
+- Backend: `GET /api/coach-activity/over-allowance/acks`.
+
+### 2026-05-12 — Reverted AI Draft Reply + Private Video count transparency
+- **Reverted** the AI Draft Reply feature (user reconsidered): removed `ticket_triage.py`, `POST /tickets/{id}/suggest-reply`, `AIReplyDraftPanel`, and the inline Sparkle buttons from both reply panels. Tickets UI is back to its pre-feature state.
+- **Private Video count chip**: now renders even when only `submission_number` is known (shows `N/—` instead of being hidden). Hover tooltip explains formula: `X = count of prior submissions for that email + 1, computed locally`; `Y = video allowance from Monday Academy Members column numeric_mkxfvz1k`.
+- **Per-row "Source" chip** (`Tally`/`Monday`) — every row tagged at ingest in `private_videos_store.py` (new `data_source` field, also backfilled on existing 486 rows: 485 Monday, 1 Tally). The chip clarifies which rows came from native Tally ingest vs the historical Monday bulk-migration.
+- **Header strip**: added a right-aligned `SOURCE · Tally · N / Monday · M` summary so the team can see at a glance how much data still depends on the Monday board.
+- **Info popover** (header `i` icon): explains the count formula, the source attribution, and that new submissions land as Tally going forward — so the Monday board can be retired for new work even though the historical bulk-migration rows stay tagged "Monday" for reference.
+- Files: `/app/backend/private_videos_store.py`, `/app/frontend/src/pages/PrivateVideos.jsx`.
 
 **(d) Auto-rotate waitlist cohort tag** (`connectors.py`):
 - New `_resolve_ayci_cohort_tags(suffix, carry_over)` helper that parses ConvertKit tag names matching `^\[AYCI <MONTH-YY>\] <suffix>$`, sorts by cohort date, and returns the newest tag IDs (optionally union'd with `N` previous cohorts).

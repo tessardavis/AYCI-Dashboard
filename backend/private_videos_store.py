@@ -151,6 +151,16 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         # assignee — return the team_member id + name (was Monday person id + name in legacy)
         "assignee_id": row.get("assignee_team_member_id"),
         "assignee_name": (assignee or {}).get("name"),
+        # tier (cached at ingest time) — informs UI styling + Zapier message
+        "tier": row.get("tier"),
+        # Where did this row come from? "tally" (native ingest via Tally
+        # webhook), "monday" (migrated from the Monday board sync), or null
+        # for legacy/manually-added rows. Used by the UI to show data-source
+        # attribution chips.
+        "data_source": row.get("data_source") or (
+            "tally" if row.get("tally_submission_id") else
+            ("monday" if row.get("monday_item_id") else None)
+        ),
     }
 
 
@@ -375,6 +385,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         "private_chat_url": academy.get("private_chat_url"),
         "interview_date": None,
         "tier": academy.get("tier"),
+        "data_source": "tally",
         "created_at": now,
         "updated_at": now,
     }
@@ -447,6 +458,7 @@ async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
             row["id"] = str(uuid.uuid4())
             row["monday_item_id"] = monday_id
             row["tally_submission_id"] = None
+            row["data_source"] = "monday"
             row["created_at"] = now
             await db.private_video_submissions.insert_one(row)
             created += 1
