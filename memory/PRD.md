@@ -12,21 +12,19 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
-### 2026-05-12 — Circle DM Bot v2 (polling-based)
-- **What changed:** Replaced Circle Workflow webhook approach with continuous polling. Circle workflows only fire once per member, which made testing impossible and meant the bot could never respond to follow-ups from the same student. Polling solves both.
-- **Loop:** every 1 minute, for each enabled coach admin (currently just Tessa), fetch their `chat_threads` via Headless API, filter to `kind=direct` (1:1 DMs only), then per-thread:
-  - First-sight → seed latest message id, don't reply to backlog
-  - Coach reply detected (admin message NOT in our `sent_message_ids`) → mark `human_takeover`, back off permanently
-  - Student says "create a ticket" / "talk to human" / similar → escalation reply + ticket
-  - Sensitive keyword (refund / urgent / complaint) → escalation reply + ticket + Slack Coralie
-  - Playbook covers it → AI reply with disclosure, stay active
-  - Playbook doesn't cover it → escalation reply + ticket
+### 2026-05-12 — Circle DM Bot v2 (polling-based) + Coach reply path
+- **What changed:** Replaced Circle Workflow webhook approach with continuous polling. Circle workflows only fire once per member, which made testing impossible and meant the bot could never respond to follow-ups from the same student. Polling solves both. Also wired up a coach-reply path so Coralie/team can respond to Circle DM tickets from the dashboard and have those replies post back into Circle as Tessa.
+- **Loop:** every 1 minute, for each enabled coach admin (currently just Tessa), fetch all chat rooms via `GET /api/headless/v1/messages` (NOT `/chat_threads` — that one silently omits fresh DMs), filter to `chat_room_kind=direct`, then per-thread fast-path skip when `last_message.id <= last_seen_message_id`. Otherwise: detect human takeover, escalation phrase, sensitive keyword, AI-resolve via playbook, or escalate.
+- **Reply post format:** Circle's chat API rejects plain-text body with `Missing parameter: rich_text_body`. We now build a minimal tiptap doc shape (`{type: "doc", content: [{type: "paragraph", content: [{type: "text", text: ...}]}]}`) and include it as `rich_text_body`. Also accepts HTTP 202 (queued for async dispatch) as success — Circle's chat POST returns 202, not 200/201.
+- **Bot dedupes its own replies via `sent_bodies`:** Circle's 202 response doesn't include a message id, so we can't add it to `sent_message_ids`. Instead the bot remembers the last ~20 reply bodies it has posted and treats any admin-authored message with a matching body as its own (not a human takeover).
+- **Coach reply path (new):** `POST /api/circle/tickets/{ticket_id}/reply` — for tickets with `source=circle_dm`, fetches the ticket's `circle_dm_meta.thread_uuid`, posts the coach's reply into the Circle DM thread (as the configured coach admin), records it on the ticket's notes timeline as `_circle_dm_outbound`, and marks the thread `human_takeover` so the bot backs off. New `CircleReplyPanel` component in `SupportTickets.jsx` renders only for `source=circle_dm` tickets.
 - **Reply format:** Always prefixed with `"Hi {first}, this is an auto-response from {coach}'s account."` per user request.
 - **Hard cap:** 8 AI replies per thread per day to prevent runaway loops.
-- **Settings UI (Settings → Bot):** live polling status, watched-threads table with state pills (active/escalated/human_takeover), per-thread Re-arm button, pause/resume toggle, manual "Poll now" button. Coach playbook editor moved into same tab. Legacy webhook events kept as a collapsible debug list.
-- **Files:** `backend/circle_dm_poll.py` (NEW), `backend/circle_api.py` (added `list_dm_threads`, `list_thread_messages_for_admin`, `post_dm_message`, `get_cached_admin_member_id`), `backend/routes/circle.py` (added `/bot/status`, `/bot/config`, `/bot/poll-now`, `/bot/reset-thread/{uuid}`), `backend/server.py` (added `_circle_dm_poll` scheduler job, every 1 min), `frontend/src/pages/Settings.jsx` (replaced static playbook section with dynamic bot dashboard).
-- **New collection:** `circle_dm_threads` `{id, thread_uuid, coach_admin_email, student_member_id, student_name, state, last_seen_message_id, sent_message_ids, ai_reply_count_today, ai_reply_count_date, escalated_ticket_id, escalation_reason, last_reply_text, last_reply_at, first_seen_at, last_activity_at}`
+- **Settings UI (Settings → Bot):** live polling status, watched-threads table with state pills (active/escalated/human_takeover), per-thread Re-arm button, pause/resume toggle, manual "Poll now" button, diagnostic endpoint for verifying Tessa's DM inbox view. Coach playbook editor moved into same tab.
+- **Files:** `backend/circle_dm_poll.py` (NEW), `backend/circle_api.py` (added `list_dm_threads` using `/messages` endpoint, `list_thread_messages_for_admin`, `post_dm_message` with tiptap rich_text_body, `get_cached_admin_member_id`), `backend/routes/circle.py` (added `/bot/status`, `/bot/config`, `/bot/poll-now`, `/bot/reset-thread/{uuid}`, `/bot/diagnose`, `/tickets/{ticket_id}/reply`), `backend/server.py` (added `_circle_dm_poll` scheduler job, every 1 min), `frontend/src/pages/Settings.jsx` (dynamic bot dashboard), `frontend/src/pages/SupportTickets.jsx` (new `CircleReplyPanel`).
+- **New collection:** `circle_dm_threads` `{id, thread_uuid, coach_admin_email, student_member_id, student_name, state, last_seen_message_id, sent_message_ids, sent_bodies, ai_reply_count_today, ai_reply_count_date, escalated_ticket_id, escalation_reason, last_reply_text, last_reply_at, first_seen_at, last_activity_at, human_takeover_at, human_takeover_by}`
 - **New config doc:** `app_settings { id:"circle_dm_bot_config", enabled, coach_emails, last_poll_at, last_poll_summary }`
+- **Status:** End-to-end verified — bot polls, posts replies in correct rich_text_body format, escalates correctly when playbook misses, coach reply path posts to Circle as Tessa and disables the bot on that thread. Default playbook is intentionally short — user is expected to extend it with their actual FAQs (or leave them to escalate).
 
 ### Earlier in this fork
 - Timeline Tooltip for Past Coaches UI (`pages/UpcomingInterviews.jsx`)

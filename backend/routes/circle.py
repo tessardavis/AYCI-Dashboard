@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 import circle_dm_bot
 from db import db
-from deps import require_admin
+from deps import require_admin, require_board
 
 logger = logging.getLogger(__name__)
 
@@ -209,3 +209,84 @@ async def bot_diagnose(admin: dict = Depends(require_admin)):
             "recent_dms": rows[:15],
         })
     return out
+
+
+# --- Coach reply from a Circle DM ticket back into Circle ------------------
+class CircleTicketReplyBody(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
+@router.post("/tickets/{ticket_id}/reply")
+async def reply_to_circle_ticket(
+    ticket_id: str,
+    payload: CircleTicketReplyBody,
+    user: dict = Depends(require_board("tickets")),
+):
+    """Coach reply from the Tickets board → posts into the original Circle
+    DM thread as the watching coach admin. Records the reply on the ticket's
+    notes timeline AND marks the bot's thread state as `human_takeover` so
+    the AI doesn't try to auto-reply on top of the coach.
+    """
+    import circle_api
+    import circle_dm_poll
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    if (t.get("source") or "") != "circle_dm":
+        raise HTTPException(400, "Not a Circle DM ticket")
+    meta = t.get("circle_dm_meta") or {}
+    thread_uuid = meta.get("thread_uuid")
+    if not thread_uuid:
+        raise HTTPException(400, "Ticket missing circle_dm_meta.thread_uuid — can't route back to Circle")
+
+    # Which admin to post as? Whichever coach is configured to watch this DM
+    # (currently a single value in cfg.coach_emails). If empty, fail loudly.
+    cfg = await circle_dm_poll.get_config(db)
+    if not cfg["coach_emails"]:
+        raise HTTPException(400, "No coach admin configured in Settings → Bot")
+    admin_email = cfg["coach_emails"][0]
+
+    body = payload.body.strip()
+    posted = await circle_api.post_dm_message(db, admin_email, thread_uuid, body)
+    if posted is None:
+        raise HTTPException(502, "Circle rejected the message — see backend logs")
+
+    now = datetime.now(timezone.utc).isoformat()
+    note = {
+        "id": __import__("uuid").uuid4().hex,
+        "author_id": "_circle_dm_outbound",
+        "author_name": user.get("name") or user.get("email") or "Coach",
+        "body": body,
+        "created_at": now,
+        "internal": False,
+        "attachments": [],
+    }
+    await db.tickets.update_one(
+        {"id": ticket_id},
+        {"$push": {"notes": note}, "$set": {"updated_at": now}},
+    )
+
+    # Stop the bot from auto-replying on this thread now that a human is in.
+    # We also remember the body so a future poll that picks up this same
+    # message (echoed back) doesn't trigger a redundant `human_takeover`.
+    state = await db.circle_dm_threads.find_one({"thread_uuid": thread_uuid}, {"_id": 0})
+    sent_bodies = (state or {}).get("sent_bodies") or []
+    sent_bodies.append(body)
+    await db.circle_dm_threads.update_one(
+        {"id": f"thread:{thread_uuid}"},
+        {"$set": {
+            "id": f"thread:{thread_uuid}",
+            "thread_uuid": thread_uuid,
+            "state": "human_takeover",
+            "sent_bodies": sent_bodies[-20:],
+            "human_takeover_at": now,
+            "human_takeover_by": user.get("email"),
+            "last_activity_at": now,
+            "last_reply_text": body,
+            "last_reply_at": now,
+        }},
+        upsert=True,
+    )
+
+    fresh = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    return {"ok": True, "posted_as": admin_email, "ticket": fresh}

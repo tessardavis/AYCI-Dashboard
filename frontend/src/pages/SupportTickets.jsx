@@ -1351,7 +1351,11 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
-        {t.student_email && t.source !== "whatsapp" && (
+        {t.source === "circle_dm" && (
+          <CircleReplyPanel ticket={t} onSent={onRefresh} />
+        )}
+
+        {t.student_email && t.source !== "whatsapp" && t.source !== "circle_dm" && (
           <EmailReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
@@ -1363,6 +1367,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             const nonReplyAuthorIds = new Set([
               "_whatsapp", "_whatsapp_outbound",
               "_gmail", "_gmail_outbound",
+              "_circle_dm_outbound",
             ]);
             const teamNotes = (t.notes || []).filter(
               (n) => !nonReplyAuthorIds.has(n.author_id),
@@ -1454,7 +1459,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
 // -------------------- Conversation thread (newest-first) --------------------
 
 const STUDENT_AUTHOR_IDS = new Set(["_whatsapp", "_gmail"]);
-const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound"]);
+const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound", "_circle_dm_outbound"]);
 
 // Renders the entire ticket conversation (original message + every reply +
 // outbound replies from the team) in a chat-style timeline. The most recent
@@ -1993,6 +1998,69 @@ function Label({ children }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------- CircleReplyPanel
+// For tickets created by the Circle DM bot. Reply posts back into the
+// original Circle DM thread as the coach (Tessa) and disables the AI bot on
+// that thread (state → human_takeover) so it doesn't speak over the team.
+function CircleReplyPanel({ ticket, onSent }) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const coach = ticket?.circle_dm_meta?.coach_name || "the coach";
+
+  const handleSend = async () => {
+    const text = body.trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      const { data } = await apiClient.post(`/circle/tickets/${ticket.id}/reply`, { body: text });
+      setBody("");
+      toast.success(`Reply posted in Circle as ${data.posted_as || coach}`);
+      onSent && (await onSent());
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div
+      className="border border-violet-200 bg-violet-50/40 rounded-md p-3"
+      data-testid="circle-dm-reply-panel"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <MessageCircle className="w-4 h-4 text-violet-700" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-violet-800">
+          Circle DM reply · posts as {coach}
+        </span>
+      </div>
+      <div className="text-[11px] text-violet-900/80 mb-2">
+        Your message will appear in the student's Circle inbox as {coach}. The AI bot will stop auto-responding on this thread once you reply.
+      </div>
+      <div className="flex items-end gap-2">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Type a reply to send in Circle…"
+          rows={3}
+          className={inputCls}
+          data-testid="circle-dm-reply-input"
+        />
+        <Button
+          onClick={handleSend}
+          disabled={!body.trim() || sending}
+          size="sm"
+          data-testid="circle-dm-reply-send"
+          className="bg-violet-600 hover:bg-violet-700"
+        >
+          {sending ? "Sending…" : "Send to Circle"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 function Modal({ title, onClose, children, wide, testid }) {
   return (
