@@ -287,10 +287,18 @@ async def post_dm_message(
     db, admin_email: str, chat_room_uuid: str, body: str,
 ) -> Optional[dict]:
     """Post a chat message as `admin_email` into the given chat room. Returns
-    the created message dict (with `id`) or None on failure."""
+    the created message dict (with `id`) or None on failure.
+
+    Circle's Headless chat API requires the body in their tiptap-rich-text
+    shape (`rich_text_body`); a plain `body` string is rejected with
+    `Missing parameter: rich_text_body`. We build the minimal tiptap doc
+    that covers our use case — single paragraph, plain text, line breaks as
+    `hardBreak` nodes.
+    """
     access_token = await _get_access_token(db, admin_email)
     if not access_token:
         return None
+    rich = _build_tiptap_body(body)
     async with httpx.AsyncClient(timeout=20) as c:
         try:
             r = await c.post(
@@ -299,11 +307,43 @@ async def post_dm_message(
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                 },
-                json={"body": body},
+                json={"body": body, "rich_text_body": rich},
             )
-            if r.status_code in (200, 201):
+            if r.status_code in (200, 201, 202):
                 return r.json()
-            logger.warning(f"[circle-api] post_dm_message failed: {r.status_code} {r.text[:200]}")
+            logger.warning(f"[circle-api] post_dm_message failed: {r.status_code} {r.text[:240]}")
         except Exception as e:
             logger.warning(f"[circle-api] post_dm_message errored: {e}")
         return None
+
+
+def _build_tiptap_body(text: str) -> dict:
+    """Build Circle's tiptap rich_text_body shape from plain text. Splits on
+    newlines so multi-line replies render with proper line breaks."""
+    text = text or ""
+    lines = text.split("\n")
+    content = []
+    for i, line in enumerate(lines):
+        if i > 0:
+            content.append({"type": "hardBreak", "circle_ios_fallback_text": "\n"})
+        if line:
+            content.append({
+                "type": "text",
+                "text": line,
+                "circle_ios_fallback_text": line,
+            })
+    return {
+        "body": {
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": content}] if content else [{"type": "paragraph"}],
+        },
+        "circle_ios_fallback_text": text,
+        "attachments": [],
+        "inline_attachments": [],
+        "sgids_to_object_map": {},
+        "format": "chat",
+        "community_members": [],
+        "entities": [],
+        "group_mentions": [],
+        "polls": [],
+    }

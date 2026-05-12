@@ -243,12 +243,17 @@ async def _process_thread(
     if not new_messages:
         return {"skipped": "no_new"}
     sent_ids = set(state.get("sent_message_ids") or [])
+    sent_bodies = set(state.get("sent_bodies") or [])
 
-    # Detect human takeover: any admin-authored message NOT sent by the bot
+    # Detect human takeover: any admin-authored message that's NOT one of
+    # the bot's recent replies (matched by message id OR by body text —
+    # Circle's chat POST returns 202 without the new message id, so we also
+    # remember the bodies we've posted recently to dedupe robustly).
     for m in new_messages:
         sid = _msg_sender_id(m)
         mid = _msg_id(m)
-        if sid == admin_member_id and mid not in sent_ids:
+        body = _msg_body(m)
+        if sid == admin_member_id and mid not in sent_ids and body not in sent_bodies:
             await _save_thread_state(db, chat_room_uuid, {
                 "state": "human_takeover",
                 "last_seen_message_id": latest_id,
@@ -294,6 +299,7 @@ async def _process_thread(
             sender_email="", message=student_text, reply=reply,
             reason="daily_cap_reached", latest_id=latest_id,
             existing_sent_ids=list(sent_ids),
+            existing_sent_bodies=list(sent_bodies),
         )
 
     # 1. Student explicitly asks for escalation
@@ -305,6 +311,7 @@ async def _process_thread(
             sender_email="", message=student_text, reply=reply,
             reason="user_requested_human", latest_id=latest_id,
             existing_sent_ids=list(sent_ids),
+            existing_sent_bodies=list(sent_bodies),
         )
 
     # 2. Sensitive keyword (refund/complaint/urgent/etc.) — escalate + Slack
@@ -317,6 +324,7 @@ async def _process_thread(
             sender_email="", message=student_text, reply=reply,
             reason=kw, latest_id=latest_id, slack_notify=True,
             existing_sent_ids=list(sent_ids),
+            existing_sent_bodies=list(sent_bodies),
         )
 
     # 3. AI resolve via playbook
@@ -337,6 +345,7 @@ async def _process_thread(
             sender_email="", message=student_text, reply=reply,
             reason="playbook_miss", latest_id=latest_id,
             existing_sent_ids=list(sent_ids),
+            existing_sent_bodies=list(sent_bodies),
         )
 
     # Successful AI resolve — post and stay watching
@@ -345,10 +354,13 @@ async def _process_thread(
     new_sent_ids = list(sent_ids)
     if posted_id:
         new_sent_ids.append(posted_id)
+    new_sent_bodies = list(sent_bodies)
+    new_sent_bodies.append(reply)
     await _save_thread_state(db, chat_room_uuid, {
         "state": "active",
         "last_seen_message_id": max(latest_id or 0, posted_id or 0),
         "sent_message_ids": new_sent_ids[-200:],
+        "sent_bodies": new_sent_bodies[-20:],
         "ai_reply_count_today": reply_count_today + 1,
         "ai_reply_count_date": today,
         "last_activity_at": datetime.now(timezone.utc).isoformat(),
@@ -384,6 +396,7 @@ async def _escalate_and_reply(
     sender_name: str, sender_email: str, message: str, reply: str,
     reason: str, latest_id: Optional[int], slack_notify: bool = False,
     existing_sent_ids: Optional[list[int]] = None,
+    existing_sent_bodies: Optional[list[str]] = None,
 ) -> dict:
     posted = await circle_api.post_dm_message(db, admin_email, chat_room_uuid, reply)
     posted_id = _msg_id(posted) if posted else None
@@ -408,10 +421,13 @@ async def _escalate_and_reply(
     sent_ids = list(existing_sent_ids or [])
     if posted_id:
         sent_ids.append(posted_id)
+    sent_bodies = list(existing_sent_bodies or [])
+    sent_bodies.append(reply)
     await _save_thread_state(db, chat_room_uuid, {
         "state": "escalated",
         "last_seen_message_id": max(latest_id or 0, posted_id or 0),
         "sent_message_ids": sent_ids[-200:],
+        "sent_bodies": sent_bodies[-20:],
         "escalated_ticket_id": ticket_id,
         "escalation_reason": reason,
         "last_activity_at": datetime.now(timezone.utc).isoformat(),
