@@ -1199,6 +1199,25 @@ async def on_startup():
         id="gmail_inbox_sync",
         replace_existing=True,
     )
+
+    # Circle DM Bot polling — every 1 minute, for each enabled coach admin,
+    # checks their DM threads via Headless API and replies / escalates.
+    async def _circle_dm_poll():
+        import circle_dm_poll
+        try:
+            res = await circle_dm_poll.poll_once(db)
+            if res.get("replied") or res.get("escalated") or res.get("errors"):
+                logger.info(f"[scheduler] circle_dm_poll: replied={res.get('replied')} escalated={res.get('escalated')} seeded={res.get('seeded')} human_takeover={res.get('human_takeover')} errors={res.get('errors')}")
+        except Exception as e:
+            logger.warning(f"[scheduler] circle_dm_poll failed: {e}")
+
+    scheduler.add_job(
+        _circle_dm_poll,
+        CronTrigger(minute="*/1", timezone=tz),
+        id="circle_dm_poll",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
     scheduler.start()
     logger.info(
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "

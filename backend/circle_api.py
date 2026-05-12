@@ -195,3 +195,89 @@ async def fetch_latest_dm_message(db, admin_email: str, sender_id: int) -> Optio
                 if body:
                     return str(body).strip()
         return None
+
+
+# ----------------------------------------------- Polling helpers (DM bot v2)
+async def get_cached_admin_member_id(db, admin_email: str) -> Optional[int]:
+    """Read the admin's community_member_id from the Headless auth cache
+    (populated by `_get_access_token`). Used by the polling bot to tell its
+    own (= the admin's) messages apart from the student's."""
+    doc = await db.app_settings.find_one(
+        {"id": f"circle_headless_token:{admin_email.lower()}"},
+        {"_id": 0, "community_member_id": 1},
+    )
+    cid = (doc or {}).get("community_member_id")
+    try:
+        return int(cid) if cid else None
+    except Exception:
+        return None
+
+
+async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict]:
+    """All Direct-Message chat threads visible to `admin_email`."""
+    access_token = await _get_access_token(db, admin_email)
+    if not access_token:
+        return []
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.get(
+                f"{HEADLESS_BASE}/chat_threads",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"per_page": per_page},
+            )
+            if r.status_code != 200:
+                logger.warning(f"[circle-api] list_dm_threads failed: {r.status_code} {r.text[:160]}")
+                return []
+            return r.json().get("records") or []
+        except Exception as e:
+            logger.warning(f"[circle-api] list_dm_threads errored: {e}")
+            return []
+
+
+async def list_thread_messages_for_admin(
+    db, admin_email: str, chat_room_uuid: str, per_page: int = 20,
+) -> list[dict]:
+    """Latest N messages in a chat room. Circle returns them newest-first."""
+    access_token = await _get_access_token(db, admin_email)
+    if not access_token:
+        return []
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.get(
+                f"{HEADLESS_BASE}/messages/{chat_room_uuid}/chat_room_messages",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"per_page": per_page},
+            )
+            if r.status_code != 200:
+                logger.warning(f"[circle-api] list_thread_messages failed: {r.status_code} {r.text[:160]}")
+                return []
+            return r.json().get("records") or []
+        except Exception as e:
+            logger.warning(f"[circle-api] list_thread_messages errored: {e}")
+            return []
+
+
+async def post_dm_message(
+    db, admin_email: str, chat_room_uuid: str, body: str,
+) -> Optional[dict]:
+    """Post a chat message as `admin_email` into the given chat room. Returns
+    the created message dict (with `id`) or None on failure."""
+    access_token = await _get_access_token(db, admin_email)
+    if not access_token:
+        return None
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.post(
+                f"{HEADLESS_BASE}/messages/{chat_room_uuid}/chat_room_messages",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"body": body},
+            )
+            if r.status_code in (200, 201):
+                return r.json()
+            logger.warning(f"[circle-api] post_dm_message failed: {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            logger.warning(f"[circle-api] post_dm_message errored: {e}")
+        return None

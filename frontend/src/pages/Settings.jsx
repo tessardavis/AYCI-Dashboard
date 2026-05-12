@@ -1239,6 +1239,10 @@ function CoachPlaybookSection({ isAdmin }) {
   const [saving, setSaving] = useState(false);
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [bot, setBot] = useState(null);
+  const [loadingBot, setLoadingBot] = useState(true);
+  const [polling, setPolling] = useState(false);
+  const [resetting, setResetting] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -1250,6 +1254,18 @@ function CoachPlaybookSection({ isAdmin }) {
       toast.error("Failed to load coach playbook");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadBot = async () => {
+    setLoadingBot(true);
+    try {
+      const { data } = await apiClient.get("/circle/bot/status");
+      setBot(data);
+    } catch (err) {
+      toast.error("Failed to load bot status");
+    } finally {
+      setLoadingBot(false);
     }
   };
 
@@ -1278,60 +1294,226 @@ function CoachPlaybookSection({ isAdmin }) {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const toggleBot = async () => {
+    if (!bot) return;
+    try {
+      const next = !bot.config.enabled;
+      await apiClient.put("/circle/bot/config", { enabled: next });
+      toast.success(next ? "Bot enabled — will reply on next poll" : "Bot paused");
+      loadBot();
+    } catch (err) {
+      toast.error("Failed: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const pollNow = async () => {
+    setPolling(true);
+    try {
+      const { data } = await apiClient.post("/circle/bot/poll-now");
+      const r = data.replied || 0, e = data.escalated || 0, s = data.seeded || 0;
+      toast.success(`Poll done — replied ${r}, escalated ${e}, seeded ${s}`);
+      loadBot();
+    } catch (err) {
+      toast.error("Poll failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setPolling(false);
+    }
+  };
+
+  const resetThread = async (uuid) => {
+    setResetting(uuid);
+    try {
+      await apiClient.post(`/circle/bot/reset-thread/${uuid}`);
+      toast.success("Thread re-armed — bot will engage on next student message");
+      loadBot();
+    } catch (err) {
+      toast.error("Reset failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setResetting(null);
+    }
+  };
+
+  useEffect(() => { load(); loadBot(); }, []);
 
   return (
     <Panel
-      title="Circle DM Bot — Coach Playbook"
-      description="Plain text the AI references when answering student DMs on Circle. Keep it concise and factual. The AI will reply NEEDS_HUMAN (i.e. hand off to the team) on anything not clearly covered here, so leaving sensitive topics out is a feature, not a bug. Sensitive keywords (refund, complaint, urgent, etc.) always escalate regardless of playbook."
+      title="Circle DM Bot"
+      description="AI auto-responder for Circle DMs sent to your coach accounts. Polls the Circle Headless API every minute and replies in-thread (with an AI disclosure) when the playbook covers the question. Backs off permanently the moment the coach replies manually. Escalates to a support ticket when the playbook can't help, the student asks for a human, or a sensitive keyword (refund/complaint/urgent) is detected."
     >
-      <div className="p-6 space-y-4">
-        {!isAdmin && (
-          <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            Only admins can edit the playbook.
+      <div className="p-6 space-y-6">
+        {/* --- Polling status block --- */}
+        <div className="border border-[var(--ayci-border)] rounded-lg p-4 bg-slate-50/40">
+          <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+            <div>
+              <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Polling status</h4>
+              <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
+                {loadingBot ? "Loading…" : bot ? (
+                  <>
+                    Watching: <b>{(bot.config.coach_emails || []).join(", ") || "—"}</b>{" • "}
+                    Last poll: {bot.last_poll_at ? new Date(bot.last_poll_at).toLocaleString("en-GB") : "never"}
+                  </>
+                ) : "—"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {bot && (
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${bot.config.enabled ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-slate-200 text-slate-700 border border-slate-300"}`}
+                  data-testid="bot-status-pill"
+                >
+                  {bot.config.enabled ? "● Active" : "○ Paused"}
+                </span>
+              )}
+              {isAdmin && bot && (
+                <Button
+                  onClick={toggleBot} variant="outline" size="sm"
+                  data-testid="bot-toggle-btn"
+                >
+                  {bot.config.enabled ? "Pause bot" : "Resume bot"}
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  onClick={pollNow} variant="outline" size="sm"
+                  disabled={polling} data-testid="bot-poll-now-btn"
+                >
+                  {polling ? "Polling…" : "Poll now"}
+                </Button>
+              )}
+            </div>
           </div>
-        )}
-        {meta && (
-          <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2 flex-wrap">
-            {meta.isDefault ? (
-              <span className="bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Using default</span>
-            ) : (
-              <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Custom</span>
-            )}
-            {meta.updatedAt && (
-              <span>Last edited {new Date(meta.updatedAt).toLocaleString("en-GB")} by {meta.updatedBy || "—"}</span>
-            )}
-          </div>
-        )}
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={!isAdmin || loading}
-          rows={18}
-          placeholder="Markdown-style FAQ. One topic per line / paragraph."
-          className="w-full font-mono text-xs border border-[var(--ayci-border)] rounded-md px-3 py-2 focus:border-[var(--ayci-teal)] focus:outline-none disabled:opacity-50"
-          data-testid="coach-playbook-textarea"
-        />
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-[11px] text-[var(--ayci-ink-muted)]">{text.length}/8000 chars</span>
-          <Button
-            onClick={save}
-            disabled={!isAdmin || saving || loading || text.trim().length < 10}
-            style={{ backgroundColor: "var(--ayci-accent)" }}
-            data-testid="coach-playbook-save"
-          >
-            {saving ? "Saving…" : "Save playbook"}
-          </Button>
+          {/* Counters from last poll */}
+          {bot?.last_poll_summary && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+              {[
+                ["Replied", bot.last_poll_summary.replied, "bg-blue-50 border-blue-200 text-blue-900"],
+                ["Escalated", bot.last_poll_summary.escalated, "bg-amber-50 border-amber-200 text-amber-900"],
+                ["Seeded", bot.last_poll_summary.seeded, "bg-slate-100 border-slate-300 text-slate-800"],
+                ["Human takeover", bot.last_poll_summary.human_takeover, "bg-violet-50 border-violet-200 text-violet-900"],
+                ["Skipped", bot.last_poll_summary.skipped, "bg-slate-50 border-slate-200 text-slate-700"],
+              ].map(([label, n, cls]) => (
+                <div key={label} className={`border rounded px-2 py-1.5 ${cls}`}>
+                  <div className="text-base font-bold leading-none">{n ?? 0}</div>
+                  <div className="text-[10px] uppercase tracking-wider mt-0.5">{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {(bot?.last_poll_summary?.errors || []).length > 0 && (
+            <div className="mt-2 text-[11px] bg-rose-50 border border-rose-200 text-rose-900 rounded px-2 py-1">
+              <b>Errors:</b> {bot.last_poll_summary.errors.join(" • ")}
+            </div>
+          )}
         </div>
-        <div className="border-t border-[var(--ayci-border)] pt-4">
+
+        {/* --- Thread state table --- */}
+        {bot?.threads && bot.threads.length > 0 && (
+          <div>
+            <h4 className="font-semibold text-sm text-[var(--ayci-ink)] mb-2">Watched threads ({bot.threads.length})</h4>
+            <div className="space-y-1.5 max-h-96 overflow-y-auto" data-testid="bot-threads-list">
+              {bot.threads.map((t) => (
+                <div key={t.thread_uuid} className="text-xs bg-white border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold truncate">{t.student_name || "—"}</span>
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                          t.state === "active" ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
+                          t.state === "escalated" ? "bg-amber-50 border-amber-200 text-amber-800" :
+                          t.state === "human_takeover" ? "bg-violet-50 border-violet-200 text-violet-800" :
+                          "bg-slate-100 border-slate-300 text-slate-700"
+                        }`}
+                      >{t.state}</span>
+                      {t.escalation_reason && (
+                        <span className="text-[10px] text-amber-700">({t.escalation_reason})</span>
+                      )}
+                      {t.ai_reply_count_today ? (
+                        <span className="text-[10px] text-slate-600">{t.ai_reply_count_today} reply{t.ai_reply_count_today > 1 ? "ies" : ""} today</span>
+                      ) : null}
+                    </div>
+                    {t.last_reply_text && (
+                      <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5 truncate" title={t.last_reply_text}>
+                        Last bot reply: {t.last_reply_text.slice(0, 120)}{t.last_reply_text.length > 120 ? "…" : ""}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {t.last_activity_at ? `Last activity: ${new Date(t.last_activity_at).toLocaleString("en-GB")}` : ""}
+                    </div>
+                  </div>
+                  {isAdmin && (t.state === "escalated" || t.state === "human_takeover") && (
+                    <Button
+                      onClick={() => resetThread(t.thread_uuid)}
+                      variant="outline" size="sm"
+                      disabled={resetting === t.thread_uuid}
+                      data-testid={`bot-thread-reset-${t.thread_uuid}`}
+                    >
+                      {resetting === t.thread_uuid ? "…" : "Re-arm"}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* --- Coach playbook editor (existing) --- */}
+        <div className="border-t border-[var(--ayci-border)] pt-5">
+          <h4 className="font-semibold text-sm text-[var(--ayci-ink)] mb-2">Coach Playbook</h4>
+          <p className="text-[11px] text-[var(--ayci-ink-muted)] mb-3">
+            Plain text the AI references when deciding whether it can answer. Anything not clearly covered here → escalated to the team. Sensitive keywords (refund, complaint, urgent) always escalate regardless.
+          </p>
+          {!isAdmin && (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+              Only admins can edit the playbook.
+            </div>
+          )}
+          {meta && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-2 flex-wrap mb-2">
+              {meta.isDefault ? (
+                <span className="bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Using default</span>
+              ) : (
+                <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Custom</span>
+              )}
+              {meta.updatedAt && (
+                <span>Last edited {new Date(meta.updatedAt).toLocaleString("en-GB")} by {meta.updatedBy || "—"}</span>
+              )}
+            </div>
+          )}
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={!isAdmin || loading}
+            rows={14}
+            placeholder="Markdown-style FAQ. One topic per line / paragraph."
+            className="w-full font-mono text-xs border border-[var(--ayci-border)] rounded-md px-3 py-2 focus:border-[var(--ayci-teal)] focus:outline-none disabled:opacity-50"
+            data-testid="coach-playbook-textarea"
+          />
+          <div className="flex items-center justify-between gap-3 flex-wrap mt-2">
+            <span className="text-[11px] text-[var(--ayci-ink-muted)]">{text.length}/8000 chars</span>
+            <Button
+              onClick={save}
+              disabled={!isAdmin || saving || loading || text.trim().length < 10}
+              style={{ backgroundColor: "var(--ayci-accent)" }}
+              data-testid="coach-playbook-save"
+            >
+              {saving ? "Saving…" : "Save playbook"}
+            </Button>
+          </div>
+        </div>
+
+        {/* --- Recent webhook events (legacy / debug) --- */}
+        <div className="border-t border-[var(--ayci-border)] pt-5">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Recent DM events (debug)</h4>
+            <div>
+              <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Recent webhook events (legacy debug)</h4>
+              <div className="text-[11px] text-[var(--ayci-ink-muted)]">Polling is the primary path now; webhook events here only fire if you still have the Circle Workflow connected.</div>
+            </div>
             <Button onClick={loadEvents} variant="outline" size="sm" data-testid="coach-playbook-load-events">
               {loadingEvents ? "Loading…" : "Load latest 20"}
             </Button>
           </div>
           {events.length === 0 && !loadingEvents && (
-            <div className="text-xs text-[var(--ayci-ink-muted)]">No events loaded yet — click "Load latest 20" to see what Circle has sent us recently.</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)]">No events loaded yet — click "Load latest 20" if your Circle Workflow webhook is still active.</div>
           )}
           {events.length > 0 && (
             <div className="space-y-1.5 max-h-64 overflow-y-auto" data-testid="coach-playbook-events">
@@ -1343,15 +1525,6 @@ function CoachPlaybookSection({ isAdmin }) {
               ))}
             </div>
           )}
-        </div>
-        <div className="bg-violet-50/60 border border-violet-200 rounded-md p-3 text-[11px] text-violet-900 space-y-1">
-          <div className="font-semibold">Circle Workflow setup (one-time):</div>
-          <ol className="list-decimal pl-4 space-y-0.5">
-            <li>In Circle admin, open the existing "Admin received a direct message" workflow.</li>
-            <li>Replace the canned reply action with a <b>Webhook</b> action: POST to <code>{(window.location.origin || "https://your-dashboard").toString()}/api/circle/dm-webhook</code> with JSON body <code>{`{"sender_name":"{{member.name}}","sender_email":"{{member.email}}","coach_name":"{{admin.name}}","message":"{{message.body}}"}`}</code></li>
-            <li>Add a <b>Send a direct message</b> action right after, body = <code>{`{{webhook.response.reply_text}}`}</code></li>
-            <li>(Optional) Set env var <code>CIRCLE_DM_WEBHOOK_SECRET</code> + sign requests with HMAC SHA-256 as <code>X-Circle-Signature</code> header for security.</li>
-          </ol>
         </div>
       </div>
     </Panel>
