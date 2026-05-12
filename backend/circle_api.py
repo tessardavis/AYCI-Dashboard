@@ -214,20 +214,26 @@ async def get_cached_admin_member_id(db, admin_email: str) -> Optional[int]:
 
 
 async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict]:
-    """All Direct-Message chat threads visible to `admin_email`.
+    """All chat rooms visible to `admin_email`, sorted newest-first by
+    `last_message.created_at`. Each row contains chat_room_kind, the other
+    participant (for DMs), and the last_message inline. Pages through results.
 
-    Pages through Circle's results so we don't miss threads. Circle defaults
-    to ~30 per page but the user typically has 50-100+ direct threads.
+    NOTE: this uses Circle's `/messages` endpoint (the "chat rooms list",
+    despite the misleading name). The earlier `/chat_threads` endpoint
+    silently omits fresh DMs that haven't yet had a reply thread, so we
+    switched. Records are normalised to a small shape the rest of the bot
+    expects: `{chat_room_uuid, chat_room: {kind, name}, last_message,
+                  other_participants: [...] }`.
     """
     access_token = await _get_access_token(db, admin_email)
     if not access_token:
         return []
-    all_records: list[dict] = []
+    out: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as c:
-        for page in range(1, 6):  # safety cap at 5 pages = 500 threads
+        for page in range(1, 6):
             try:
                 r = await c.get(
-                    f"{HEADLESS_BASE}/chat_threads",
+                    f"{HEADLESS_BASE}/messages",
                     headers={"Authorization": f"Bearer {access_token}"},
                     params={"per_page": min(per_page, 100), "page": page},
                 )
@@ -235,14 +241,23 @@ async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict
                     logger.warning(f"[circle-api] list_dm_threads p{page} failed: {r.status_code} {r.text[:120]}")
                     break
                 body = r.json()
-                recs = body.get("records") or []
-                all_records.extend(recs)
+                for rec in body.get("records") or []:
+                    out.append({
+                        "chat_room_uuid": rec.get("uuid"),
+                        "chat_room": {
+                            "kind": rec.get("chat_room_kind"),
+                            "name": rec.get("chat_room_name"),
+                        },
+                        "last_message": rec.get("last_message") or {},
+                        "other_participants_preview": rec.get("other_participants_preview") or [],
+                        "unread_messages_count": rec.get("unread_messages_count") or 0,
+                    })
                 if not body.get("has_next_page"):
                     break
             except Exception as e:
                 logger.warning(f"[circle-api] list_dm_threads errored: {e}")
                 break
-    return all_records
+    return out
 
 
 async def list_thread_messages_for_admin(

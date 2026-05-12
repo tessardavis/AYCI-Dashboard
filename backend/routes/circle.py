@@ -183,24 +183,22 @@ async def bot_diagnose(admin: dict = Depends(require_admin)):
         dms = [t for t in threads if (t.get("chat_room") or {}).get("kind") == "direct"]
         rows = []
         for t in dms:
-            pm = t.get("parent_message") or {}
-            participants = pm.get("thread_participants_preview") or []
+            participants = t.get("other_participants_preview") or []
             other = next(
                 (p for p in participants
                  if p.get("community_member_id") and int(p["community_member_id"]) != int(admin_id or 0)),
                 None,
             )
-            # If admin not in participants, parent_message.sender IS the other party
-            if not other:
-                s = pm.get("sender") or {}
-                if s.get("community_member_id") and int(s["community_member_id"]) != int(admin_id or 0):
-                    other = s
+            lm = t.get("last_message") or {}
             rows.append({
-                "uuid": pm.get("chat_room_uuid"),
+                "uuid": t.get("chat_room_uuid"),
                 "with": (other or {}).get("name"),
                 "with_member_id": (other or {}).get("community_member_id"),
-                "last_activity_at": pm.get("last_reply_at") or pm.get("sent_at"),
-                "parent_sender": (pm.get("sender") or {}).get("name"),
+                "with_email": (other or {}).get("email"),
+                "last_activity_at": lm.get("created_at") or lm.get("sent_at"),
+                "last_body": (lm.get("body") or "")[:120],
+                "last_sender": (lm.get("sender") or {}).get("name"),
+                "unread": t.get("unread_messages_count") or 0,
             })
         rows.sort(key=lambda r: r["last_activity_at"] or "", reverse=True)
         out["coaches"].append({

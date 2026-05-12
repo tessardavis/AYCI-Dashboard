@@ -142,13 +142,11 @@ async def _save_thread_state(db, thread_uuid: str, patch: dict) -> None:
 def _identify_student(thread: dict, admin_member_id: int) -> tuple[Optional[int], Optional[str]]:
     """Return (student_member_id, student_name) — the non-admin participant.
 
-    Circle's /chat_threads response gives us participants in two places:
-      • parent_message.thread_participants_preview (the other DM participant)
-      • parent_message.sender                       (whoever opened the thread)
+    Our normalised thread shape (from circle_api.list_dm_threads) puts the
+    other-side participants at `other_participants_preview`. Falls back to
+    the `last_message.sender` if the participant list is empty.
     """
-    pm = thread.get("parent_message") or {}
-    # First try thread_participants_preview — the OTHER side of the DM.
-    for p in pm.get("thread_participants_preview") or []:
+    for p in thread.get("other_participants_preview") or []:
         pid = p.get("community_member_id") or p.get("id")
         try:
             if pid and int(pid) != admin_member_id:
@@ -160,8 +158,7 @@ def _identify_student(thread: dict, admin_member_id: int) -> tuple[Optional[int]
                 return int(pid), name
         except (ValueError, TypeError):
             continue
-    # Fall back to parent_message.sender if it isn't the admin
-    s = pm.get("sender") or {}
+    s = (thread.get("last_message") or {}).get("sender") or {}
     pid = s.get("community_member_id") or s.get("id")
     try:
         if pid and int(pid) != admin_member_id:
@@ -188,11 +185,7 @@ async def _process_thread(
     thread: dict,
 ) -> dict:
     """Returns a small dict for the poll summary."""
-    chat_room_uuid = (
-        (thread.get("parent_message") or {}).get("chat_room_uuid")
-        or thread.get("chat_room_uuid")
-        or thread.get("uuid")
-    )
+    chat_room_uuid = thread.get("chat_room_uuid")
     if not chat_room_uuid:
         return {"skipped": "no_uuid"}
 
@@ -206,6 +199,34 @@ async def _process_thread(
     if state and state.get("state") in ("escalated", "human_takeover"):
         return {"skipped": state["state"]}
 
+    # Fast-path: skip threads with no new messages.
+    # The inline `last_message` is the most recent message in the room. If
+    # its id <= last_seen, nothing to do — avoids 1 API call per thread on
+    # quiet polls (we have ~400 threads, so this is a big saving).
+    inline_last = thread.get("last_message") or {}
+    inline_last_id = _msg_id(inline_last)
+    last_seen = (state or {}).get("last_seen_message_id") or 0
+    if state and inline_last_id is not None and inline_last_id <= last_seen:
+        return {"skipped": "no_new"}
+
+    # First-sight seeding fast-path: use the inline `last_message` to record
+    # last_seen without fetching the full message list (avoids 1 API call
+    # per thread on the very first poll across all of Tessa's ~400 rooms).
+    if not state:
+        await _save_thread_state(db, chat_room_uuid, {
+            "coach_admin_email": admin_email,
+            "student_member_id": student_id,
+            "student_name": student_name,
+            "state": "active",
+            "last_seen_message_id": inline_last_id or 0,
+            "sent_message_ids": [],
+            "ai_reply_count_today": 0,
+            "ai_reply_count_date": _today_str(),
+            "first_seen_at": datetime.now(timezone.utc).isoformat(),
+            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"seeded": chat_room_uuid}
+
     messages = await circle_api.list_thread_messages_for_admin(
         db, admin_email, chat_room_uuid, per_page=20,
     )
@@ -215,31 +236,13 @@ async def _process_thread(
     # Sort oldest -> newest. Circle returns newest-first by default.
     messages.sort(key=lambda m: m.get("created_at") or "")
     latest_id = _msg_id(messages[-1])
-
-    # First-sight seeding: record latest id and DON'T reply to backlog.
-    if not state:
-        await _save_thread_state(db, chat_room_uuid, {
-            "coach_admin_email": admin_email,
-            "student_member_id": student_id,
-            "student_name": student_name,
-            "state": "active",
-            "last_seen_message_id": latest_id,
-            "sent_message_ids": [],
-            "ai_reply_count_today": 0,
-            "ai_reply_count_date": _today_str(),
-            "first_seen_at": datetime.now(timezone.utc).isoformat(),
-            "last_activity_at": datetime.now(timezone.utc).isoformat(),
-        })
-        return {"seeded": chat_room_uuid}
-
-    last_seen = state.get("last_seen_message_id") or 0
-    sent_ids = set(state.get("sent_message_ids") or [])
     new_messages = [
         m for m in messages
         if _msg_id(m) is not None and _msg_id(m) > last_seen
     ]
     if not new_messages:
         return {"skipped": "no_new"}
+    sent_ids = set(state.get("sent_message_ids") or [])
 
     # Detect human takeover: any admin-authored message NOT sent by the bot
     for m in new_messages:
