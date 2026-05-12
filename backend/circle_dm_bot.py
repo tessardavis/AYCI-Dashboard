@@ -56,6 +56,85 @@ async def _get_playbook(db) -> str:
     return (doc or {}).get("text") or DEFAULT_PLAYBOOK
 
 
+def _walk(payload: dict, keys: list[str]) -> Optional[str]:
+    """Find the first non-empty value matching any of `keys`, searching the
+    payload and one level of nested dicts. Returns the value as a string."""
+    if not isinstance(payload, dict):
+        return None
+    for k in keys:
+        v = payload.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    # Walk one level deep so we catch `{data: {member: {name: "..."}}}` etc.
+    for sub in payload.values():
+        if isinstance(sub, dict):
+            for k in keys:
+                v = sub.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            # Two levels deep — Circle wraps things in {data: {member: {...}}}
+            for sub2 in sub.values():
+                if isinstance(sub2, dict):
+                    for k in keys:
+                        v = sub2.get(k)
+                        if isinstance(v, str) and v.strip():
+                            return v.strip()
+    return None
+
+
+def _extract_dm_fields(payload: dict) -> tuple[str, str, str, str]:
+    """Pull (sender_name, sender_email, coach_name, message) from Circle's
+    webhook payload regardless of shape. Returns sensible fallbacks if a field
+    is missing."""
+
+    def _get_in(d: dict, *paths: tuple[str, ...]) -> Optional[str]:
+        for path in paths:
+            cur = d
+            for k in path:
+                if isinstance(cur, dict) and k in cur:
+                    cur = cur[k]
+                else:
+                    cur = None
+                    break
+            if isinstance(cur, str) and cur.strip():
+                return cur.strip()
+        return None
+
+    # Sender (the community member who DM'd)
+    sender_name = _get_in(payload,
+        ("sender_name",), ("from_name",), ("member_name",), ("full_name",),
+        # Nested: any of these dict keys with a `name` field inside
+        ("sender", "name"), ("from", "name"), ("member", "name"), ("user", "name"),
+        ("data", "sender", "name"), ("data", "from", "name"),
+        ("data", "member", "name"), ("data", "user", "name"),
+    ) or _walk(payload, ["name", "first_name"]) or "there"
+
+    sender_email = (_get_in(payload,
+        ("sender_email",), ("from_email",), ("member_email",), ("email",),
+        ("sender", "email"), ("from", "email"), ("member", "email"), ("user", "email"),
+        ("data", "sender", "email"), ("data", "from", "email"),
+        ("data", "member", "email"), ("data", "user", "email"),
+    ) or "").lower()
+
+    # Coach (the admin the DM was sent to)
+    coach_name = _get_in(payload,
+        ("coach_name",), ("admin_name",), ("recipient_name",), ("to_name",),
+        ("admin", "name"), ("recipient", "name"), ("to", "name"),
+        ("data", "admin", "name"), ("data", "recipient", "name"),
+        ("data", "to", "name"),
+    ) or "the team"
+
+    # Message body
+    message = _get_in(payload,
+        ("message",), ("message_body",), ("body",), ("text",), ("content",),
+        ("message", "body"), ("message", "text"), ("message", "content"),
+        ("data", "message", "body"), ("data", "message", "text"),
+        ("data", "message_body",), ("data", "body",),
+    ) or _walk(payload, ["body", "text", "content"]) or ""
+
+    return sender_name, sender_email, coach_name, message
+
+
 def _is_sensitive(text: str) -> tuple[bool, Optional[str]]:
     """Return (escalate, reason). Hard escalation rules — no AI judgment."""
     if not text:
@@ -198,11 +277,16 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
 
     `background` is FastAPI's BackgroundTasks — anything that can wait
     until after the HTTP response (Slack pings, secondary writes) goes here.
+
+    Circle's basic "Send to webhook" action doesn't let us customise the
+    payload, so we accept ANY shape and try to find the relevant fields by
+    duck-typing. Common Circle payload shapes we know about:
+      • Flat: {sender_name, sender_email, coach_name, message}
+      • Nested under `data`: {data: {member: {...}, admin: {...}, message: {...}}}
+      • Workflow context: {member_name, member_email, admin_name, message_body}
+      • DM-specific: {chat_thread: {...}, message_body, sender: {...}}
     """
-    sender_name = (payload.get("sender_name") or payload.get("from_name") or "there").strip()
-    sender_email = (payload.get("sender_email") or payload.get("from_email") or "").strip().lower()
-    coach_name = (payload.get("coach_name") or payload.get("admin_name") or "the team").strip()
-    message = (payload.get("message") or payload.get("body") or payload.get("text") or "").strip()
+    sender_name, sender_email, coach_name, message = _extract_dm_fields(payload)
     if not message:
         return {"reply_text": _holding_reply(sender_name, coach_name),
                 "escalated": False, "ai_resolved": False, "ticket_id": None}
