@@ -290,3 +290,99 @@ async def reply_to_circle_ticket(
 
     fresh = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
     return {"ok": True, "posted_as": admin_email, "ticket": fresh}
+
+
+# --- Playbook suggestions (self-improving bot) -----------------------------
+@router.get("/bot/playbook-suggestions")
+async def list_playbook_suggestions(admin: dict = Depends(require_admin), limit: int = 30):
+    """Tickets the bot escalated with reason=playbook_miss that haven't been
+    dismissed yet. These are real student questions the playbook could be
+    extended to cover. Returns the question, ticket id, student name, and
+    timestamp."""
+    rows = await db.tickets.find(
+        {
+            "source": "circle_dm",
+            "circle_dm_meta.escalation_reason": "playbook_miss",
+            "circle_dm_meta.suggestion_status": {"$ne": "dismissed"},
+        },
+        {"_id": 0, "id": 1, "student_name": 1, "circle_dm_meta": 1,
+         "created_at": 1, "status": 1, "subject": 1},
+    ).sort("created_at", -1).limit(min(max(1, limit), 100)).to_list(100)
+    out = []
+    for r in rows:
+        meta = r.get("circle_dm_meta") or {}
+        out.append({
+            "ticket_id": r.get("id"),
+            "subject": r.get("subject"),
+            "student_name": r.get("student_name"),
+            "question": meta.get("original_message")
+                        or (r.get("subject") or "").replace("Circle DM to Tessa Davis: ", ""),
+            "coach_name": meta.get("coach_name"),
+            "created_at": r.get("created_at"),
+            "ticket_status": r.get("status"),
+            "suggestion_status": meta.get("suggestion_status") or "pending",
+        })
+    return {"suggestions": out}
+
+
+class PlaybookSuggestionAction(BaseModel):
+    answer: str | None = None  # required when action=accept
+    action: str = "accept"      # "accept" | "dismiss"
+
+
+@router.post("/bot/playbook-suggestions/{ticket_id}/handle")
+async def handle_playbook_suggestion(
+    ticket_id: str, body: PlaybookSuggestionAction,
+    admin: dict = Depends(require_admin),
+):
+    """Either dismiss the suggestion (no playbook change), or accept it by
+    appending a new Q/A pair to the coach playbook and marking the ticket
+    as handled."""
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    meta = t.get("circle_dm_meta") or {}
+    question = meta.get("original_message") or (t.get("subject") or "").replace(
+        f"Circle DM to {meta.get('coach_name') or 'Coach'}: ", "",
+    )
+    now = datetime.now(timezone.utc).isoformat()
+
+    if body.action == "dismiss":
+        await db.tickets.update_one(
+            {"id": ticket_id},
+            {"$set": {"circle_dm_meta.suggestion_status": "dismissed",
+                      "circle_dm_meta.suggestion_handled_at": now,
+                      "updated_at": now}},
+        )
+        return {"ok": True, "action": "dismissed"}
+
+    # accept → append to playbook
+    if not body.answer or len(body.answer.strip()) < 5:
+        raise HTTPException(400, "Provide an `answer` (min 5 chars) to add to the playbook")
+
+    pb = await db.app_settings.find_one(
+        {"id": "coach_playbook"}, {"_id": 0, "text": 1},
+    )
+    current = (pb or {}).get("text") or ""
+    if not current:
+        current = circle_dm_bot.DEFAULT_PLAYBOOK
+    entry = f"\n\n- **{question.strip()}** {body.answer.strip()}"
+    new_text = (current.rstrip() + entry).strip()[:8000]
+    await db.app_settings.update_one(
+        {"id": "coach_playbook"},
+        {"$set": {
+            "id": "coach_playbook",
+            "text": new_text,
+            "updated_at": now,
+            "updated_by": admin.get("id"),
+            "updated_by_name": admin.get("name") or admin.get("email"),
+        }},
+        upsert=True,
+    )
+    await db.tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {"circle_dm_meta.suggestion_status": "added",
+                  "circle_dm_meta.suggestion_handled_at": now,
+                  "updated_at": now}},
+    )
+    return {"ok": True, "action": "added", "playbook_chars": len(new_text)}

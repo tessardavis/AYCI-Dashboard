@@ -1243,6 +1243,12 @@ function CoachPlaybookSection({ isAdmin }) {
   const [loadingBot, setLoadingBot] = useState(true);
   const [polling, setPolling] = useState(false);
   const [resetting, setResetting] = useState(null);
+  const [editingCoaches, setEditingCoaches] = useState(false);
+  const [coachEmailsInput, setCoachEmailsInput] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggs, setLoadingSuggs] = useState(false);
+  const [suggAnswers, setSuggAnswers] = useState({});  // ticket_id -> draft answer
+  const [handlingSugg, setHandlingSugg] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -1333,7 +1339,53 @@ function CoachPlaybookSection({ isAdmin }) {
     }
   };
 
-  useEffect(() => { load(); loadBot(); }, []);
+  const saveCoachEmails = async () => {
+    const list = coachEmailsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (list.length === 0) {
+      toast.error("Need at least one coach email");
+      return;
+    }
+    try {
+      await apiClient.put("/circle/bot/config", { coach_emails: list });
+      toast.success(`Watching ${list.length} coach${list.length === 1 ? "" : "es"}`);
+      setEditingCoaches(false);
+      loadBot();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const loadSuggestions = async () => {
+    setLoadingSuggs(true);
+    try {
+      const { data } = await apiClient.get("/circle/bot/playbook-suggestions", { params: { limit: 30 } });
+      setSuggestions(data.suggestions || []);
+    } catch (err) {
+      toast.error("Failed to load playbook suggestions");
+    } finally {
+      setLoadingSuggs(false);
+    }
+  };
+
+  const handleSugg = async (ticketId, action) => {
+    setHandlingSugg(ticketId);
+    try {
+      const payload = action === "accept"
+        ? { action: "accept", answer: (suggAnswers[ticketId] || "").trim() }
+        : { action: "dismiss" };
+      const { data } = await apiClient.post(`/circle/bot/playbook-suggestions/${ticketId}/handle`, payload);
+      toast.success(action === "accept" ? "Added to playbook ✓" : "Dismissed");
+      setSuggAnswers((m) => { const n = { ...m }; delete n[ticketId]; return n; });
+      if (action === "accept") load();  // refresh playbook text
+      loadSuggestions();
+    } catch (err) {
+      toast.error("Failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setHandlingSugg(null);
+    }
+  };
+
+  useEffect(() => { load(); loadBot(); loadSuggestions(); }, []);
 
   return (
     <Panel
@@ -1344,7 +1396,7 @@ function CoachPlaybookSection({ isAdmin }) {
         {/* --- Polling status block --- */}
         <div className="border border-[var(--ayci-border)] rounded-lg p-4 bg-slate-50/40">
           <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-            <div>
+            <div className="min-w-0 flex-1">
               <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Polling status</h4>
               <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
                 {loadingBot ? "Loading…" : bot ? (
@@ -1354,6 +1406,20 @@ function CoachPlaybookSection({ isAdmin }) {
                   </>
                 ) : "—"}
               </div>
+              {editingCoaches && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <input
+                    type="text" value={coachEmailsInput}
+                    onChange={(e) => setCoachEmailsInput(e.target.value)}
+                    placeholder="tessa@…, coralie@…"
+                    className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1 w-72"
+                    data-testid="bot-coach-emails-input"
+                  />
+                  <Button size="sm" onClick={saveCoachEmails} data-testid="bot-coach-emails-save">Save</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingCoaches(false)} data-testid="bot-coach-emails-cancel">Cancel</Button>
+                  <span className="text-[10px] text-[var(--ayci-ink-muted)]">Comma-separated admin emails. Each must already be a Circle admin.</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {bot && (
@@ -1363,6 +1429,15 @@ function CoachPlaybookSection({ isAdmin }) {
                 >
                   {bot.config.enabled ? "● Active" : "○ Paused"}
                 </span>
+              )}
+              {isAdmin && bot && !editingCoaches && (
+                <Button
+                  onClick={() => { setCoachEmailsInput((bot.config.coach_emails || []).join(", ")); setEditingCoaches(true); }}
+                  variant="outline" size="sm"
+                  data-testid="bot-edit-coaches-btn"
+                >
+                  Edit coaches
+                </Button>
               )}
               {isAdmin && bot && (
                 <Button
@@ -1455,6 +1530,71 @@ function CoachPlaybookSection({ isAdmin }) {
             </div>
           </div>
         )}
+
+        {/* --- Playbook suggestions (self-improving) --- */}
+        <div className="border-t border-[var(--ayci-border)] pt-5">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">Playbook suggestions ({suggestions.filter(s => s.suggestion_status === "pending").length})</h4>
+              <div className="text-[11px] text-[var(--ayci-ink-muted)]">Real student questions the bot escalated because the playbook didn't cover them. Add an answer → bot will handle the next student who asks the same thing. Dismiss to ignore.</div>
+            </div>
+            <Button onClick={loadSuggestions} variant="outline" size="sm" data-testid="playbook-suggestions-refresh">
+              {loadingSuggs ? "Loading…" : "Refresh"}
+            </Button>
+          </div>
+          {suggestions.length === 0 && !loadingSuggs && (
+            <div className="text-xs text-[var(--ayci-ink-muted)]">No outstanding suggestions yet. They'll show up here whenever the bot escalates with reason <code>playbook_miss</code>.</div>
+          )}
+          <div className="space-y-2 max-h-[28rem] overflow-y-auto" data-testid="playbook-suggestions-list">
+            {suggestions.map((s) => {
+              const answered = s.suggestion_status === "added";
+              return (
+                <div
+                  key={s.ticket_id}
+                  className={`border rounded-md p-3 ${answered ? "bg-emerald-50/40 border-emerald-200" : "bg-white border-[var(--ayci-border)]"}`}
+                  data-testid={`playbook-suggestion-${s.ticket_id}`}
+                >
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className="text-xs font-semibold">{s.student_name || "Unknown"}</span>
+                    <span className="text-[10px] text-[var(--ayci-ink-muted)]">{new Date(s.created_at).toLocaleString("en-GB")}</span>
+                    {answered && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-emerald-800">Added</span>
+                    )}
+                  </div>
+                  <div className="text-xs italic text-[var(--ayci-ink)] mb-2">"{s.question}"</div>
+                  {!answered && isAdmin && (
+                    <div className="flex items-end gap-2 flex-wrap">
+                      <textarea
+                        value={suggAnswers[s.ticket_id] || ""}
+                        onChange={(e) => setSuggAnswers((m) => ({ ...m, [s.ticket_id]: e.target.value }))}
+                        placeholder="Write the answer the bot should give next time…"
+                        rows={2}
+                        className="flex-1 min-w-[260px] text-xs border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:border-[var(--ayci-teal)] focus:outline-none"
+                        data-testid={`playbook-suggestion-input-${s.ticket_id}`}
+                      />
+                      <Button
+                        onClick={() => handleSugg(s.ticket_id, "accept")}
+                        disabled={handlingSugg === s.ticket_id || (suggAnswers[s.ticket_id] || "").trim().length < 5}
+                        size="sm" style={{ backgroundColor: "var(--ayci-accent)" }}
+                        data-testid={`playbook-suggestion-accept-${s.ticket_id}`}
+                      >
+                        {handlingSugg === s.ticket_id ? "…" : "Add to playbook"}
+                      </Button>
+                      <Button
+                        onClick={() => handleSugg(s.ticket_id, "dismiss")}
+                        disabled={handlingSugg === s.ticket_id}
+                        size="sm" variant="outline"
+                        data-testid={`playbook-suggestion-dismiss-${s.ticket_id}`}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* --- Coach playbook editor (existing) --- */}
         <div className="border-t border-[var(--ayci-border)] pt-5">

@@ -248,6 +248,7 @@ async def _create_ticket_from_dm(
             "coach_name": coach_name,
             "escalation_reason": escalation_reason,
             "ai_resolved": False,
+            "original_message": message,
         },
     }
     await db.tickets.insert_one(ticket)
