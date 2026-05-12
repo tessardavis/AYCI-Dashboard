@@ -463,9 +463,57 @@ async def _escalate_and_reply(
     return {"escalated": chat_room_uuid, "ticket_id": ticket_id, "reason": reason}
 
 
+async def _poll_one_coach(db, admin_email: str, excluded_tags_lower: set[str]) -> dict:
+    """Poll a single coach admin. Returns this coach's per_coach summary."""
+    per_coach = {"admin_email": admin_email, "threads_checked": 0,
+                 "threads_total": 0, "actions": [], "errors": []}
+    try:
+        admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
+        if not admin_member_id:
+            tok = await circle_api._get_access_token(db, admin_email)
+            if not tok:
+                per_coach["errors"].append("auth failed")
+                return per_coach
+            admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
+            if not admin_member_id:
+                per_coach["errors"].append("no admin id in cache")
+                return per_coach
+        coach_info = await circle_api.fetch_member(admin_member_id)
+        coach_name = (
+            (coach_info or {}).get("name")
+            or admin_email.split("@")[0].title()
+        )
+        threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
+        dm_threads = [
+            t for t in threads
+            if (t.get("chat_room") or {}).get("kind") == "direct"
+        ]
+        per_coach["threads_checked"] = len(dm_threads)
+        per_coach["threads_total"] = len(threads)
+        for t in dm_threads:
+            try:
+                res = await _process_thread(
+                    db, admin_email=admin_email,
+                    admin_member_id=admin_member_id,
+                    coach_name=coach_name, thread=t,
+                    excluded_tags_lower=excluded_tags_lower,
+                )
+                per_coach["actions"].append(res)
+            except Exception as e:
+                logger.exception(f"[circle-dm-poll] thread errored: {e}")
+                per_coach["actions"].append({"error": str(e)[:120]})
+    except Exception as e:
+        logger.exception(f"[circle-dm-poll] coach {admin_email} errored: {e}")
+        per_coach["errors"].append(str(e)[:200])
+    return per_coach
+
+
 # ---------------------------------------------------------------- Poll loop
 async def poll_once(db) -> dict:
-    """Single poll cycle across all enabled coach admins."""
+    """Single poll cycle across all enabled coach admins. Runs the coach
+    fetches in parallel (asyncio.gather) so 5 coaches cost ~the same wall
+    time as 1 coach."""
+    import asyncio
     cfg = await get_config(db)
     excluded_tags_lower = {(t or "").lower() for t in cfg.get("excluded_member_tags") or []}
     summary = {
@@ -477,64 +525,30 @@ async def poll_once(db) -> dict:
     if not cfg["enabled"]:
         return summary
 
-    for admin_email in cfg["coach_emails"]:
-        try:
-            admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
-            if not admin_member_id:
-                # Calling _get_access_token populates the cache as a side
-                # effect — force a token fetch so we can learn the id.
-                tok = await circle_api._get_access_token(db, admin_email)
-                if not tok:
-                    summary["errors"].append(f"{admin_email}: auth failed")
-                    continue
-                admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
-                if not admin_member_id:
-                    summary["errors"].append(f"{admin_email}: no admin id in cache")
-                    continue
-            # Look up the coach's display name (or fall back to first part of email)
-            coach_info = await circle_api.fetch_member(admin_member_id)
-            coach_name = (
-                (coach_info or {}).get("name")
-                or admin_email.split("@")[0].title()
-            )
-            threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
-            # Only watch 1:1 DMs (not group chats / space chats).
-            dm_threads = [
-                t for t in threads
-                if (t.get("chat_room") or {}).get("kind") == "direct"
-            ]
-            per_coach = {"admin_email": admin_email,
-                         "threads_checked": len(dm_threads),
-                         "threads_total": len(threads),
-                         "actions": []}
-            for t in dm_threads:
-                try:
-                    res = await _process_thread(
-                        db, admin_email=admin_email,
-                        admin_member_id=admin_member_id,
-                        coach_name=coach_name, thread=t,
-                        excluded_tags_lower=excluded_tags_lower,
-                    )
-                    per_coach["actions"].append(res)
-                    if res.get("replied"):
-                        summary["replied"] += 1
-                    if res.get("escalated"):
-                        summary["escalated"] += 1
-                    if res.get("seeded"):
-                        summary["seeded"] += 1
-                    if res.get("human_takeover"):
-                        summary["human_takeover"] += 1
-                    if res.get("tag_excluded"):
-                        summary["tag_excluded"] += 1
-                    if res.get("skipped"):
-                        summary["skipped"] += 1
-                except Exception as e:
-                    logger.exception(f"[circle-dm-poll] thread errored: {e}")
-                    per_coach["actions"].append({"error": str(e)[:120]})
-            summary["coaches"].append(per_coach)
-        except Exception as e:
-            logger.exception(f"[circle-dm-poll] coach {admin_email} errored: {e}")
-            summary["errors"].append(f"{admin_email}: {e}")
+    results = await asyncio.gather(
+        *[_poll_one_coach(db, e, excluded_tags_lower) for e in cfg["coach_emails"]],
+        return_exceptions=True,
+    )
+    for admin_email, per_coach in zip(cfg["coach_emails"], results):
+        if isinstance(per_coach, Exception):
+            summary["errors"].append(f"{admin_email}: {per_coach}")
+            continue
+        for err in per_coach.get("errors", []):
+            summary["errors"].append(f"{admin_email}: {err}")
+        for res in per_coach.get("actions", []):
+            if res.get("replied"):
+                summary["replied"] += 1
+            if res.get("escalated"):
+                summary["escalated"] += 1
+            if res.get("seeded"):
+                summary["seeded"] += 1
+            if res.get("human_takeover"):
+                summary["human_takeover"] += 1
+            if res.get("tag_excluded"):
+                summary["tag_excluded"] += 1
+            if res.get("skipped"):
+                summary["skipped"] += 1
+        summary["coaches"].append(per_coach)
 
     summary["finished_at"] = datetime.now(timezone.utc).isoformat()
     await db.app_settings.update_one(

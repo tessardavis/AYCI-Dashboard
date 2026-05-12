@@ -264,7 +264,10 @@ async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict
         return []
     out: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as c:
-        for page in range(1, 6):
+        # 2 pages × 100 = 200 most-recently-active chat rooms per coach.
+        # That's plenty — beyond ~200 they're all stale and rarely get a
+        # new student message. Keeps poll cycles under ~30s for 5 coaches.
+        for page in range(1, 3):
             try:
                 r = await c.get(
                     f"{HEADLESS_BASE}/messages",

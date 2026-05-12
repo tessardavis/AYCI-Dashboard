@@ -12,6 +12,14 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-12 — 5-coach rollout: Tessa + Coralie + Oksana + Becky + Anoop
+- **Bot now watches 5 admin inboxes:** `tessa@medicalinterviewprep.com`, `coralie.fairon@yahoo.co.uk`, `oksana.demchenko.2000@ukr.net`, `becky.platt2@nhs.net`, `anoop.chidam@gmail.com`. Each got an authorised Headless API token via the existing `CIRCLE_HEADLESS_TOKEN` exchange. All 5 token caches succeeded; 0 errors on first poll.
+- **Initial seed:** ~1,341 DM threads recorded across the 5 coaches (state=active, last_seen=latest_message_id) so the bot doesn't auto-reply to historical backlog. Future polls only act on truly-new student messages.
+- **Performance fixes for multi-coach:**
+  - Parallelised coach loop with `asyncio.gather` — 5 coaches now run concurrently. Wall time dropped from >60s (sequential) to ~17s.
+  - Capped chat-rooms pagination at 2 pages × 100 records per coach (= top 200 recently-active chat rooms). Stale rooms beyond that rarely get new student messages.
+- **Webhook deprecated:** The Circle workflow "Coralie DM AI reply (Support desk)" webhook should now be **disabled** in Circle. Polling does the same job and doesn't have the one-shot-per-member limitation.
+
 ### 2026-05-12 — Tag-based exclusion (mirrors Circle workflow audience filter)
 - **New behaviour:** When a Circle DM arrives from a member who has any tag in the configured `excluded_member_tags` list, the bot stays completely silent — no reply, no ticket, no Slack. Thread state recorded as `tag_excluded`. Mirrors the user's existing Circle workflow audience filter (which excludes audiences tagged "Circle Member", "Autoreply hold", "Interview week", "AYGI 25/26").
 - **Member tag lookup**: extended `circle_api.fetch_member` to also return `tags` (from `member_tags[].name`). Added `fetch_member_cached(db, member_id)` with a 6-hour `circle_members_cache` cache so we don't slam the Admin API every poll cycle.
