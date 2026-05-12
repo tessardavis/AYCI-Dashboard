@@ -394,6 +394,24 @@ function UsersSection({ isAdmin }) {
     updateUser(user.id, { board_access: next });
   };
 
+  const resetUserPassword = async (user) => {
+    const newPw = window.prompt(
+      `Set a new password for ${user.email}.\n\nThey'll need to log in with this and can change it later.\n\n(Min 8 chars)`,
+      "",
+    );
+    if (newPw === null) return;
+    if (newPw.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    try {
+      await apiClient.patch(`/admin/users/${user.id}`, { password: newPw });
+      toast.success(`Password reset for ${user.email} — share securely with them`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+
   if (!isAdmin) {
     return <div className="text-sm text-[var(--ayci-ink-muted)]">Admin only.</div>;
   }
@@ -529,6 +547,14 @@ function UsersSection({ isAdmin }) {
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetUserPassword(u)}
+                      data-testid={`user-row-reset-pw-${u.id}`}
+                    >
+                      Reset password
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
