@@ -12,6 +12,17 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-13 — Enhancement: Student context stripe on the Kanban/table ticket card
+- **Why:** Coaches scanning the support-tickets board had no way to tell which tickets were from high-touch Private-tier students with imminent interviews vs. passive Academy members — they had to click each ticket to find out.
+- **What:** Added a tiny one-line `<StudentMatchStripe>` rendered under the student name on every Kanban card and Table row. Shows pills for:
+  - **Tier** — shortened ("Private+" instead of "Academy Private Plus"), violet to make it pop.
+  - **Cohort joined** — slate, neutral context.
+  - **Interview date** — calendar pill colour-coded by proximity: rose (≤7d / today), amber (≤21d), emerald (>21d), slate (past). Includes both nice date ("27 May") and relative suffix ("in 14d"). Hidden when no interview date is set.
+- **Backend:** `student_match._build_match` now also captures `interview_date` from the Monday Academy Members board (column `date_mkr7rdv7`). Cache invalidation logic treats matches missing the new `interview_date` key as stale so existing tickets pick it up on next open without waiting 24h.
+- **One-shot backfill** run in this session: 14 already-matched tickets refreshed with `interview_date`; 34 of 59 previously-unmatched tickets newly linked via the name fallback. 47 stripes now render on Coralie's Kanban view at first paint.
+- **Files:** `backend/student_match.py`, `frontend/src/pages/SupportTickets.jsx`.
+
+
 ### 2026-05-13 — Bugfix: Student lookup now works on Circle DM tickets (Coralie)
 - **Bug:** Coralie reported "student lookup in the ticket isn't working." Repro'd: Circle DM tickets land with `student_name` only (no `student_email` or `phone`), so `student_match.match_student` had nothing to match on and returned `{matched: False}`. Result: the ticket detail panel showed no "Linked student record" card and no "Student Lookup" link — Coralie couldn't jump from a Circle DM ticket to the unified Student Lookup view.
 - **Fix (backend):** `student_match.match_student` now takes an optional `name`. When email/phone fail, it resolves `name → email` via the cached Circle members list (`student_lookup.name_search`, only honours matches ≥ 80) then runs the existing Monday email search. Returned match carries `matched_via: "name"` for observability. `ensure_ticket_student_match` no longer honours the 24h cache for previously-unmatched tickets, so existing Circle DM tickets auto-rematch on next open.

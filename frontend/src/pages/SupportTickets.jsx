@@ -20,6 +20,7 @@ import {
   Download,
   Lock,
   XCircle,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
@@ -627,6 +628,80 @@ function StatusChip({ status }) {
   );
 }
 
+// Compact "Tier · Cohort · Interview date" stripe rendered under the student
+// name on Kanban cards and table rows so coaches see at-a-glance whether a
+// ticket is from a private-tier student with an imminent interview.
+function shortenTier(tier) {
+  if (!tier) return null;
+  return tier.replace(/^Academy\s+/i, "").replace(/Private\s+Plus/i, "Private+");
+}
+
+function parseInterviewDate(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((d - today) / 86400000);
+  const label = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  let tone, suffix;
+  if (diffDays < 0) {
+    tone = "bg-slate-100 text-slate-600 border-slate-200";
+    suffix = `${Math.abs(diffDays)}d ago`;
+  } else if (diffDays === 0) {
+    tone = "bg-rose-100 text-rose-800 border-rose-300";
+    suffix = "today";
+  } else if (diffDays <= 7) {
+    tone = "bg-rose-50 text-rose-800 border-rose-200";
+    suffix = `in ${diffDays}d`;
+  } else if (diffDays <= 21) {
+    tone = "bg-amber-50 text-amber-900 border-amber-200";
+    suffix = `in ${diffDays}d`;
+  } else {
+    tone = "bg-emerald-50 text-emerald-800 border-emerald-200";
+    suffix = `in ${diffDays}d`;
+  }
+  return { label, suffix, tone, diffDays };
+}
+
+function StudentMatchStripe({ match, compact = false }) {
+  if (!match || !match.matched) return null;
+  const tier = shortenTier(match.tier);
+  const cohort = match.cohort;
+  const iv = parseInterviewDate(match.interview_date);
+  if (!tier && !cohort && !iv) return null;
+  return (
+    <div
+      className={`mt-1 flex items-center gap-1 flex-wrap ${compact ? "text-[10px]" : "text-[10.5px]"}`}
+      data-testid="ticket-student-stripe"
+    >
+      {tier && (
+        <span className="inline-flex items-center px-1.5 py-px rounded border bg-violet-50 text-violet-800 border-violet-200 font-semibold leading-tight">
+          {tier}
+        </span>
+      )}
+      {cohort && (
+        <span className="inline-flex items-center px-1.5 py-px rounded border bg-slate-50 text-slate-700 border-slate-200 leading-tight">
+          {cohort}
+        </span>
+      )}
+      {iv && (
+        <span
+          className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded border font-semibold leading-tight ${iv.tone}`}
+          title={`Interview ${iv.label} — ${iv.suffix}`}
+        >
+          <Calendar className="w-2.5 h-2.5" />
+          {iv.label}
+          <span className="opacity-70 font-normal ml-0.5">· {iv.suffix}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+
+
 function KanbanBoard({ grouped, teamById, onOpen, onUpdate, selectedIds, onToggleSelect, onToggleSelectMany }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3" data-testid="tickets-kanban">
@@ -743,6 +818,7 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSele
         {ticket.subject}
       </div>
       <div className="text-xs text-[var(--ayci-ink-muted)] mt-1 truncate">{ticket.student_name}</div>
+      <StudentMatchStripe match={ticket.student_match} compact />
       <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-1.5 flex items-center justify-between gap-1">
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
@@ -843,6 +919,7 @@ function TicketTable({ rows, teamById, onOpen, selectedIds, onToggleSelect, onTo
                   <td className="px-3 py-2.5">
                     <div className="text-[var(--ayci-ink)]">{t.student_name}</div>
                     <div className="text-xs text-[var(--ayci-ink-muted)]">{t.student_email}</div>
+                    <StudentMatchStripe match={t.student_match} />
                   </td>
                   <td className="px-3 py-2.5 capitalize text-[var(--ayci-ink-muted)]">{t.category}</td>
                   <td className="px-3 py-2.5 text-[var(--ayci-ink-muted)]">

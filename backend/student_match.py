@@ -32,6 +32,7 @@ COL_EMAIL = "email_mkqxv0j0"
 COL_PHONE = "phone_mkqxcapx"
 COL_TIER = "dropdown_mkqxgqbq"
 COL_COHORT_JOINED = "dropdown_mkqxhw8p"
+COL_INTERVIEW_DATE = "date_mkr7rdv7"
 
 STUDENT_MATCH_TTL_HOURS = 24
 
@@ -149,6 +150,7 @@ def _build_match(item: dict) -> dict:
         "phone": _txt(cols, COL_PHONE) or None,
         "tier": _txt(cols, COL_TIER) or None,
         "cohort": _txt(cols, COL_COHORT_JOINED) or None,
+        "interview_date": _txt(cols, COL_INTERVIEW_DATE) or None,
         "monday_item_id": item.get("id"),
         "monday_url": item.get("url"),
     }
@@ -216,11 +218,17 @@ async def ensure_ticket_student_match(db, ticket: dict, *, force: bool = False) 
     cache = ticket.get("student_match")
     cached_at = ticket.get("student_match_at")
     cached_matched = bool(cache and cache.get("matched"))
+    # Successful matches written before the `interview_date` field existed
+    # don't carry that key — treat them as stale so the stripe on the
+    # Kanban card / table row picks up tier · cohort · interview-date on
+    # the next ticket open without waiting 24h for the TTL.
+    cache_has_new_fields = bool(cache and "interview_date" in cache)
     # Re-try unmatched tickets on every open (cheap — Circle name cache is in
     # Mongo, Monday email search is ~500ms). Without this, Circle DM tickets
     # that landed before the name-fallback existed would stay un-linked for
-    # 24h. Only the cache for successful matches is honoured long-term.
-    if cache and cached_at and not force and cached_matched:
+    # 24h. Only the cache for successful matches with the latest field set is
+    # honoured long-term.
+    if cache and cached_at and not force and cached_matched and cache_has_new_fields:
         ts = cached_at
         if isinstance(ts, datetime):
             if ts.tzinfo is None:
