@@ -58,12 +58,39 @@ export default function InterviewEveWidget() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        <Stat label="Sent" value={c.sent} tone="bg-slate-100 text-slate-800 border-slate-300" testid="eve-stat-sent" />
-        <Stat label="Replied" value={c.replied} tone="bg-blue-50 text-blue-900 border-blue-200" testid="eve-stat-replied" />
-        <Stat label="Pending" value={c.pending} tone="bg-amber-50 text-amber-900 border-amber-200" testid="eve-stat-pending" />
-        <Stat label="Low score ≤5" value={c.low_score} tone="bg-rose-50 text-rose-900 border-rose-300" testid="eve-stat-low" />
+      <div className="space-y-3 mb-4">
+        <StatGroup
+          title="All students"
+          stats={c}
+          tones={{ sent: "bg-slate-100 text-slate-800 border-slate-300",
+                   replied: "bg-blue-50 text-blue-900 border-blue-200",
+                   pending: "bg-amber-50 text-amber-900 border-amber-200",
+                   low: "bg-rose-50 text-rose-900 border-rose-300" }}
+          testidPrefix="eve-stat"
+        />
+        <StatGroup
+          title="Private tier"
+          stats={data.private_tier || {}}
+          tones={{ sent: "bg-violet-50 text-violet-900 border-violet-200",
+                   replied: "bg-violet-50 text-violet-900 border-violet-200",
+                   pending: "bg-violet-50 text-violet-900 border-violet-200",
+                   low: "bg-rose-50 text-rose-900 border-rose-300" }}
+          testidPrefix="eve-stat-private"
+        />
       </div>
+
+      {(data.private_tier_rows || []).length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] uppercase tracking-wider font-semibold text-violet-700 mb-1.5">
+            Recent private-tier scores
+          </div>
+          <ul className="space-y-1.5 max-h-48 overflow-y-auto" data-testid="interview-eve-private-list">
+            {data.private_tier_rows.map((r) => (
+              <FocusRow key={`pt-${r.id}`} row={r} todayIso={data.today} tomorrowIso={data.tomorrow} />
+            ))}
+          </ul>
+        </div>
+      )}
 
       {(data.focus || []).length > 0 ? (
         <div>
@@ -90,6 +117,35 @@ function Stat({ label, value, tone, testid }) {
     <div className={`border rounded px-2 py-2 text-center ${tone}`} data-testid={testid}>
       <div className="text-xl font-bold leading-none tabular-nums">{value ?? 0}</div>
       <div className="text-[10px] uppercase tracking-wider mt-1">{label}</div>
+    </div>
+  );
+}
+
+function StatGroup({ title, stats, tones, testidPrefix }) {
+  const avg = stats.avg_score;
+  const avgTone =
+    avg == null ? "bg-slate-100 text-slate-600 border-slate-300"
+    : avg <= 5 ? "bg-rose-100 text-rose-900 border-rose-300"
+    : avg <= 7 ? "bg-amber-100 text-amber-900 border-amber-300"
+    : "bg-emerald-100 text-emerald-900 border-emerald-300";
+  return (
+    <div data-testid={`${testidPrefix}-group`}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">{title}</div>
+        <div
+          className={`px-2 py-0.5 ${avgTone} border rounded-full text-[11px] font-bold uppercase tracking-wider tabular-nums`}
+          data-testid={`${testidPrefix}-avg`}
+          title={avg == null ? "No scores received yet in this window" : `Average score across ${stats.replied} replies in the last 7 days`}
+        >
+          Avg {avg == null ? "—" : `${avg}/10`}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Stat label="Sent" value={stats.sent} tone={tones.sent} testid={`${testidPrefix}-sent`} />
+        <Stat label="Replied" value={stats.replied} tone={tones.replied} testid={`${testidPrefix}-replied`} />
+        <Stat label="Pending" value={stats.pending} tone={tones.pending} testid={`${testidPrefix}-pending`} />
+        <Stat label="Low ≤5" value={stats.low_score} tone={tones.low} testid={`${testidPrefix}-low`} />
+      </div>
     </div>
   );
 }

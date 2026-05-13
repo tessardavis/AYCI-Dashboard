@@ -27,8 +27,9 @@ async def run_now(admin: dict = Depends(require_admin)):
 @router.get("/summary")
 async def summary(user: dict = Depends(require_board("coach_activity"))):
     """Aggregated view of the last 7 days of interview-eve DMs — for the
-    Coach Activity widget. Returns counts (sent / replied / low / pending)
-    plus the rows for today + tomorrow's interviews."""
+    Coach Activity widget. Returns counts (sent / replied / low / pending),
+    averages, and the rows for today + tomorrow's interviews, split by
+    tier so private-tier students can be tracked separately."""
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=7)).isoformat()
@@ -37,15 +38,28 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
     ).sort("interview_date", -1).to_list(None)
     today = now.date().isoformat()
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
-    sent = len(rows)
-    replied = sum(1 for r in rows if r.get("score") is not None)
-    low = sum(1 for r in rows if (r.get("score") or 99) <= 5)
-    pending = sent - replied
-    focus = [r for r in rows if r.get("interview_date") in (today, tomorrow)]
+
+    def _stats(subset: list[dict]) -> dict:
+        scored = [r for r in subset if r.get("score") is not None]
+        avg = round(sum(r["score"] for r in scored) / len(scored), 1) if scored else None
+        return {
+            "sent": len(subset),
+            "replied": len(scored),
+            "pending": len(subset) - len(scored),
+            "low_score": sum(1 for r in subset if (r.get("score") or 99) <= 5),
+            "avg_score": avg,
+        }
+
+    private_rows = [r for r in rows if r.get("is_private_tier")]
+    other_rows = [r for r in rows if not r.get("is_private_tier")]
+
     return {
         "window_days": 7,
-        "counts": {"sent": sent, "replied": replied, "low_score": low, "pending": pending},
-        "focus": focus,
+        "counts": _stats(rows),
+        "private_tier": _stats(private_rows),
+        "academy_tier": _stats(other_rows),
+        "focus": [r for r in rows if r.get("interview_date") in (today, tomorrow)],
+        "private_tier_rows": [r for r in private_rows if r.get("score") is not None][:50],
         "today": today,
         "tomorrow": tomorrow,
     }
