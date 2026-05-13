@@ -88,8 +88,12 @@ async def _ensure_dm_chat_room(admin_email: str, member_id: int) -> Optional[str
     """Get-or-create the 1:1 DM chat room between `admin_email` (the coach)
     and the target community member. Returns the chat_room_uuid or None.
 
-    Circle's Headless API exposes `POST /messages` (the "find or create chat
-    room" endpoint) which returns the room for a given pair of members.
+    Circle's Headless API exposes a find-or-create endpoint at
+    `POST /api/headless/v1/messages` which returns the existing or new chat
+    room for a pair of community members. Posting body shape:
+        { "community_member_ids": [<member_id>] }
+    The caller's own `community_member_id` is implicit (derived from the
+    Bearer access token).
     """
     # We need the coach's access token to create the room as them.
     from db import db as _db
@@ -99,21 +103,22 @@ async def _ensure_dm_chat_room(admin_email: str, member_id: int) -> Optional[str
     async with httpx.AsyncClient(timeout=20) as c:
         try:
             r = await c.post(
-                f"{circle_api.HEADLESS_BASE}/chat_rooms",
+                f"{circle_api.HEADLESS_BASE}/messages",
                 headers={"Authorization": f"Bearer {access_token}",
                          "Content-Type": "application/json"},
-                json={
-                    "chat_room": {
-                        "kind": "direct",
-                        "chat_room_participants_attributes": [
-                            {"community_member_id": int(member_id)},
-                        ],
-                    },
-                },
+                json={"chat_room": {
+                    "kind": "direct",
+                    "community_member_ids": [int(member_id)],
+                }},
             )
             if r.status_code in (200, 201):
                 body = r.json()
-                return body.get("uuid") or (body.get("chat_room") or {}).get("uuid")
+                # Response shape: {"chat_room_uuid": "...", "chat_room": {...}, ...}
+                return (
+                    body.get("chat_room_uuid")
+                    or (body.get("chat_room") or {}).get("uuid")
+                    or body.get("uuid")
+                )
             logger.warning(f"[interview-eve] create chat_room failed {r.status_code} {r.text[:200]}")
         except Exception as e:
             logger.warning(f"[interview-eve] create chat_room errored: {e}")

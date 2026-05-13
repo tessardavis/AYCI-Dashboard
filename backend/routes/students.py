@@ -46,18 +46,10 @@ async def _prewarm_drive_summary(student_name: str, email: str) -> None:
         pass
 
 
-@router.get("/students/lookup")
-async def students_lookup(
-    email: str,
-    name: Optional[str] = None,
-    user: dict = Depends(require_board("students")),
-):
-    """Unified student lookup — fan out across Monday.com, Circle, Stripe,
-    ConvertKit, Calendly, Tally in parallel. Optional `name` param falls
-    back to a Monday name-column search when emails differ across platforms."""
-    if not email or "@" not in email:
-        raise HTTPException(400, "Valid email required")
-    email = email.strip().lower()
+async def _run_lookup_fanout(email: str, name: Optional[str] = None) -> dict:
+    """Pure lookup fan-out without auth/HTTP wrapping. Returns the same shape
+    as the GET /students/lookup endpoint. Reused by the cache pre-warm cron
+    so private-tier students are hot before the team starts the day."""
     monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
         lookup.monday_lookup(email, name_hint=name),
         lookup.circle_lookup(db, email),
@@ -82,11 +74,7 @@ async def students_lookup(
             drive_link = await gdrive.find_student_doc_link(db, student_name)
         except Exception as e:
             drive_link = {"found": False, "error": str(e)}
-        # If we already have a fresh AI summary cached, return it inline so the
-        # PrivateDocCard renders instantly instead of triggering a 2nd request.
         drive_summary = await _get_inline_summary(email)
-        # If found a doc but no fresh summary yet, kick off the summary fetch
-        # in the background so it's hot the moment the coach clicks the card.
         if (drive_link or {}).get("found") and not drive_summary:
             asyncio.create_task(_prewarm_drive_summary(student_name, email))
 
@@ -101,6 +89,95 @@ async def students_lookup(
         "drive": drive_link,
         "drive_summary": drive_summary,
     }
+
+
+# Student Lookup is hit repeatedly during a coaching session (coaches re-open
+# the same student to copy a link, check a date, etc). Cache the full
+# fan-out for 30 minutes per email so 2nd/3rd opens are instant. The 05:30 UK
+# pre-warm job populates this for every private-tier student before the team
+# starts the day.
+LOOKUP_CACHE_TTL_MINUTES = 30
+
+
+async def _read_lookup_cache(email: str) -> Optional[dict]:
+    doc = await db.student_lookup_cache.find_one({"_id": email}, {"_id": 0})
+    if not doc:
+        return None
+    cached_at = doc.get("cached_at")
+    if isinstance(cached_at, datetime):
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=timezone.utc)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=LOOKUP_CACHE_TTL_MINUTES)
+        if cached_at > cutoff:
+            payload = doc.get("payload") or {}
+            payload["_cached"] = True
+            payload["_cached_at"] = cached_at.isoformat()
+            return payload
+    return None
+
+
+async def _write_lookup_cache(email: str, payload: dict) -> None:
+    try:
+        # Drop any inline-cached flags before persisting so subsequent reads
+        # don't double-flag.
+        clean = {k: v for k, v in payload.items() if not k.startswith("_")}
+        await db.student_lookup_cache.update_one(
+            {"_id": email},
+            {"$set": {
+                "_id": email,
+                "payload": clean,
+                "cached_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+@router.get("/students/lookup")
+async def students_lookup(
+    email: str,
+    name: Optional[str] = None,
+    refresh: bool = False,
+    user: dict = Depends(require_board("students")),
+):
+    """Unified student lookup — fan out across Monday.com, Circle, Stripe,
+    ConvertKit, Calendly, Tally in parallel. Optional `name` param falls
+    back to a Monday name-column search when emails differ across platforms.
+    Pass `refresh=true` to bypass the 30-min cache and force a fresh fetch."""
+    if not email or "@" not in email:
+        raise HTTPException(400, "Valid email required")
+    email = email.strip().lower()
+
+    if not refresh:
+        cached = await _read_lookup_cache(email)
+        if cached:
+            return cached
+
+    payload = await _run_lookup_fanout(email, name=name)
+    await _write_lookup_cache(email, payload)
+    return payload
+
+
+@router.patch("/students/lookup/{monday_item_id}")
+async def students_lookup_update(
+    monday_item_id: str,
+    body: dict,
+    user: dict = Depends(require_board("students")),
+):
+    """Update a student's name on the Monday Academy Members board. Used by
+    the Student Lookup header pencil-edit so coaches can fix typos / add
+    missing surnames inline. Busts caches so the change is immediately
+    visible across the dashboard."""
+    new_name = (body or {}).get("name", "").strip()
+    if not new_name or len(new_name) < 2:
+        raise HTTPException(400, "Name must be at least 2 characters")
+    if len(new_name) > 80:
+        raise HTTPException(400, "Name too long (max 80 chars)")
+
+    import student_edit as edit_mod
+    result = await edit_mod.update_student_name(db, monday_item_id, new_name)
+    return result
 
 
 @router.get("/students/name-search")

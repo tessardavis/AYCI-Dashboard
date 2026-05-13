@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { Search, Loader2, RefreshCw, ExternalLink, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -154,11 +154,14 @@ export default function StudentLookup() {
   // Derive a "student header" from any platform that has a name + key facts
   const header = (() => {
     if (!result) return null;
+    // Monday is our source-of-truth for the student's full name (synced from
+    // their Tally signup form). Circle / ConvertKit often store just the
+    // first name so prefer Monday first.
     const name =
+      result.monday?.data?.name ||
       result.circle?.data?.name ||
       result.convertkit?.data?.first_name ||
       result.stripe?.data?.customers?.[0]?.name ||
-      result.monday?.data?.name ||
       null;
     const avatar = result.circle?.data?.avatar_url;
 
@@ -314,7 +317,24 @@ export default function StudentLookup() {
       {result && (
         <>
           {/* Identity header */}
-          <StudentHeaderCard header={header} query={query} result={result} />
+          <StudentHeaderCard
+            header={header}
+            query={query}
+            result={result}
+            onNameSaved={(newName) => {
+              // Optimistically update the in-place result so the header reflects
+              // the saved name immediately, then re-fetch in the background to
+              // pick up any downstream changes (Circle cache invalidation etc.).
+              setResult((prev) => prev && prev.monday?.data
+                ? { ...prev, monday: { ...prev.monday, data: { ...prev.monday.data, name: newName } } }
+                : prev);
+              // Bust the server-side cache and re-fetch on next tab visit.
+              apiClient
+                .get(`/students/lookup`, { params: { email: query, refresh: true }, timeout: 30000 })
+                .then(({ data }) => setResult(data))
+                .catch(() => {});
+            }}
+          />
 
           {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
           <CoachSummary result={result} />
@@ -390,7 +410,7 @@ export default function StudentLookup() {
   );
 }
 
-function StudentHeaderCard({ header, query, result }) {
+function StudentHeaderCard({ header, query, result, onNameSaved }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -449,9 +469,11 @@ function StudentHeaderCard({ header, query, result }) {
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-lg sm:text-xl text-[var(--ayci-ink)] truncate">
-            {header?.name || "Unknown student"}
-          </div>
+          <StudentNameEditor
+            currentName={header?.name || "Unknown student"}
+            mondayItemId={result?.monday?.data?.id}
+            onSaved={onNameSaved}
+          />
           <div className="text-xs sm:text-sm text-[var(--ayci-ink-muted)] flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className="break-all">{query}</span>
             {header?.tier && (
@@ -593,6 +615,114 @@ function PlatformBadges({ result }) {
 
 // Re-export to satisfy ExternalLink import (kept to keep bundler from tree-shaking)
 export { ExternalLink };
+
+// ------------------------------------------------------------ StudentNameEditor
+// Inline pencil-edit for the student's name on the Lookup header. Saves back
+// to the Monday Academy Members board (which is our source of truth) and
+// busts the unified-lookup cache so other coaches see the corrected name on
+// their next open. Read-only fallback when there's no Monday item id.
+function StudentNameEditor({ currentName, mondayItemId, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(currentName);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(currentName);
+  }, [currentName]);
+
+  if (!mondayItemId) {
+    // No Monday record means we can't write back — just render the name.
+    return (
+      <div
+        className="font-display font-bold text-lg sm:text-xl text-[var(--ayci-ink)] truncate"
+        data-testid="student-header-name"
+      >
+        {currentName}
+      </div>
+    );
+  }
+
+  const save = async () => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === currentName) {
+      setEditing(false);
+      setDraft(currentName);
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiClient.patch(`/students/lookup/${mondayItemId}`, { name: trimmed });
+      toast.success("Name updated on Monday");
+      setEditing(false);
+      onSaved?.(trimmed);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Could not save name");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5" data-testid="student-name-editor">
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setEditing(false);
+              setDraft(currentName);
+            }
+          }}
+          disabled={saving}
+          className="h-8 text-base font-display font-bold max-w-sm"
+          data-testid="student-name-input"
+        />
+        <Button
+          type="button"
+          onClick={save}
+          disabled={saving || !draft.trim() || draft.trim() === currentName}
+          className="h-8 px-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+          data-testid="student-name-save"
+          title="Save"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => { setEditing(false); setDraft(currentName); }}
+          disabled={saving}
+          className="h-8 px-2"
+          data-testid="student-name-cancel"
+          title="Cancel"
+        >
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="font-display font-bold text-lg sm:text-xl text-[var(--ayci-ink)] flex items-center gap-1.5 group"
+      data-testid="student-header-name"
+    >
+      <span className="truncate">{currentName}</span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="opacity-40 hover:opacity-100 transition-opacity p-1 rounded hover:bg-slate-100"
+        title="Edit name (saves to Monday)"
+        data-testid="student-name-edit-button"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 function isPrivateTier(mondayData) {
   if (!mondayData) return false;

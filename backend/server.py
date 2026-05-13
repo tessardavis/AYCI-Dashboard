@@ -1235,6 +1235,28 @@ async def on_startup():
         CronTrigger(hour=19, minute=0, day_of_week="mon-fri", timezone=tz),
         id="interview_eve_dms",
         replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Pre-warm Student Lookup cache for every private-tier student at 05:30 UK.
+    # Coaches open these students 10x more often than Academy students (private
+    # coaching sessions, weekly 1:1s) — warming the cache means the first open
+    # of the day is instant instead of a 3-8s parallel fan-out. Academy
+    # students fall back to the on-demand 30-min cache.
+    async def _prewarm_private_lookups():
+        import student_prewarm
+        try:
+            res = await student_prewarm.prewarm_private_tier_lookups(db)
+            logger.info(f"[scheduler] prewarm_private_lookups: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] prewarm_private_lookups failed: {e}")
+
+    scheduler.add_job(
+        _prewarm_private_lookups,
+        CronTrigger(hour=5, minute=30, timezone=tz),
+        id="prewarm_private_lookups",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
     scheduler.start()
     logger.info(
