@@ -19,6 +19,45 @@ const daysUntil = (iso, todayIso) => {
   return `in ${diff} days`;
 };
 
+
+// ---------------------------------------------------------------- EveScoreChip
+// Surfaces the student's "How supported do you feel?" pre-interview check-in
+// score (sent the evening before via Coralie's account). Three states:
+//   • DM not yet sent (e.g. interview is still >24h away) → null (hidden)
+//   • DM sent, no score yet → grey pill "Eve · pending"
+//   • Score received → coloured pill "N/10" (red ≤5, amber 6-7, green 8-10)
+function EveScoreChip({ eve }) {
+  if (!eve) return null;
+  const score = eve.score;
+  if (score == null) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
+        title={`Eve-of-interview check-in DM sent ${new Date(eve.sent_at).toLocaleString("en-GB")} — no score reply yet`}
+        data-testid="eve-score-pending"
+      >
+        💬 Eve · pending
+      </span>
+    );
+  }
+  const tone =
+    score <= 5
+      ? "bg-rose-100 text-rose-900 border-rose-300"
+      : score <= 7
+        ? "bg-amber-100 text-amber-900 border-amber-300"
+        : "bg-emerald-100 text-emerald-900 border-emerald-300";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 ${tone} border rounded-full text-[10px] uppercase tracking-wider font-bold`}
+      title={`Pre-interview support score ${score}/10 — replied ${new Date(eve.score_received_at).toLocaleString("en-GB")}`}
+      data-testid={`eve-score-${score}`}
+    >
+      {score <= 5 ? "🚨" : score <= 7 ? "🟡" : "✅"} Eve {score}/10
+    </span>
+  );
+}
+
+
 function InterviewTypeBadge({ type }) {
   const isLocum = (type || "").toLowerCase().includes("locum");
   const cls = isLocum
@@ -364,6 +403,7 @@ function AcademyRow({ student, today }) {
               +{student.over_allowance.over_by} over
             </span>
           )}
+          <EveScoreChip eve={student.eve_score} />
         </div>
         <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex flex-wrap gap-x-3">
           <span>{student.speciality || "—"}</span>
@@ -424,6 +464,7 @@ function PrivateCard({ student, today }) {
                 +{student.over_allowance.over_by} over allowance
               </span>
             )}
+            <EveScoreChip eve={student.eve_score} />
           </div>
           <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
             {student.speciality || "—"}

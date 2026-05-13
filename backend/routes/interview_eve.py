@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 
 import interview_eve_dm
 from db import db
-from deps import require_admin
+from deps import require_admin, require_board
 
 router = APIRouter(prefix="/api/interview-eve", tags=["interview-eve"])
 
@@ -22,6 +22,33 @@ async def list_records(admin: dict = Depends(require_admin), limit: int = 100):
 async def run_now(admin: dict = Depends(require_admin)):
     """Force the interview-eve job to run immediately (for testing)."""
     return await interview_eve_dm.send_interview_eve_dms(db)
+
+
+@router.get("/summary")
+async def summary(user: dict = Depends(require_board("coach_activity"))):
+    """Aggregated view of the last 7 days of interview-eve DMs — for the
+    Coach Activity widget. Returns counts (sent / replied / low / pending)
+    plus the rows for today + tomorrow's interviews."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=7)).isoformat()
+    rows = await db.interview_eve_dms.find(
+        {"sent_at": {"$gte": cutoff}}, {"_id": 0},
+    ).sort("interview_date", -1).to_list(None)
+    today = now.date().isoformat()
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    sent = len(rows)
+    replied = sum(1 for r in rows if r.get("score") is not None)
+    low = sum(1 for r in rows if (r.get("score") or 99) <= 5)
+    pending = sent - replied
+    focus = [r for r in rows if r.get("interview_date") in (today, tomorrow)]
+    return {
+        "window_days": 7,
+        "counts": {"sent": sent, "replied": replied, "low_score": low, "pending": pending},
+        "focus": focus,
+        "today": today,
+        "tomorrow": tomorrow,
+    }
 
 
 @router.get("/preview")

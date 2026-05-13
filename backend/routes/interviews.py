@@ -48,6 +48,35 @@ async def upcoming_interviews(
                     "monday_total_allowance": o["monday_total_allowance"],
                     "over_by": o["over_by"],
                 }
+
+    # Enrich each student with their interview-eve check-in score (if we've
+    # already DM'd them for THIS interview's date). The score appears as a
+    # chip on each row so the team sees pre-interview confidence at a glance.
+    interview_dates = sorted({
+        s.get("interview_date")
+        for bucket in (academy, data["private"]) for s in bucket
+        if s.get("interview_date")
+    })
+    if interview_dates:
+        eve_rows = await db.interview_eve_dms.find(
+            {"interview_date": {"$in": interview_dates}},
+            {"_id": 0, "student_email": 1, "interview_date": 1, "score": 1,
+             "score_received_at": 1, "sent_at": 1, "is_private_tier": 1},
+        ).to_list(None)
+        eve_by_key = {
+            (r["student_email"], r["interview_date"]): r for r in eve_rows
+        }
+        for bucket in (academy, data["private"]):
+            for s in bucket:
+                em = (s.get("email") or "").lower()
+                key = (em, s.get("interview_date"))
+                rec = eve_by_key.get(key)
+                if rec:
+                    s["eve_score"] = {
+                        "score": rec.get("score"),
+                        "score_received_at": rec.get("score_received_at"),
+                        "sent_at": rec.get("sent_at"),
+                    }
     return {
         "academy_window": {"days": academy_days, "end": academy_cutoff},
         "private_window": {"days": private_days, "end": data["window"]["end"]},

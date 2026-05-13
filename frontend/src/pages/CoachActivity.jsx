@@ -6,6 +6,7 @@ import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 import TodayCallsWidget from "@/components/TodayCallsWidget";
 import OverAllowanceWidget from "@/components/OverAllowanceWidget";
+import InterviewEveWidget from "@/components/InterviewEveWidget";
 
 const fmtShortDate = (iso) => {
   if (!iso) return "—";
@@ -74,6 +75,8 @@ export default function CoachActivity() {
       <TodayCallsWidget />
 
       <OverAllowanceWidget />
+
+      <InterviewEveWidget />
 
       {data && (
         <>
