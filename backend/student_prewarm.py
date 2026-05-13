@@ -113,7 +113,9 @@ async def prewarm_private_tier_lookups(db) -> dict:
 
         async def _one(s: dict) -> tuple[bool, bool]:
             try:
-                payload = await _run_lookup_fanout(s["email"], name=s.get("name"))
+                payload = await _run_lookup_fanout(
+                    s["email"], name=s.get("name"), skip_drive_summary=True,
+                )
                 await _write_lookup_cache(s["email"], payload)
                 return True, False
             except Exception as e:

@@ -46,10 +46,20 @@ async def _prewarm_drive_summary(student_name: str, email: str) -> None:
         pass
 
 
-async def _run_lookup_fanout(email: str, name: Optional[str] = None) -> dict:
+async def _run_lookup_fanout(
+    email: str,
+    name: Optional[str] = None,
+    *,
+    skip_drive_summary: bool = False,
+) -> dict:
     """Pure lookup fan-out without auth/HTTP wrapping. Returns the same shape
     as the GET /students/lookup endpoint. Reused by the cache pre-warm cron
-    so private-tier students are hot before the team starts the day."""
+    so private-tier students are hot before the team starts the day.
+
+    `skip_drive_summary=True` disables the background Drive summary
+    pre-generation (Claude API call). Used by the daily prewarm cron to
+    keep costs at $0/day — summaries still generate on-demand when the
+    coach opens the doc card."""
     monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
         lookup.monday_lookup(email, name_hint=name),
         lookup.circle_lookup(db, email),
@@ -75,7 +85,7 @@ async def _run_lookup_fanout(email: str, name: Optional[str] = None) -> dict:
         except Exception as e:
             drive_link = {"found": False, "error": str(e)}
         drive_summary = await _get_inline_summary(email)
-        if (drive_link or {}).get("found") and not drive_summary:
+        if (drive_link or {}).get("found") and not drive_summary and not skip_drive_summary:
             asyncio.create_task(_prewarm_drive_summary(student_name, email))
 
     return {
