@@ -12,6 +12,14 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-13 — Bugfix: Student lookup now works on Circle DM tickets (Coralie)
+- **Bug:** Coralie reported "student lookup in the ticket isn't working." Repro'd: Circle DM tickets land with `student_name` only (no `student_email` or `phone`), so `student_match.match_student` had nothing to match on and returned `{matched: False}`. Result: the ticket detail panel showed no "Linked student record" card and no "Student Lookup" link — Coralie couldn't jump from a Circle DM ticket to the unified Student Lookup view.
+- **Fix (backend):** `student_match.match_student` now takes an optional `name`. When email/phone fail, it resolves `name → email` via the cached Circle members list (`student_lookup.name_search`, only honours matches ≥ 80) then runs the existing Monday email search. Returned match carries `matched_via: "name"` for observability. `ensure_ticket_student_match` no longer honours the 24h cache for previously-unmatched tickets, so existing Circle DM tickets auto-rematch on next open.
+- **Fix (frontend):** `SupportTickets.jsx` ticket detail now renders a fallback "open Student Lookup" link (using `?name=…`) whenever the ticket has a `student_name` but no matched email, so Coralie always has a path off the ticket. `StudentLookup.jsx` honours the new `?name=` query param by pre-filling the search input — the existing debounced name-search picks up suggestions instantly.
+- **Verified:** Logged in as Coralie, called `POST /api/tickets/{id}/match-student` on an unmatched Circle DM ticket → now returns `matched: true` with email/tier/cohort + `matched_via: "name"`. Email-based matches unchanged. Frontend `/students?name=Nalaayeni%20Kanesan` pre-fills the box and surfaces the right candidate.
+- **Files:** `backend/student_match.py`, `frontend/src/pages/SupportTickets.jsx`, `frontend/src/pages/StudentLookup.jsx`.
+
+
 ### 2026-05-13 — Bugfix: Circle ticket reply now posts as the right coach
 - **Bug:** "Circle rejected the message — see backend logs" when Coralie tried to reply from the Tickets board to any Circle DM ticket that originated from Oksana/Becky/Coralie/Anoop (not Tessa). The endpoint hard-coded `admin_email = cfg.coach_emails[0]` (always Tessa). Circle's Headless API rejects POSTs when the posting admin isn't a participant in that 1:1 DM thread.
 - **Fix:** Reply endpoint now looks up `circle_dm_threads.coach_admin_email` (or `ticket.circle_dm_meta.coach_admin_email` as fallback) to identify which coach owns the thread, and posts as that coach's token. Error message now also includes the email it tried to post as.

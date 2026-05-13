@@ -154,11 +154,37 @@ def _build_match(item: dict) -> dict:
     }
 
 
+async def _resolve_email_by_name(db, name: str) -> Optional[str]:
+    """Circle DM tickets land with only a student name (no email/phone). Use the
+    cached Circle members list to map name → email. Returns the email of the
+    top match only when it's a strong (>=80) hit, to avoid linking the wrong
+    student on weak fuzzy matches."""
+    if not name or len(name.strip()) < 2:
+        return None
+    try:
+        import student_lookup as lookup
+        hits = await lookup.name_search(db, name, limit=3)
+    except Exception as e:
+        logger.warning(f"[student-match] name_search failed: {e}")
+        return None
+    if not hits:
+        return None
+    top = hits[0]
+    if (top.get("match_score") or 0) >= 80 and top.get("email"):
+        return top["email"].strip().lower()
+    return None
+
+
 async def match_student(
-    *, email: Optional[str] = None, phone: Optional[str] = None,
+    *,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    name: Optional[str] = None,
+    db=None,
 ) -> dict:
-    """Try email first (cheap indexed search), then phone (board scan). Returns
-    a student-match dict — `matched=False` when no row found."""
+    """Try email first (cheap indexed search), then phone (board scan), then
+    name (Circle cache → email → Monday). Returns a student-match dict —
+    `matched=False` when no row found."""
     try:
         if email:
             item = await _monday_search_by_email(email.strip().lower())
@@ -170,6 +196,14 @@ async def match_student(
                 item = await _monday_search_by_phone(digits)
                 if item:
                     return _build_match(item)
+        if name and db is not None:
+            resolved = await _resolve_email_by_name(db, name)
+            if resolved:
+                item = await _monday_search_by_email(resolved)
+                if item:
+                    out = _build_match(item)
+                    out["matched_via"] = "name"
+                    return out
     except Exception as e:
         logger.warning(f"[student-match] lookup failed: {e}")
         return {"matched": False, "error": str(e)}
@@ -181,7 +215,12 @@ async def ensure_ticket_student_match(db, ticket: dict, *, force: bool = False) 
     match dict. Mutates the ticket doc in place."""
     cache = ticket.get("student_match")
     cached_at = ticket.get("student_match_at")
-    if cache and cached_at and not force:
+    cached_matched = bool(cache and cache.get("matched"))
+    # Re-try unmatched tickets on every open (cheap — Circle name cache is in
+    # Mongo, Monday email search is ~500ms). Without this, Circle DM tickets
+    # that landed before the name-fallback existed would stay un-linked for
+    # 24h. Only the cache for successful matches is honoured long-term.
+    if cache and cached_at and not force and cached_matched:
         ts = cached_at
         if isinstance(ts, datetime):
             if ts.tzinfo is None:
@@ -196,9 +235,15 @@ async def ensure_ticket_student_match(db, ticket: dict, *, force: bool = False) 
         or ticket.get("student_phone")
         or ""
     )
+    name = (ticket.get("student_name") or "").strip()
     # Skip the expensive phone scan when the ticket already has an email — the
     # email search alone is enough and runs in < 500 ms.
-    match = await match_student(email=email or None, phone=phone or None)
+    match = await match_student(
+        email=email or None,
+        phone=phone or None,
+        name=name or None,
+        db=db,
+    )
     await db.tickets.update_one(
         {"id": ticket["id"]},
         {"$set": {

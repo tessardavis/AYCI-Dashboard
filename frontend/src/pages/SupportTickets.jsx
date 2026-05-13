@@ -1166,6 +1166,8 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
   const matchedEmail = (match && match.matched && match.email) || t.student_email || null;
   const studentLookupHref = matchedEmail
     ? `/students?email=${encodeURIComponent(matchedEmail)}`
+    : t.student_name
+    ? `/students?name=${encodeURIComponent(t.student_name)}`
     : null;
 
   return (
@@ -1272,6 +1274,20 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
                 >
                   {matching ? "searching…" : "search again"}
                 </button>
+                {studentLookupHref && (
+                  <>
+                    {" · "}
+                    <a
+                      href={studentLookupHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[var(--ayci-accent)] hover:underline font-semibold inline-flex items-center gap-1 not-italic"
+                      data-testid="ticket-student-lookup-fallback"
+                    >
+                      <ExternalLink className="w-3 h-3" /> open Student Lookup
+                    </a>
+                  </>
+                )}
               </div>
             )}
           </div>

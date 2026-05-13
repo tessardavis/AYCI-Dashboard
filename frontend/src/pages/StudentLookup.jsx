@@ -29,11 +29,18 @@ export default function StudentLookup() {
   const [searchParams] = useSearchParams();
 
   // Auto-run lookup when an `?email=` query param is provided (e.g. from at-risk page)
+  // or auto-fill the search box when only `?name=` is provided (e.g. from a Circle DM
+  // ticket where we only have the student's display name, not their email).
   useEffect(() => {
     const emailParam = searchParams.get("email");
+    const nameParam = searchParams.get("name");
     if (emailParam && emailParam !== query) {
       setSearch(emailParam);
       runLookupForEmail(emailParam);
+    } else if (!emailParam && nameParam && nameParam !== search) {
+      // Pre-fill the input — the debounced name-search effect will fire
+      // suggestions automatically so the coach can pick the right student.
+      setSearch(nameParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
