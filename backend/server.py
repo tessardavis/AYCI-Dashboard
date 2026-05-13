@@ -1218,6 +1218,24 @@ async def on_startup():
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
+
+    # Interview-eve check-in DMs — 19:00 UK every weekday.
+    # Sends a Coralie DM to every student whose interview is tomorrow,
+    # asking for a 1-10 support score. Low scores → Slack alert.
+    async def _interview_eve_dms():
+        import interview_eve_dm
+        try:
+            res = await interview_eve_dm.send_interview_eve_dms(db)
+            logger.info(f"[scheduler] interview_eve_dms: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] interview_eve_dms failed: {e}")
+
+    scheduler.add_job(
+        _interview_eve_dms,
+        CronTrigger(hour=19, minute=0, day_of_week="mon-fri", timezone=tz),
+        id="interview_eve_dms",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
@@ -1362,6 +1380,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     private_videos as routes_private_videos,
     today_calls as routes_today_calls,
     circle as routes_circle,
+    interview_eve as routes_interview_eve,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1370,7 +1389,7 @@ for _r in (
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
     routes_wati.router, routes_private_videos.router, routes_today_calls.router,
-    routes_circle.router,
+    routes_circle.router, routes_interview_eve.router,
 ):
     app.include_router(_r)
 

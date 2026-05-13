@@ -12,6 +12,17 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-13 — Interview-Eve check-in DMs
+- **New scheduled job** at **19:00 UK Mon–Fri**: pulls all students whose interview is tomorrow (from the Monday Academy Members board via `upcoming_interviews.fetch_upcoming_interviews`), looks them up in the Circle members cache by email, ensures a 1:1 DM chat room exists between Coralie and the student, and sends the message:
+  > *Hi {first}, this is an auto-response from Coralie's account. How supported do you feel heading into your interview tomorrow? Reply with a number from 1-10 and we'll be in touch if you need anything. Good luck — you've got this. 💪*
+- **Score capture via existing polling bot**: when the student replies, `circle_dm_poll` calls `interview_eve_dm.maybe_record_score` which extracts a 1-10 number (lenient parser — single-digit numbers in short messages, or digits next to "/10", "rate", "score" in longer messages), saves it on `interview_eve_dms`, and sends an acknowledgement reply ("Thanks {first}, got it — recorded as N/10. Best of luck tomorrow!").
+- **Low-score (≤5) Slack alert**: routed by tier — `SLACK_PRIVATE_TIER_WEBHOOK_URL` for private-tier students (Plus / VIP / 1:1 / Boost & Go), `SLACK_COACH_CHAT_WEBHOOK_URL` for Academy / Silver / Gold. Falls back to `SLACK_WEBHOOK_URL` if neither is set.
+- **Idempotent**: re-running the job won't double-send (keyed on `interview_eve_dms.id = "eve:{date}:{email}"`).
+- **Routes:** `GET /api/interview-eve/preview` (dry-run — who would we DM?), `POST /api/interview-eve/run-now` (force a run), `GET /api/interview-eve/records` (recent DMs + scores).
+- **Files:** `backend/interview_eve_dm.py` (NEW), `backend/routes/interview_eve.py` (NEW), `backend/circle_dm_poll.py` (calls `maybe_record_score` before AI triage), `backend/server.py` (new scheduler job + router include).
+- **New collection:** `interview_eve_dms` `{id, student_email, student_name, interview_date, tier, is_private_tier, circle_member_id, thread_uuid, coach_admin_email, sent_at, sent_body, score, score_received_at, score_raw_text}`.
+- **Status:** Wired end-to-end; preview endpoint shows 5 students queued for tomorrow's interview. Pending user-provided Slack webhook URLs for tier-routed low-score alerts (currently falls back to `SLACK_WEBHOOK_URL`).
+
 ### 2026-05-12 — Per-coach scoped tag exclusion + Coralie bot access
 - **Tessa-only tag exclusion (default):** New config field `tag_exclusion_coach_emails` (defaults to `[tessa@medicalinterviewprep.com]`). The excluded_member_tags list only applies to coaches in this list — other coaches auto-reply to everyone regardless of tags. Editable via `PUT /api/circle/bot/config` + a new editor in Settings → Bot. Implemented by passing `excluded_tags_lower` set to `_poll_one_coach` only when the coach is in the scope list.
 - **New `bot` board permission** added to `ALL_BOARDS`. All Circle bot endpoints (`/circle/bot/*`, `/circle/coach-playbook` GET/PUT, `/circle/dm-events`) switched from `require_admin` → `require_board("bot")`. Admins still pass (role-bypass in `user_has_board`).

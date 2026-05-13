@@ -296,6 +296,35 @@ async def _process_thread(
         })
         return {"skipped": "empty_body"}
 
+    # ---- Interview-eve score capture --------------------------------------
+    # If this thread is an interview-eve DM thread, the first numeric reply
+    # gets recorded as the support score and (if low) fires a Slack alert.
+    try:
+        import interview_eve_dm
+        scored = await interview_eve_dm.maybe_record_score(db, chat_room_uuid, student_text)
+        if scored is not None:
+            # Acknowledge to the student & back off — the conversation is
+            # the equivalent of a Tally form completion.
+            ack = (
+                f"Thanks {(student_name or 'there').split(' ')[0]}, "
+                f"got it — recorded as {scored['score']}/10. "
+                "Best of luck tomorrow!"
+            )
+            await circle_api.post_dm_message(db, admin_email, chat_room_uuid, ack)
+            existing_sent = list((state or {}).get("sent_bodies") or [])
+            existing_sent.append(ack)
+            await _save_thread_state(db, chat_room_uuid, {
+                "state": "active",
+                "last_seen_message_id": latest_id,
+                "sent_bodies": existing_sent[-20:],
+                "last_activity_at": datetime.now(timezone.utc).isoformat(),
+                "last_reply_text": ack,
+                "last_reply_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return {"interview_eve_score_recorded": chat_room_uuid, "score": scored["score"]}
+    except Exception as e:
+        logger.warning(f"[interview-eve] score capture errored: {e}")
+
     # ---- Tag exclusion check ---------------------------------------------
     # If the student carries any excluded member tag (e.g. "Interview week",
     # "Autoreply hold"), the bot stays completely silent — no reply, no
