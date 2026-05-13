@@ -12,6 +12,13 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-13 — Bugfix: Circle ticket reply now posts as the right coach
+- **Bug:** "Circle rejected the message — see backend logs" when Coralie tried to reply from the Tickets board to any Circle DM ticket that originated from Oksana/Becky/Coralie/Anoop (not Tessa). The endpoint hard-coded `admin_email = cfg.coach_emails[0]` (always Tessa). Circle's Headless API rejects POSTs when the posting admin isn't a participant in that 1:1 DM thread.
+- **Fix:** Reply endpoint now looks up `circle_dm_threads.coach_admin_email` (or `ticket.circle_dm_meta.coach_admin_email` as fallback) to identify which coach owns the thread, and posts as that coach's token. Error message now also includes the email it tried to post as.
+- **Polling bot** now writes `coach_admin_email` onto every ticket's `circle_dm_meta` (both escalation + AI-resolve paths), so the fallback works for future tickets even if the thread state doc is dropped.
+- **Backfilled** existing Circle DM tickets with the correct `coach_admin_email` derived from their `thread_uuid` → state lookup (preview database only — production needs a redeploy + an admin to trigger a one-shot backfill, OR the bug is implicitly fixed as new tickets carry the field).
+- **Files:** `backend/routes/circle.py` (lookup thread coach), `backend/circle_dm_poll.py` (set coach_admin_email on ticket meta in both paths).
+
 ### 2026-05-13 — Interview-eve: private-tier separation + averages
 - **Backend `/api/interview-eve/summary` extended** to return three stat groups (overall, private tier, academy tier) each with: sent, replied, pending, low_score, avg_score. Also returns `private_tier_rows` — the last 50 scored private-tier check-ins for the widget's drill-down list.
 - **Widget shows two stat blocks** (All students + Private tier) each with an "Avg N/10" pill in the top-right (colour-coded: red ≤5, amber 6-7, green 8-10). Private-tier scored students list shown below the stat blocks for quick scanning by Coralie / private-tier coach.

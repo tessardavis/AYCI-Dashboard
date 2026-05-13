@@ -243,17 +243,35 @@ async def reply_to_circle_ticket(
     if not thread_uuid:
         raise HTTPException(400, "Ticket missing circle_dm_meta.thread_uuid — can't route back to Circle")
 
-    # Which admin to post as? Whichever coach is configured to watch this DM
-    # (currently a single value in cfg.coach_emails). If empty, fail loudly.
-    cfg = await circle_dm_poll.get_config(db)
-    if not cfg["coach_emails"]:
-        raise HTTPException(400, "No coach admin configured in Settings → Bot")
-    admin_email = cfg["coach_emails"][0]
+    # Which admin to post as? The thread's actual watching coach — NOT
+    # always cfg.coach_emails[0]. Tessa can't post in Oksana's DM threads
+    # and vice versa: Circle's Headless API binds each access token to the
+    # specific admin's chat room participation. Look up the thread state
+    # to find the right coach. Fall back to ticket meta.coach_email then
+    # to the first configured coach (legacy single-coach tickets).
+    thread_state = await db.circle_dm_threads.find_one(
+        {"thread_uuid": thread_uuid},
+        {"_id": 0, "coach_admin_email": 1},
+    )
+    admin_email = (
+        (thread_state or {}).get("coach_admin_email")
+        or meta.get("coach_admin_email")
+    )
+    if not admin_email:
+        cfg = await circle_dm_poll.get_config(db)
+        if not cfg["coach_emails"]:
+            raise HTTPException(400, "No coach admin configured in Settings → Bot")
+        admin_email = cfg["coach_emails"][0]
 
     body = payload.body.strip()
     posted = await circle_api.post_dm_message(db, admin_email, thread_uuid, body)
     if posted is None:
-        raise HTTPException(502, "Circle rejected the message — see backend logs")
+        raise HTTPException(
+            502,
+            f"Circle rejected the message (posting as {admin_email}). "
+            "Most likely the wrong admin account — check that this DM thread "
+            "is actually visible in {admin_email}'s Circle inbox."
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     note = {

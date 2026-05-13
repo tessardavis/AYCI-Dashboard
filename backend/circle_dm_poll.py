@@ -444,6 +444,7 @@ async def _process_thread(
                 "status": "resolved", "priority": "low",
                 "circle_dm_meta.ai_resolved": True,
                 "circle_dm_meta.thread_uuid": chat_room_uuid,
+                "circle_dm_meta.coach_admin_email": admin_email,
             }},
         )
     return {"replied": chat_room_uuid, "posted_id": posted_id}
@@ -463,10 +464,15 @@ async def _escalate_and_reply(
         coach_name=coach_name, message=message, ai_reply=reply,
         escalation_reason=reason,
     )
-    # Tag ticket with thread for traceability
+    # Tag ticket with thread + posting coach for traceability (the coach
+    # reply endpoint needs `coach_admin_email` so it knows which admin to
+    # post the reply as).
     await db.tickets.update_one(
         {"id": ticket_id},
-        {"$set": {"circle_dm_meta.thread_uuid": chat_room_uuid}},
+        {"$set": {
+            "circle_dm_meta.thread_uuid": chat_room_uuid,
+            "circle_dm_meta.coach_admin_email": admin_email,
+        }},
     )
     if slack_notify:
         try:
