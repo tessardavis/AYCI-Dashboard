@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import circle_api
@@ -256,11 +256,25 @@ async def _process_thread(
     sent_ids = set(state.get("sent_message_ids") or [])
     sent_bodies = set(state.get("sent_bodies") or [])
 
-    # Detect human takeover: any admin-authored message that's NOT one of
-    # the bot's recent replies (matched by message id OR by body text —
-    # Circle's chat POST returns 202 without the new message id, so we also
-    # remember the bodies we've posted recently to dedupe robustly).
-    for m in new_messages:
+    # Detect human takeover — scan the FULL fetched window, not just `new_messages`.
+    # Why full window? Two reasons:
+    #   1. A coach can reply directly in Circle's web/mobile UI. If the
+    #      reply happened before `last_seen_message_id` was last bumped
+    #      (e.g. our first-sight seed pinned last_seen to that very message),
+    #      the polling cron would never see the admin reply as "new".
+    #   2. We just shipped a `reset-stuck-threads` admin endpoint to recover
+    #      from cross-environment polling races. Reset threads should
+    #      auto-re-flag to `human_takeover` if a coach has been actively
+    #      chatting via Circle's own UI — without that, the bot would reply
+    #      on top of a live coach conversation.
+    # We exclude messages whose id is in `sent_message_ids` OR whose body is
+    # in `sent_bodies` so the bot doesn't flag its own previous replies as
+    # takeover. We deliberately ignore messages older than 14 days so a
+    # zombie 2-year-old admin message doesn't permanently silence the bot.
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    for m in messages:
+        if (m.get("created_at") or "") < cutoff_iso:
+            continue
         sid = _msg_sender_id(m)
         mid = _msg_id(m)
         body = _msg_body(m)
