@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+import asyncio
 from typing import Optional
 
 import circle_api
@@ -553,13 +554,21 @@ async def _poll_one_coach(db, admin_email: str, excluded_tags_lower: set[str]) -
         per_coach["threads_total"] = len(threads)
         for t in dm_threads:
             try:
-                res = await _process_thread(
-                    db, admin_email=admin_email,
-                    admin_member_id=admin_member_id,
-                    coach_name=coach_name, thread=t,
-                    excluded_tags_lower=excluded_tags_lower,
+                # Per-thread hard timeout so one slow thread can't hang the
+                # whole coach's poll. 8s is generous — typical fetch is <500ms.
+                res = await asyncio.wait_for(
+                    _process_thread(
+                        db, admin_email=admin_email,
+                        admin_member_id=admin_member_id,
+                        coach_name=coach_name, thread=t,
+                        excluded_tags_lower=excluded_tags_lower,
+                    ),
+                    timeout=8,
                 )
                 per_coach["actions"].append(res)
+            except asyncio.TimeoutError:
+                logger.warning(f"[circle-dm-poll] thread {t.get('chat_room_uuid')} timed out (>8s)")
+                per_coach["actions"].append({"timeout": t.get("chat_room_uuid")})
             except Exception as e:
                 logger.exception(f"[circle-dm-poll] thread errored: {e}")
                 per_coach["actions"].append({"error": str(e)[:120]})

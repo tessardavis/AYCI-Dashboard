@@ -1211,10 +1211,16 @@ async def on_startup():
     )
     async def _circle_dm_poll():
         import circle_dm_poll
+        import asyncio as _asyncio
         try:
-            res = await circle_dm_poll.poll_once(db)
+            # Hard timeout — APScheduler's `max_instances=1` means a hung
+            # poll silently drops every subsequent cron fire. Cap each
+            # cycle at 90s so the watchdog actually has something to watch.
+            res = await _asyncio.wait_for(circle_dm_poll.poll_once(db), timeout=90)
             if res.get("replied") or res.get("escalated") or res.get("errors"):
                 logger.info(f"[scheduler] circle_dm_poll: replied={res.get('replied')} escalated={res.get('escalated')} seeded={res.get('seeded')} human_takeover={res.get('human_takeover')} errors={res.get('errors')}")
+        except _asyncio.TimeoutError:
+            logger.warning("[scheduler] circle_dm_poll TIMED OUT after 90s — next cron fire will pick up where this left off")
         except Exception as e:
             logger.warning(f"[scheduler] circle_dm_poll failed: {e}")
 
