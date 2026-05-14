@@ -470,7 +470,13 @@ function Row({ item, users, onEdit, onSaved }) {
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
           {tally && (
-            <a href={tally} target="_blank" rel="noreferrer" className="text-xs text-rose-700 hover:underline flex items-center gap-0.5" title="Watch the student's video">
+            <a
+              href={`${API}/private-videos/${item.id}/video`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-rose-700 hover:underline flex items-center gap-0.5"
+              title="Watch the student's video (mobile-friendly H.264)"
+            >
               <Video className="w-3 h-3" /> Video
             </a>
           )}
@@ -721,7 +727,7 @@ function EditModal({ item, users, onClose, onSaved }) {
           {(item.tally_video?.url || item.video?.url) && (
             <div>
               <Label>Student video</Label>
-              <InlineVideo itemId={item.id} fallbackUrl={item.tally_video?.url || item.video?.url} />
+              <InlineVideo itemId={item.id} />
             </div>
           )}
 
@@ -809,7 +815,7 @@ const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-
 //   3. serve from disk with proper Range support
 // First load takes ~30-90s (download + transcode); we poll the status
 // endpoint and show progress so the user knows it's working.
-function InlineVideo({ itemId, fallbackUrl }) {
+function InlineVideo({ itemId }) {
   const [errored, setErrored] = useState(false);
   const [status, setStatus] = useState("loading");
   const proxyUrl = `${API}/private-videos/${itemId}/video`;
@@ -839,13 +845,12 @@ function InlineVideo({ itemId, fallbackUrl }) {
   }, [itemId]);
 
   if (errored || status === "error" || status === "no_video") {
-    // Fallback when the inline `<video>` can't decode (rare — old browser
-    // missing codecs). The proxy URL works as a navigation target since
-    // the file's already cached + transcoded server-side.
-    const downloadUrl = errored ? proxyUrl : fallbackUrl;
+    // Inline `<video>` couldn't play. We ALWAYS route the fallback to our
+    // proxy URL, which serves the transcoded H.264 — not the raw Tally URL,
+    // because iPhone Chrome can't decode HEVC from non-Apple domains.
     return (
       <a
-        href={downloadUrl}
+        href={proxyUrl}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-1.5 text-sm text-rose-700 hover:underline font-semibold"
@@ -890,14 +895,6 @@ function InlineVideo({ itemId, fallbackUrl }) {
       >
         Your browser can't play this video.
       </video>
-      <a
-        href={fallbackUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="text-[11px] text-[var(--ayci-ink-muted)] hover:text-rose-700 hover:underline inline-flex items-center gap-1"
-      >
-        <ExternalLink className="w-3 h-3" /> Open original (HEVC)
-      </a>
     </div>
   );
 }
