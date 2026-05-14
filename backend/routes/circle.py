@@ -252,6 +252,8 @@ async def bot_diagnose(
         "admin_token_configured": bool(
             (os.environ.get("CIRCLE_API_TOKEN") or "").strip()
         ),
+        "last_poll_started_at": cfg.get("last_poll_started_at"),
+        "last_poll_finished_at": cfg.get("last_poll_at"),
         "coaches": [],
     }
     # Optional deep probe: hit Circle's /messages endpoint directly for

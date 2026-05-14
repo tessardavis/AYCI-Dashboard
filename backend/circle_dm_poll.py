@@ -587,8 +587,19 @@ async def poll_once(db) -> dict:
     cfg = await get_config(db)
     excluded_tags_lower = {(t or "").lower() for t in cfg.get("excluded_member_tags") or []}
     tag_excl_coaches_lower = {(e or "").lower() for e in cfg.get("tag_exclusion_coach_emails") or []}
+    started_at = datetime.now(timezone.utc).isoformat()
+    # Persist `last_poll_started_at` IMMEDIATELY so the dashboard can show
+    # "poll in progress" instead of stuck-at-old-timestamp during a long
+    # poll cycle. Also useful for telling apart "poll hung" from "scheduler
+    # never fired" — a stale started_at means the scheduler isn't even
+    # triggering; a fresh started_at means it triggered but is hung.
+    await db.app_settings.update_one(
+        {"id": _settings_id()},
+        {"$set": {"last_poll_started_at": started_at}},
+        upsert=True,
+    )
     summary = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": started_at,
         "enabled": cfg["enabled"],
         "coaches": [], "replied": 0, "escalated": 0, "seeded": 0,
         "human_takeover": 0, "skipped": 0, "tag_excluded": 0, "errors": [],
@@ -596,11 +607,23 @@ async def poll_once(db) -> dict:
     if not cfg["enabled"]:
         return summary
 
+    # Hard cap each coach's fetch loop at 60s so one slow coach can't hang
+    # the whole poll. Per-thread timeout is 8s but `_poll_one_coach`
+    # iterates serially through hundreds of threads, so total per-coach
+    # cap is the safety net.
+    async def _coach_with_timeout(e: str) -> dict:
+        scoped_tags = excluded_tags_lower if e.lower() in tag_excl_coaches_lower else set()
+        try:
+            return await asyncio.wait_for(
+                _poll_one_coach(db, e, scoped_tags),
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"[circle-dm-poll] coach {e} timed out after 60s")
+            return {"actions": [], "errors": [f"{e}: coach-level timeout"], "threads_checked": 0, "threads_total": 0}
+
     results = await asyncio.gather(
-        *[_poll_one_coach(
-            db, e,
-            excluded_tags_lower if e.lower() in tag_excl_coaches_lower else set(),
-        ) for e in cfg["coach_emails"]],
+        *[_coach_with_timeout(e) for e in cfg["coach_emails"]],
         return_exceptions=True,
     )
     for admin_email, per_coach in zip(cfg["coach_emails"], results):
