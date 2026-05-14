@@ -45,12 +45,24 @@ export default function StudentLookup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Set to true the moment the coach picks a suggestion (or focuses out).
+  // Prevents the dropdown from popping back open when the input text is
+  // programmatically set to the picked name — which would re-trigger the
+  // debounced name-search effect and re-show the suggestion list right
+  // when the unified lookup is loading.
+  const suppressSuggestionsRef = useRef(false);
+
   // Debounced name autocomplete (only when input doesn't look like an email)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = search.trim();
     if (trimmed.length < 2 || trimmed.includes("@")) {
       setSuggestions([]);
+      return;
+    }
+    if (suppressSuggestionsRef.current) {
+      // Don't fire suggestions for a programmatic input update right after a
+      // pick. The user can clear the input or type a new character to re-arm.
       return;
     }
     debounceRef.current = setTimeout(async () => {
@@ -116,7 +128,10 @@ export default function StudentLookup() {
   };
 
   const pickSuggestion = (s) => {
+    suppressSuggestionsRef.current = true;
     setSearch(s.name || s.email);
+    setShowSuggestions(false);
+    setSuggestions([]);
     runLookupForEmail(s.email, s.name);
   };
 
@@ -227,7 +242,12 @@ export default function StudentLookup() {
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ayci-ink-muted)]" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              // Any user typing re-arms suggestions (so they can pick a
+              // different student after a previous lookup).
+              suppressSuggestionsRef.current = false;
+              setSearch(e.target.value);
+            }}
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             placeholder="Email or name…"
