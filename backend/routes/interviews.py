@@ -26,6 +26,7 @@ async def upcoming_interviews(
         f"upcoming_interviews:{wider}",
         ttl_min=30,
         compute_fn=lambda: upcoming.fetch_upcoming_interviews(db=db, days=wider),
+        day_sensitive=True,
     )
     today = datetime.now(timezone.utc).date()
     academy_cutoff = (today + timedelta(days=academy_days)).isoformat()
@@ -103,4 +104,5 @@ async def private_tier_utilisation(
     return await launches_mod._stale_while_revalidate(
         db, cache_key, ttl_min=30,
         compute_fn=lambda: ptu.fetch_private_tier_utilisation(days=days),
+        day_sensitive=True,
     )

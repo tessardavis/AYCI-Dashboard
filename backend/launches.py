@@ -45,6 +45,7 @@ _BG_TASKS: dict[str, asyncio.Task] = {}
 
 async def _stale_while_revalidate(
     db, key: str, ttl_min: int, compute_fn,
+    *, day_sensitive: bool = False,
 ):
     cached = await db[_FN_CACHE].find_one({"_id": key}, {"_id": 0})
     now = datetime.now(timezone.utc)
@@ -56,6 +57,11 @@ async def _stale_while_revalidate(
         if ca.tzinfo is None:
             ca = ca.replace(tzinfo=timezone.utc)
         is_fresh = ca > fresh_cutoff
+        # Day-sensitive payloads (anything that labels rows "Today" / "Tomorrow")
+        # must be discarded outright when the UTC date rolls over — otherwise
+        # yesterday's "Today" sticks around until the TTL expires.
+        if is_fresh and day_sensitive and ca.date() != now.date():
+            is_fresh = False
 
     async def _refresh():
         try:
@@ -71,6 +77,11 @@ async def _stale_while_revalidate(
 
     if cached and is_fresh:
         return cached["payload"]
+
+    # Day-sensitive: when the date has rolled over, recompute SYNCHRONOUSLY so
+    # the user never sees yesterday's "Today" labels even for a single render.
+    if day_sensitive and cached and not is_fresh:
+        return await _refresh()
 
     if cached and not is_fresh:
         # Stale — return cached, kick off a background refresh (deduped by key)
