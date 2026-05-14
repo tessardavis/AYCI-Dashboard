@@ -1271,6 +1271,7 @@ function CoachPlaybookSection({ isAdmin }) {
   const [loadingBot, setLoadingBot] = useState(true);
   const [polling, setPolling] = useState(false);
   const [resetting, setResetting] = useState(null);
+  const [resettingAll, setResettingAll] = useState(false);
   const [editingCoaches, setEditingCoaches] = useState(false);
   const [coachEmailsInput, setCoachEmailsInput] = useState("");
   const [editingTags, setEditingTags] = useState(false);
@@ -1355,6 +1356,25 @@ function CoachPlaybookSection({ isAdmin }) {
       toast.error("Poll failed: " + (err.response?.data?.detail || err.message));
     } finally {
       setPolling(false);
+    }
+  };
+
+  const resetAllStuck = async () => {
+    if (!confirm(
+      "Reset every thread currently in 'human takeover' back to active?\n\n" +
+      "Use this when threads got stuck because of a deployment / env race. " +
+      "The bot's lookback guard will auto-re-flag any threads where a coach " +
+      "has been chatting in Circle's own UI on the next poll, so this is safe."
+    )) return;
+    setResettingAll(true);
+    try {
+      const { data } = await apiClient.post("/circle/bot/reset-stuck-threads");
+      toast.success(`Reset ${data.modified} stuck thread${data.modified === 1 ? "" : "s"} — bot re-armed`);
+      loadBot();
+    } catch (err) {
+      toast.error("Reset all failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setResettingAll(false);
     }
   };
 
@@ -1509,6 +1529,16 @@ function CoachPlaybookSection({ isAdmin }) {
                   disabled={polling} data-testid="bot-poll-now-btn"
                 >
                   {polling ? "Polling…" : "Poll now"}
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  onClick={resetAllStuck} variant="outline" size="sm"
+                  disabled={resettingAll} data-testid="bot-reset-all-stuck-btn"
+                  className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                  title="Re-arm every thread currently in 'human takeover'. The bot's lookback guard will auto-re-flag any active coach conversations on the next poll."
+                >
+                  {resettingAll ? "Resetting…" : "Reset stuck threads"}
                 </Button>
               )}
             </div>
