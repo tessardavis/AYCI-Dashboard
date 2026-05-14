@@ -235,7 +235,10 @@ async def bot_reset_thread(thread_uuid: str, user: dict = Depends(require_board(
 
 
 @router.get("/bot/diagnose")
-async def bot_diagnose(user: dict = Depends(require_board("bot"))):
+async def bot_diagnose(
+    probe: int = 0,
+    user: dict = Depends(require_board("bot")),
+):
     """Read-only snapshot of every coach admin's DM inbox as Circle's
     Headless API sees it. Use this to verify a test DM actually landed in
     the right inbox before troubleshooting the bot itself."""
@@ -251,6 +254,26 @@ async def bot_diagnose(user: dict = Depends(require_board("bot"))):
         ),
         "coaches": [],
     }
+    # Optional deep probe: hit Circle's /messages endpoint directly so we
+    # can see status code + raw body shape. Triggered by ?probe=1 — kept
+    # off by default since it's chatty.
+    if probe:
+        import httpx
+        for admin_email in cfg["coach_emails"][:1]:  # just the first coach
+            tok = await circle_api._get_access_token(db, admin_email)
+            probe_url = f"{circle_api.HEADLESS_BASE}/messages?per_page=5"
+            try:
+                async with httpx.AsyncClient(timeout=15) as c:
+                    r = await c.get(probe_url, headers={"Authorization": f"Bearer {tok}"})
+                out["probe"] = {
+                    "admin_email": admin_email,
+                    "url": probe_url,
+                    "status": r.status_code,
+                    "headers_keys": list(r.headers.keys()),
+                    "body_text_head": r.text[:600],
+                }
+            except Exception as e:
+                out["probe"] = {"error": str(e)}
     for admin_email in cfg["coach_emails"]:
         # Per-coach diagnostic — surface every failure mode so we can tell
         # auth failures apart from "Circle's chat_rooms endpoint just
