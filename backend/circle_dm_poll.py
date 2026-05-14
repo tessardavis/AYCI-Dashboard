@@ -186,7 +186,7 @@ def _holding_handoff(student_first: str, coach_name: str) -> str:
         f"Hi {student_first}, thanks so much for getting in touch! 🙏 "
         f"I've got your message and the team will be in touch within 24 hours. "
         f"In the meantime, feel free to share any extra context that might help us help you faster.\n\n"
-        f"Speak soon,\n{coach_first} x"
+        f"Speak soon,\n{coach_first}"
     )
 
 
@@ -304,10 +304,12 @@ async def _process_thread(
         if scored is not None:
             # Acknowledge to the student & back off — the conversation is
             # the equivalent of a Tally form completion.
+            student_first = (student_name or "there").split(" ")[0]
+            coach_first = (coach_name or "").split(" ")[0] or "the team"
             ack = (
-                f"Thanks {(student_name or 'there').split(' ')[0]}, "
-                f"got it — recorded as {scored['score']}/10. "
-                "Best of luck tomorrow!"
+                f"Thanks {student_first}! Got you down as {scored['score']}/10 — "
+                f"sending you all the best for tomorrow. You've got this 💪\n\n"
+                f"{coach_first}"
             )
             await circle_api.post_dm_message(db, admin_email, chat_room_uuid, ack)
             existing_sent = list((state or {}).get("sent_bodies") or [])

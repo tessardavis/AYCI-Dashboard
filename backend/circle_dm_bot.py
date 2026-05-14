@@ -181,7 +181,7 @@ async def _generate_reply(
         "doing well!'). Then give the helpful answer in plain, conversational "
         "language. End with something supportive like 'Hope that helps!', "
         "'Let me know if you need anything else!', or 'Speak soon!'. Sign off "
-        f"with just the coach's first name on a new line: '{(coach_name or '').split(' ')[0]} x'. "
+        f"with just the coach's first name on a new line: '{(coach_name or '').split(' ')[0]}'. "
         "Keep total reply under 600 characters.\n"
         "3. Never invent facts not in the playbook. Never quote refund or "
         "cancellation policy. Never reference dates, prices, or names that "
@@ -218,7 +218,7 @@ def _holding_reply(sender_name: str, coach_name: str) -> str:
         f"I've got your message and I'll come back to you within 24 hours. "
         f"If it's really urgent, drop us a line at support@medicalinterviewprep.com "
         f"and we'll jump on it sooner.\n\n"
-        f"Speak soon,\n{coach_first} x"
+        f"Speak soon,\n{coach_first}"
     )
 
 

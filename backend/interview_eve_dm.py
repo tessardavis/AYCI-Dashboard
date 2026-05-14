@@ -59,7 +59,7 @@ def _build_dm_body(first_name: str) -> str:
         f"Quick check-in — on a scale of 1 to 10, how supported do you feel heading in? "
         f"Just pop a number back and if anything's not quite right we'll be in touch "
         f"tonight to help.\n\n"
-        f"You've got this!\n{coach_first} x"
+        f"You've got this!\n{coach_first}"
     )
 
 
