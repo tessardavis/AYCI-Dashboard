@@ -242,13 +242,23 @@ async def bot_diagnose(user: dict = Depends(require_board("bot"))):
     import circle_api
     import circle_dm_poll
     cfg = await circle_dm_poll.get_config(db)
-    out = {"coaches": []}
+    out: dict = {
+        "parent_token_configured": bool(
+            (os.environ.get("CIRCLE_HEADLESS_TOKEN") or "").strip()
+        ),
+        "admin_token_configured": bool(
+            (os.environ.get("CIRCLE_API_TOKEN") or "").strip()
+        ),
+        "coaches": [],
+    }
     for admin_email in cfg["coach_emails"]:
+        # Per-coach diagnostic — surface every failure mode so we can tell
+        # auth failures apart from "Circle's chat_rooms endpoint just
+        # returned an empty list this minute".
+        token = await circle_api._get_access_token(db, admin_email)
         admin_id = await circle_api.get_cached_admin_member_id(db, admin_email)
-        if not admin_id:
-            tok = await circle_api._get_access_token(db, admin_email)
-            if tok:
-                admin_id = await circle_api.get_cached_admin_member_id(db, admin_email)
+        if not admin_id and token:
+            admin_id = await circle_api.get_cached_admin_member_id(db, admin_email)
         threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
         dms = [t for t in threads if (t.get("chat_room") or {}).get("kind") == "direct"]
         rows = []
@@ -273,6 +283,7 @@ async def bot_diagnose(user: dict = Depends(require_board("bot"))):
         rows.sort(key=lambda r: r["last_activity_at"] or "", reverse=True)
         out["coaches"].append({
             "admin_email": admin_email,
+            "headless_token_ok": bool(token),
             "admin_member_id": admin_id,
             "total_threads": len(threads),
             "dm_threads": len(dms),
