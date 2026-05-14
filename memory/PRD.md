@@ -134,8 +134,7 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 ## Pending Tasks
 
 ### P1 — Upcoming
-- Slack daily support-tickets digest @ 8am UK (top 3 overdue + counts by priority)
-- Personalised Slack DM kickstart @ 9am UK weekdays ("You have N open / M overdue")
+(none currently — Slack digests removed at user's request 2026-05-14)
 
 ### P2 — Future
 - Enriched Linked Student card in ticket UI (interview date, at-risk, Pulse signal)
