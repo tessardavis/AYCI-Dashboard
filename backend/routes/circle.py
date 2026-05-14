@@ -254,26 +254,34 @@ async def bot_diagnose(
         ),
         "coaches": [],
     }
-    # Optional deep probe: hit Circle's /messages endpoint directly so we
-    # can see status code + raw body shape. Triggered by ?probe=1 — kept
-    # off by default since it's chatty.
+    # Optional deep probe: hit Circle's /messages endpoint directly for
+    # EVERY coach so we can see status code + raw body shape per coach.
+    # Triggered by ?probe=1 — kept off by default since it's chatty.
     if probe:
         import httpx
-        for admin_email in cfg["coach_emails"][:1]:  # just the first coach
+        out["probes"] = []
+        for admin_email in cfg["coach_emails"]:
             tok = await circle_api._get_access_token(db, admin_email)
-            probe_url = f"{circle_api.HEADLESS_BASE}/messages?per_page=5"
+            probe_url = f"{circle_api.HEADLESS_BASE}/messages?per_page=5&page=1"
+            entry: dict = {"admin_email": admin_email, "token_minted": bool(tok)}
+            if not tok:
+                out["probes"].append(entry)
+                continue
             try:
                 async with httpx.AsyncClient(timeout=15) as c:
                     r = await c.get(probe_url, headers={"Authorization": f"Bearer {tok}"})
-                out["probe"] = {
-                    "admin_email": admin_email,
-                    "url": probe_url,
-                    "status": r.status_code,
-                    "headers_keys": list(r.headers.keys()),
-                    "body_text_head": r.text[:600],
-                }
+                entry["url"] = probe_url
+                entry["status"] = r.status_code
+                entry["body_text_head"] = r.text[:500]
+                try:
+                    body = r.json()
+                    entry["json_keys"] = list(body.keys()) if isinstance(body, dict) else None
+                    entry["records_count"] = len((body or {}).get("records") or []) if isinstance(body, dict) else None
+                except Exception:
+                    entry["json_keys"] = "(not JSON)"
             except Exception as e:
-                out["probe"] = {"error": str(e)}
+                entry["error"] = str(e)
+            out["probes"].append(entry)
     for admin_email in cfg["coach_emails"]:
         # Per-coach diagnostic — surface every failure mode so we can tell
         # auth failures apart from "Circle's chat_rooms endpoint just
