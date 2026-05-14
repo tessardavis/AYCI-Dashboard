@@ -271,7 +271,14 @@ async def _process_thread(
     # in `sent_bodies` so the bot doesn't flag its own previous replies as
     # takeover. We deliberately ignore messages older than 14 days so a
     # zombie 2-year-old admin message doesn't permanently silence the bot.
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    # Additionally we ignore anything older than `reset_at` — when a coach
+    # resets a stuck thread via the dashboard they're explicitly saying
+    # "forget the past and resume normal bot behaviour".
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    cutoff_iso = (_dt.now(_tz.utc) - _td(days=14)).isoformat()
+    reset_at_iso = state.get("reset_at") or ""
+    if reset_at_iso and reset_at_iso > cutoff_iso:
+        cutoff_iso = reset_at_iso
     for m in messages:
         if (m.get("created_at") or "") < cutoff_iso:
             continue
