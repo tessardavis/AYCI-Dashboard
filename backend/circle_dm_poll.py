@@ -180,14 +180,13 @@ def _identify_student(thread: dict, admin_member_id: int) -> tuple[Optional[int]
     return None, None
 
 
-def _ai_disclosure(student_first: str, coach_name: str) -> str:
-    return f"Hi {student_first}, this is an auto-response from {coach_name}'s account."
-
-
 def _holding_handoff(student_first: str, coach_name: str) -> str:
+    coach_first = (coach_name or "").split(" ")[0] or "the team"
     return (
-        f"{_ai_disclosure(student_first, coach_name)} "
-        "I'm passing this to the team, they'll be in touch within 24h.\nBest, AYCI Team"
+        f"Hi {student_first}, thanks so much for getting in touch! 🙏 "
+        f"I've got your message and the team will be in touch within 24 hours. "
+        f"In the meantime, feel free to share any extra context that might help us help you faster.\n\n"
+        f"Speak soon,\n{coach_first} x"
     )
 
 

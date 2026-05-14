@@ -170,12 +170,19 @@ async def _generate_reply(
         "by the COACH PLAYBOOK below. Otherwise, output exactly the token "
         "`NEEDS_HUMAN` and nothing else, and the team will pick it up.\n\n"
         f"=== COACH PLAYBOOK ===\n{playbook}\n=== END PLAYBOOK ===\n\n"
+        "When you DO answer, write as if you ARE the coach. The student does NOT "
+        "need to know the reply is automated — never mention that, never call "
+        "yourself a bot, never use the phrase 'auto-response'. Be warm, friendly "
+        "and encouraging — like a real coach who knows them well.\n\n"
         "Rules:\n"
         "1. If the playbook does not clearly cover the question, output `NEEDS_HUMAN`.\n"
-        "2. If you DO answer: start with the AI disclosure exactly: "
-        f"'Hi {sender_name}, this is an auto-response from {coach_name}'s account.' "
-        "Then on a new line, give the helpful answer. Keep total reply under 500 "
-        "characters. Sign off warmly (e.g. 'Best, AYCI Team').\n"
+        f"2. If you DO answer: start with 'Hi {sender_name}, ' followed by a warm "
+        "opener (e.g. 'thanks for reaching out!', 'great question!', 'hope you're "
+        "doing well!'). Then give the helpful answer in plain, conversational "
+        "language. End with something supportive like 'Hope that helps!', "
+        "'Let me know if you need anything else!', or 'Speak soon!'. Sign off "
+        f"with just the coach's first name on a new line: '{(coach_name or '').split(' ')[0]} x'. "
+        "Keep total reply under 600 characters.\n"
         "3. Never invent facts not in the playbook. Never quote refund or "
         "cancellation policy. Never reference dates, prices, or names that "
         "aren't in the playbook.\n"
@@ -204,10 +211,14 @@ async def _generate_reply(
 
 
 def _holding_reply(sender_name: str, coach_name: str) -> str:
+    student_first = (sender_name or "there").split(" ")[0]
+    coach_first = (coach_name or "").split(" ")[0] or "the team"
     return (
-        f"Hi {sender_name}, this is an auto-response from {coach_name}'s account. "
-        "I've passed your message on to the team — they'll respond within 24h. "
-        "If it's urgent, please email support@medicalinterviewprep.com.\nBest, AYCI Team"
+        f"Hi {student_first}, thanks so much for getting in touch! 🙏 "
+        f"I've got your message and I'll come back to you within 24 hours. "
+        f"If it's really urgent, drop us a line at support@medicalinterviewprep.com "
+        f"and we'll jump on it sooner.\n\n"
+        f"Speak soon,\n{coach_first} x"
     )
 
 

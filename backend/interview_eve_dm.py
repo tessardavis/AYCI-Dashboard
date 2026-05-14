@@ -53,11 +53,13 @@ def _tomorrow_iso() -> str:
 
 
 def _build_dm_body(first_name: str) -> str:
+    coach_first = (COACH_DISPLAY_NAME or "").split(" ")[0] or "the team"
     return (
-        f"Hi {first_name}, this is an auto-response from {COACH_DISPLAY_NAME}'s account. "
-        "How supported do you feel heading into your interview tomorrow? "
-        "Reply with a number from 1-10 and we'll be in touch if you need anything. "
-        "Good luck — you've got this. 💪"
+        f"Hi {first_name}! 💪 Hope you're feeling good about tomorrow's interview. "
+        f"Quick check-in — on a scale of 1 to 10, how supported do you feel heading in? "
+        f"Just pop a number back and if anything's not quite right we'll be in touch "
+        f"tonight to help.\n\n"
+        f"You've got this!\n{coach_first} x"
     )
 
 

@@ -12,6 +12,19 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-13 — Warmer, more human auto-replies (no AI disclosure, signed by coach first name)
+- **User feedback:** "Our auto-replies feel a bit robotic — they mention 'this is an auto-response from Coralie Fairon's account' and sign off as 'AYCI Team'. Should feel warm, friendly, signed by the coach, and never call out the automation."
+- **Rewrote every customer-facing template** so the student never sees the word "auto-response" and the message reads like the coach wrote it themselves:
+  - **Circle DM holding handoff** (bot can't answer, escalates to ticket): _"Hi Ben, thanks so much for getting in touch! 🙏 I've got your message and the team will be in touch within 24 hours. In the meantime, feel free to share any extra context that might help us help you faster. Speak soon, Coralie x"_
+  - **AI fallback holding** (when Claude is down): _"Hi Ben, thanks so much for getting in touch! 🙏 I've got your message and I'll come back to you within 24 hours. If it's really urgent, drop us a line at support@medicalinterviewprep.com and we'll jump on it sooner. Speak soon, Coralie x"_
+  - **Interview-eve check-in DM**: _"Hi Ben! 💪 Hope you're feeling good about tomorrow's interview. Quick check-in — on a scale of 1 to 10, how supported do you feel heading in? Just pop a number back and if anything's not quite right we'll be in touch tonight to help. You've got this! Coralie x"_
+  - **Eve score ack**: _"Thanks Ben! Got you down as 9/10 — sending you all the best vibes for tomorrow. You've got this 💪 Coralie x"_
+- **Updated the Claude system prompt** for AI-generated playbook answers so the bot writes _as the coach_ — never refers to itself as automated, opens warmly ("thanks for reaching out!", "great question!"), uses the student's first name, ends with a supportive line ("Hope that helps!" / "Let me know if you need anything else!" / "Speak soon!"), and signs off as `{coach_first} x` on its own line.
+- **Removed `_ai_disclosure` helper** entirely — was only used by the escalation handoff. Also removed `Best, AYCI Team` sign-off (was used everywhere).
+- **Files:** `backend/circle_dm_poll.py` (`_holding_handoff` rewrite + eve ack rewrite), `backend/circle_dm_bot.py` (system-prompt rewrite + `_holding_reply` rewrite), `backend/interview_eve_dm.py` (`_build_dm_body` rewrite), `backend/routes/circle.py` (fail-open reply text).
+- **Note:** Changes apply to NEW messages going forward. Anything already in students' Circle inboxes keeps the old wording.
+
+
 ### 2026-05-13 — Student Lookup: editable name, 30-min cache, 5:30 UK pre-warm, hover-prefetch + eve-DM endpoint fix
 - **Editable student name** — pencil affordance on the Student Lookup header. Clicking opens an inline input that PATCHes `/api/students/lookup/{monday_item_id}` to rename the Monday Academy Members item. On save: cache is busted, Circle members cache is updated in-place so name-search picks up the new spelling immediately, and the header optimistically reflects the change. Falls back to read-only when there's no Monday item id. Endpoint validates 2-80 char name.
 - **30-min unified-lookup cache** — wraps the existing `GET /api/students/lookup` fan-out (Monday + Circle + Stripe + ConvertKit + Calendly + Tally + Drive). 2nd/3rd opens of the same student within 30 min return in ~250ms instead of ~2-8s (**~8× speed-up** measured on Ben Silver: 2047ms → 242ms). Pass `refresh=true` to bypass. Response includes `_cached: true` + `_cached_at` so the UI can show a fresh-vs-cached indicator if we ever want one.

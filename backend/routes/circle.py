@@ -65,7 +65,7 @@ async def circle_dm_webhook(request: Request, background: BackgroundTasks):
         logger.exception(f"[circle-dm-webhook] handler crashed: {e}")
         # Fail open: send the holding reply so the student isn't ignored
         return {
-            "reply_text": "Hi there, thanks for reaching out — I've passed your message to the team and they'll respond within 24h.\nBest, AYCI Team",
+            "reply_text": "Hi there, thanks so much for getting in touch! 🙏 I've got your message and the team will be in touch within 24 hours.\n\nSpeak soon!",
             "escalated": True,
             "ai_resolved": False,
             "ticket_id": None,
