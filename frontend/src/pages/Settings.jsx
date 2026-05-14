@@ -1364,9 +1364,16 @@ function CoachPlaybookSection({ isAdmin }) {
     setPolling(true);
     try {
       const { data } = await apiClient.post("/circle/bot/poll-now");
-      const r = data.replied || 0, e = data.escalated || 0, s = data.seeded || 0;
-      toast.success(`Poll done — replied ${r}, escalated ${e}, seeded ${s}`);
-      loadBot();
+      if (data.started) {
+        toast.success("Polling started in background — refresh in ~30s for results");
+        // Auto-refresh the bot status after 30s so the user sees the result
+        // without manually reloading.
+        setTimeout(() => { loadBot(); }, 30000);
+      } else {
+        const r = data.replied || 0, e = data.escalated || 0, s = data.seeded || 0;
+        toast.success(`Poll done — replied ${r}, escalated ${e}, seeded ${s}`);
+        loadBot();
+      }
     } catch (err) {
       toast.error("Poll failed: " + (err.response?.data?.detail || err.message));
     } finally {

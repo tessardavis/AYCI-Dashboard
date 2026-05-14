@@ -1227,6 +1227,42 @@ async def on_startup():
             max_instances=1, coalesce=True,
         )
         logger.info("[scheduler] circle_dm_poll: ENABLED (CIRCLE_BOT_ENABLED=true)")
+
+        # Watchdog — if a poll hangs (e.g. a Circle API call blocking for 10
+        # minutes), `max_instances=1, coalesce=True` would silently drop
+        # every subsequent cron fire and the bot would go dark. Every 5
+        # minutes we check the persisted `last_poll_at` timestamp: if no
+        # poll has completed in the last 5 minutes, we kick a fresh poll as
+        # a one-shot background task. Idempotent — the next normal cron
+        # fire will resume from where this leaves off.
+        async def _circle_dm_poll_watchdog():
+            import circle_dm_poll
+            import asyncio
+            from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+            try:
+                cfg = await circle_dm_poll.get_config(db)
+                last_iso = cfg.get("last_poll_at") if cfg else None
+                stale = True
+                if last_iso:
+                    try:
+                        last = _dt.fromisoformat(last_iso.replace("Z", "+00:00"))
+                        if last.tzinfo is None:
+                            last = last.replace(tzinfo=_tz.utc)
+                        stale = last < _dt.now(_tz.utc) - _td(minutes=5)
+                    except Exception:
+                        stale = True
+                if stale:
+                    logger.warning(f"[watchdog] circle_dm_poll appears stuck (last_poll_at={last_iso}). Kicking a one-shot poll.")
+                    asyncio.create_task(_circle_dm_poll())
+            except Exception as e:
+                logger.warning(f"[watchdog] circle_dm_poll check failed: {e}")
+
+        scheduler.add_job(
+            _circle_dm_poll_watchdog,
+            CronTrigger(minute="*/5", timezone=tz),
+            id="circle_dm_poll_watchdog",
+            replace_existing=True,
+        )
     else:
         logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_ENABLED=true to enable)")
 

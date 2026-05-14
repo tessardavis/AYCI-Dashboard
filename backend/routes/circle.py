@@ -203,9 +203,26 @@ async def bot_config_update(body: BotConfigUpdate, user: dict = Depends(require_
 
 @router.post("/bot/poll-now")
 async def bot_poll_now(user: dict = Depends(require_board("bot"))):
-    """Force a single poll cycle for testing without waiting for the cron."""
+    """Force a single poll cycle for testing without waiting for the cron.
+
+    Non-blocking — the poll runs in a background task and we return
+    immediately. The client should refresh the bot status after ~10-30s to
+    see new replies / escalations. A full poll across 5 coaches and 500+
+    active threads can take 1-3 minutes; blocking the HTTP request that
+    long causes proxy timeouts (which is what made the button hang).
+    """
     import circle_dm_poll
-    return await circle_dm_poll.poll_once(db)
+    import asyncio
+
+    async def _run():
+        try:
+            res = await circle_dm_poll.poll_once(db)
+            logger.info(f"[poll-now] done: {res}")
+        except Exception as e:
+            logger.warning(f"[poll-now] failed: {e}")
+
+    asyncio.create_task(_run())
+    return {"ok": True, "started": True, "message": "Polling started in background — refresh in 30s"}
 
 
 @router.post("/bot/reset-thread/{thread_uuid}")
