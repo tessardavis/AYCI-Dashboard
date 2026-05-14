@@ -220,7 +220,7 @@ export default function StudentLookup() {
   })();
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="student-lookup-page">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6" data-testid="student-lookup-page">
       <div>
         <div className="text-[10px] sm:text-[11px] font-display font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase text-[var(--ayci-teal)]">
           Unified view
@@ -228,7 +228,7 @@ export default function StudentLookup() {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
           Student Lookup
         </h1>
-        <p className="text-[var(--ayci-ink-muted)] text-xs sm:text-sm mt-1 max-w-xl">
+        <p className="text-[var(--ayci-ink-muted)] text-xs sm:text-sm mt-1 max-w-xl hidden sm:block">
           Search any student by <strong>email or name</strong> to see a unified profile pulled live from Monday.com,
           Circle, Stripe, ConvertKit and Calendly.
         </p>
@@ -506,17 +506,17 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
             )}
           </div>
         </div>
-        <div className="w-full sm:w-auto">
+        <div className="w-full sm:w-auto hidden sm:block">
           <PlatformBadges result={result} />
         </div>
       </div>
 
       {/* Big & clear interview / specialty banner */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="student-interview-summary">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3" data-testid="student-interview-summary">
         {/* Interview date */}
         {interviewBlock ? (
           <div
-            className={`rounded-lg border px-4 py-3 ${interviewBlock.tone}`}
+            className={`rounded-lg border px-3 py-2.5 sm:px-4 sm:py-3 col-span-2 md:col-span-1 ${interviewBlock.tone}`}
             data-testid="student-interview-date"
           >
             <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
@@ -529,7 +529,7 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
           </div>
         ) : header?.kajabiDate ? (
           <div
-            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-700 px-4 py-3"
+            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-700 px-3 py-2.5 sm:px-4 sm:py-3 col-span-2 md:col-span-1"
             data-testid="student-interview-date"
           >
             <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
@@ -542,7 +542,7 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
           </div>
         ) : (
           <div
-            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-500 px-4 py-3"
+            className="rounded-lg border bg-slate-50 border-slate-200 text-slate-500 px-3 py-2.5 sm:px-4 sm:py-3 col-span-2 md:col-span-1"
             data-testid="student-interview-date"
           >
             <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
@@ -554,7 +554,7 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
 
         {/* Interview type — Substantive / Locum */}
         <div
-          className={`rounded-lg border px-4 py-3 ${
+          className={`rounded-lg border px-3 py-2.5 sm:px-4 sm:py-3 ${
             interviewType
               ? "bg-sky-50 border-sky-200 text-sky-900"
               : "bg-slate-50 border-slate-200 text-slate-500"
@@ -564,14 +564,14 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
           <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
             Interview type
           </div>
-          <div className="font-display font-bold text-lg leading-tight mt-0.5">
+          <div className="font-display font-bold text-base sm:text-lg leading-tight mt-0.5">
             {interviewType || "Not specified"}
           </div>
         </div>
 
         {/* Speciality */}
         <div
-          className={`rounded-lg border px-4 py-3 ${
+          className={`rounded-lg border px-3 py-2.5 sm:px-4 sm:py-3 ${
             header?.speciality
               ? "bg-violet-50 border-violet-200 text-violet-900"
               : "bg-slate-50 border-slate-200 text-slate-500"
@@ -581,7 +581,7 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
           <div className="text-[10px] uppercase tracking-widest font-display font-bold opacity-70">
             Speciality
           </div>
-          <div className="font-display font-bold text-lg leading-tight mt-0.5">
+          <div className="font-display font-bold text-base sm:text-lg leading-tight mt-0.5">
             {header?.speciality || "Not specified"}
           </div>
           {header?.hospital && (

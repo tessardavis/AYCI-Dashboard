@@ -7,7 +7,7 @@ coaching team can see, at a glance:
   - How many videos / posts students have submitted each day since cohort
     Day 1.
   - How many of those each coach has replied to (Circle comment by a coach).
-  - Which posts have NO coach reply after 48 h (escalation flag).
+  - Which posts have NO coach reply after 24 h (escalation flag).
   - Students posting more than 3 videos in a calendar week (rate-limit flag).
   - Private-tier video submissions on Monday board 5083952249 — total
     submitted vs total each coach has been assigned to reply to.
@@ -73,7 +73,7 @@ _ALIAS_TO_COACH: list[tuple[str, str]] = [
     for alias in aliases
 ]
 
-NO_REPLY_SLA_HOURS = 48
+NO_REPLY_SLA_HOURS = 24
 WEEKLY_VIDEO_LIMIT = 3
 COACH_FUZZY_THRESHOLD = 0.82
 
@@ -267,7 +267,7 @@ async def analyse_circle_space(
     ]
     per_coach.sort(key=lambda x: x["replies"], reverse=True)
 
-    # Unanswered (> 48 h, no coach reply)
+    # Unanswered (> 24 h, no coach reply)
     unanswered: list[dict] = []
     for p in in_window:
         if p["id"] in answered_post_ids:

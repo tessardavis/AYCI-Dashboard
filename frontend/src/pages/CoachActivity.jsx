@@ -138,7 +138,7 @@ function CircleSpaceCard({ space, primaryNoun, showRateLimit = true, onDismiss }
           icon={Clock}
           title={`Awaiting coach reply (${space.unanswered.length})`}
           tone="rose"
-          empty={`Every ${primaryNoun} has had a coach reply within 48 hours.`}
+          empty={`Every ${primaryNoun} has had a coach reply within 24 hours.`}
           testid="flag-unanswered"
         >
           {space.unanswered.map((u) => (
