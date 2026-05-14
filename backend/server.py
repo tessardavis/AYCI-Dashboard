@@ -1202,6 +1202,13 @@ async def on_startup():
 
     # Circle DM Bot polling — every 1 minute, for each enabled coach admin,
     # checks their DM threads via Headless API and replies / escalates.
+    # Gated behind CIRCLE_BOT_ENABLED so preview + production don't both poll
+    # the same Circle inbox and race-condition each other into human_takeover
+    # (each environment's bot mistakes the OTHER's reply as a human admin
+    # taking over the thread). Default off — production explicitly opts in.
+    circle_bot_enabled = (
+        os.environ.get("CIRCLE_BOT_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+    )
     async def _circle_dm_poll():
         import circle_dm_poll
         try:
@@ -1211,13 +1218,17 @@ async def on_startup():
         except Exception as e:
             logger.warning(f"[scheduler] circle_dm_poll failed: {e}")
 
-    scheduler.add_job(
-        _circle_dm_poll,
-        CronTrigger(minute="*/1", timezone=tz),
-        id="circle_dm_poll",
-        replace_existing=True,
-        max_instances=1, coalesce=True,
-    )
+    if circle_bot_enabled:
+        scheduler.add_job(
+            _circle_dm_poll,
+            CronTrigger(minute="*/1", timezone=tz),
+            id="circle_dm_poll",
+            replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
+        logger.info("[scheduler] circle_dm_poll: ENABLED (CIRCLE_BOT_ENABLED=true)")
+    else:
+        logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_ENABLED=true to enable)")
 
     # Interview-eve check-in DMs — 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,

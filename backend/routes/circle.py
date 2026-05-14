@@ -408,3 +408,46 @@ async def handle_playbook_suggestion(
                   "updated_at": now}},
     )
     return {"ok": True, "action": "added", "playbook_chars": len(new_text)}
+
+
+
+@router.post("/bot/reset-stuck-threads")
+async def reset_stuck_threads(
+    coach_email: str | None = None,
+    user: dict = Depends(require_board("bot")),
+):
+    """Re-arm threads that got stuck in `human_takeover` — used to recover
+    from cross-environment polling races (where preview's bot reply was
+    interpreted as a human admin reply by production's bot, and vice versa).
+
+    Resets state to "active" and clears `sent_message_ids` / `sent_bodies`
+    so the next poll picks up incoming messages cleanly. Pass `coach_email`
+    to scope to a single coach; omit to reset every coach's stuck threads.
+
+    Idempotent — safe to re-run. Does NOT touch threads in `escalated` or
+    `tag_excluded` state (those are intentional)."""
+    q: dict = {"state": "human_takeover"}
+    if coach_email:
+        q["coach_admin_email"] = coach_email.strip().lower()
+    count = await db.circle_dm_threads.count_documents(q)
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.circle_dm_threads.update_many(
+        q,
+        {
+            "$set": {
+                "state": "active",
+                "human_takeover_at": None,
+                "human_takeover_by": None,
+                "last_activity_at": now,
+                "reset_at": now,
+                "reset_by": user.get("email"),
+            },
+            "$unset": {"sent_message_ids": "", "sent_bodies": ""},
+        },
+    )
+    return {
+        "ok": True,
+        "matched": count,
+        "modified": res.modified_count,
+        "coach_email": coach_email or "(all)",
+    }
