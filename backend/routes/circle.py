@@ -129,6 +129,7 @@ class BotConfigUpdate(BaseModel):
 async def bot_status(
     search: str | None = None,
     state: str | None = None,
+    recent_days: int | None = 7,
     limit: int = 200,
     user: dict = Depends(require_board("bot")),
 ):
@@ -137,6 +138,10 @@ async def bot_status(
     Filters:
       - `search`: case-insensitive substring match on `student_name`
       - `state`: one of active / human_takeover / escalated / tag_excluded
+      - `recent_days`: only return threads with activity in the last N days
+        (default 7 — keeps the Watched-threads list useful at first paint;
+        pass 0 to show ALL threads). Applies to the LIST only; the global
+        state-totals tiles always reflect every thread.
       - `limit`: max threads to return (default 200, max 1000)
     """
     import circle_dm_poll
@@ -152,6 +157,10 @@ async def bot_status(
             # Anchor on safe regex chars only — escape user input.
             import re as _re
             q["student_name"] = {"$regex": _re.escape(s), "$options": "i"}
+    if recent_days and recent_days > 0:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        cutoff = (_dt.now(_tz.utc) - _td(days=int(recent_days))).isoformat()
+        q["last_activity_at"] = {"$gte": cutoff}
 
     threads = await db.circle_dm_threads.find(q, {"_id": 0}).sort("last_activity_at", -1).limit(limit).to_list(limit)
     total_matching = await db.circle_dm_threads.count_documents(q)

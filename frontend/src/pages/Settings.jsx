@@ -1286,6 +1286,9 @@ function CoachPlaybookSection({ isAdmin }) {
   // without scrolling through hundreds of rows).
   const [threadSearch, setThreadSearch] = useState("");
   const [threadStateFilter, setThreadStateFilter] = useState("");
+  // Default to "recent only" so the first paint isn't 1000+ stale threads.
+  // 0 means "all".
+  const [threadRecentDays, setThreadRecentDays] = useState(7);
 
   const load = async () => {
     setLoading(true);
@@ -1306,8 +1309,11 @@ function CoachPlaybookSection({ isAdmin }) {
       const params = {};
       const s = opts.search ?? threadSearch;
       const st = opts.state ?? threadStateFilter;
+      const rd = opts.recentDays ?? threadRecentDays;
       if (s && s.trim()) params.search = s.trim();
       if (st) params.state = st;
+      // Always send `recent_days` (0 = show all). Default 7.
+      params.recent_days = Number(rd) || 0;
       const { data } = await apiClient.get("/circle/bot/status", { params });
       setBot(data);
     } catch (err) {
@@ -1721,7 +1727,10 @@ function CoachPlaybookSection({ isAdmin }) {
               Watched threads
               {bot?.total_matching != null && (
                 <span className="ml-2 text-xs font-normal text-[var(--ayci-ink-muted)]">
-                  ({bot.threads?.length || 0} shown of {bot.total_matching} {threadSearch || threadStateFilter ? "matching" : "total"})
+                  ({bot.threads?.length || 0} shown of {bot.total_matching}
+                  {threadRecentDays > 0
+                    ? ` active in last ${threadRecentDays === 1 ? "24h" : `${threadRecentDays} days`}`
+                    : " total"})
                 </span>
               )}
             </h4>
@@ -1747,6 +1756,18 @@ function CoachPlaybookSection({ isAdmin }) {
                 <option value="escalated">Escalated</option>
                 <option value="tag_excluded">Tag-excluded</option>
               </select>
+              <select
+                value={threadRecentDays}
+                onChange={(e) => { const v = Number(e.target.value); setThreadRecentDays(v); loadBot({ recentDays: v }); }}
+                className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
+                data-testid="bot-threads-recent-filter"
+                title="Hide threads with no activity in the last N days. Helps cut through the noise."
+              >
+                <option value="1">Active last 24h</option>
+                <option value="7">Active last 7 days</option>
+                <option value="30">Active last 30 days</option>
+                <option value="0">All time</option>
+              </select>
               <Button
                 type="button" variant="outline" size="sm"
                 onClick={() => loadBot()}
@@ -1756,10 +1777,10 @@ function CoachPlaybookSection({ isAdmin }) {
               >
                 {loadingBot ? "…" : "Search"}
               </Button>
-              {(threadSearch || threadStateFilter) && (
+              {(threadSearch || threadStateFilter || threadRecentDays !== 7) && (
                 <Button
                   type="button" variant="ghost" size="sm"
-                  onClick={() => { setThreadSearch(""); setThreadStateFilter(""); loadBot({ search: "", state: "" }); }}
+                  onClick={() => { setThreadSearch(""); setThreadStateFilter(""); setThreadRecentDays(7); loadBot({ search: "", state: "", recentDays: 7 }); }}
                   className="h-8 text-xs px-2 text-[var(--ayci-ink-muted)]"
                   data-testid="bot-threads-clear-btn"
                 >
@@ -1819,7 +1840,9 @@ function CoachPlaybookSection({ isAdmin }) {
           ) : (
             <div className="text-xs text-[var(--ayci-ink-muted)] italic bg-white border border-dashed border-[var(--ayci-border)] rounded px-3 py-3 text-center" data-testid="bot-threads-empty">
               {threadSearch || threadStateFilter
-                ? `No threads match "${threadSearch || ""}" ${threadStateFilter ? `(state: ${threadStateFilter})` : ""}`
+                ? `No threads match "${threadSearch || ""}" ${threadStateFilter ? `(state: ${threadStateFilter})` : ""}${threadRecentDays > 0 ? ` in the last ${threadRecentDays === 1 ? "24h" : `${threadRecentDays} days`}` : ""}`
+                : threadRecentDays > 0
+                ? `No threads have moved in the last ${threadRecentDays === 1 ? "24h" : `${threadRecentDays} days`}. Switch to "All time" to see older threads.`
                 : loadingBot ? "Loading…" : "No threads yet"}
             </div>
           )}
