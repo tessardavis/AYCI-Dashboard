@@ -627,8 +627,30 @@ async def poll_once(db) -> dict:
 
 async def reset_thread(db, chat_room_uuid: str) -> bool:
     """Re-enable the bot on a thread that was previously escalated or taken
-    over by a human. Drops the state doc so next poll seeds it fresh."""
-    res = await db.circle_dm_threads.delete_one(
+    over by a human.
+
+    Important: we DON'T delete the state doc — that would wipe
+    `sent_message_ids` / `sent_bodies` and the next poll's lookback guard
+    would treat the bot's own previous replies (or any admin message in
+    the last 14 days) as "human is here, back off" and immediately re-flag
+    the thread as `human_takeover`. Instead, do an in-place reset that
+    flips state back to `active`, clears the escalation/takeover markers,
+    and stamps `reset_at` so the lookback guard ignores anything before
+    this moment. The bot's own previous replies remain in `sent_message_ids`
+    so they're still recognised, and any older coach replies are ignored
+    via the reset_at cutoff."""
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.circle_dm_threads.update_one(
         {"id": f"thread:{chat_room_uuid}"},
+        {
+            "$set": {
+                "state": "active",
+                "human_takeover_at": None,
+                "human_takeover_by": None,
+                "escalated_at": None,
+                "last_activity_at": now,
+                "reset_at": now,
+            },
+        },
     )
-    return res.deleted_count > 0
+    return res.modified_count > 0 or res.matched_count > 0
