@@ -126,13 +126,35 @@ class BotConfigUpdate(BaseModel):
 
 
 @router.get("/bot/status")
-async def bot_status(user: dict = Depends(require_board("bot"))):
-    """Polling bot status + recent thread state. Used by Settings → Bot tab."""
+async def bot_status(
+    search: str | None = None,
+    state: str | None = None,
+    limit: int = 200,
+    user: dict = Depends(require_board("bot")),
+):
+    """Polling bot status + recent thread state. Used by Settings → Bot tab.
+
+    Filters:
+      - `search`: case-insensitive substring match on `student_name`
+      - `state`: one of active / human_takeover / escalated / tag_excluded
+      - `limit`: max threads to return (default 200, max 1000)
+    """
     import circle_dm_poll
     cfg = await circle_dm_poll.get_config(db)
-    threads = await db.circle_dm_threads.find(
-        {}, {"_id": 0},
-    ).sort("last_activity_at", -1).limit(50).to_list(50)
+    limit = max(10, min(int(limit or 200), 1000))
+
+    q: dict = {}
+    if state:
+        q["state"] = state.strip()
+    if search:
+        s = search.strip()
+        if s:
+            # Anchor on safe regex chars only — escape user input.
+            import re as _re
+            q["student_name"] = {"$regex": _re.escape(s), "$options": "i"}
+
+    threads = await db.circle_dm_threads.find(q, {"_id": 0}).sort("last_activity_at", -1).limit(limit).to_list(limit)
+    total_matching = await db.circle_dm_threads.count_documents(q)
 
     # Live thread-state counts so the team can see at a glance how many threads
     # the bot is currently engaging with vs. has backed off from.
@@ -153,6 +175,7 @@ async def bot_status(user: dict = Depends(require_board("bot"))):
         "last_poll_at": cfg.get("last_poll_at"),
         "last_poll_summary": cfg.get("last_poll_summary") or {},
         "threads": threads,
+        "total_matching": total_matching,
         "state_totals": state_totals,
         "by_coach": by_coach,
     }

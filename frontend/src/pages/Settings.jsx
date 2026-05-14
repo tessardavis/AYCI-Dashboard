@@ -1282,6 +1282,10 @@ function CoachPlaybookSection({ isAdmin }) {
   const [loadingSuggs, setLoadingSuggs] = useState(false);
   const [suggAnswers, setSuggAnswers] = useState({});  // ticket_id -> draft answer
   const [handlingSugg, setHandlingSugg] = useState(null);
+  // Watched-threads search/filter (so coaches can find a specific student
+  // without scrolling through hundreds of rows).
+  const [threadSearch, setThreadSearch] = useState("");
+  const [threadStateFilter, setThreadStateFilter] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -1296,10 +1300,15 @@ function CoachPlaybookSection({ isAdmin }) {
     }
   };
 
-  const loadBot = async () => {
+  const loadBot = async (opts = {}) => {
     setLoadingBot(true);
     try {
-      const { data } = await apiClient.get("/circle/bot/status");
+      const params = {};
+      const s = opts.search ?? threadSearch;
+      const st = opts.state ?? threadStateFilter;
+      if (s && s.trim()) params.search = s.trim();
+      if (st) params.state = st;
+      const { data } = await apiClient.get("/circle/bot/status", { params });
       setBot(data);
     } catch (err) {
       toast.error("Failed to load bot status");
@@ -1706,9 +1715,60 @@ function CoachPlaybookSection({ isAdmin }) {
         </div>
 
         {/* --- Thread state table --- */}
-        {bot?.threads && bot.threads.length > 0 && (
-          <div>
-            <h4 className="font-semibold text-sm text-[var(--ayci-ink)] mb-2">Watched threads ({bot.threads.length})</h4>
+        <div>
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <h4 className="font-semibold text-sm text-[var(--ayci-ink)]">
+              Watched threads
+              {bot?.total_matching != null && (
+                <span className="ml-2 text-xs font-normal text-[var(--ayci-ink-muted)]">
+                  ({bot.threads?.length || 0} shown of {bot.total_matching} {threadSearch || threadStateFilter ? "matching" : "total"})
+                </span>
+              )}
+            </h4>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="search"
+                value={threadSearch}
+                onChange={(e) => setThreadSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") loadBot({ search: threadSearch }); }}
+                placeholder="Search by student name…"
+                className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
+                data-testid="bot-threads-search"
+              />
+              <select
+                value={threadStateFilter}
+                onChange={(e) => { setThreadStateFilter(e.target.value); loadBot({ state: e.target.value }); }}
+                className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
+                data-testid="bot-threads-state-filter"
+              >
+                <option value="">All states</option>
+                <option value="active">Active</option>
+                <option value="human_takeover">Human takeover</option>
+                <option value="escalated">Escalated</option>
+                <option value="tag_excluded">Tag-excluded</option>
+              </select>
+              <Button
+                type="button" variant="outline" size="sm"
+                onClick={() => loadBot()}
+                disabled={loadingBot}
+                className="h-8 text-xs px-2.5"
+                data-testid="bot-threads-search-btn"
+              >
+                {loadingBot ? "…" : "Search"}
+              </Button>
+              {(threadSearch || threadStateFilter) && (
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  onClick={() => { setThreadSearch(""); setThreadStateFilter(""); loadBot({ search: "", state: "" }); }}
+                  className="h-8 text-xs px-2 text-[var(--ayci-ink-muted)]"
+                  data-testid="bot-threads-clear-btn"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+          {bot?.threads && bot.threads.length > 0 ? (
             <div className="space-y-1.5 max-h-96 overflow-y-auto" data-testid="bot-threads-list">
               {bot.threads.map((t) => (
                 <div key={t.thread_uuid} className="text-xs bg-white border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
@@ -1756,8 +1816,14 @@ function CoachPlaybookSection({ isAdmin }) {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-xs text-[var(--ayci-ink-muted)] italic bg-white border border-dashed border-[var(--ayci-border)] rounded px-3 py-3 text-center" data-testid="bot-threads-empty">
+              {threadSearch || threadStateFilter
+                ? `No threads match "${threadSearch || ""}" ${threadStateFilter ? `(state: ${threadStateFilter})` : ""}`
+                : loadingBot ? "Loading…" : "No threads yet"}
+            </div>
+          )}
+        </div>
 
         {/* --- Playbook suggestions (self-improving) --- */}
         <div className="border-t border-[var(--ayci-border)] pt-5">
