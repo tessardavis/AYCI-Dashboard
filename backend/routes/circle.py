@@ -133,11 +133,28 @@ async def bot_status(user: dict = Depends(require_board("bot"))):
     threads = await db.circle_dm_threads.find(
         {}, {"_id": 0},
     ).sort("last_activity_at", -1).limit(50).to_list(50)
+
+    # Live thread-state counts so the team can see at a glance how many threads
+    # the bot is currently engaging with vs. has backed off from.
+    pipeline = [
+        {"$group": {"_id": {"state": "$state", "coach": "$coach_admin_email"}, "n": {"$sum": 1}}},
+    ]
+    state_rows = await db.circle_dm_threads.aggregate(pipeline).to_list(500)
+    state_totals: dict = {}
+    by_coach: dict = {}
+    for row in state_rows:
+        st = row["_id"].get("state") or "unknown"
+        coach = row["_id"].get("coach") or "(none)"
+        n = row["n"]
+        state_totals[st] = state_totals.get(st, 0) + n
+        by_coach.setdefault(coach, {})[st] = n
     return {
         "config": {k: cfg.get(k) for k in ("enabled", "coach_emails", "excluded_member_tags", "tag_exclusion_coach_emails")},
         "last_poll_at": cfg.get("last_poll_at"),
         "last_poll_summary": cfg.get("last_poll_summary") or {},
         "threads": threads,
+        "state_totals": state_totals,
+        "by_coach": by_coach,
     }
 
 

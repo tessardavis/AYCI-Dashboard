@@ -1543,6 +1543,58 @@ function CoachPlaybookSection({ isAdmin }) {
               )}
             </div>
           </div>
+          {/* Live thread-state totals (across ALL polls, not just the last cycle) */}
+          {bot?.state_totals && Object.keys(bot.state_totals).length > 0 && (
+            <div className="border-t border-[var(--ayci-border)] pt-3">
+              <div className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2 font-semibold">
+                Live thread state — across all coaches
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]" data-testid="bot-state-totals">
+                {[
+                  ["Active", bot.state_totals.active || 0, "bg-emerald-50 border-emerald-200 text-emerald-900", "Bot is watching — will reply on next student message"],
+                  ["Human takeover", bot.state_totals.human_takeover || 0, "bg-violet-50 border-violet-200 text-violet-900", "Coach replied directly — bot is silent here"],
+                  ["Escalated", bot.state_totals.escalated || 0, "bg-amber-50 border-amber-200 text-amber-900", "Converted to a Support Ticket — bot is silent here"],
+                  ["Tag-excluded", bot.state_totals.tag_excluded || 0, "bg-pink-50 border-pink-200 text-pink-900", "Student has an excluded tag (e.g. Boss) — bot is silent here"],
+                ].map(([label, n, cls, hint]) => (
+                  <div key={label} className={`border rounded px-2 py-1.5 ${cls}`} title={hint}>
+                    <div className="text-base font-bold leading-none">{n}</div>
+                    <div className="text-[10px] uppercase tracking-wider mt-0.5">{label}</div>
+                  </div>
+                ))}
+              </div>
+              {bot.by_coach && Object.keys(bot.by_coach).length > 1 && (
+                <details className="mt-2 text-[11px]" data-testid="bot-state-by-coach">
+                  <summary className="cursor-pointer text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)]">
+                    Break down by coach
+                  </summary>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className="text-[var(--ayci-ink-muted)]">
+                        <tr>
+                          <th className="text-left font-semibold py-1 pr-3">Coach</th>
+                          <th className="text-right font-semibold px-2">Active</th>
+                          <th className="text-right font-semibold px-2">Human takeover</th>
+                          <th className="text-right font-semibold px-2">Escalated</th>
+                          <th className="text-right font-semibold px-2">Tag-excluded</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(bot.by_coach).map(([coach, counts]) => (
+                          <tr key={coach} className="border-t border-[var(--ayci-border)]">
+                            <td className="py-1 pr-3 font-mono text-[10px]">{coach}</td>
+                            <td className="text-right px-2">{counts.active || 0}</td>
+                            <td className="text-right px-2">{counts.human_takeover || 0}</td>
+                            <td className="text-right px-2">{counts.escalated || 0}</td>
+                            <td className="text-right px-2">{counts.tag_excluded || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
           {/* Counters from last poll */}
           {bot?.last_poll_summary && (
             <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-[11px]">
