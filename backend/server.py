@@ -1202,12 +1202,12 @@ async def on_startup():
 
     # Circle DM Bot polling — every 1 minute, for each enabled coach admin,
     # checks their DM threads via Headless API and replies / escalates.
-    # Gated behind CIRCLE_BOT_ENABLED so preview + production don't both poll
-    # the same Circle inbox and race-condition each other into human_takeover
-    # (each environment's bot mistakes the OTHER's reply as a human admin
-    # taking over the thread). Default off — production explicitly opts in.
+    # Defaults to ENABLED. Preview's /app/backend/.env sets
+    # CIRCLE_BOT_ENABLED=false so preview and production don't both poll the
+    # same Circle inbox and race each other into human_takeover (each env's
+    # bot mistakes the OTHER's reply as a human admin taking over the thread).
     circle_bot_enabled = (
-        os.environ.get("CIRCLE_BOT_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+        os.environ.get("CIRCLE_BOT_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
     )
     async def _circle_dm_poll():
         import circle_dm_poll
