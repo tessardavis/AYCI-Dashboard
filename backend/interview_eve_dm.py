@@ -246,13 +246,26 @@ def parse_score(text: str) -> Optional[int]:
       "7"           → 7
       "i'd say 4"   → 4
       "maybe 8 today" → 8
-    But NOT "see you at 11am" (matches "1" though — false positive). To
-    minimise false positives, require either the message to be short
-    (≤30 chars) or contain wording hinting at a rating.
+      "⁹"          → 9    (Unicode superscript — auto-normalised)
+      "9️⃣"          → 9    (keycap emoji — auto-normalised)
+    Multi-digit numbers (e.g. "11am") don't match because we require word
+    boundaries around the 1-10 digit. Long replies (>30 chars) only count
+    if they contain a rating-like keyword.
+
+    Unicode handling: Circle's keyboard/emoji shortcuts let students reply
+    with superscripts (⁹), keycap emoji (9️⃣), full-width digits (９), etc.
+    We NFKC-normalise the text before matching so all variants collapse
+    to plain ASCII digits.
     """
     if not text:
         return None
-    t = text.strip()
+    import unicodedata
+    # NFKC turns superscripts/subscripts/full-width digits into ASCII.
+    # Keycap emoji (e.g. "9️⃣") survive NFKC, so strip the trailing variation
+    # selector + combining-enclosing-keycap separately.
+    t = unicodedata.normalize("NFKC", text)
+    t = t.replace("\u20e3", "").replace("\ufe0f", "")
+    t = t.strip()
     low = t.lower()
     m = _SCORE_RE.search(t)
     if not m:

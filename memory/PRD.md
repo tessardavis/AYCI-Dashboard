@@ -12,29 +12,26 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
-### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill v2 + manual-set + team glossary
+### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill v3 + Unicode digits + manual-set + team glossary
 
-**Production deploy 1** shipped the ordering fix + initial backfill. Recovered:
+**Production deploy 1** — ordering fix (`_process_thread` now runs score capture before lookback guard) + initial backfill. Recovered:
 - ✅ Michael Carling — 7/10
 
-**Production deploy 2** shipped backfill v2 (first-score-wins from `sent_at`, scans oldest→newest). Recovered:
+**Production deploy 2** — backfill v2 (first-score-wins, scans oldest→newest from `sent_at`). Recovered:
 - ✅ Mohammed Elsabbagh — 8/10
 
-**Backfill v3 (preview, awaiting deploy 3):**
-- Bumped per_page from 20 → 60 messages (in case the score is paginated out of a busy thread).
-- still_pending entries now surface `all_student_msgs_after_send` — the full list of every student reply after the eve-DM, so the admin can see exactly what the student said even if no digit parsed.
-- **New endpoint** `POST /api/interview-eve/records/{id}/set-score` body `{"score": 1-10, "note": "..."}` — admin manual override. Audit-stamps `score_set_manually_by` and `score_set_manually_at`. Fires the same low-score Slack alert pathway. Useful when a student replied with words rather than a number.
+**Production deploy 3** — backfill v3 (per_page 20→60, surfaces `all_student_msgs_after_send` for visibility) + manual-set endpoint + Unicode-digit support. Recovered:
+- ✅ Henry Walton — 9/10 (set manually — student replied with `⁹` Unicode superscript that the regex didn't match; now permanently fixed)
 
-Still pending after deploy 2 (will be revisited after deploy 3):
-- Henry Walton — backfill couldn't find a digit in his last 20 student messages; v3 expands to 60 and exposes all his replies.
-- Jemma Boyle — substantive Speciality Doctor question; not eligible for backfill.
-- 4 others — no student reply (genuine non-responders).
+**Permanent fix for Unicode digits**: `parse_score()` now NFKC-normalises the input before regex matching, so superscripts (⁹, ¹⁰), keycap emoji (9️⃣), and full-width digits (９) all collapse to ASCII before matching. Regression tests at `backend/tests/test_parse_score.py` (5 tests) pin every case.
 
-- **Root-cause for missed scores**: in `_process_thread()`, the lookback guard ran BEFORE the interview-eve score capture. A coach's manual note in the thread short-circuited the bot before score capture.
-- **Fix**: score capture now runs immediately after the messages fetch — before the lookback guard.
-- **Team glossary on Settings → Bot**: collapsible help panel explaining every state + button.
-- **Regression test** at `backend/tests/test_circle_dm_first_sight.py`.
-- **Files:** `backend/circle_dm_poll.py`, `backend/routes/interview_eve.py`, `backend/tests/test_circle_dm_first_sight.py`, `frontend/src/pages/Settings.jsx`.
+**Confirmed non-responders** (no student reply at all, no recovery possible): Matt Gray, Afifa Saulat, Trishala Raj, Shailaja Anipindi.
+
+**Special case**: Jemma Boyle sent a substantive Speciality Doctor interview-date question instead of a score — needs Coralie's reply, not bot recovery.
+
+**Team glossary on Settings → Bot**: collapsible help panel explaining every state + button.
+
+- **Files:** `backend/circle_dm_poll.py` (ordering), `backend/interview_eve_dm.py` (NFKC parse_score), `backend/routes/interview_eve.py` (backfill v3 + set-score endpoint), `backend/tests/test_circle_dm_first_sight.py`, `backend/tests/test_parse_score.py` (NEW), `frontend/src/pages/Settings.jsx` (glossary).
 
 
 ### 2026-05-15 — Circle DM Bot: first-sight smart reply + per-thread diagnostic suite + Trust & re-arm
