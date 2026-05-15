@@ -144,53 +144,83 @@ async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
         if not messages:
             still_pending.append({"name": rec.get("student_name"), "reason": "no_messages"})
             continue
-        # Sort oldest -> newest, find latest student message.
+        # Sort oldest -> newest, find the FIRST student message that parses
+        # as a 1-10 score. (We can't just grab the latest student message:
+        # students often reply with the score first, then the coach sends a
+        # personal note, then the student sends a "thanks!" — which would
+        # be the latest student message but isn't the score.)
         messages.sort(key=lambda m: m.get("created_at") or "")
-        latest_student = None
-        for m in reversed(messages):
+        sent_at_iso = rec.get("sent_at") or ""
+        best_msg = None
+        best_score = None
+        for m in messages:
+            if sent_at_iso and (m.get("created_at") or "") < sent_at_iso:
+                # Ignore messages older than the eve-DM itself.
+                continue
             sender = (m.get("sender") or {})
             sid = sender.get("community_member_id") or sender.get("id") or m.get("community_member_id")
             try:
-                if sid is not None and int(sid) == int(member_id):
-                    latest_student = m
-                    break
+                if sid is None or int(sid) != int(member_id):
+                    continue
             except (ValueError, TypeError):
                 continue
-        if not latest_student:
-            still_pending.append({"name": rec.get("student_name"),
-                                  "reason": "no_student_reply"})
-            continue
-        body = (
-            latest_student.get("body")
-            or latest_student.get("plain_text")
-            or (latest_student.get("rich_text_body") or {}).get("circle_ios_fallback_text")
-            or latest_student.get("text")
-            or ""
-        ).strip()
-        score = interview_eve_dm.parse_score(body)
-        if score is None:
-            still_pending.append({
-                "name": rec.get("student_name"),
-                "reason": "no_score_parsed",
-                "last_student_msg": body[:140],
-            })
+            body = (
+                m.get("body")
+                or m.get("plain_text")
+                or (m.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+                or m.get("text")
+                or ""
+            ).strip()
+            score = interview_eve_dm.parse_score(body)
+            if score is not None:
+                best_msg = body
+                best_score = score
+                break  # first match wins
+        if best_score is None:
+            # Fall back to "latest student message" for the still_pending
+            # report so the admin can see what the student actually said.
+            latest_student_body = None
+            for m in reversed(messages):
+                sender = (m.get("sender") or {})
+                sid = sender.get("community_member_id") or sender.get("id") or m.get("community_member_id")
+                try:
+                    if sid is not None and int(sid) == int(member_id):
+                        latest_student_body = (
+                            m.get("body")
+                            or m.get("plain_text")
+                            or (m.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+                            or m.get("text")
+                            or ""
+                        ).strip()
+                        break
+                except (ValueError, TypeError):
+                    continue
+            if latest_student_body is None:
+                still_pending.append({"name": rec.get("student_name"),
+                                      "reason": "no_student_reply"})
+            else:
+                still_pending.append({
+                    "name": rec.get("student_name"),
+                    "reason": "no_score_parsed",
+                    "last_student_msg": latest_student_body[:140],
+                })
             continue
         # Persist + fire Slack alert if low.
-        scored = await interview_eve_dm.maybe_record_score(db, thread_uuid, body)
+        scored = await interview_eve_dm.maybe_record_score(db, thread_uuid, best_msg)
         if scored is None:
             # Could be a race — already recorded. Re-check.
             fresh = await db.interview_eve_dms.find_one({"id": rec["id"]}, {"_id": 0, "score": 1})
             recovered.append({
                 "name": rec.get("student_name"),
                 "score": (fresh or {}).get("score"),
-                "raw": body[:140],
+                "raw": best_msg[:140],
                 "note": "already_recorded_by_concurrent_poll",
             })
         else:
             recovered.append({
                 "name": rec.get("student_name"),
                 "score": scored["score"],
-                "raw": body[:140],
+                "raw": best_msg[:140],
             })
     return {
         "scanned": len(rows),
