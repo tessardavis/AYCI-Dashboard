@@ -74,6 +74,7 @@ async def get_config(db) -> dict:
             "tessa@medicalinterviewprep.com",
         ],
         "last_poll_at": doc.get("last_poll_at"),
+        "last_poll_started_at": doc.get("last_poll_started_at"),
         "last_poll_summary": doc.get("last_poll_summary") or {},
     }
 

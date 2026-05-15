@@ -1211,9 +1211,12 @@ async def on_startup():
     # CIRCLE_BOT_ENABLED=false so preview and production don't both poll the
     # same Circle inbox and race each other into human_takeover (each env's
     # bot mistakes the OTHER's reply as a human admin taking over the thread).
-    circle_bot_enabled = (
-        os.environ.get("CIRCLE_BOT_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
-    )
+    # Default ENABLED. Treats unset, empty string, and explicit-true values
+    # all as "on". Only set CIRCLE_BOT_ENABLED=false in preview to silence
+    # the bot. Yesterday's outage was caused by this defaulting to false
+    # when Emergent set the env var to an empty string.
+    _cb_env = (os.environ.get("CIRCLE_BOT_ENABLED") or "").strip().lower()
+    circle_bot_enabled = _cb_env not in ("0", "false", "no", "off")
     async def _circle_dm_poll():
         import circle_dm_poll
         import asyncio as _asyncio

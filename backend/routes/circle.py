@@ -252,6 +252,7 @@ async def bot_diagnose(
         "admin_token_configured": bool(
             (os.environ.get("CIRCLE_API_TOKEN") or "").strip()
         ),
+        "circle_bot_enabled_env_raw": os.environ.get("CIRCLE_BOT_ENABLED"),
         "last_poll_started_at": cfg.get("last_poll_started_at"),
         "last_poll_finished_at": cfg.get("last_poll_at"),
         "coaches": [],
