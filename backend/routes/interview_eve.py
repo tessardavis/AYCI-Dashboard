@@ -1,5 +1,6 @@
 """Interview-Eve DM routes — admin view of sent check-ins + manual trigger."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 import interview_eve_dm
 from db import db
@@ -136,7 +137,7 @@ async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
             continue
         try:
             messages = await circle_api.list_thread_messages_for_admin(
-                db, coach_email, thread_uuid, per_page=20,
+                db, coach_email, thread_uuid, per_page=60,
             )
         except Exception as e:
             errors.append({"name": rec.get("student_name"), "error": str(e)[:160]})
@@ -179,30 +180,38 @@ async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
         if best_score is None:
             # Fall back to "latest student message" for the still_pending
             # report so the admin can see what the student actually said.
-            latest_student_body = None
-            for m in reversed(messages):
+            # Also surface ALL student messages after the eve-DM send time
+            # — if the score is in there but `parse_score()` rejected it
+            # (e.g. an unusual rating keyword), the admin can spot it.
+            student_msgs_after_send: list[str] = []
+            for m in messages:
+                if sent_at_iso and (m.get("created_at") or "") < sent_at_iso:
+                    continue
                 sender = (m.get("sender") or {})
                 sid = sender.get("community_member_id") or sender.get("id") or m.get("community_member_id")
                 try:
-                    if sid is not None and int(sid) == int(member_id):
-                        latest_student_body = (
-                            m.get("body")
-                            or m.get("plain_text")
-                            or (m.get("rich_text_body") or {}).get("circle_ios_fallback_text")
-                            or m.get("text")
-                            or ""
-                        ).strip()
-                        break
+                    if sid is None or int(sid) != int(member_id):
+                        continue
                 except (ValueError, TypeError):
                     continue
-            if latest_student_body is None:
+                body = (
+                    m.get("body")
+                    or m.get("plain_text")
+                    or (m.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+                    or m.get("text")
+                    or ""
+                ).strip()
+                if body:
+                    student_msgs_after_send.append(body[:160])
+            if not student_msgs_after_send:
                 still_pending.append({"name": rec.get("student_name"),
                                       "reason": "no_student_reply"})
             else:
                 still_pending.append({
                     "name": rec.get("student_name"),
                     "reason": "no_score_parsed",
-                    "last_student_msg": latest_student_body[:140],
+                    "last_student_msg": student_msgs_after_send[-1],
+                    "all_student_msgs_after_send": student_msgs_after_send,
                 })
             continue
         # Persist + fire Slack alert if low.
@@ -228,3 +237,49 @@ async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
         "still_pending": still_pending,
         "errors": errors,
     }
+
+
+class ManualScoreBody(BaseModel):
+    score: int = Field(..., ge=1, le=10, description="1-10 confidence score")
+    note: str | None = Field(None, max_length=240,
+        description="Optional admin note for the audit trail")
+
+
+@router.post("/records/{record_id}/set-score")
+async def set_score_manual(
+    record_id: str, body: ManualScoreBody,
+    admin: dict = Depends(require_admin),
+):
+    """Manually set the support score on an eve-DM record. Use this when
+    backfill couldn't parse the student's reply (e.g. "very supported,
+    thanks!" — no digit) but the admin has read the conversation and
+    knows the right number. Fires the low-score Slack alert if ≤ threshold.
+    Audit-stamps `score_set_manually_by` so we can tell hand-entered
+    scores apart from auto-captured ones.
+    """
+    from datetime import datetime, timezone
+    rec = await db.interview_eve_dms.find_one({"id": record_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "eve-DM record not found")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.interview_eve_dms.update_one(
+        {"id": record_id},
+        {"$set": {
+            "score": body.score,
+            "score_received_at": now,
+            "score_raw_text": (body.note or "(set manually)")[:200],
+            "score_set_manually_by": admin.get("email") or admin.get("name"),
+            "score_set_manually_at": now,
+        }},
+    )
+    rec["score"] = body.score
+    rec["score_received_at"] = now
+    rec["score_raw_text"] = (body.note or "(set manually)")[:200]
+    # Fire low-score Slack alert if applicable.
+    if body.score <= interview_eve_dm.SCORE_LOW_THRESHOLD:
+        try:
+            await interview_eve_dm._slack_alert_low_score(rec, body.score)
+        except Exception:
+            pass
+    return {"ok": True, "record_id": record_id, "score": body.score}
+

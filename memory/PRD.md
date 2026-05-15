@@ -12,24 +12,28 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
-### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill endpoint + team glossary
+### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill v2 + manual-set + team glossary
 
-**Production deploy 1 (2026-05-15 afternoon)** shipped the ordering fix + initial backfill. Running `POST /api/interview-eve/backfill-scores?days=2` recovered:
+**Production deploy 1** shipped the ordering fix + initial backfill. Recovered:
 - ✅ Michael Carling — 7/10
 
-Still pending after deploy 1:
-- Mohammed Elsabbagh — backfill found his *latest* message was "Thank you Coralie" (he replied with the score earlier, then thanked Coralie after her manual reply)
-- Henry Walton — same pattern, latest message "Thanks"
-- Jemma Boyle — replied with a substantive interview question, not a score (not eligible for backfill)
-- 4 others — no student reply
+**Production deploy 2** shipped backfill v2 (first-score-wins from `sent_at`, scans oldest→newest). Recovered:
+- ✅ Mohammed Elsabbagh — 8/10
 
-**Backfill v2 (preview, awaiting deploy 2)**: now scans student messages OLDEST→NEWEST starting from `sent_at` of the eve-DM, picks the FIRST one that parses as a 1-10 score. Handles the common pattern of "student score → coach personal note → student thank-you". After redeploy, re-running the backfill should recover Mohammed and Henry.
+**Backfill v3 (preview, awaiting deploy 3):**
+- Bumped per_page from 20 → 60 messages (in case the score is paginated out of a busy thread).
+- still_pending entries now surface `all_student_msgs_after_send` — the full list of every student reply after the eve-DM, so the admin can see exactly what the student said even if no digit parsed.
+- **New endpoint** `POST /api/interview-eve/records/{id}/set-score` body `{"score": 1-10, "note": "..."}` — admin manual override. Audit-stamps `score_set_manually_by` and `score_set_manually_at`. Fires the same low-score Slack alert pathway. Useful when a student replied with words rather than a number.
 
-- **Root-cause for missed scores**: in `_process_thread()`, the lookback guard ran BEFORE the interview-eve score capture. When a coach (typically Coralie) sent a personal message in an eve-DM thread between the student's score reply and the next poll, the guard fired on the coach's manual message → thread flipped to `human_takeover` → score never recorded.
-- **Fix**: in `backend/circle_dm_poll.py::_process_thread`, score capture now runs IMMEDIATELY after the messages fetch — before the lookback guard.
-- **`POST /api/interview-eve/backfill-scores?days=3`** — admin-only retroactive recovery, now smarter (v2: first-score-wins from the eve-DM send time forward).
-- **Team glossary on Settings → Bot**: collapsible "What do these states & buttons mean?" panel.
-- **Regression test added** at `backend/tests/test_circle_dm_first_sight.py::_scenario_eve_score_captured_before_lookback_guard`.
+Still pending after deploy 2 (will be revisited after deploy 3):
+- Henry Walton — backfill couldn't find a digit in his last 20 student messages; v3 expands to 60 and exposes all his replies.
+- Jemma Boyle — substantive Speciality Doctor question; not eligible for backfill.
+- 4 others — no student reply (genuine non-responders).
+
+- **Root-cause for missed scores**: in `_process_thread()`, the lookback guard ran BEFORE the interview-eve score capture. A coach's manual note in the thread short-circuited the bot before score capture.
+- **Fix**: score capture now runs immediately after the messages fetch — before the lookback guard.
+- **Team glossary on Settings → Bot**: collapsible help panel explaining every state + button.
+- **Regression test** at `backend/tests/test_circle_dm_first_sight.py`.
 - **Files:** `backend/circle_dm_poll.py`, `backend/routes/interview_eve.py`, `backend/tests/test_circle_dm_first_sight.py`, `frontend/src/pages/Settings.jsx`.
 
 
