@@ -234,22 +234,21 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
     call_counts = await _fetch_private_call_counts(emails)
 
     # Add manually-logged calls (ad-hoc bookings the team added via
-    # `/api/today-calls/manual` — these aren't on Calendly). Each entry's
-    # contribution to a student's call count is `ceil(duration_min / 30)`
-    # — so a 30-min call = 1, a 60-min call = 2, etc. This matches how the
-    # team conceptualises Calendly slots.
+    # `/api/today-calls/manual` — these aren't on Calendly). Each entry
+    # counts as **one** call event, regardless of duration. Matches how
+    # tier allowances are described (VIP = 4 x 30-min + 1 x 60-min mock
+    # = 5 calls; PP = 1 call; bonus calls = 1 call each). The duration
+    # is kept for the audit trail but doesn't multiply the count.
     try:
-        import math
         from db import db as _db
         tracked_emails = {e.strip().lower() for e in emails if e}
         async for row in _db.manual_calls.find(
-            {}, {"_id": 0, "student_email": 1, "duration_min": 1},
+            {}, {"_id": 0, "student_email": 1},
         ):
             em = (row.get("student_email") or "").strip().lower()
             if not em or em not in tracked_emails:
                 continue
-            credits = max(1, math.ceil(int(row.get("duration_min") or 30) / 30))
-            call_counts[em] = call_counts.get(em, 0) + credits
+            call_counts[em] = call_counts.get(em, 0) + 1
     except Exception:
         # Manual-call lookup must never break the utilisation widget.
         pass

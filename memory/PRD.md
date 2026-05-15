@@ -12,6 +12,16 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 3) — Log extra call: corrected to count events, not minutes
+**Important correction** based on team feedback: tier allowances are described as *call events*, not *minutes*. VIP = 4×30-min + 1×60-min mock = **5 calls** (the 60-min mock is one event). Private Plus = 1 call. Bonus calls = 1 each. So my initial "60 min = 2 slots" logic was wrong.
+- Each manual call now adds **1** to the count, regardless of duration. The duration is kept on the record for the audit trail / team awareness, but doesn't multiply.
+- Verified live on preview: a 60-min manual entry on Amal Hashi now adds +1 to `calendly_calls_used` (4 → 4 became 4 → 4… i.e. 3 → 4, over_by 1 → 2), not +2.
+- Dialog copy updated to explain the call-event model clearly.
+- **Confirmed bonus calls ARE counted**: in `over_allowance_alerts.py::_fetch_all_private_students`, `monday_total_allowance = calls.total + mocks.total + bonus.total`. Students eligible for bonus calls have their bonus column added to the total allowance, and any bonus call they actually book through Calendly is included in the Calendly count (since Calendly counts every event).
+- Regression test updated to pin "each manual entry adds exactly 1, regardless of duration" (3 entries of 30/60/90 min → 3 credits, not 6).
+- Files: `backend/private_tier_utilisation.py`, `backend/over_allowance_alerts.py`, `frontend/src/pages/UpcomingInterviews.jsx`, `backend/tests/test_manual_call_credits.py`.
+
+
 ### 2026-05-15 (evening 2) — Log extra call: off-Calendly bookings counted towards student allowance
 - **Use case**: William Twiggs got an extra 1-hour call (~30 min over his allowance) that wasn't booked through Calendly. The team needs to record this so it counts towards his overall call usage.
 - **"Log extra call"** button on Upcoming Interviews → Private Tier Utilisation header. Opens a dialog with: student select (pulled from the widget's own private-tier list), duration toggle (30/45/60/90 min), coach pre-filled to logged-in user, datetime picker (defaults to now), notes. After save, the utilisation widget auto-refreshes.

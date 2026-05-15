@@ -199,19 +199,18 @@ async def find_over_allowance_students(db) -> dict:
 
     # Add manually-logged extra calls (off-Calendly bookings added via
     # `/api/today-calls/manual`) to each student's used-count. Each entry
-    # contributes `ceil(duration_min / 30)` credits — so a 30-min call = 1,
-    # a 60-min call = 2.
+    # counts as one call event, regardless of duration (matches the way
+    # Monday allowances are described: e.g. VIP = 5 calls total even
+    # though one of those is a 60-min mock).
     try:
-        import math
         tracked_emails = {e.strip().lower() for e in emails if e}
         async for row in db.manual_calls.find(
-            {}, {"_id": 0, "student_email": 1, "duration_min": 1},
+            {}, {"_id": 0, "student_email": 1},
         ):
             em = (row.get("student_email") or "").strip().lower()
             if not em or em not in tracked_emails:
                 continue
-            credits = max(1, math.ceil(int(row.get("duration_min") or 30) / 30))
-            counts[em] = counts.get(em, 0) + credits
+            counts[em] = counts.get(em, 0) + 1
     except Exception as e:
         logger.warning(f"[over-allowance] manual_calls fold-in failed: {e}")
 

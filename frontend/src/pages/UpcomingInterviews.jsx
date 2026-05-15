@@ -1184,9 +1184,8 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
         duration_min: minutes,
         notes: notes || null,
       });
-      const credits = Math.max(1, Math.ceil(minutes / 30));
       toast.success(
-        `Logged ${minutes}-min call for ${finalName} — counts as ${credits} ${credits === 1 ? "slot" : "slots"}`,
+        `Logged ${minutes}-min call for ${finalName} — counts as 1 call`,
       );
       setStudentId("");
       setEmailOverride("");
@@ -1210,7 +1209,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
             Log extra call
           </DialogTitle>
           <DialogDescription>
-            Records a 1:1 call that wasn't booked through Calendly. Counts towards the student's call allowance — 30 min = 1 slot, 60 min = 2, 90 min = 3.
+            Records a 1:1 call that wasn't booked through Calendly. <strong>Counts as one call</strong> towards the student's allowance, no matter the length. (Tier allowances are call-events, not minutes — VIP = 4×30 + 1×60-min mock = 5 calls; Private Plus = 1 call; bonus calls = 1 each.) Duration is logged for the audit trail.
           </DialogDescription>
         </DialogHeader>
 
@@ -1272,7 +1271,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
                 ))}
               </div>
               <div className="text-[10.5px] text-[var(--ayci-ink-muted)] mt-1">
-                Counts as <strong>{Math.max(1, Math.ceil(minutes / 30))} slot{Math.ceil(minutes / 30) === 1 ? "" : "s"}</strong>
+                Logged for the audit trail · counts as <strong>1 call</strong>
               </div>
             </div>
             <div>
@@ -1304,7 +1303,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Extra session by request, ran 60 min so counts as 2 slots"
+              placeholder="e.g. Extra session by request, ran 60 min — student kindly bumped allowance"
               rows={2}
               maxLength={500}
               className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
