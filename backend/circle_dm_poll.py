@@ -225,20 +225,58 @@ async def _process_thread(
     # First-sight seeding fast-path: use the inline `last_message` to record
     # last_seen without fetching the full message list (avoids 1 API call
     # per thread on the very first poll across all of Tessa's ~400 rooms).
+    #
+    # EXCEPTION — fresh-student-message bypass: if the most-recent message
+    # in this thread is a *student* message less than 10 minutes old, this
+    # is almost certainly a brand-new DM that just landed (e.g. a coach
+    # testing the bot, or a real student messaging a coach for the first
+    # time). Seeding-and-skipping would silently swallow that first
+    # message, which is bad UX. So we minimally-seed state and fall
+    # through to the normal processing path. Backlog protection is
+    # preserved for everything older than 10 min.
     if not state:
+        inline_sender = _msg_sender_id(inline_last)
+        inline_created = inline_last.get("created_at") or ""
+        fresh_cutoff_iso = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        is_fresh_student_msg = (
+            inline_sender is not None
+            and inline_sender != admin_member_id
+            and inline_created > fresh_cutoff_iso
+        )
+        if not is_fresh_student_msg:
+            await _save_thread_state(db, chat_room_uuid, {
+                "coach_admin_email": admin_email,
+                "student_member_id": student_id,
+                "student_name": student_name,
+                "state": "active",
+                "last_seen_message_id": inline_last_id or 0,
+                "sent_message_ids": [],
+                "ai_reply_count_today": 0,
+                "ai_reply_count_date": _today_str(),
+                "first_seen_at": datetime.now(timezone.utc).isoformat(),
+                "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return {"seeded": chat_room_uuid}
+        # Fresh student message — seed minimal state (last_seen=0 so the
+        # student message counts as "new"), then fall through to the rest
+        # of _process_thread() which will fetch /messages, run the
+        # lookback guard, and produce a reply.
         await _save_thread_state(db, chat_room_uuid, {
             "coach_admin_email": admin_email,
             "student_member_id": student_id,
             "student_name": student_name,
             "state": "active",
-            "last_seen_message_id": inline_last_id or 0,
+            "last_seen_message_id": 0,
             "sent_message_ids": [],
+            "sent_bodies": [],
             "ai_reply_count_today": 0,
             "ai_reply_count_date": _today_str(),
             "first_seen_at": datetime.now(timezone.utc).isoformat(),
             "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            "first_sight_replied": True,
         })
-        return {"seeded": chat_room_uuid}
+        state = await _get_thread_state(db, chat_room_uuid) or {}
+        last_seen = 0
 
     messages = await circle_api.list_thread_messages_for_admin(
         db, admin_email, chat_room_uuid, per_page=20,
@@ -858,14 +896,39 @@ async def trace_thread(
         }
 
     if not state:
-        return {
-            "found": True, "trace": steps,
-            "conclusion": (
-                f"WOULD SEED: no state doc exists. First poll will record "
-                f"last_seen_message_id={inline_last_id} *without* replying. "
-                f"Send another DM after seeding to trigger an actual reply."
-            ),
-        }
+        from datetime import datetime as _dt2, timezone as _tz2, timedelta as _td2
+        inline_sender_for_seed = _msg_sender_id(inline_last)
+        inline_created_for_seed = inline_last.get("created_at") or ""
+        fresh_cutoff_iso = (_dt2.now(_tz2.utc) - _td2(minutes=10)).isoformat()
+        is_fresh_student_msg = (
+            inline_sender_for_seed is not None
+            and inline_sender_for_seed != target_admin_id
+            and inline_created_for_seed > fresh_cutoff_iso
+        )
+        steps.append({
+            "step": "first_sight_check",
+            "inline_sender_id": inline_sender_for_seed,
+            "inline_created_at": inline_created_for_seed,
+            "fresh_cutoff_iso": fresh_cutoff_iso,
+            "is_fresh_student_msg": is_fresh_student_msg,
+        })
+        if not is_fresh_student_msg:
+            return {
+                "found": True, "trace": steps,
+                "conclusion": (
+                    f"WOULD SEED (no reply): no state doc exists AND the "
+                    f"inline last_message isn't a fresh (<10 min) student "
+                    f"message. First poll will record "
+                    f"last_seen_message_id={inline_last_id} *without* "
+                    f"replying. Send another DM after seeding to trigger a "
+                    f"reply."
+                ),
+            }
+        # else: bot WOULD minimally-seed and continue to a real reply.
+        # The trace simulates this by treating last_seen=0 so the inline
+        # student message counts as "new" below.
+        last_seen = 0
+        state = {}
 
     messages = await circle_api.list_thread_messages_for_admin(
         db, target_coach, chat_room_uuid, per_page=20,

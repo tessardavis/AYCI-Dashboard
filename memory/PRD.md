@@ -12,13 +12,14 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
-### 2026-05-15 — Circle DM Bot: per-thread `trace_thread()` diagnostic + lookback-guard breadcrumb
-- **Why:** "Test - Coralie" thread was silently ignored by the bot even though everything else worked. Diagnosing required production server logs.
-- **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()`. Returns step-by-step state + the exact gate that would fire (`WOULD SEED` / `WOULD SKIP` / `WOULD ESCALATE` / `WOULD FLAG human_takeover` / `WOULD REPLY`). Lookup by `thread_uuid` (+ optional `coach_email`) OR by `student_search` substring on the other-participant name.
-- **Lookback-guard breadcrumb** — when `_process_thread()` flips a thread to `human_takeover`, it now persists `human_takeover_trigger: {message_id, sender_id, body_snippet, created_at, cutoff_iso_used, reset_at_at_time, sent_ids_count, sent_bodies_count}` on the thread doc. Post-mortems become trivial.
-- **Settings → Bot → "Diagnose a thread"** inline panel: paste a student name or UUID, click Diagnose, see the conclusion + full JSON trace. Admin-only.
-- **Root cause for the Coralie test thread found on first probe:** `has_state: false` — the bot has never recorded state for that thread. Most-recent inline message is a Tessa-as-admin holding handoff. On the next poll the bot would just SEED (record `last_seen`), not reply. Fix: run "Poll Now" once to seed, then send a fresh DM to trigger an actual reply.
-- **Files:** `backend/circle_dm_poll.py` (new `trace_thread()` + lookback-guard breadcrumb), `backend/routes/circle.py` (new route), `frontend/src/pages/Settings.jsx` (Diagnose panel).
+### 2026-05-15 — Circle DM Bot: first-sight smart reply + per-thread diagnostic suite
+- **First-sight smart reply** (`backend/circle_dm_poll.py::_process_thread`): when the bot first sees a thread, it now distinguishes backlog from a real new conversation. If the inline `last_message` is a **student** message **less than 10 min old**, it minimally-seeds state and falls through to the normal reply path (instead of swallowing the first message). Anything older or admin-sent still seeds silently — backlog protection preserved. Fixes the "I sent a test DM and got nothing" UX.
+- **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()` with step-by-step trace + a clear `WOULD …` conclusion. Lookup by `thread_uuid` or `student_search` (substring on the other-participant name). No Circle POSTs, no LLM calls, no state writes.
+- **Lookback-guard breadcrumb**: when `_process_thread()` flips a thread to `human_takeover`, it now persists `human_takeover_trigger: {message_id, sender_id, body_snippet, created_at, cutoff_iso_used, reset_at_at_time, sent_ids_count, sent_bodies_count}` on the thread doc. Future post-mortems become trivial.
+- **Settings → Bot → "Diagnose a thread"** inline panel: paste name/UUID → see conclusion + full JSON trace. Admin-only. Verified live.
+- **Regression test** at `backend/tests/test_circle_dm_first_sight.py` pins all three scenarios (admin-message seed, old-student seed, fresh-student reply) so future agents can't accidentally re-break the logic.
+- **Production diagnosis** (2026-05-15): "Test - Coralie" threads — Tessa was correctly escalated (playbook_miss), Oksana was seeded-only (now solved by smart-reply), Coralie was in `human_takeover` (cause unknown until deploy lands the breadcrumb). Boss-tag scoping confirmed correct (only Tessa).
+- **Files:** `backend/circle_dm_poll.py` (smart-reply + trace + breadcrumb), `backend/routes/circle.py` (new route), `frontend/src/pages/Settings.jsx` (Diagnose panel), `backend/tests/test_circle_dm_first_sight.py` (NEW).
 
 
 ### 2026-05-13 — Warmer, more human auto-replies (no AI disclosure, signed by coach first name)
