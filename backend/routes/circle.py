@@ -526,6 +526,34 @@ async def handle_playbook_suggestion(
 
 
 
+@router.get("/bot/thread-trace")
+async def bot_thread_trace(
+    thread_uuid: str | None = None,
+    coach_email: str | None = None,
+    student_search: str | None = None,
+    user: dict = Depends(require_board("bot")),
+):
+    """Non-mutating, step-by-step simulation of what `_process_thread()`
+    would do for a single thread. Returns the exact gate that's blocking
+    the bot (or "WOULD REPLY") with every relevant piece of state.
+
+    Pass either:
+      - `thread_uuid` (optionally `coach_email` to scope the lookup), OR
+      - `student_search` — substring-matches the other-participant name
+        across all configured coaches, picks the most recently active.
+
+    Designed for debugging "the bot didn't reply to X" with zero side
+    effects — no Circle POSTs, no LLM calls, no state writes.
+    """
+    import circle_dm_poll
+    if not (thread_uuid or student_search):
+        raise HTTPException(400, "Provide thread_uuid or student_search")
+    return await circle_dm_poll.trace_thread(
+        db, thread_uuid=thread_uuid, coach_email=coach_email,
+        student_search=student_search,
+    )
+
+
 @router.post("/bot/reset-stuck-threads")
 async def reset_stuck_threads(
     coach_email: str | None = None,

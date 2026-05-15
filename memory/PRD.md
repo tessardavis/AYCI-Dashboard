@@ -12,6 +12,15 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 — Circle DM Bot: per-thread `trace_thread()` diagnostic + lookback-guard breadcrumb
+- **Why:** "Test - Coralie" thread was silently ignored by the bot even though everything else worked. Diagnosing required production server logs.
+- **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()`. Returns step-by-step state + the exact gate that would fire (`WOULD SEED` / `WOULD SKIP` / `WOULD ESCALATE` / `WOULD FLAG human_takeover` / `WOULD REPLY`). Lookup by `thread_uuid` (+ optional `coach_email`) OR by `student_search` substring on the other-participant name.
+- **Lookback-guard breadcrumb** — when `_process_thread()` flips a thread to `human_takeover`, it now persists `human_takeover_trigger: {message_id, sender_id, body_snippet, created_at, cutoff_iso_used, reset_at_at_time, sent_ids_count, sent_bodies_count}` on the thread doc. Post-mortems become trivial.
+- **Settings → Bot → "Diagnose a thread"** inline panel: paste a student name or UUID, click Diagnose, see the conclusion + full JSON trace. Admin-only.
+- **Root cause for the Coralie test thread found on first probe:** `has_state: false` — the bot has never recorded state for that thread. Most-recent inline message is a Tessa-as-admin holding handoff. On the next poll the bot would just SEED (record `last_seen`), not reply. Fix: run "Poll Now" once to seed, then send a fresh DM to trigger an actual reply.
+- **Files:** `backend/circle_dm_poll.py` (new `trace_thread()` + lookback-guard breadcrumb), `backend/routes/circle.py` (new route), `frontend/src/pages/Settings.jsx` (Diagnose panel).
+
+
 ### 2026-05-13 — Warmer, more human auto-replies (no AI disclosure, signed by coach first name)
 - **User feedback:** "Our auto-replies feel a bit robotic — they mention 'this is an auto-response from Coralie Fairon's account' and sign off as 'AYCI Team'. Should feel warm, friendly, signed by the coach, and never call out the automation."
 - **Rewrote every customer-facing template** so the student never sees the word "auto-response" and the message reads like the coach wrote it themselves:

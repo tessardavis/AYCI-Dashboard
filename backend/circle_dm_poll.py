@@ -288,11 +288,24 @@ async def _process_thread(
         mid = _msg_id(m)
         body = _msg_body(m)
         if sid == admin_member_id and mid not in sent_ids and body not in sent_bodies:
+            # Breadcrumb: capture exactly which message convinced us a human
+            # was talking — invaluable for post-mortems when a thread looks
+            # like it should be bot-active but quietly went to human_takeover.
             await _save_thread_state(db, chat_room_uuid, {
                 "state": "human_takeover",
                 "last_seen_message_id": latest_id,
                 "last_activity_at": datetime.now(timezone.utc).isoformat(),
                 "human_takeover_at": datetime.now(timezone.utc).isoformat(),
+                "human_takeover_trigger": {
+                    "message_id": mid,
+                    "sender_id": sid,
+                    "body_snippet": (body or "")[:200],
+                    "created_at": m.get("created_at"),
+                    "cutoff_iso_used": cutoff_iso,
+                    "reset_at_at_time": reset_at_iso or None,
+                    "sent_ids_count": len(sent_ids),
+                    "sent_bodies_count": len(sent_bodies),
+                },
             })
             return {"human_takeover": chat_room_uuid}
 
@@ -687,3 +700,347 @@ async def reset_thread(db, chat_room_uuid: str) -> bool:
         },
     )
     return res.modified_count > 0 or res.matched_count > 0
+
+
+# ---------------------------------------------------------- Non-mutating trace
+async def trace_thread(
+    db,
+    *,
+    thread_uuid: Optional[str] = None,
+    coach_email: Optional[str] = None,
+    student_search: Optional[str] = None,
+) -> dict:
+    """READ-ONLY simulation of ``_process_thread()``.
+
+    Walks every gate the bot would walk for a single thread and returns a
+    step-by-step trace + the *exact* conclusion the bot would reach. Nothing
+    is mutated — no state writes, no Circle POSTs, no LLM calls. Designed
+    for the "why didn't the bot reply to *this* thread?" debugging loop.
+
+    Lookup priority:
+      • ``thread_uuid`` (+ optional ``coach_email``) — exact UUID lookup
+      • ``student_search`` — substring-matches the *other-participant* name
+        across every configured coach's DM list; picks the most recently
+        active match. Useful when you don't know the UUID off-hand.
+    """
+    import circle_api
+    cfg = await get_config(db)
+
+    if not (thread_uuid or student_search):
+        return {"found": False, "error": "pass thread_uuid or student_search"}
+
+    coaches: list[str] = (
+        [coach_email.strip().lower()]
+        if coach_email else list(cfg["coach_emails"])
+    )
+
+    target_thread: Optional[dict] = None
+    target_coach: Optional[str] = None
+    target_admin_id: Optional[int] = None
+    search_log: list[dict] = []
+
+    for c in coaches:
+        admin_id = await circle_api.get_cached_admin_member_id(db, c)
+        if not admin_id:
+            tok = await circle_api._get_access_token(db, c)
+            if tok:
+                admin_id = await circle_api.get_cached_admin_member_id(db, c)
+        threads = await circle_api.list_dm_threads(db, c, per_page=100)
+        dm_threads = [t for t in threads if (t.get("chat_room") or {}).get("kind") == "direct"]
+        search_log.append({"coach": c, "admin_id": admin_id,
+                           "total_threads": len(threads),
+                           "dm_threads": len(dm_threads)})
+
+        if thread_uuid:
+            for t in dm_threads:
+                if t.get("chat_room_uuid") == thread_uuid:
+                    target_thread, target_coach, target_admin_id = t, c, admin_id
+                    break
+        elif student_search:
+            needle = student_search.lower()
+            candidates = []
+            for t in dm_threads:
+                for p in t.get("other_participants_preview") or []:
+                    name = (p.get("name") or "")
+                    if needle in name.lower():
+                        candidates.append(t)
+                        break
+            if candidates:
+                # Pick the most recently active match
+                candidates.sort(
+                    key=lambda t: (t.get("last_message") or {}).get("created_at") or "",
+                    reverse=True,
+                )
+                target_thread, target_coach, target_admin_id = candidates[0], c, admin_id
+        if target_thread:
+            break
+
+    if not target_thread:
+        return {
+            "found": False,
+            "search_log": search_log,
+            "conclusion": (
+                "Thread not visible in any configured coach's DM list. The bot "
+                "can only process threads returned by Circle's Headless API. "
+                "Possible causes: (a) wrong coach inbox, (b) Circle hiding the "
+                "thread from the API, (c) the coach's CIRCLE_USER_TOKEN is "
+                "scoped to a different community."
+            ),
+        }
+
+    steps: list[dict] = []
+    chat_room_uuid = target_thread.get("chat_room_uuid")
+    steps.append({
+        "step": "thread_found",
+        "chat_room_uuid": chat_room_uuid,
+        "coach_admin_email": target_coach,
+        "admin_member_id": target_admin_id,
+        "search_log": search_log,
+    })
+
+    student_id, student_name = _identify_student(target_thread, target_admin_id or 0)
+    steps.append({
+        "step": "identify_student",
+        "student_member_id": student_id,
+        "student_name": student_name,
+        "other_participants": target_thread.get("other_participants_preview") or [],
+    })
+    if not student_id:
+        return {"found": True, "trace": steps,
+                "conclusion": "WOULD SKIP: no student identified (only the admin is in this thread)."}
+
+    state = await _get_thread_state(db, chat_room_uuid)
+    steps.append({
+        "step": "load_state",
+        "has_state": bool(state),
+        "current_state": (state or {}).get("state"),
+        "last_seen_message_id": (state or {}).get("last_seen_message_id"),
+        "reset_at": (state or {}).get("reset_at"),
+        "human_takeover_at": (state or {}).get("human_takeover_at"),
+        "human_takeover_trigger": (state or {}).get("human_takeover_trigger"),
+        "sent_message_ids_count": len((state or {}).get("sent_message_ids") or []),
+        "sent_bodies_count": len((state or {}).get("sent_bodies") or []),
+        "ai_reply_count_today": (state or {}).get("ai_reply_count_today"),
+        "ai_reply_count_date": (state or {}).get("ai_reply_count_date"),
+    })
+
+    if state and state.get("state") in ("escalated", "human_takeover", "tag_excluded"):
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                f"WOULD SKIP: state={state['state']}. Bot has explicitly "
+                f"backed off. Use Re-arm on this thread to re-engage."
+            ),
+        }
+
+    inline_last = target_thread.get("last_message") or {}
+    inline_last_id = _msg_id(inline_last)
+    last_seen = (state or {}).get("last_seen_message_id") or 0
+    steps.append({
+        "step": "fast_path_check",
+        "inline_last_id": inline_last_id,
+        "last_seen": last_seen,
+        "inline_last_sender": (inline_last.get("sender") or {}).get("name"),
+        "inline_last_sender_id": _msg_sender_id(inline_last),
+        "inline_last_body": _msg_body(inline_last)[:200],
+        "inline_last_created_at": inline_last.get("created_at"),
+    })
+    if state and inline_last_id is not None and inline_last_id <= last_seen:
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                f"WOULD SKIP: no_new (inline_last_id={inline_last_id} "
+                f"<= last_seen={last_seen}). The inline last_message in the "
+                f"thread-list response is older than the bot's high-water "
+                f"mark — either no new message arrived, or a previous poll "
+                f"already advanced last_seen past it."
+            ),
+        }
+
+    if not state:
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                f"WOULD SEED: no state doc exists. First poll will record "
+                f"last_seen_message_id={inline_last_id} *without* replying. "
+                f"Send another DM after seeding to trigger an actual reply."
+            ),
+        }
+
+    messages = await circle_api.list_thread_messages_for_admin(
+        db, target_coach, chat_room_uuid, per_page=20,
+    )
+    if not messages:
+        return {"found": True, "trace": steps,
+                "conclusion": "WOULD SKIP: no_messages (Circle returned empty)."}
+
+    messages.sort(key=lambda m: m.get("created_at") or "")
+    latest_id = _msg_id(messages[-1])
+    sent_ids_set = set(state.get("sent_message_ids") or [])
+    sent_bodies_set = set(state.get("sent_bodies") or [])
+
+    msg_summary = [{
+        "id": _msg_id(m),
+        "sender_id": _msg_sender_id(m),
+        "sender_name": (m.get("sender") or {}).get("name"),
+        "is_admin": _msg_sender_id(m) == target_admin_id,
+        "is_student": _msg_sender_id(m) == student_id,
+        "body": _msg_body(m)[:200],
+        "created_at": m.get("created_at"),
+        "in_sent_ids": _msg_id(m) in sent_ids_set,
+        "in_sent_bodies": _msg_body(m) in sent_bodies_set,
+    } for m in messages]
+    steps.append({"step": "fetch_messages", "count": len(messages), "messages": msg_summary})
+
+    new_messages = [m for m in messages if _msg_id(m) is not None and _msg_id(m) > last_seen]
+    steps.append({
+        "step": "filter_new",
+        "latest_id": latest_id,
+        "new_count": len(new_messages),
+        "new_ids": [_msg_id(m) for m in new_messages],
+    })
+    if not new_messages:
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                f"WOULD SKIP: no_new (no fetched message has id > "
+                f"last_seen={last_seen}). The inline last_message said "
+                f"id={inline_last_id} but the full /messages fetch didn't "
+                f"return anything newer than last_seen. Possible: the test "
+                f"message was edited/deleted, or Circle is paginating it "
+                f"out of the first 20."
+            ),
+        }
+
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    cutoff_iso = (_dt.now(_tz.utc) - _td(days=14)).isoformat()
+    reset_at_iso = state.get("reset_at") or ""
+    if reset_at_iso and reset_at_iso > cutoff_iso:
+        cutoff_iso = reset_at_iso
+    steps.append({
+        "step": "lookback_guard_setup",
+        "cutoff_iso": cutoff_iso,
+        "reset_at_iso": reset_at_iso,
+    })
+
+    triggered = None
+    for m in messages:
+        if (m.get("created_at") or "") < cutoff_iso:
+            continue
+        sid = _msg_sender_id(m)
+        mid = _msg_id(m)
+        body = _msg_body(m)
+        if sid == target_admin_id and mid not in sent_ids_set and body not in sent_bodies_set:
+            triggered = {
+                "message_id": mid,
+                "sender_id": sid,
+                "sender_name": (m.get("sender") or {}).get("name"),
+                "body_snippet": body[:200],
+                "created_at": m.get("created_at"),
+                "reason": "admin message not in sent_message_ids AND not in sent_bodies",
+            }
+            break
+    if triggered:
+        steps.append({"step": "lookback_guard_triggered", "trigger": triggered})
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                "WOULD FLAG human_takeover: the lookback guard sees an admin "
+                "message inside the window that the bot doesn't recognise as "
+                "its own. Either the coach posted manually in Circle, or the "
+                "bot replied from a different env (preview vs production) "
+                "and the current env's sent_message_ids / sent_bodies don't "
+                "know about it. Fix: bulk Reset Stuck Threads, or Re-arm + "
+                "send a fresh test message."
+            ),
+        }
+    steps.append({"step": "lookback_guard_passed"})
+
+    latest_student_msg = None
+    for m in reversed(new_messages):
+        if _msg_sender_id(m) == student_id:
+            latest_student_msg = m
+            break
+    if not latest_student_msg:
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                "WOULD SKIP: no_student_msg (all new messages came from the "
+                "bot itself — nothing to react to)."
+            ),
+        }
+    student_text = _msg_body(latest_student_msg)
+    steps.append({
+        "step": "found_student_msg",
+        "id": _msg_id(latest_student_msg),
+        "body": student_text[:400],
+        "created_at": latest_student_msg.get("created_at"),
+    })
+    if not student_text:
+        return {"found": True, "trace": steps, "conclusion": "WOULD SKIP: empty_body."}
+
+    today = _today_str()
+    reply_count_today = (
+        state.get("ai_reply_count_today", 0)
+        if state.get("ai_reply_count_date") == today else 0
+    )
+    if reply_count_today >= DAILY_REPLY_CAP_PER_THREAD:
+        return {
+            "found": True, "trace": steps,
+            "conclusion": (
+                f"WOULD ESCALATE: daily_cap_reached "
+                f"({reply_count_today}/{DAILY_REPLY_CAP_PER_THREAD})."
+            ),
+        }
+
+    if _wants_escalation(student_text):
+        return {"found": True, "trace": steps,
+                "conclusion": "WOULD ESCALATE: user_requested_human (matched an escalation phrase)."}
+
+    try:
+        import circle_dm_bot
+        sensitive, kw = circle_dm_bot._is_sensitive(student_text)
+    except Exception as e:
+        sensitive, kw = False, f"(sensitive check errored: {e})"
+    if sensitive:
+        return {"found": True, "trace": steps,
+                "conclusion": f"WOULD ESCALATE: sensitive keyword ({kw}). Slack notification fires."}
+
+    excluded_tags_lower = {(t or "").lower() for t in cfg.get("excluded_member_tags") or []}
+    tag_excl_coaches_lower = {(e or "").lower() for e in cfg.get("tag_exclusion_coach_emails") or []}
+    if (target_coach or "").lower() in tag_excl_coaches_lower and excluded_tags_lower:
+        member = await circle_api.fetch_member_cached(db, student_id)
+        student_tags_raw = (member or {}).get("tags") or []
+        student_tags_lower = [(t or "").lower() for t in student_tags_raw]
+        matched = [t for t in student_tags_lower if t in excluded_tags_lower]
+        steps.append({
+            "step": "tag_check",
+            "student_tags": student_tags_raw,
+            "excluded_tags_config": list(excluded_tags_lower),
+            "matched_excluded": matched,
+        })
+        if matched:
+            return {
+                "found": True, "trace": steps,
+                "conclusion": f"WOULD SKIP: tag_excluded — student carries excluded tag(s): {matched}",
+            }
+    else:
+        steps.append({
+            "step": "tag_check_scoped_out",
+            "reason": (
+                f"coach {target_coach} is not in tag_exclusion_coach_emails "
+                f"({sorted(tag_excl_coaches_lower)}) — tags ignored for this coach"
+            ),
+        })
+
+    return {
+        "found": True, "trace": steps,
+        "conclusion": (
+            "WOULD REPLY (or escalate via playbook). The bot would post an "
+            "AI reply. If the real bot is silent on this thread, the failure "
+            "is downstream of these gates — likely: (a) Circle rejecting the "
+            "POST (token revoked / wrong admin), (b) the asyncio polling "
+            "loop died, or (c) the playbook LLM call is timing out. Trigger "
+            "'Poll Now' from Settings and check last_poll_summary."
+        ),
+    }

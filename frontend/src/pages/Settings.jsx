@@ -1289,6 +1289,11 @@ function CoachPlaybookSection({ isAdmin }) {
   // Default to "recent only" so the first paint isn't 1000+ stale threads.
   // 0 means "all".
   const [threadRecentDays, setThreadRecentDays] = useState(7);
+  // Thread-trace diagnostic: paste a student name (or UUID) and see exactly
+  // which gate in _process_thread() would fire — without polling.
+  const [traceQuery, setTraceQuery] = useState("");
+  const [tracing, setTracing] = useState(false);
+  const [traceResult, setTraceResult] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -1410,6 +1415,28 @@ function CoachPlaybookSection({ isAdmin }) {
       toast.error("Reset failed: " + (err.response?.data?.detail || err.message));
     } finally {
       setResetting(null);
+    }
+  };
+
+  const runTrace = async () => {
+    const q = (traceQuery || "").trim();
+    if (!q) {
+      toast.error("Enter a student name or thread UUID");
+      return;
+    }
+    setTracing(true);
+    setTraceResult(null);
+    try {
+      // UUIDs are 36 chars with dashes — anything else is treated as a name search.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
+      const params = isUuid ? { thread_uuid: q } : { student_search: q };
+      const { data } = await apiClient.get("/circle/bot/thread-trace", { params });
+      setTraceResult(data);
+    } catch (err) {
+      toast.error("Trace failed: " + (err.response?.data?.detail || err.message));
+      setTraceResult({ error: err.response?.data?.detail || err.message });
+    } finally {
+      setTracing(false);
     }
   };
 
@@ -1796,6 +1823,62 @@ function CoachPlaybookSection({ isAdmin }) {
               )}
             </div>
           </div>
+
+          {/* Thread-trace diagnostic — non-mutating walk-through of every gate in
+              _process_thread() for a single thread. Solves "why didn't the bot
+              reply to X?" without needing prod logs. Lookup by student name
+              (substring match) or paste a chat_room_uuid. */}
+          {isAdmin && (
+            <div className="mb-3 bg-amber-50/60 border border-amber-200 rounded p-3" data-testid="bot-thread-trace-panel">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-amber-900">Diagnose a thread</span>
+                <span className="text-[10px] text-amber-800/80">Walks every bot gate for one thread (read-only — no replies, no state changes)</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mt-2">
+                <input
+                  type="text"
+                  value={traceQuery}
+                  onChange={(e) => setTraceQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") runTrace(); }}
+                  placeholder="Student name (e.g. Coralie) or chat_room_uuid"
+                  className="text-xs border border-amber-300 rounded px-2 py-1.5 flex-1 min-w-[260px] bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  data-testid="bot-trace-input"
+                />
+                <Button
+                  type="button" size="sm"
+                  onClick={runTrace}
+                  disabled={tracing}
+                  className="h-8 text-xs px-3 bg-amber-700 hover:bg-amber-800 text-white"
+                  data-testid="bot-trace-run-btn"
+                >
+                  {tracing ? "Tracing…" : "Diagnose"}
+                </Button>
+                {traceResult && (
+                  <Button
+                    type="button" variant="ghost" size="sm"
+                    onClick={() => { setTraceResult(null); setTraceQuery(""); }}
+                    className="h-8 text-xs px-2 text-amber-900"
+                    data-testid="bot-trace-clear-btn"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {traceResult && (
+                <div className="mt-3" data-testid="bot-trace-result">
+                  {traceResult.conclusion && (
+                    <div className="text-xs font-bold text-amber-900 bg-white border border-amber-300 rounded px-2 py-1.5 mb-2">
+                      {traceResult.conclusion}
+                    </div>
+                  )}
+                  <pre className="text-[10.5px] leading-tight bg-white border border-amber-200 rounded p-2 overflow-auto max-h-80 whitespace-pre-wrap break-words">
+{JSON.stringify(traceResult, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
           {bot?.threads && bot.threads.length > 0 ? (
             <div className="space-y-1.5 max-h-96 overflow-y-auto" data-testid="bot-threads-list">
               {bot.threads.map((t) => (
