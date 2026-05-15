@@ -421,7 +421,10 @@ function EveCheckInsWidget() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/interview-eve/records", { params: { limit: 20 } });
+      // Fetch enough records to build a 30-day sparkline (private-tier &
+      // Academy interview volumes combined rarely exceed ~10/day, so 300
+      // covers 30 days with headroom).
+      const { data } = await apiClient.get("/interview-eve/records", { params: { limit: 300 } });
       setRecords(data.records || []);
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load eve check-ins");
@@ -476,10 +479,18 @@ function EveCheckInsWidget() {
     }
   };
 
+  // Last 7 days view (for the cards + lists)
   const last7 = (records || []).filter((r) => {
     const sent = r.sent_at ? new Date(r.sent_at) : null;
     if (!sent) return false;
     return (Date.now() - sent.getTime()) <= 7 * 24 * 3600 * 1000;
+  });
+
+  // 30-day window (for the sparkline trend on each card)
+  const last30 = (records || []).filter((r) => {
+    const sent = r.sent_at ? new Date(r.sent_at) : null;
+    if (!sent) return false;
+    return (Date.now() - sent.getTime()) <= 30 * 24 * 3600 * 1000;
   });
 
   // Split replied → pre-interview (clean) vs post-interview (potentially
@@ -531,6 +542,38 @@ function EveCheckInsWidget() {
   const statsAcademy = computeStats(academyRows);
   const stats = computeStats(last7);
   const buckets = stats.buckets;
+
+  // 30-day daily-avg series for each group (pre-interview scores only).
+  // Returns ordered array of { date: "YYYY-MM-DD", avg: number | null }.
+  const buildDailySeries = (rows) => {
+    const byDay = new Map();
+    rows.forEach((r) => {
+      if (classifyReply(r) !== "pre") return;
+      const day = r.interview_date;
+      if (!day) return;
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(r.score);
+    });
+    // Build last-30-days timeline (inclusive of today).
+    const series = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const day = d.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+      const scores = byDay.get(day) || [];
+      series.push({
+        date: day,
+        avg: scores.length > 0
+          ? scores.reduce((a, b) => a + b, 0) / scores.length
+          : null,
+        n: scores.length,
+      });
+    }
+    return series;
+  };
+  const seriesPremium = buildDailySeries(last30.filter(isPremium));
+  const seriesAcademy = buildDailySeries(last30.filter((r) => !isPremium(r)));
 
   // Combined replied / pending lists for the row display below the rollups.
   const repliedAll = [...buckets.pre, ...buckets.post];
@@ -586,12 +629,14 @@ function EveCheckInsWidget() {
           label="Private + Boost & Go"
           colour="violet"
           stats={statsPremium}
+          series30d={seriesPremium}
           testIdPrefix="eve-premium"
         />
         <GroupStatsCard
           label="Academy"
           colour="teal"
           stats={statsAcademy}
+          series30d={seriesAcademy}
           testIdPrefix="eve-academy"
         />
       </div>
@@ -758,25 +803,71 @@ function EveCheckInsWidget() {
   );
 }
 
-function GroupStatsCard({ label, colour, stats, testIdPrefix }) {
+function GroupStatsCard({ label, colour, stats, series30d, testIdPrefix }) {
   const palette = {
     violet: {
       border: "border-violet-200",
       bg: "bg-violet-50/40",
       header: "text-violet-900",
       avg: "text-violet-700",
+      stroke: "#7c3aed",   // violet-600
+      fill: "rgba(124, 58, 237, 0.12)",
     },
     teal: {
       border: "border-teal-200",
       bg: "bg-teal-50/40",
       header: "text-teal-900",
       avg: "text-teal-700",
+      stroke: "#0d9488",   // teal-600
+      fill: "rgba(13, 148, 136, 0.12)",
     },
-  }[colour] || { border: "border-slate-200", bg: "bg-slate-50/40", header: "text-slate-900", avg: "text-slate-700" };
+  }[colour] || {
+    border: "border-slate-200", bg: "bg-slate-50/40",
+    header: "text-slate-900", avg: "text-slate-700",
+    stroke: "#475569", fill: "rgba(71, 85, 105, 0.12)",
+  };
   const postCount = stats.buckets.post.length;
+
+  // Trend: compare the most-recent 15 days' avg to the prior 15 days'.
+  // Only meaningful when both halves have at least 1 data point.
+  const series = series30d || [];
+  const split = Math.floor(series.length / 2);
+  const lo = series.slice(0, split).filter((p) => p.avg !== null);
+  const hi = series.slice(split).filter((p) => p.avg !== null);
+  const mean = (xs) => xs.length > 0
+    ? xs.reduce((a, b) => a + b.avg, 0) / xs.length : null;
+  const meanLo = mean(lo);
+  const meanHi = mean(hi);
+  const delta = (meanLo !== null && meanHi !== null)
+    ? meanHi - meanLo : null;
+  const trendArrow = delta === null
+    ? null
+    : delta > 0.1 ? "up"
+    : delta < -0.1 ? "down"
+    : "flat";
+
   return (
     <div className={`rounded-md border ${palette.border} ${palette.bg} p-3`} data-testid={`${testIdPrefix}-card`}>
-      <div className={`text-xs font-semibold uppercase tracking-wider ${palette.header} mb-2`}>{label}</div>
+      <div className={`text-xs font-semibold uppercase tracking-wider ${palette.header} mb-2 flex items-center justify-between gap-2 flex-wrap`}>
+        <span>{label}</span>
+        {trendArrow && (
+          <span
+            className={
+              "inline-flex items-center gap-1 text-[10px] normal-case font-medium px-1.5 py-0.5 rounded " +
+              (trendArrow === "up"
+                ? "bg-emerald-100 text-emerald-800"
+                : trendArrow === "down"
+                ? "bg-rose-100 text-rose-800"
+                : "bg-slate-100 text-slate-700")
+            }
+            title="30-day trend (recent 15 days vs prior 15 days, pre-interview avg)"
+            data-testid={`${testIdPrefix}-trend`}
+          >
+            {trendArrow === "up" ? "▲" : trendArrow === "down" ? "▼" : "→"}
+            {delta !== null && ` ${delta > 0 ? "+" : ""}${delta.toFixed(1)}`}
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-5 gap-1.5 items-baseline">
         <MiniStat label="Sent" value={stats.sent} accent="text-slate-700" testid={`${testIdPrefix}-sent`} />
         <MiniStat label="Replied" value={stats.replied} accent="text-emerald-700" testid={`${testIdPrefix}-replied`} />
@@ -790,6 +881,75 @@ function GroupStatsCard({ label, colour, stats, testIdPrefix }) {
           sublabel={stats.avgAll && postCount > 0 ? `inc post ${stats.avgAll}` : null}
           testid={`${testIdPrefix}-avg`}
         />
+      </div>
+      <Sparkline series={series} stroke={palette.stroke} fill={palette.fill} testid={`${testIdPrefix}-sparkline`} />
+    </div>
+  );
+}
+
+function Sparkline({ series, stroke, fill, testid }) {
+  const valid = (series || []).filter((p) => p.avg !== null);
+  if (valid.length < 2) {
+    return (
+      <div className="mt-2 h-7 flex items-center justify-center text-[10px] text-[var(--ayci-ink-muted)] italic" data-testid={testid}>
+        Not enough data for 30-day trend yet
+      </div>
+    );
+  }
+  const W = 280;
+  const H = 28;
+  const PAD = 2;
+  // Y range: 1–10 (full score range, so trends stay visually comparable
+  // across both cards even if one has a tight cluster).
+  const yMin = 1;
+  const yMax = 10;
+  const y = (v) => H - PAD - ((v - yMin) / (yMax - yMin)) * (H - PAD * 2);
+  // X: stretch across the full 30-day axis, evenly spaced day-by-day.
+  // Skipping nulls visually so the line jumps the gap.
+  const n = series.length;
+  const x = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - PAD * 2);
+  // Build a single polyline that breaks at null gaps using "M" / "L".
+  let d = "";
+  let lastWasNull = true;
+  series.forEach((p, i) => {
+    if (p.avg === null) { lastWasNull = true; return; }
+    const cmd = lastWasNull ? "M" : "L";
+    d += `${cmd}${x(i).toFixed(1)},${y(p.avg).toFixed(1)} `;
+    lastWasNull = false;
+  });
+  // Endpoint dot (most recent valid point).
+  let endX = null;
+  let endY = null;
+  for (let i = series.length - 1; i >= 0; i -= 1) {
+    if (series[i].avg !== null) {
+      endX = x(i); endY = y(series[i].avg); break;
+    }
+  }
+  return (
+    <div className="mt-2" data-testid={testid}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-7" aria-hidden>
+        {/* Reference line at 7 (the team's typical confidence floor) */}
+        <line
+          x1={PAD} x2={W - PAD}
+          y1={y(7)} y2={y(7)}
+          stroke={stroke} strokeOpacity="0.18" strokeDasharray="2 2" strokeWidth="0.6"
+        />
+        {/* Fill under curve — visual weight, optional */}
+        {valid.length > 1 && (
+          <path
+            d={d + `L${(endX || 0).toFixed(1)},${H - PAD} L${(x(series.findIndex((p) => p.avg !== null)) || PAD).toFixed(1)},${H - PAD} Z`}
+            fill={fill}
+            stroke="none"
+          />
+        )}
+        <path d={d.trim()} fill="none" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        {endX !== null && (
+          <circle cx={endX} cy={endY} r="1.7" fill={stroke} />
+        )}
+      </svg>
+      <div className="text-[9.5px] text-[var(--ayci-ink-muted)] mt-0.5 flex items-center justify-between">
+        <span>30 days · pre-interview avg</span>
+        <span>{valid.length} day{valid.length === 1 ? "" : "s"} with replies</span>
       </div>
     </div>
   );

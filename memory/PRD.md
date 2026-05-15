@@ -12,6 +12,15 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 6) — Eve check-ins: 30-day sparkline + trend delta on each card
+- **Inline SVG sparkline** beneath each tier-split card showing the daily pre-interview-only avg score over the last 30 days. Day-by-day with null gaps (days with no replies) rendered as visual jumps. Subtle dashed reference line at 7/10. Endpoint dot highlights the most recent reading.
+- **Trend pill** in the card header: compares the avg of the recent 15 days vs the prior 15 days. Shows `▲ +X.X` (emerald) for improvement >0.1, `▼ -X.X` (rose) for decline, `→` (slate) for flat. Hover-tooltip explains the methodology.
+- **Robust to sparse data**: when fewer than 2 days have replies, shows an unobtrusive "Not enough data for 30-day trend yet" placeholder instead of breaking.
+- **Y-axis fixed at 1-10** (full score range) so both Premium and Academy cards stay visually comparable — a 3-point drop looks like a 3-point drop everywhere.
+- **No backend changes** — same `/api/interview-eve/records` endpoint, fetch bumped from limit=20 to 300 to cover the 30-day window.
+- **File**: `frontend/src/pages/UpcomingInterviews.jsx` (`Sparkline` component + `buildDailySeries` helper + `GroupStatsCard` extended).
+
+
 ### 2026-05-15 (evening 5) — Eve check-ins: tier-split rollup (Private + B&G vs Academy)
 - **Two side-by-side rollup cards** on the eve check-ins widget — a violet "Private + Boost & Go" card and a teal "Academy" card. Each shows Sent / Replied / Pending / Low ≤5 / Avg (pre-interview, with "inc post" sub-label when relevant) for its own group.
 - **Group classification**: uses the existing `is_private_tier` flag set at eve-DM send time. Premium = Private Plus + VIP + Boost & Go. Academy = Academy + legacy Silver/Gold.
