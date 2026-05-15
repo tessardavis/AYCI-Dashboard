@@ -12,14 +12,16 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
-### 2026-05-15 — Circle DM Bot: first-sight smart reply + per-thread diagnostic suite
+### 2026-05-15 — Circle DM Bot: first-sight smart reply + per-thread diagnostic suite + Trust & re-arm
 - **First-sight smart reply** (`backend/circle_dm_poll.py::_process_thread`): when the bot first sees a thread, it now distinguishes backlog from a real new conversation. If the inline `last_message` is a **student** message **less than 10 min old**, it minimally-seeds state and falls through to the normal reply path (instead of swallowing the first message). Anything older or admin-sent still seeds silently — backlog protection preserved. Fixes the "I sent a test DM and got nothing" UX.
-- **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()` with step-by-step trace + a clear `WOULD …` conclusion. Lookup by `thread_uuid` or `student_search` (substring on the other-participant name). No Circle POSTs, no LLM calls, no state writes.
-- **Lookback-guard breadcrumb**: when `_process_thread()` flips a thread to `human_takeover`, it now persists `human_takeover_trigger: {message_id, sender_id, body_snippet, created_at, cutoff_iso_used, reset_at_at_time, sent_ids_count, sent_bodies_count}` on the thread doc. Future post-mortems become trivial.
-- **Settings → Bot → "Diagnose a thread"** inline panel: paste name/UUID → see conclusion + full JSON trace. Admin-only. Verified live.
-- **Regression test** at `backend/tests/test_circle_dm_first_sight.py` pins all three scenarios (admin-message seed, old-student seed, fresh-student reply) so future agents can't accidentally re-break the logic.
-- **Production diagnosis** (2026-05-15): "Test - Coralie" threads — Tessa was correctly escalated (playbook_miss), Oksana was seeded-only (now solved by smart-reply), Coralie was in `human_takeover` (cause unknown until deploy lands the breadcrumb). Boss-tag scoping confirmed correct (only Tessa).
-- **Files:** `backend/circle_dm_poll.py` (smart-reply + trace + breadcrumb), `backend/routes/circle.py` (new route), `frontend/src/pages/Settings.jsx` (Diagnose panel), `backend/tests/test_circle_dm_first_sight.py` (NEW).
+- **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()` with step-by-step trace + a clear `WOULD …` conclusion. Lookup by `thread_uuid` or `student_search`. No Circle POSTs, no LLM calls, no state writes.
+- **Lookback-guard breadcrumb**: when `_process_thread()` flips a thread to `human_takeover`, it persists `human_takeover_trigger: {message_id, sender_id, body (full), body_snippet, created_at, cutoff_iso_used, reset_at_at_time, sent_ids_count, sent_bodies_count}` on the thread doc.
+- **`POST /api/circle/bot/trust-takeover/{uuid}`** + **"Trust & re-arm" button** on `human_takeover` thread rows: one-click recovery for cross-environment races. Appends the breadcrumbed trigger body to `sent_bodies` and id to `sent_message_ids`, then re-arms. The next poll's lookback guard recognises the message and won't re-trigger takeover. Rejects threads without a recorded trigger (older takeovers — use plain Re-arm).
+- **Inline takeover-trigger display**: each `human_takeover` row now shows `Triggered by msg #<id> (<body snippet>)` so coaches can decide between Trust vs Re-arm before clicking.
+- **Settings → Bot → "Diagnose a thread"** inline panel: paste name/UUID → see conclusion + full JSON trace. Admin-only.
+- **Regression tests** at `backend/tests/test_circle_dm_first_sight.py` pin all three first-sight scenarios + the trust-takeover flow (including the "already active" and "no state doc" guard paths). Passing.
+- **Production diagnosis** (2026-05-15): "Test - Coralie" threads — Tessa correctly escalated (playbook_miss), Oksana was seeded-only (now solved by smart-reply), Coralie was in `human_takeover` (cause now traceable via breadcrumb). Boss-tag scoping confirmed correct (only Tessa).
+- **Files:** `backend/circle_dm_poll.py` (smart-reply + trace + breadcrumb + `trust_takeover_trigger`), `backend/routes/circle.py` (trace + trust routes), `frontend/src/pages/Settings.jsx` (Diagnose panel + Trust button + inline trigger display), `backend/tests/test_circle_dm_first_sight.py` (NEW).
 
 
 ### 2026-05-13 — Warmer, more human auto-replies (no AI disclosure, signed by coach first name)

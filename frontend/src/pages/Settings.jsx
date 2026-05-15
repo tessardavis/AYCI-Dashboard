@@ -1418,6 +1418,30 @@ function CoachPlaybookSection({ isAdmin }) {
     }
   };
 
+  const trustTakeover = async (uuid, studentName) => {
+    if (!window.confirm(
+      `Trust the message that flipped this thread to human_takeover as the bot's own reply, and re-arm "${studentName || uuid}"?\n\n` +
+      `Use this when a cross-environment race (preview vs production) made the bot back off. The bot will resume on the next student message.`,
+    )) return;
+    setResetting(uuid);
+    try {
+      const { data } = await apiClient.post(`/circle/bot/trust-takeover/${uuid}`);
+      toast.success(`Trusted message #${data.trusted_message_id || "?"} and re-armed — bot will resume`);
+      loadBot();
+    } catch (err) {
+      const reason = err.response?.data?.detail || err.message;
+      if (reason === "no_trigger_body_recorded") {
+        toast.error("This thread predates the breadcrumb. Use plain Re-arm instead.");
+      } else if (reason === "not_in_human_takeover") {
+        toast.error("This thread is no longer in human_takeover — try Re-arm.");
+      } else {
+        toast.error("Trust failed: " + reason);
+      }
+    } finally {
+      setResetting(null);
+    }
+  };
+
   const runTrace = async () => {
     const q = (traceQuery || "").trim();
     if (!q) {
@@ -1910,19 +1934,38 @@ function CoachPlaybookSection({ isAdmin }) {
                         Last bot reply: {t.last_reply_text.slice(0, 120)}{t.last_reply_text.length > 120 ? "…" : ""}
                       </div>
                     )}
+                    {t.state === "human_takeover" && t.human_takeover_trigger && (
+                      <div className="text-[11px] text-violet-800 mt-0.5 truncate" title={t.human_takeover_trigger.body || t.human_takeover_trigger.body_snippet || ""}>
+                        Triggered by msg #{t.human_takeover_trigger.message_id} ({(t.human_takeover_trigger.body_snippet || "").slice(0, 100)}{(t.human_takeover_trigger.body_snippet || "").length > 100 ? "…" : ""})
+                      </div>
+                    )}
                     <div className="text-[10px] text-slate-500 mt-0.5">
                       {t.last_activity_at ? `Last activity: ${new Date(t.last_activity_at).toLocaleString("en-GB")}` : ""}
                     </div>
                   </div>
                   {isAdmin && (t.state === "escalated" || t.state === "human_takeover" || t.state === "tag_excluded") && (
-                    <Button
-                      onClick={() => resetThread(t.thread_uuid)}
-                      variant="outline" size="sm"
-                      disabled={resetting === t.thread_uuid}
-                      data-testid={`bot-thread-reset-${t.thread_uuid}`}
-                    >
-                      {resetting === t.thread_uuid ? "…" : "Re-arm"}
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      {t.state === "human_takeover" && t.human_takeover_trigger?.body && (
+                        <Button
+                          onClick={() => trustTakeover(t.thread_uuid, t.student_name)}
+                          variant="outline" size="sm"
+                          disabled={resetting === t.thread_uuid}
+                          title={`Trust the message that flipped this thread to takeover as the bot's own. Body: "${(t.human_takeover_trigger.body_snippet || t.human_takeover_trigger.body || "").slice(0, 140)}…"`}
+                          data-testid={`bot-thread-trust-${t.thread_uuid}`}
+                          className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                        >
+                          {resetting === t.thread_uuid ? "…" : "Trust & re-arm"}
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => resetThread(t.thread_uuid)}
+                        variant="outline" size="sm"
+                        disabled={resetting === t.thread_uuid}
+                        data-testid={`bot-thread-reset-${t.thread_uuid}`}
+                      >
+                        {resetting === t.thread_uuid ? "…" : "Re-arm"}
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))}

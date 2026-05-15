@@ -329,6 +329,10 @@ async def _process_thread(
             # Breadcrumb: capture exactly which message convinced us a human
             # was talking — invaluable for post-mortems when a thread looks
             # like it should be bot-active but quietly went to human_takeover.
+            # `body` is stored in full (not truncated) so the "Trust & re-arm"
+            # admin tool can append it to `sent_bodies` and the next poll's
+            # lookback guard will recognise it as our own message via the
+            # `body not in sent_bodies` exact-match check.
             await _save_thread_state(db, chat_room_uuid, {
                 "state": "human_takeover",
                 "last_seen_message_id": latest_id,
@@ -337,6 +341,7 @@ async def _process_thread(
                 "human_takeover_trigger": {
                     "message_id": mid,
                     "sender_id": sid,
+                    "body": body,
                     "body_snippet": (body or "")[:200],
                     "created_at": m.get("created_at"),
                     "cutoff_iso_used": cutoff_iso,
@@ -738,6 +743,69 @@ async def reset_thread(db, chat_room_uuid: str) -> bool:
         },
     )
     return res.modified_count > 0 or res.matched_count > 0
+
+
+async def trust_takeover_trigger(db, chat_room_uuid: str) -> dict:
+    """One-click recovery for a thread that flipped to `human_takeover`
+    because of a cross-environment race (or any false-positive admin
+    message).
+
+    Reads the persisted `human_takeover_trigger` breadcrumb, appends the
+    triggering message's full body to `sent_bodies` AND its id to
+    `sent_message_ids`, then re-arms the thread so the bot resumes. The
+    next poll's lookback guard will recognise the same message as the
+    bot's own (`mid in sent_ids OR body in sent_bodies`) and not flip
+    back to takeover.
+
+    Returns a small dict for the API to relay to the caller.
+    """
+    state = await db.circle_dm_threads.find_one(
+        {"id": f"thread:{chat_room_uuid}"}, {"_id": 0},
+    )
+    if not state:
+        return {"ok": False, "reason": "no_state_doc"}
+    if state.get("state") != "human_takeover":
+        return {"ok": False, "reason": "not_in_human_takeover",
+                "current_state": state.get("state")}
+    trigger = state.get("human_takeover_trigger") or {}
+    body = trigger.get("body")
+    if not body:
+        # Older takeovers (pre-breadcrumb) won't have the full body — the
+        # admin should use plain Re-arm in that case.
+        return {"ok": False, "reason": "no_trigger_body_recorded"}
+    mid = trigger.get("message_id")
+
+    sent_bodies = list(state.get("sent_bodies") or [])
+    if body not in sent_bodies:
+        sent_bodies.append(body)
+    sent_ids = list(state.get("sent_message_ids") or [])
+    if mid and mid not in sent_ids:
+        sent_ids.append(mid)
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.circle_dm_threads.update_one(
+        {"id": f"thread:{chat_room_uuid}"},
+        {
+            "$set": {
+                "state": "active",
+                "human_takeover_at": None,
+                "human_takeover_by": None,
+                "human_takeover_trigger": None,
+                "last_activity_at": now,
+                "reset_at": now,
+                "sent_bodies": sent_bodies[-20:],
+                "sent_message_ids": sent_ids[-200:],
+                "trust_takeover_at": now,
+            },
+        },
+    )
+    return {
+        "ok": True,
+        "trusted_message_id": mid,
+        "trusted_body_chars": len(body),
+        "sent_bodies_count": len(sent_bodies),
+        "sent_message_ids_count": len(sent_ids),
+    }
 
 
 # ---------------------------------------------------------- Non-mutating trace

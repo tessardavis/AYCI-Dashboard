@@ -162,8 +162,9 @@ async def _scenario_fresh_student_message():
 
 
 def test_first_sight_logic_all_scenarios():
-    """All three first-sight scenarios in a single asyncio.run() (motor
-    binds to the first loop, so we can't safely call asyncio.run twice)."""
+    """All three first-sight scenarios + trust-takeover in a single
+    asyncio.run() (motor binds to the first loop, so we can't safely call
+    asyncio.run twice)."""
     async def _run_all():
         try:
             await _cleanup()
@@ -172,6 +173,58 @@ def test_first_sight_logic_all_scenarios():
             await _scenario_old_student_message()
             await _cleanup()
             await _scenario_fresh_student_message()
+            await _cleanup()
+            await _scenario_trust_takeover_trigger()
         finally:
             await _cleanup()
     asyncio.run(_run_all())
+
+
+async def _scenario_trust_takeover_trigger():
+    """`trust_takeover_trigger()` should append the breadcrumbed message
+    body+id to `sent_bodies`/`sent_message_ids` and re-arm the thread."""
+    import circle_dm_poll as _p
+    uuid = "first-sight-test-trust"
+    body = "Hi there — replying from a different env's bot run"
+    await db.circle_dm_threads.update_one(
+        {"id": f"thread:{uuid}"},
+        {"$set": {
+            "id": f"thread:{uuid}",
+            "thread_uuid": uuid,
+            "coach_admin_email": COACH_EMAIL,
+            "state": "human_takeover",
+            "last_seen_message_id": 99999,
+            "human_takeover_at": datetime.now(timezone.utc).isoformat(),
+            "human_takeover_trigger": {
+                "message_id": 99999,
+                "sender_id": ADMIN_ID,
+                "body": body,
+                "body_snippet": body[:200],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "sent_bodies": [],
+            "sent_message_ids": [],
+        }},
+        upsert=True,
+    )
+    res = await _p.trust_takeover_trigger(db, uuid)
+    assert res["ok"] is True, f"trust failed: {res}"
+    assert res["trusted_message_id"] == 99999
+
+    state = await db.circle_dm_threads.find_one({"id": f"thread:{uuid}"}, {"_id": 0})
+    assert state["state"] == "active"
+    assert state["human_takeover_at"] is None
+    assert state["human_takeover_trigger"] is None
+    assert body in (state.get("sent_bodies") or [])
+    assert 99999 in (state.get("sent_message_ids") or [])
+    assert state.get("trust_takeover_at")
+
+    # Idempotency / guard: calling again should refuse — thread is no
+    # longer in human_takeover.
+    res2 = await _p.trust_takeover_trigger(db, uuid)
+    assert res2["ok"] is False
+    assert res2["reason"] == "not_in_human_takeover"
+
+    # No-state and no-trigger paths
+    res3 = await _p.trust_takeover_trigger(db, "first-sight-test-doesnt-exist")
+    assert res3 == {"ok": False, "reason": "no_state_doc"}

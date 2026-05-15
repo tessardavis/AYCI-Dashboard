@@ -234,6 +234,24 @@ async def bot_reset_thread(thread_uuid: str, user: dict = Depends(require_board(
     return {"ok": ok}
 
 
+@router.post("/bot/trust-takeover/{thread_uuid}")
+async def bot_trust_takeover(thread_uuid: str, user: dict = Depends(require_board("bot"))):
+    """One-click recovery: when a thread flipped to `human_takeover` because
+    of a cross-environment race (or any false-positive admin message),
+    trust the breadcrumbed message as the bot's own and re-arm.
+
+    Appends `human_takeover_trigger.body` to `sent_bodies` and the
+    `message_id` to `sent_message_ids`, then resets state to `active`.
+    The next poll's lookback guard will recognise the message and not
+    re-trigger takeover. Returns 400 if the thread isn't in takeover or
+    has no recorded trigger (use plain Re-arm in that case)."""
+    import circle_dm_poll
+    res = await circle_dm_poll.trust_takeover_trigger(db, thread_uuid)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("reason") or "trust failed")
+    return res
+
+
 @router.get("/bot/diagnose")
 async def bot_diagnose(
     probe: int = 0,
