@@ -12,6 +12,14 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 7) — Coach Activity: daily bars now show counts clearly
+- **Counts above every bar**: the Recorded Answer Review and Specific Interview Support charts now render the daily count above each bar (was tooltip-only — required hovering). Days with 0 show a dim "0" so you can see the rhythm at a glance.
+- **Weekday labels added** (Mon-Sun) beneath each day-of-month, with weekends visually faded (60% opacity teal bar + muted labels) so the eye automatically separates work-days from weekend bumps.
+- **Footer rollup**: "Total X · Avg/active-day Y.Y · Peak Z" plus an inline legend "Weekends shown faded". Average is over active days (excludes zeros so a long quiet stretch doesn't distort the headline).
+- **Layout robustness**: count labels reserve the top 18% of the bar height so the tallest bar's number never pushes off-screen; bar minimum height bumped to 4px so even a count of 1 is visible.
+- **File**: `frontend/src/pages/CoachActivity.jsx::DailyBars`.
+
+
 ### 2026-05-15 (evening 6) — Eve check-ins: 30-day sparkline + trend delta on each card
 - **Inline SVG sparkline** beneath each tier-split card showing the daily pre-interview-only avg score over the last 30 days. Day-by-day with null gaps (days with no replies) rendered as visual jumps. Subtle dashed reference line at 7/10. Endpoint dot highlights the most recent reading.
 - **Trend pill** in the card header: compares the avg of the recent 15 days vs the prior 15 days. Shows `▲ +X.X` (emerald) for improvement >0.1, `▼ -X.X` (rose) for decline, `→` (slate) for flat. Hover-tooltip explains the methodology.

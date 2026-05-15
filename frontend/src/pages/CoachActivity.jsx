@@ -314,24 +314,85 @@ function SubLabel({ children }) {
 
 function DailyBars({ perDay }) {
   if (!perDay?.length) return <div className="text-sm text-[var(--ayci-ink-muted)]">No activity yet.</div>;
-  const max = Math.max(1, ...perDay.map((d) => d.count));
+  const counts = perDay.map((d) => d.count);
+  const max = Math.max(1, ...counts);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const nonZeroDays = counts.filter((c) => c > 0).length;
+  const avg = nonZeroDays > 0 ? (total / nonZeroDays).toFixed(1) : "0";
+  // UK day-of-week labels (e.g. "Mon"). The `date` field is YYYY-MM-DD;
+  // parse as local midday to avoid timezone day-shifts.
+  const weekday = (iso) => {
+    try {
+      return new Date(iso + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short" });
+    } catch {
+      return "";
+    }
+  };
+  const isWeekend = (iso) => {
+    const d = new Date(iso + "T12:00:00Z").getUTCDay();
+    return d === 0 || d === 6;
+  };
   return (
-    <div className="flex items-end gap-0.5 h-32 bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3">
-      {perDay.map((d) => {
-        const pct = (d.count / max) * 100;
-        return (
-          <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-            <div
-              className="w-full bg-[var(--ayci-teal)] rounded-t-sm hover:opacity-80 transition-opacity"
-              style={{ height: `${pct}%`, minHeight: d.count > 0 ? "4px" : "0" }}
-              title={`${d.date}: ${d.count}`}
-            />
-            <span className="text-[8px] text-[var(--ayci-ink-muted)] truncate w-full text-center">
-              {d.date.slice(8)}
-            </span>
-          </div>
-        );
-      })}
+    <div className="bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3" data-testid="daily-bars">
+      <div className="flex items-end gap-1 h-40">
+        {perDay.map((d) => {
+          // Reserve top 18% of the bar area for the count label so tall
+          // bars don't push the number out of view.
+          const pct = (d.count / max) * 82;
+          const weekend = isWeekend(d.date);
+          return (
+            <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0 h-full">
+              <div className="flex-1 w-full flex flex-col justify-end items-center">
+                <span
+                  className={
+                    "text-[10px] font-semibold tabular-nums leading-none mb-0.5 " +
+                    (d.count > 0 ? "text-[var(--ayci-ink)]" : "text-slate-300")
+                  }
+                  data-testid={`bar-count-${d.date}`}
+                >
+                  {d.count}
+                </span>
+                <div
+                  className={
+                    "w-full rounded-t-sm hover:opacity-80 transition-opacity " +
+                    (d.count === 0
+                      ? "bg-slate-200"
+                      : weekend
+                      ? "bg-[var(--ayci-teal)]/60"
+                      : "bg-[var(--ayci-teal)]")
+                  }
+                  style={{
+                    height: d.count > 0 ? `${pct}%` : "2px",
+                    minHeight: d.count > 0 ? "4px" : "2px",
+                  }}
+                  title={`${d.date}: ${d.count} ${d.count === 1 ? "post" : "posts"}`}
+                />
+              </div>
+              <div className="flex flex-col items-center w-full">
+                <span className={
+                  "text-[9.5px] uppercase tracking-wider truncate w-full text-center leading-tight " +
+                  (weekend ? "text-[var(--ayci-ink-muted)]" : "text-[var(--ayci-ink)]")
+                }>
+                  {weekday(d.date)}
+                </span>
+                <span className="text-[8.5px] text-[var(--ayci-ink-muted)] truncate w-full text-center leading-tight">
+                  {d.date.slice(8)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--ayci-border)] text-[10px] text-[var(--ayci-ink-muted)]">
+        <span>
+          Total <strong className="text-[var(--ayci-ink)] tabular-nums">{total}</strong>
+          <span className="mx-2 text-slate-300">·</span>
+          Avg/active-day <strong className="text-[var(--ayci-ink)] tabular-nums">{avg}</strong>
+          <span className="mx-2 text-slate-300">·</span>
+          Peak <strong className="text-[var(--ayci-ink)] tabular-nums">{max}</strong>
+        </span>
+        <span className="hidden sm:inline opacity-70">Weekends shown faded</span>
+      </div>
     </div>
   );
 }
