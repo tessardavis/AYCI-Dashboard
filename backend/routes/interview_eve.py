@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/interview-eve", tags=["interview-eve"])
 
 
 @router.get("/records")
-async def list_records(admin: dict = Depends(require_admin), limit: int = 100):
+async def list_records(user: dict = Depends(require_board("coach_activity")), limit: int = 100):
     """Recent interview-eve DM records (newest first), including any score
     the student replied with and whether a low-score alert was fired."""
     rows = await db.interview_eve_dms.find(
@@ -102,7 +102,7 @@ async def preview(admin: dict = Depends(require_admin)):
 
 
 @router.post("/backfill-scores")
-async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
+async def backfill_scores(user: dict = Depends(require_board("coach_activity")), days: int = 3):
     """Retroactively recover any interview-eve scores that were missed by
     the bot — typically because the polling bot's lookback guard fired on
     a coach's manual personal message and short-circuited before the
@@ -248,11 +248,11 @@ class ManualScoreBody(BaseModel):
 @router.post("/records/{record_id}/set-score")
 async def set_score_manual(
     record_id: str, body: ManualScoreBody,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(require_board("coach_activity")),
 ):
     """Manually set the support score on an eve-DM record. Use this when
     backfill couldn't parse the student's reply (e.g. "very supported,
-    thanks!" — no digit) but the admin has read the conversation and
+    thanks!" — no digit) but the coach has read the conversation and
     knows the right number. Fires the low-score Slack alert if ≤ threshold.
     Audit-stamps `score_set_manually_by` so we can tell hand-entered
     scores apart from auto-captured ones.
@@ -268,7 +268,7 @@ async def set_score_manual(
             "score": body.score,
             "score_received_at": now,
             "score_raw_text": (body.note or "(set manually)")[:200],
-            "score_set_manually_by": admin.get("email") or admin.get("name"),
+            "score_set_manually_by": user.get("email") or user.get("name"),
             "score_set_manually_at": now,
         }},
     )

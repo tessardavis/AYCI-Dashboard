@@ -183,7 +183,9 @@ function PastCoaches({ coaches }) {
 
 export default function UpcomingInterviews() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canSeeEveWidget =
+    user?.role === "admin"
+    || (user?.board_access || []).includes("coach_activity");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("private"); // "private" | "all"
@@ -312,7 +314,7 @@ export default function UpcomingInterviews() {
         days={privateDays}
       />
 
-      {isAdmin && <EveCheckInsWidget />}
+      {canSeeEveWidget && <EveCheckInsWidget />}
 
       {data && (
         <div className={"grid grid-cols-1 gap-6 " + (showAcademy ? "xl:grid-cols-2" : "")}>

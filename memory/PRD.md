@@ -13,12 +13,18 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 ## Implemented Features (latest first)
 
 ### 2026-05-15 (evening) — Eve check-ins self-service widget on Upcoming Interviews
-- **`<EveCheckInsWidget />`** on `/interviews` page (admin-only, between Utilisation and the interview grid). The team can now:
+- **`<EveCheckInsWidget />`** on `/interviews` page (visible to anyone with `coach_activity` board OR admin). The team can now:
   - See **5-tile rollup** for the last 7 days: Sent / Replied / Pending / Low ≤5 / Avg score
   - Click **"Recover missed scores"** to run the backfill in one click. Shows a clear ✅ recovered / ⚠️ still-pending breakdown inline.
   - For every pending student: type a 1-10 score into the inline input + click Save (or press Enter) to record manually via the existing set-score endpoint. Useful when a student replied with words instead of a number.
   - "Hide details" collapse toggle for when the widget gets noisy.
-- **Files:** `frontend/src/pages/UpcomingInterviews.jsx` (new `EveCheckInsWidget` + `Stat` components, `useAuth` for admin-only visibility).
+- **Backend access relaxed** for the three eve-DM routes from `require_admin` → `require_board("coach_activity")`: `GET /records`, `POST /backfill-scores`, `POST /records/{id}/set-score`. All 5 current team accounts (Coralie, Oksana, Arub, Becky, Anoop) have `coach_activity`, so they can all self-serve. `/run-now` and `/preview` stay admin-only (more powerful — actually sends DMs).
+- **Tested** as both admin and Test Coach (non-admin) — widget renders and is fully functional for both. Audit trail `score_set_manually_by` captures who set each manual score.
+- **Team composition** (per user input 2026-05-15):
+  - Team members: Coralie, Oksana, Arub
+  - Senior coaches: Becky, Anoop
+  - Other coaches (need accounts created): Charlotte, Zinnirah, Anne, Kat
+- **Files:** `frontend/src/pages/UpcomingInterviews.jsx` (new `EveCheckInsWidget` + `Stat` components, `useAuth` + `coach_activity` gate), `backend/routes/interview_eve.py` (relaxed access on read+backfill+set-score routes), `memory/test_credentials.md` (Test Coach now has coach_activity).
 
 
 ### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill v3 + Unicode digits + manual-set + team glossary
