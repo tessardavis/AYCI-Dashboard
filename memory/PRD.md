@@ -12,6 +12,13 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 5) — Eve check-ins: tier-split rollup (Private + B&G vs Academy)
+- **Two side-by-side rollup cards** on the eve check-ins widget — a violet "Private + Boost & Go" card and a teal "Academy" card. Each shows Sent / Replied / Pending / Low ≤5 / Avg (pre-interview, with "inc post" sub-label when relevant) for its own group.
+- **Group classification**: uses the existing `is_private_tier` flag set at eve-DM send time. Premium = Private Plus + VIP + Boost & Go. Academy = Academy + legacy Silver/Gold.
+- **Tier badge on every row** (both replied and pending) — violet for Premium, teal for Academy — so the team can instantly tell who's in which group when scanning the unified list below.
+- **File**: `frontend/src/pages/UpcomingInterviews.jsx` (extracted `GroupStatsCard` + `MiniStat` helpers, refactored stats computation into a reusable `computeStats(rows)` function so the same logic produces both group rollups + the overall view).
+
+
 ### 2026-05-15 (evening 4) — Eve check-ins: show replied entries + pre/post-interview split
 - **Before**: the widget only listed pending replies. Replied check-ins were invisible — the team couldn't see who scored what, nor verify the average.
 - **Now**:

@@ -498,24 +498,42 @@ function EveCheckInsWidget() {
     if (!scoreDate || !r.interview_date) return "pre";
     return scoreDate > r.interview_date ? "post" : "pre";
   };
-  const buckets = { pre: [], post: [], pending: [] };
-  last7.forEach((r) => { buckets[classifyReply(r)].push(r); });
 
-  const repliedAll = [...buckets.pre, ...buckets.post];
-  const preScores = buckets.pre.map((r) => r.score);
-  const allScores = repliedAll.map((r) => r.score);
-  const stats = {
-    sent: last7.length,
-    replied: repliedAll.length,
-    pending: buckets.pending.length,
-    low: repliedAll.filter((r) => r.score <= 5).length,
+  // Group split: Premium (Private Plus + VIP + Boost & Go) vs Academy
+  // (Academy + legacy Silver/Gold). Mirrors the system's `is_private_tier`
+  // flag — set server-side at eve-DM send time.
+  const isPremium = (r) => Boolean(r.is_private_tier);
+
+  // Build a stats block for an arbitrary subset of records.
+  const computeStats = (rows) => {
+    const buckets = { pre: [], post: [], pending: [] };
+    rows.forEach((r) => { buckets[classifyReply(r)].push(r); });
+    const replied = [...buckets.pre, ...buckets.post];
+    const preScores = buckets.pre.map((r) => r.score);
+    const allScores = replied.map((r) => r.score);
+    const avg = (arr) => arr.length > 0
+      ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)
+      : null;
+    return {
+      buckets,
+      sent: rows.length,
+      replied: replied.length,
+      pending: buckets.pending.length,
+      low: replied.filter((r) => r.score <= 5).length,
+      avgPre: avg(preScores),
+      avgAll: avg(allScores),
+    };
   };
-  const avgPre = preScores.length > 0
-    ? (preScores.reduce((a, b) => a + b, 0) / preScores.length).toFixed(1)
-    : null;
-  const avgAll = allScores.length > 0
-    ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1)
-    : null;
+
+  const premiumRows = last7.filter(isPremium);
+  const academyRows = last7.filter((r) => !isPremium(r));
+  const statsPremium = computeStats(premiumRows);
+  const statsAcademy = computeStats(academyRows);
+  const stats = computeStats(last7);
+  const buckets = stats.buckets;
+
+  // Combined replied / pending lists for the row display below the rollups.
+  const repliedAll = [...buckets.pre, ...buckets.post];
 
   // Sort pending newest-first.
   const pendingRows = buckets.pending
@@ -561,21 +579,20 @@ function EveCheckInsWidget() {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3" data-testid="eve-widget-stats">
-        <Stat label="Sent" value={stats.sent} accent="text-slate-700" />
-        <Stat label="Replied" value={stats.replied} accent="text-emerald-700" />
-        <Stat label="Pending" value={stats.pending} accent={stats.pending > 0 ? "text-amber-700" : "text-slate-500"} />
-        <Stat label="Low ≤5" value={stats.low} accent={stats.low > 0 ? "text-rose-700" : "text-slate-500"} />
-        <Stat
-          label={avgAll && buckets.post.length > 0 ? "Avg · pre-interview" : "Avg"}
-          value={avgPre ? `${avgPre}/10` : "—"}
-          accent="text-violet-700"
-          sublabel={
-            avgAll && buckets.post.length > 0
-              ? `Inc. post: ${avgAll}/10`
-              : null
-          }
+      {/* Tier-split rollup: Premium (Private Plus + VIP + B&G) on the left,
+          Academy (incl. Silver/Gold) on the right. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3" data-testid="eve-widget-stats">
+        <GroupStatsCard
+          label="Private + Boost & Go"
+          colour="violet"
+          stats={statsPremium}
+          testIdPrefix="eve-premium"
+        />
+        <GroupStatsCard
+          label="Academy"
+          colour="teal"
+          stats={statsAcademy}
+          testIdPrefix="eve-academy"
         />
       </div>
 
@@ -625,6 +642,8 @@ function EveCheckInsWidget() {
                     : rec.score <= 7
                     ? "bg-amber-100 text-amber-800 border-amber-300"
                     : "bg-emerald-100 text-emerald-800 border-emerald-300";
+                  const tierLabel = rec.tier || "Academy";
+                  const tierIsPremium = Boolean(rec.is_private_tier);
                   return (
                     <div
                       key={rec.id}
@@ -635,8 +654,14 @@ function EveCheckInsWidget() {
                       data-testid={`eve-replied-row-${rec.id}`}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
+                        <div className="font-semibold text-[var(--ayci-ink)] truncate flex items-center gap-1.5 flex-wrap">
                           {rec.student_name || rec.student_email}
+                          <span className={
+                            "text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold " +
+                            (tierIsPremium ? "bg-violet-100 text-violet-800" : "bg-teal-100 text-teal-800")
+                          } title={`Tier: ${tierLabel}`}>
+                            {tierLabel}
+                          </span>
                           {cls === "post" ? (
                             <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-semibold" title="Score arrived after the interview — could be skewed by knowing the result">
                               Post-interview
@@ -653,7 +678,7 @@ function EveCheckInsWidget() {
                           )}
                         </div>
                         <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
-                          Interview {rec.interview_date} · {rec.tier || "Academy"} · replied {rec.score_received_at ? new Date(rec.score_received_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          Interview {rec.interview_date} · replied {rec.score_received_at ? new Date(rec.score_received_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
                         </div>
                       </div>
                       <span className={`text-sm font-display font-bold rounded border px-2.5 py-1 ${scoreColor}`}>
@@ -679,12 +704,23 @@ function EveCheckInsWidget() {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-1">
                   Pending replies ({pendingRows.length})
                 </div>
-                {pendingRows.map((rec) => (
+                {pendingRows.map((rec) => {
+                  const tierLabel = rec.tier || "Academy";
+                  const tierIsPremium = Boolean(rec.is_private_tier);
+                  return (
                   <div key={rec.id} className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap text-xs" data-testid={`eve-pending-row-${rec.id}`}>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-[var(--ayci-ink)] truncate">{rec.student_name || rec.student_email}</div>
+                      <div className="font-semibold text-[var(--ayci-ink)] truncate flex items-center gap-1.5 flex-wrap">
+                        {rec.student_name || rec.student_email}
+                        <span className={
+                          "text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-semibold " +
+                          (tierIsPremium ? "bg-violet-100 text-violet-800" : "bg-teal-100 text-teal-800")
+                        } title={`Tier: ${tierLabel}`}>
+                          {tierLabel}
+                        </span>
+                      </div>
                       <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
-                        Interview {rec.interview_date} · {rec.tier || "Academy"} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        Interview {rec.interview_date} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -711,7 +747,8 @@ function EveCheckInsWidget() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -721,13 +758,50 @@ function EveCheckInsWidget() {
   );
 }
 
-function Stat({ label, value, accent, sublabel }) {
+function GroupStatsCard({ label, colour, stats, testIdPrefix }) {
+  const palette = {
+    violet: {
+      border: "border-violet-200",
+      bg: "bg-violet-50/40",
+      header: "text-violet-900",
+      avg: "text-violet-700",
+    },
+    teal: {
+      border: "border-teal-200",
+      bg: "bg-teal-50/40",
+      header: "text-teal-900",
+      avg: "text-teal-700",
+    },
+  }[colour] || { border: "border-slate-200", bg: "bg-slate-50/40", header: "text-slate-900", avg: "text-slate-700" };
+  const postCount = stats.buckets.post.length;
   return (
-    <div className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-2.5 py-2 text-center">
-      <div className={`text-xl font-display font-bold ${accent}`}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{label}</div>
+    <div className={`rounded-md border ${palette.border} ${palette.bg} p-3`} data-testid={`${testIdPrefix}-card`}>
+      <div className={`text-xs font-semibold uppercase tracking-wider ${palette.header} mb-2`}>{label}</div>
+      <div className="grid grid-cols-5 gap-1.5 items-baseline">
+        <MiniStat label="Sent" value={stats.sent} accent="text-slate-700" testid={`${testIdPrefix}-sent`} />
+        <MiniStat label="Replied" value={stats.replied} accent="text-emerald-700" testid={`${testIdPrefix}-replied`} />
+        <MiniStat label="Pending" value={stats.pending} accent={stats.pending > 0 ? "text-amber-700" : "text-slate-500"} testid={`${testIdPrefix}-pending`} />
+        <MiniStat label="Low ≤5" value={stats.low} accent={stats.low > 0 ? "text-rose-700" : "text-slate-500"} testid={`${testIdPrefix}-low`} />
+        <MiniStat
+          label={stats.avgAll && postCount > 0 ? "Avg · pre" : "Avg"}
+          value={stats.avgPre ? `${stats.avgPre}` : "—"}
+          accent={palette.avg}
+          big
+          sublabel={stats.avgAll && postCount > 0 ? `inc post ${stats.avgAll}` : null}
+          testid={`${testIdPrefix}-avg`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, accent, big, sublabel, testid }) {
+  return (
+    <div className="text-center" data-testid={testid}>
+      <div className={`font-display font-bold ${accent} ${big ? "text-2xl" : "text-lg"}`}>{value}</div>
+      <div className="text-[9.5px] uppercase tracking-wider text-[var(--ayci-ink-muted)] leading-tight">{label}</div>
       {sublabel && (
-        <div className="text-[9.5px] text-[var(--ayci-ink-muted)] mt-0.5">{sublabel}</div>
+        <div className="text-[9px] text-[var(--ayci-ink-muted)] leading-tight">{sublabel}</div>
       )}
     </div>
   );
