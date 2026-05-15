@@ -178,7 +178,7 @@ async def add_manual_call(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": created_by,
     }
-    await db.manual_calls.insert_one(row)
+    await db.manual_calls.insert_one(dict(row))
     # Fire-and-forget pre-warm so by the time the coach opens the lookup
     # the Drive summary is cached.
     try:

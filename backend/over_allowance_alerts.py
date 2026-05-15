@@ -197,6 +197,24 @@ async def find_over_allowance_students(db) -> dict:
     emails = [s["email"] for s in students if s.get("email")]
     counts = await _count_calendly_alltime(emails)
 
+    # Add manually-logged extra calls (off-Calendly bookings added via
+    # `/api/today-calls/manual`) to each student's used-count. Each entry
+    # contributes `ceil(duration_min / 30)` credits — so a 30-min call = 1,
+    # a 60-min call = 2.
+    try:
+        import math
+        tracked_emails = {e.strip().lower() for e in emails if e}
+        async for row in db.manual_calls.find(
+            {}, {"_id": 0, "student_email": 1, "duration_min": 1},
+        ):
+            em = (row.get("student_email") or "").strip().lower()
+            if not em or em not in tracked_emails:
+                continue
+            credits = max(1, math.ceil(int(row.get("duration_min") or 30) / 30))
+            counts[em] = counts.get(em, 0) + credits
+    except Exception as e:
+        logger.warning(f"[over-allowance] manual_calls fold-in failed: {e}")
+
     # Acknowledgements: per-email max over_by that was acked. A row stays
     # hidden until the student goes over by more than the acked count.
     acked: dict[str, int] = {}

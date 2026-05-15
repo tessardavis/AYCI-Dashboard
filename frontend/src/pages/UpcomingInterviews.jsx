@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, AlertOctagon, CheckCircle2, Clock, Search, HeartPulse, RefreshCcw } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, AlertOctagon, CheckCircle2, Clock, Search, HeartPulse, RefreshCcw, PhoneCall, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 
 // Module-scoped dedupe so the same email isn't re-prefetched within a
 // session if the coach hovers it multiple times. Set lives until page reload.
@@ -312,6 +315,7 @@ export default function UpcomingInterviews() {
         utilisation={utilisation}
         loading={utilLoading}
         days={privateDays}
+        onRefresh={loadUtilisation}
       />
 
       {canSeeEveWidget && <EveCheckInsWidget />}
@@ -865,7 +869,8 @@ function SlotRow({ slot }) {
 // Private Tier Utilisation — flagged students who haven't used their videos /
 // calls yet, surfaced ahead of their interview so coaches can chase.
 // ============================================================================
-function UtilisationSection({ utilisation, loading, days }) {
+function UtilisationSection({ utilisation, loading, days, onRefresh }) {
+  const [logOpen, setLogOpen] = useState(false);
   if (loading && !utilisation) {
     return (
       <div
@@ -909,7 +914,17 @@ function UtilisationSection({ utilisation, loading, days }) {
               Private Plus + VIP students with an upcoming interview who haven't used enough of their video / call allowance yet.
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            <button
+              type="button"
+              onClick={() => setLogOpen(true)}
+              className="text-xs font-medium px-3 py-1.5 rounded-md bg-white border border-violet-300 text-violet-800 hover:bg-violet-50 flex items-center gap-1.5 shadow-sm"
+              data-testid="log-extra-call-btn"
+              title="Record a 1:1 call that wasn't booked through Calendly. It will count towards the student's call allowance."
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Log extra call
+            </button>
             <SummaryPill
               label="Private Plus"
               total={ppSummary.total}
@@ -925,6 +940,16 @@ function UtilisationSection({ utilisation, loading, days }) {
           </div>
         </div>
       </div>
+
+      <LogExtraCallDialog
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        students={[...(flagged || []), ...(onTrack || [])]}
+        onSaved={() => {
+          setLogOpen(false);
+          onRefresh && onRefresh();
+        }}
+      />
 
       {/* Flagged table */}
       {flagged.length > 0 ? (
@@ -1072,5 +1097,257 @@ function FlaggedRow({ student, okay = false }) {
         )}
       </td>
     </tr>
+  );
+}
+
+
+function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
+  const { user } = useAuth();
+  const [studentId, setStudentId] = useState("");
+  const [emailOverride, setEmailOverride] = useState("");
+  const [nameOverride, setNameOverride] = useState("");
+  const [host, setHost] = useState("");
+  const [minutes, setMinutes] = useState(30);
+  const [happenedAt, setHappenedAt] = useState("");
+  const [notes, setNotes] = useState("");
+  const [recent, setRecent] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open && !happenedAt) {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      setHappenedAt(
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      );
+    }
+    if (open && !host) {
+      setHost((user?.name || "").trim());
+    }
+    if (open) {
+      apiClient
+        .get("/today-calls")
+        .then(({ data }) => {
+          const manuals = (data.items || []).filter((c) => c.source === "manual");
+          setRecent(manuals.slice(0, 5));
+        })
+        .catch(() => setRecent([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const studentOptions = (students || [])
+    .map((s) => ({
+      key: `${s.monday_id}|${s.email}|${s.name}`,
+      label: `${s.name}${s.tier ? ` (${s.tier})` : ""}`,
+      email: s.email,
+      name: s.name,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const isCustom = studentId === "__custom__";
+
+  const submit = async () => {
+    const selected = studentOptions.find((o) => o.key === studentId);
+    const finalEmail = isCustom ? (emailOverride || "").trim().toLowerCase() : selected?.email;
+    const finalName = isCustom ? (nameOverride || "").trim() : selected?.name;
+    if (!finalEmail || !finalEmail.includes("@")) {
+      toast.error("Pick a student or enter a valid email");
+      return;
+    }
+    if (!finalName) {
+      toast.error("Student name is required");
+      return;
+    }
+    if (!host.trim()) {
+      toast.error("Who ran the call?");
+      return;
+    }
+    if (!happenedAt) {
+      toast.error("When did the call happen?");
+      return;
+    }
+    let startsAtIso;
+    try {
+      startsAtIso = new Date(happenedAt).toISOString();
+    } catch {
+      toast.error("Invalid date/time");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiClient.post("/today-calls/manual", {
+        student_name: finalName,
+        student_email: finalEmail,
+        host: host.trim(),
+        starts_at: startsAtIso,
+        duration_min: minutes,
+        notes: notes || null,
+      });
+      const credits = Math.max(1, Math.ceil(minutes / 30));
+      toast.success(
+        `Logged ${minutes}-min call for ${finalName} — counts as ${credits} ${credits === 1 ? "slot" : "slots"}`,
+      );
+      setStudentId("");
+      setEmailOverride("");
+      setNameOverride("");
+      setMinutes(30);
+      setNotes("");
+      onSaved && onSaved();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="log-extra-call-dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PhoneCall className="w-4 h-4 text-violet-700" />
+            Log extra call
+          </DialogTitle>
+          <DialogDescription>
+            Records a 1:1 call that wasn't booked through Calendly. Counts towards the student's call allowance — 30 min = 1 slot, 60 min = 2, 90 min = 3.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-[var(--ayci-ink)] mb-1 block">Student</label>
+            <select
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              data-testid="log-call-student-select"
+            >
+              <option value="">— Select a private-tier student —</option>
+              {studentOptions.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+              <option value="__custom__">+ Other student (type email)</option>
+            </select>
+            {isCustom && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <input
+                  type="text"
+                  value={nameOverride}
+                  onChange={(e) => setNameOverride(e.target.value)}
+                  placeholder="Student name"
+                  className="text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  data-testid="log-call-custom-name"
+                />
+                <input
+                  type="email"
+                  value={emailOverride}
+                  onChange={(e) => setEmailOverride(e.target.value)}
+                  placeholder="student@example.com"
+                  className="text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  data-testid="log-call-custom-email"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-[var(--ayci-ink)] mb-1 block">Duration</label>
+              <div className="flex gap-1.5" data-testid="log-call-minutes-group">
+                {[30, 45, 60, 90].map((m) => (
+                  <button
+                    key={m} type="button"
+                    onClick={() => setMinutes(m)}
+                    className={
+                      "flex-1 text-xs font-semibold rounded px-2 py-1.5 border " +
+                      (minutes === m
+                        ? "bg-violet-600 text-white border-violet-700"
+                        : "bg-white text-[var(--ayci-ink)] border-[var(--ayci-border)] hover:bg-violet-50")
+                    }
+                    data-testid={`log-call-minutes-${m}`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10.5px] text-[var(--ayci-ink-muted)] mt-1">
+                Counts as <strong>{Math.max(1, Math.ceil(minutes / 30))} slot{Math.ceil(minutes / 30) === 1 ? "" : "s"}</strong>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[var(--ayci-ink)] mb-1 block">Coach / host</label>
+              <input
+                type="text"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="Tessa"
+                className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                data-testid="log-call-host"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-[var(--ayci-ink)] mb-1 block">When did the call happen?</label>
+            <input
+              type="datetime-local"
+              value={happenedAt}
+              onChange={(e) => setHappenedAt(e.target.value)}
+              className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              data-testid="log-call-happened-at"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-[var(--ayci-ink)] mb-1 block">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Extra session by request, ran 60 min so counts as 2 slots"
+              rows={2}
+              maxLength={500}
+              className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              data-testid="log-call-notes"
+            />
+          </div>
+
+          {recent.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)]">
+                Recent manual entries ({recent.length})
+              </summary>
+              <ul className="mt-1 space-y-1">
+                {recent.map((r) => (
+                  <li key={r.id} className="text-[11px] text-[var(--ayci-ink-muted)] truncate" title={r.notes || ""}>
+                    <span className="font-semibold text-[var(--ayci-ink)]">{r.student_name}</span> · {r.duration_min}m with {r.host} · {new Date(r.starts_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="text-xs font-medium px-3 py-1.5 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink)] hover:bg-slate-50"
+            data-testid="log-call-cancel-btn"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving}
+            className="text-xs font-medium px-3 py-1.5 rounded bg-violet-700 text-white hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="log-call-save-btn"
+          >
+            {saving ? "Saving…" : "Log call"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

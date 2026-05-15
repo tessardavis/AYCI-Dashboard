@@ -233,6 +233,27 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
     emails = [s["email"] for s in students if s.get("email")]
     call_counts = await _fetch_private_call_counts(emails)
 
+    # Add manually-logged calls (ad-hoc bookings the team added via
+    # `/api/today-calls/manual` — these aren't on Calendly). Each entry's
+    # contribution to a student's call count is `ceil(duration_min / 30)`
+    # — so a 30-min call = 1, a 60-min call = 2, etc. This matches how the
+    # team conceptualises Calendly slots.
+    try:
+        import math
+        from db import db as _db
+        tracked_emails = {e.strip().lower() for e in emails if e}
+        async for row in _db.manual_calls.find(
+            {}, {"_id": 0, "student_email": 1, "duration_min": 1},
+        ):
+            em = (row.get("student_email") or "").strip().lower()
+            if not em or em not in tracked_emails:
+                continue
+            credits = max(1, math.ceil(int(row.get("duration_min") or 30) / 30))
+            call_counts[em] = call_counts.get(em, 0) + credits
+    except Exception:
+        # Manual-call lookup must never break the utilisation widget.
+        pass
+
     on_track: list[dict] = []
     flagged: list[dict] = []
 

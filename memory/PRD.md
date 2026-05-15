@@ -12,6 +12,17 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 2) — Log extra call: off-Calendly bookings counted towards student allowance
+- **Use case**: William Twiggs got an extra 1-hour call (~30 min over his allowance) that wasn't booked through Calendly. The team needs to record this so it counts towards his overall call usage.
+- **"Log extra call"** button on Upcoming Interviews → Private Tier Utilisation header. Opens a dialog with: student select (pulled from the widget's own private-tier list), duration toggle (30/45/60/90 min), coach pre-filled to logged-in user, datetime picker (defaults to now), notes. After save, the utilisation widget auto-refreshes.
+- **Credits formula**: each manual call contributes `ceil(duration_min / 30)` to the student's call count — 30 min = 1 slot, 60 min = 2, 90 min = 3. Matches how the team thinks about Calendly slots.
+- **Folded into BOTH widgets**: `_fetch_private_call_counts` (utilisation widget) and `find_over_allowance_students` (over-allowance widget) both query `db.manual_calls` and add the credits. Verified end-to-end: bumping a real student (Amal Hashi) by a 60-min entry took her `over_by` from 1 → 3 (+2 credits) and reverted on delete.
+- **Bug fix**: `today_calls.add_manual_call` was returning the dict mutated by `insert_one` (with `_id: ObjectId` added), causing FastAPI to throw a 500 on success. Fixed by inserting a `dict(row)` copy.
+- **Frontend**: reuses the existing `POST /api/today-calls/manual` + `DELETE /api/today-calls/manual/{id}` endpoints (no new routes needed) — visible to anyone with `coach_activity` board access.
+- **Regression tests** at `backend/tests/test_manual_call_credits.py` pin the duration→credits conversion (7 edge cases) AND the email-scoping rule (untracked emails must NOT be folded in).
+- **Files:** `backend/private_tier_utilisation.py`, `backend/over_allowance_alerts.py` (fold-in helpers), `backend/today_calls.py` (ObjectId fix), `backend/tests/test_manual_call_credits.py` (NEW), `frontend/src/pages/UpcomingInterviews.jsx` (button + `LogExtraCallDialog`).
+
+
 ### 2026-05-15 (evening) — Eve check-ins self-service widget on Upcoming Interviews
 - **`<EveCheckInsWidget />`** on `/interviews` page (visible to anyone with `coach_activity` board OR admin). The team can now:
   - See **5-tile rollup** for the last 7 days: Sent / Replied / Pending / Low ≤5 / Avg score
