@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, AlertOctagon, CheckCircle2, Clock, Search } from "lucide-react";
+import { Briefcase, Calendar, Loader2, ExternalLink, MessageSquare, Video, Phone, Target, History, Users2, AlertTriangle, AlertOctagon, CheckCircle2, Clock, Search, HeartPulse, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 // Module-scoped dedupe so the same email isn't re-prefetched within a
 // session if the coach hovers it multiple times. Set lives until page reload.
@@ -181,6 +182,8 @@ function PastCoaches({ coaches }) {
 }
 
 export default function UpcomingInterviews() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("private"); // "private" | "all"
@@ -309,6 +312,8 @@ export default function UpcomingInterviews() {
         days={privateDays}
       />
 
+      {isAdmin && <EveCheckInsWidget />}
+
       {data && (
         <div className={"grid grid-cols-1 gap-6 " + (showAcademy ? "xl:grid-cols-2" : "")}>
           {/* Private — always shown */}
@@ -394,6 +399,222 @@ function EmptyState({ text }) {
   return (
     <div className="bg-white border border-dashed border-[var(--ayci-border)] rounded-lg p-6 text-center text-[var(--ayci-ink-muted)] text-sm">
       {text}
+    </div>
+  );
+}
+
+function EveCheckInsWidget() {
+  const [records, setRecords] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverReport, setRecoverReport] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [draftScores, setDraftScores] = useState({}); // record_id -> "1".."10"
+  const [savingId, setSavingId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/interview-eve/records", { params: { limit: 20 } });
+      setRecords(data.records || []);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load eve check-ins");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const recover = async () => {
+    setRecovering(true);
+    setRecoverReport(null);
+    try {
+      const { data } = await apiClient.post("/interview-eve/backfill-scores?days=2");
+      setRecoverReport(data);
+      const n = (data.recovered || []).length;
+      if (n > 0) {
+        toast.success(`Recovered ${n} score${n > 1 ? "s" : ""}`);
+      } else {
+        toast.info("No new scores recovered — see breakdown");
+      }
+      load();
+    } catch (err) {
+      toast.error("Recover failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setRecovering(false);
+    }
+  };
+
+  const setScoreManual = async (rec) => {
+    const draft = (draftScores[rec.id] || "").trim();
+    const n = parseInt(draft, 10);
+    if (!n || n < 1 || n > 10) {
+      toast.error("Enter a number between 1 and 10");
+      return;
+    }
+    setSavingId(rec.id);
+    try {
+      await apiClient.post(`/interview-eve/records/${encodeURIComponent(rec.id)}/set-score`, {
+        score: n, note: "Set from Upcoming Interviews widget",
+      });
+      toast.success(`${rec.student_name}: ${n}/10 recorded`);
+      setDraftScores((s) => ({ ...s, [rec.id]: "" }));
+      load();
+    } catch (err) {
+      toast.error("Save failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const last7 = (records || []).filter((r) => {
+    const sent = r.sent_at ? new Date(r.sent_at) : null;
+    if (!sent) return false;
+    return (Date.now() - sent.getTime()) <= 7 * 24 * 3600 * 1000;
+  });
+  const stats = last7.reduce((acc, r) => {
+    acc.sent += 1;
+    if (r.score !== null && r.score !== undefined) {
+      acc.replied += 1;
+      acc.scoreSum += r.score;
+      if (r.score <= 5) acc.low += 1;
+    } else {
+      acc.pending += 1;
+    }
+    return acc;
+  }, { sent: 0, replied: 0, pending: 0, low: 0, scoreSum: 0 });
+  const avg = stats.replied > 0 ? (stats.scoreSum / stats.replied).toFixed(1) : "—";
+
+  // Pending rows from the last 7 days, newest first.
+  const pendingRows = last7
+    .filter((r) => r.score === null || r.score === undefined)
+    .sort((a, b) => (b.sent_at || "").localeCompare(a.sent_at || ""));
+
+  return (
+    <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 sm:p-5" data-testid="eve-checkins-widget">
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+        <div className="flex items-start gap-2">
+          <HeartPulse className="w-5 h-5 text-rose-600 mt-0.5" />
+          <div>
+            <h3 className="font-display font-bold text-lg text-[var(--ayci-ink)] leading-tight">Eve check-ins · last 7 days</h3>
+            <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
+              Auto-DMs sent at 7pm UK the night before each interview. The bot records the student's 1-10 confidence reply.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={recover}
+            disabled={recovering || loading}
+            className="text-xs font-medium px-3 py-1.5 rounded-md bg-[var(--ayci-teal)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            data-testid="eve-recover-scores-btn"
+            title="Re-scans every pending eve-DM thread for a 1-10 score reply the bot might have missed."
+          >
+            <RefreshCcw className={`w-3.5 h-3.5 ${recovering ? "animate-spin" : ""}`} />
+            {recovering ? "Recovering…" : "Recover missed scores"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            className="text-xs text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)] underline-offset-2 hover:underline"
+            data-testid="eve-widget-collapse-toggle"
+          >
+            {collapsed ? "Expand" : "Hide details"}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3" data-testid="eve-widget-stats">
+        <Stat label="Sent" value={stats.sent} accent="text-slate-700" />
+        <Stat label="Replied" value={stats.replied} accent="text-emerald-700" />
+        <Stat label="Pending" value={stats.pending} accent={stats.pending > 0 ? "text-amber-700" : "text-slate-500"} />
+        <Stat label="Low ≤5" value={stats.low} accent={stats.low > 0 ? "text-rose-700" : "text-slate-500"} />
+        <Stat label="Avg" value={`${avg}/10`} accent="text-violet-700" />
+      </div>
+
+      {/* Recover report */}
+      {recoverReport && !collapsed && (
+        <div className="mb-3 bg-emerald-50/70 border border-emerald-200 rounded-md p-3 text-xs" data-testid="eve-recover-report">
+          <div className="font-semibold text-emerald-900 mb-1">
+            Recovery result · scanned {recoverReport.scanned}
+          </div>
+          {(recoverReport.recovered || []).length > 0 ? (
+            <div className="text-emerald-900">
+              ✅ Recovered: {recoverReport.recovered.map((r) => `${r.name} (${r.score}/10)`).join(" · ")}
+            </div>
+          ) : (
+            <div className="text-emerald-900/70">No new scores recovered.</div>
+          )}
+          {(recoverReport.still_pending || []).length > 0 && (
+            <div className="text-amber-900 mt-1">
+              Still pending: {recoverReport.still_pending.map((r) => r.name).join(", ")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!collapsed && (
+        loading ? (
+          <div className="text-xs text-[var(--ayci-ink-muted)] py-2"><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> Loading records…</div>
+        ) : pendingRows.length === 0 ? (
+          <div className="text-xs text-emerald-700 bg-emerald-50/70 border border-emerald-200 rounded px-3 py-2" data-testid="eve-widget-no-pending">
+            ✓ No pending check-ins — every student who was DM'd has either replied or is still in the response window.
+          </div>
+        ) : (
+          <div className="space-y-1.5" data-testid="eve-widget-pending-list">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-1">
+              Pending replies ({pendingRows.length})
+            </div>
+            {pendingRows.map((rec) => (
+              <div key={rec.id} className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap text-xs" data-testid={`eve-pending-row-${rec.id}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[var(--ayci-ink)] truncate">{rec.student_name || rec.student_email}</div>
+                  <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
+                    Interview {rec.interview_date} · {rec.tier || "Academy"} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1" max="10"
+                    placeholder="1-10"
+                    value={draftScores[rec.id] || ""}
+                    onChange={(e) => setDraftScores((s) => ({ ...s, [rec.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") setScoreManual(rec); }}
+                    className="w-16 text-xs border border-[var(--ayci-border)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
+                    data-testid={`eve-score-input-${rec.id}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setScoreManual(rec)}
+                    disabled={savingId === rec.id || !draftScores[rec.id]}
+                    className="text-xs font-medium px-2.5 py-1 rounded bg-[var(--ayci-ink)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid={`eve-score-save-${rec.id}`}
+                    title="Manually record this student's confidence score (use when they replied with words or no number)"
+                  >
+                    {savingId === rec.id ? "…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }) {
+  return (
+    <div className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-2.5 py-2 text-center">
+      <div className={`text-xl font-display font-bold ${accent}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{label}</div>
     </div>
   );
 }

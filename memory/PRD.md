@@ -12,6 +12,15 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening) — Eve check-ins self-service widget on Upcoming Interviews
+- **`<EveCheckInsWidget />`** on `/interviews` page (admin-only, between Utilisation and the interview grid). The team can now:
+  - See **5-tile rollup** for the last 7 days: Sent / Replied / Pending / Low ≤5 / Avg score
+  - Click **"Recover missed scores"** to run the backfill in one click. Shows a clear ✅ recovered / ⚠️ still-pending breakdown inline.
+  - For every pending student: type a 1-10 score into the inline input + click Save (or press Enter) to record manually via the existing set-score endpoint. Useful when a student replied with words instead of a number.
+  - "Hide details" collapse toggle for when the widget gets noisy.
+- **Files:** `frontend/src/pages/UpcomingInterviews.jsx` (new `EveCheckInsWidget` + `Stat` components, `useAuth` for admin-only visibility).
+
+
 ### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill v3 + Unicode digits + manual-set + team glossary
 
 **Production deploy 1** — ordering fix (`_process_thread` now runs score capture before lookback guard) + initial backfill. Recovered:
