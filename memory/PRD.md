@@ -12,6 +12,17 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (evening 4) — Eve check-ins: show replied entries + pre/post-interview split
+- **Before**: the widget only listed pending replies. Replied check-ins were invisible — the team couldn't see who scored what, nor verify the average.
+- **Now**:
+  - **Replies section** lists every replied check-in with the score (color-coded: ≤5 rose, 6-7 amber, ≥8 emerald) plus a **PRE** or **POST-INTERVIEW** badge.
+  - **Pre/post classification**: a reply is "post-interview" if `score_received_at` UK date > `interview_date` — at that point the student already knows the outcome and the score is potentially skewed.
+  - **Average is computed pre-interview only** (clean signal). When any post-interview replies exist, the avg tile relabels to "AVG · PRE-INTERVIEW" and shows a sub-label "Inc. post: X.X/10". An amber banner explains why those replies are excluded.
+  - **Manual-set badge** appears on rows where a coach hand-entered the score (visibility into who/when).
+- **No backend changes needed** — the records endpoint already returns `score_received_at` + `interview_date`.
+- **File**: `frontend/src/pages/UpcomingInterviews.jsx` (`EveCheckInsWidget` + `Stat` extended with optional `sublabel`).
+
+
 ### 2026-05-15 (evening 3) — Log extra call: corrected to count events, not minutes
 **Important correction** based on team feedback: tier allowances are described as *call events*, not *minutes*. VIP = 4×30-min + 1×60-min mock = **5 calls** (the 60-min mock is one event). Private Plus = 1 call. Bonus calls = 1 each. So my initial "60 min = 2 slots" logic was wrong.
 - Each manual call now adds **1** to the count, regardless of duration. The duration is kept on the record for the audit trail / team awareness, but doesn't multiply.

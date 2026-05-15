@@ -481,23 +481,50 @@ function EveCheckInsWidget() {
     if (!sent) return false;
     return (Date.now() - sent.getTime()) <= 7 * 24 * 3600 * 1000;
   });
-  const stats = last7.reduce((acc, r) => {
-    acc.sent += 1;
-    if (r.score !== null && r.score !== undefined) {
-      acc.replied += 1;
-      acc.scoreSum += r.score;
-      if (r.score <= 5) acc.low += 1;
-    } else {
-      acc.pending += 1;
-    }
-    return acc;
-  }, { sent: 0, replied: 0, pending: 0, low: 0, scoreSum: 0 });
-  const avg = stats.replied > 0 ? (stats.scoreSum / stats.replied).toFixed(1) : "—";
 
-  // Pending rows from the last 7 days, newest first.
-  const pendingRows = last7
-    .filter((r) => r.score === null || r.score === undefined)
+  // Split replied → pre-interview (clean) vs post-interview (potentially
+  // skewed because the student knows the outcome). UK calendar dates.
+  const ukDate = (iso) => {
+    if (!iso) return null;
+    try {
+      // Convert to UK day-string YYYY-MM-DD using en-CA locale (ISO-like).
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+    } catch { return null; }
+  };
+  const classifyReply = (r) => {
+    if (r.score === null || r.score === undefined) return "pending";
+    const scoreDate = ukDate(r.score_received_at);
+    if (!scoreDate || !r.interview_date) return "pre";
+    return scoreDate > r.interview_date ? "post" : "pre";
+  };
+  const buckets = { pre: [], post: [], pending: [] };
+  last7.forEach((r) => { buckets[classifyReply(r)].push(r); });
+
+  const repliedAll = [...buckets.pre, ...buckets.post];
+  const preScores = buckets.pre.map((r) => r.score);
+  const allScores = repliedAll.map((r) => r.score);
+  const stats = {
+    sent: last7.length,
+    replied: repliedAll.length,
+    pending: buckets.pending.length,
+    low: repliedAll.filter((r) => r.score <= 5).length,
+  };
+  const avgPre = preScores.length > 0
+    ? (preScores.reduce((a, b) => a + b, 0) / preScores.length).toFixed(1)
+    : null;
+  const avgAll = allScores.length > 0
+    ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1)
+    : null;
+
+  // Sort pending newest-first.
+  const pendingRows = buckets.pending
+    .slice()
     .sort((a, b) => (b.sent_at || "").localeCompare(a.sent_at || ""));
+  // Sort replied by score_received_at desc.
+  const repliedRows = repliedAll
+    .slice()
+    .sort((a, b) => (b.score_received_at || "").localeCompare(a.score_received_at || ""));
 
   return (
     <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 sm:p-5" data-testid="eve-checkins-widget">
@@ -540,7 +567,16 @@ function EveCheckInsWidget() {
         <Stat label="Replied" value={stats.replied} accent="text-emerald-700" />
         <Stat label="Pending" value={stats.pending} accent={stats.pending > 0 ? "text-amber-700" : "text-slate-500"} />
         <Stat label="Low ≤5" value={stats.low} accent={stats.low > 0 ? "text-rose-700" : "text-slate-500"} />
-        <Stat label="Avg" value={`${avg}/10`} accent="text-violet-700" />
+        <Stat
+          label={avgAll && buckets.post.length > 0 ? "Avg · pre-interview" : "Avg"}
+          value={avgPre ? `${avgPre}/10` : "—"}
+          accent="text-violet-700"
+          sublabel={
+            avgAll && buckets.post.length > 0
+              ? `Inc. post: ${avgAll}/10`
+              : null
+          }
+        />
       </div>
 
       {/* Recover report */}
@@ -567,48 +603,117 @@ function EveCheckInsWidget() {
       {!collapsed && (
         loading ? (
           <div className="text-xs text-[var(--ayci-ink-muted)] py-2"><Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> Loading records…</div>
-        ) : pendingRows.length === 0 ? (
-          <div className="text-xs text-emerald-700 bg-emerald-50/70 border border-emerald-200 rounded px-3 py-2" data-testid="eve-widget-no-pending">
-            ✓ No pending check-ins — every student who was DM'd has either replied or is still in the response window.
-          </div>
         ) : (
-          <div className="space-y-1.5" data-testid="eve-widget-pending-list">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-1">
-              Pending replies ({pendingRows.length})
-            </div>
-            {pendingRows.map((rec) => (
-              <div key={rec.id} className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap text-xs" data-testid={`eve-pending-row-${rec.id}`}>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-[var(--ayci-ink)] truncate">{rec.student_name || rec.student_email}</div>
-                  <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
-                    Interview {rec.interview_date} · {rec.tier || "Academy"} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+          <div className="space-y-4">
+            {/* Replied rows */}
+            {repliedRows.length > 0 && (
+              <div className="space-y-1.5" data-testid="eve-widget-replied-list">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">
+                    Replies ({repliedRows.length})
                   </div>
+                  {buckets.post.length > 0 && (
+                    <div className="text-[10.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                      <strong>{buckets.post.length}</strong> reply{buckets.post.length === 1 ? "" : "ies"} came in after the interview — excluded from the average (student already knew the result)
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min="1" max="10"
-                    placeholder="1-10"
-                    value={draftScores[rec.id] || ""}
-                    onChange={(e) => setDraftScores((s) => ({ ...s, [rec.id]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") setScoreManual(rec); }}
-                    className="w-16 text-xs border border-[var(--ayci-border)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
-                    data-testid={`eve-score-input-${rec.id}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setScoreManual(rec)}
-                    disabled={savingId === rec.id || !draftScores[rec.id]}
-                    className="text-xs font-medium px-2.5 py-1 rounded bg-[var(--ayci-ink)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                    data-testid={`eve-score-save-${rec.id}`}
-                    title="Manually record this student's confidence score (use when they replied with words or no number)"
-                  >
-                    {savingId === rec.id ? "…" : "Save"}
-                  </button>
-                </div>
+                {repliedRows.map((rec) => {
+                  const cls = classifyReply(rec);
+                  const scoreColor = rec.score <= 5
+                    ? "bg-rose-100 text-rose-800 border-rose-300"
+                    : rec.score <= 7
+                    ? "bg-amber-100 text-amber-800 border-amber-300"
+                    : "bg-emerald-100 text-emerald-800 border-emerald-300";
+                  return (
+                    <div
+                      key={rec.id}
+                      className={
+                        "bg-white border rounded px-3 py-2 flex items-center gap-3 flex-wrap text-xs " +
+                        (cls === "post" ? "border-amber-200 bg-amber-50/30" : "border-[var(--ayci-border)]")
+                      }
+                      data-testid={`eve-replied-row-${rec.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-[var(--ayci-ink)] truncate flex items-center gap-1.5">
+                          {rec.student_name || rec.student_email}
+                          {cls === "post" ? (
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-semibold" title="Score arrived after the interview — could be skewed by knowing the result">
+                              Post-interview
+                            </span>
+                          ) : (
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold" title="Score arrived before the interview — clean signal">
+                              Pre
+                            </span>
+                          )}
+                          {rec.score_set_manually_by && (
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold" title={`Set manually by ${rec.score_set_manually_by}`}>
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
+                          Interview {rec.interview_date} · {rec.tier || "Academy"} · replied {rec.score_received_at ? new Date(rec.score_received_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        </div>
+                      </div>
+                      <span className={`text-sm font-display font-bold rounded border px-2.5 py-1 ${scoreColor}`}>
+                        {rec.score}/10
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
+
+            {/* Pending rows */}
+            {pendingRows.length === 0 && repliedRows.length > 0 ? (
+              <div className="text-xs text-emerald-700 bg-emerald-50/70 border border-emerald-200 rounded px-3 py-2" data-testid="eve-widget-no-pending">
+                ✓ No pending check-ins.
+              </div>
+            ) : pendingRows.length === 0 ? (
+              <div className="text-xs text-emerald-700 bg-emerald-50/70 border border-emerald-200 rounded px-3 py-2" data-testid="eve-widget-no-pending">
+                ✓ No pending check-ins — every student who was DM'd has either replied or is still in the response window.
+              </div>
+            ) : (
+              <div className="space-y-1.5" data-testid="eve-widget-pending-list">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-1">
+                  Pending replies ({pendingRows.length})
+                </div>
+                {pendingRows.map((rec) => (
+                  <div key={rec.id} className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap text-xs" data-testid={`eve-pending-row-${rec.id}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[var(--ayci-ink)] truncate">{rec.student_name || rec.student_email}</div>
+                      <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
+                        Interview {rec.interview_date} · {rec.tier || "Academy"} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1" max="10"
+                        placeholder="1-10"
+                        value={draftScores[rec.id] || ""}
+                        onChange={(e) => setDraftScores((s) => ({ ...s, [rec.id]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") setScoreManual(rec); }}
+                        className="w-16 text-xs border border-[var(--ayci-border)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--ayci-teal)]"
+                        data-testid={`eve-score-input-${rec.id}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setScoreManual(rec)}
+                        disabled={savingId === rec.id || !draftScores[rec.id]}
+                        className="text-xs font-medium px-2.5 py-1 rounded bg-[var(--ayci-ink)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                        data-testid={`eve-score-save-${rec.id}`}
+                        title="Manually record this student's confidence score (use when they replied with words or no number)"
+                      >
+                        {savingId === rec.id ? "…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )
       )}
@@ -616,11 +721,14 @@ function EveCheckInsWidget() {
   );
 }
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent, sublabel }) {
   return (
     <div className="bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded px-2.5 py-2 text-center">
       <div className={`text-xl font-display font-bold ${accent}`}>{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{label}</div>
+      {sublabel && (
+        <div className="text-[9.5px] text-[var(--ayci-ink-muted)] mt-0.5">{sublabel}</div>
+      )}
     </div>
   );
 }
