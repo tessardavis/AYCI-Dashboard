@@ -57,6 +57,11 @@ api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Keep strong references to long-running asyncio tasks so the GC can't kill
+# them mid-flight. Holds the Circle DM polling loop task (and any other
+# fire-and-forget background loops we add later).
+_INDEPENDENT_POLLER_TASKS: list = []
+
 
 # --- Auth endpoints ---------------------------------------------------------
 @api.post("/auth/login")
@@ -1300,7 +1305,13 @@ async def on_startup():
                 except Exception:
                     # Sleep failure (event loop weirdness) — just spin.
                     pass
-        asyncio.create_task(_circle_dm_poll_independent_loop())
+        # Hold a strong reference so Python's GC can't kill the task. Without
+        # this, the Task returned by create_task has no live reference and
+        # gets garbage-collected the moment on_startup exits — silently
+        # killing the entire loop. The module-level list keeps it alive.
+        _INDEPENDENT_POLLER_TASKS.append(
+            asyncio.create_task(_circle_dm_poll_independent_loop())
+        )
 
     # Interview-eve check-in DMs — 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,
