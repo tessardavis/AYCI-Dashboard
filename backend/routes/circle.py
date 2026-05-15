@@ -252,7 +252,11 @@ async def bot_diagnose(
         "admin_token_configured": bool(
             (os.environ.get("CIRCLE_API_TOKEN") or "").strip()
         ),
-        "circle_bot_disabled_env_raw": os.environ.get("CIRCLE_BOT_DISABLED"),
+        "circle_bot_decision": {
+            "enabled": "(see polling status)",
+            "is_preview": "localhost" in (os.environ.get("MONGO_URL") or "") or "127.0.0.1" in (os.environ.get("MONGO_URL") or ""),
+            "mongo_url_kind": "localhost" if ("localhost" in (os.environ.get("MONGO_URL") or "") or "127.0.0.1" in (os.environ.get("MONGO_URL") or "")) else "external",
+        },
         "last_poll_started_at": cfg.get("last_poll_started_at"),
         "last_poll_finished_at": cfg.get("last_poll_at"),
         "coaches": [],

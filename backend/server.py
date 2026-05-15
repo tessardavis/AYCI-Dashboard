@@ -1211,14 +1211,18 @@ async def on_startup():
     # CIRCLE_BOT_ENABLED=false so preview and production don't both poll the
     # same Circle inbox and race each other into human_takeover (each env's
     # bot mistakes the OTHER's reply as a human admin taking over the thread).
-    # Default ENABLED in production. We use CIRCLE_BOT_DISABLED (inverted
-    # semantics) instead of CIRCLE_BOT_ENABLED so an existing legacy
-    # `CIRCLE_BOT_ENABLED=false` in production env vars no longer silences
-    # the bot — production should always run unless explicitly disabled.
-    # Preview's /app/backend/.env sets CIRCLE_BOT_DISABLED=true so the two
-    # environments don't both poll the same Circle inbox and race.
-    _cb_env = (os.environ.get("CIRCLE_BOT_DISABLED") or "").strip().lower()
-    circle_bot_enabled = _cb_env not in ("1", "true", "yes", "on")
+    # Bot polling is ON in production, OFF in preview. We can't rely on env
+    # vars because (a) Emergent's deployment UI doesn't expose them to the
+    # user reliably and (b) we accidentally set CIRCLE_BOT_ENABLED=false in
+    # production env vars while debugging in preview, with no way to remove
+    # them after deployment. So we detect environment by inspecting the
+    # MongoDB connection string — preview's `MONGO_URL` is the local in-
+    # container Mongo at `mongodb://localhost:27017`, while production
+    # uses a managed external cluster (atlas/etc). Anything that's not
+    # `localhost` is treated as production.
+    _mongo_url = os.environ.get("MONGO_URL") or ""
+    _is_preview = "localhost" in _mongo_url or "127.0.0.1" in _mongo_url
+    circle_bot_enabled = not _is_preview
     async def _circle_dm_poll():
         import circle_dm_poll
         import asyncio as _asyncio
