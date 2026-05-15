@@ -296,6 +296,64 @@ async def _process_thread(
     sent_ids = set(state.get("sent_message_ids") or [])
     sent_bodies = set(state.get("sent_bodies") or [])
 
+    # ---- Interview-eve score capture (runs BEFORE the lookback guard) ----
+    # Eve-DM threads are special: the bot is *expecting* a numeric score
+    # reply from the student. If the coach has also sent a personal note
+    # in the thread between the student's reply and this poll, the
+    # lookback guard below would fire on the coach's message and flip the
+    # thread to `human_takeover` — losing the score forever. Running the
+    # score capture FIRST guarantees we record the score even when the
+    # coach is actively chatting in the thread. The coach's manual reply
+    # will still flip the thread to human_takeover on the next poll (via
+    # the lookback guard), which is the correct end state.
+    if state.get("interview_eve_record_id"):
+        latest_student_msg_for_score = None
+        for _m in reversed(messages):
+            if _msg_sender_id(_m) == student_id:
+                latest_student_msg_for_score = _m
+                break
+        if latest_student_msg_for_score:
+            student_text_for_score = _msg_body(latest_student_msg_for_score)
+            if student_text_for_score:
+                try:
+                    import interview_eve_dm
+                    scored_early = await interview_eve_dm.maybe_record_score(
+                        db, chat_room_uuid, student_text_for_score,
+                    )
+                    if scored_early is not None:
+                        _first = (student_name or "there").split(" ")[0]
+                        _coach_first = (coach_name or "").split(" ")[0] or "the team"
+                        ack = (
+                            f"Thanks {_first}! Got you down as "
+                            f"{scored_early['score']}/10 — sending you all "
+                            f"the best for tomorrow. You've got this 💪\n\n"
+                            f"{_coach_first}"
+                        )
+                        posted_ack = await circle_api.post_dm_message(
+                            db, admin_email, chat_room_uuid, ack,
+                        )
+                        ack_posted_id = _msg_id(posted_ack) if posted_ack else None
+                        new_sent_ids = list(sent_ids)
+                        if ack_posted_id:
+                            new_sent_ids.append(ack_posted_id)
+                        new_sent_bodies = list(sent_bodies)
+                        new_sent_bodies.append(ack)
+                        await _save_thread_state(db, chat_room_uuid, {
+                            "state": "active",
+                            "last_seen_message_id": max(
+                                latest_id or 0, ack_posted_id or 0,
+                            ),
+                            "sent_message_ids": new_sent_ids[-200:],
+                            "sent_bodies": new_sent_bodies[-20:],
+                            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+                            "last_reply_text": ack,
+                            "last_reply_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        return {"interview_eve_score_recorded": chat_room_uuid,
+                                "score": scored_early["score"]}
+                except Exception as e:
+                    logger.warning(f"[interview-eve] early score capture errored: {e}")
+
     # Detect human takeover — scan the FULL fetched window, not just `new_messages`.
     # Why full window? Two reasons:
     #   1. A coach can reply directly in Circle's web/mobile UI. If the
@@ -374,36 +432,10 @@ async def _process_thread(
         })
         return {"skipped": "empty_body"}
 
-    # ---- Interview-eve score capture --------------------------------------
-    # If this thread is an interview-eve DM thread, the first numeric reply
-    # gets recorded as the support score and (if low) fires a Slack alert.
-    try:
-        import interview_eve_dm
-        scored = await interview_eve_dm.maybe_record_score(db, chat_room_uuid, student_text)
-        if scored is not None:
-            # Acknowledge to the student & back off — the conversation is
-            # the equivalent of a Tally form completion.
-            student_first = (student_name or "there").split(" ")[0]
-            coach_first = (coach_name or "").split(" ")[0] or "the team"
-            ack = (
-                f"Thanks {student_first}! Got you down as {scored['score']}/10 — "
-                f"sending you all the best for tomorrow. You've got this 💪\n\n"
-                f"{coach_first}"
-            )
-            await circle_api.post_dm_message(db, admin_email, chat_room_uuid, ack)
-            existing_sent = list((state or {}).get("sent_bodies") or [])
-            existing_sent.append(ack)
-            await _save_thread_state(db, chat_room_uuid, {
-                "state": "active",
-                "last_seen_message_id": latest_id,
-                "sent_bodies": existing_sent[-20:],
-                "last_activity_at": datetime.now(timezone.utc).isoformat(),
-                "last_reply_text": ack,
-                "last_reply_at": datetime.now(timezone.utc).isoformat(),
-            })
-            return {"interview_eve_score_recorded": chat_room_uuid, "score": scored["score"]}
-    except Exception as e:
-        logger.warning(f"[interview-eve] score capture errored: {e}")
+    # NOTE: interview-eve score capture used to live here. Moved earlier
+    # in the function (above the lookback guard) so a coach's personal
+    # note in an eve-DM thread can't cause the score to be lost to a
+    # premature human_takeover flag.
 
     # ---- Tag exclusion check ---------------------------------------------
     # If the student carries any excluded member tag (e.g. "Interview week",

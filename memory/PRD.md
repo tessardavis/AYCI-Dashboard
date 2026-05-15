@@ -12,6 +12,15 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-15 (afternoon) — Eve-DM score capture ordering fix + backfill endpoint + team glossary
+- **Root-cause for missed scores**: in `_process_thread()`, the lookback guard ran BEFORE the interview-eve score capture. When a coach (typically Coralie) sent a personal message in an eve-DM thread between the student's score reply and the next poll, the guard fired on the coach's manual message → thread flipped to `human_takeover` → score never recorded. Identified via the new admin endpoint after observing ALL 8 sent_at=2026-05-14 eve-DMs had `score=None` despite known student replies from Mohammed Elsabbagh and Henry Walton.
+- **Fix**: in `backend/circle_dm_poll.py::_process_thread`, score capture now runs IMMEDIATELY after the messages fetch — before the lookback guard. On match it persists the score, sends the ack, advances `last_seen_message_id`, and returns. The coach's manual reply will still flip the thread on the *next* poll if appropriate (correct end state, but the score is safely captured).
+- **`POST /api/interview-eve/backfill-scores?days=3`** — admin-only retroactive recovery. For every eve-DM record in the last N days with `score=None`, fetches the thread's latest student message via Circle and runs `parse_score()`. Recovered scores trigger the same low-score Slack alert pathway as live captures.
+- **Team glossary on Settings → Bot**: collapsible "What do these states & buttons mean?" panel explaining `active` / `human_takeover` / `escalated` / `tag_excluded`, plus every action button (Re-arm, Trust & re-arm, Reset stuck threads, Diagnose, Poll Now), and the backlog/first-sight rules.
+- **Regression test added** at `backend/tests/test_circle_dm_first_sight.py::_scenario_eve_score_captured_before_lookback_guard` — proves a thread with `eve-DM body, student "9", coach manual` in the fetched window now captures the score (was being lost pre-fix).
+- **Files:** `backend/circle_dm_poll.py` (early score capture, dedup), `backend/routes/interview_eve.py` (backfill route), `backend/tests/test_circle_dm_first_sight.py` (regression test), `frontend/src/pages/Settings.jsx` (glossary panel).
+
+
 ### 2026-05-15 — Circle DM Bot: first-sight smart reply + per-thread diagnostic suite + Trust & re-arm
 - **First-sight smart reply** (`backend/circle_dm_poll.py::_process_thread`): when the bot first sees a thread, it now distinguishes backlog from a real new conversation. If the inline `last_message` is a **student** message **less than 10 min old**, it minimally-seeds state and falls through to the normal reply path (instead of swallowing the first message). Anything older or admin-sent still seeds silently — backlog protection preserved. Fixes the "I sent a test DM and got nothing" UX.
 - **`GET /api/circle/bot/thread-trace`** — read-only, non-mutating simulation of `_process_thread()` with step-by-step trace + a clear `WOULD …` conclusion. Lookup by `thread_uuid` or `student_search`. No Circle POSTs, no LLM calls, no state writes.

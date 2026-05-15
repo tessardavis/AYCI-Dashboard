@@ -162,9 +162,8 @@ async def _scenario_fresh_student_message():
 
 
 def test_first_sight_logic_all_scenarios():
-    """All three first-sight scenarios + trust-takeover in a single
-    asyncio.run() (motor binds to the first loop, so we can't safely call
-    asyncio.run twice)."""
+    """All scenarios in a single asyncio.run() (motor binds to the first
+    loop, so we can't safely call asyncio.run twice)."""
     async def _run_all():
         try:
             await _cleanup()
@@ -175,9 +174,118 @@ def test_first_sight_logic_all_scenarios():
             await _scenario_fresh_student_message()
             await _cleanup()
             await _scenario_trust_takeover_trigger()
+            await _cleanup()
+            await _scenario_eve_score_captured_before_lookback_guard()
         finally:
             await _cleanup()
     asyncio.run(_run_all())
+
+
+async def _scenario_eve_score_captured_before_lookback_guard():
+    """REGRESSION: when an interview-eve thread has BOTH a student score
+    reply AND a coach-typed-by-hand follow-up in the fetched window, the
+    score MUST be captured. Previously the lookback guard ran first and
+    flipped the thread to `human_takeover` before reaching score capture,
+    silently losing the score. Fixed 2026-05-15 by moving score capture
+    above the lookback guard."""
+    import circle_dm_poll as _p
+    uuid = "first-sight-test-eve-race"
+    now = datetime.now(timezone.utc)
+    eve_dm_body = "Hi! On a scale of 1 to 10, how supported do you feel?"
+    coach_manual = "Just thinking of you — let me know how it goes!"
+
+    # Seed an eve-DM-style thread state mirroring what interview_eve_dm
+    # writes on send: state=active, sent_bodies=[eve body], reference to
+    # the eve-DM record.
+    eve_record_id = "eve-test-record-id"
+    await db.interview_eve_dms.update_one(
+        {"id": eve_record_id},
+        {"$set": {
+            "id": eve_record_id,
+            "student_email": "test@example.com",
+            "student_name": "Test Student",
+            "interview_date": (now + timedelta(days=1)).date().isoformat(),
+            "tier": "Academy",
+            "is_private_tier": False,
+            "circle_member_id": STUDENT_ID,
+            "thread_uuid": uuid,
+            "coach_admin_email": COACH_EMAIL,
+            "sent_at": now.isoformat(),
+            "sent_body": eve_dm_body,
+            "score": None,
+            "score_received_at": None,
+        }},
+        upsert=True,
+    )
+    try:
+        await db.circle_dm_threads.update_one(
+            {"id": f"thread:{uuid}"},
+            {"$set": {
+                "id": f"thread:{uuid}",
+                "thread_uuid": uuid,
+                "coach_admin_email": COACH_EMAIL,
+                "student_member_id": STUDENT_ID,
+                "student_name": "Test Student",
+                "state": "active",
+                "interview_eve_record_id": eve_record_id,
+                "sent_bodies": [eve_dm_body],
+                "sent_message_ids": [],
+                "last_seen_message_id": 0,
+                "last_activity_at": now.isoformat(),
+            }},
+            upsert=True,
+        )
+        thread = _thread(uuid, _msg(
+            mid=4003, sender_id=ADMIN_ID, body=coach_manual,
+            created_at=now,  # coach's manual reply is the newest message
+        ))
+        # Fetched window contains: eve-DM (admin, in sent_bodies),
+        # student "9" (student reply), coach manual follow-up (admin, NOT
+        # in sent_bodies — pre-fix this would trigger human_takeover and
+        # lose the score).
+        messages = [
+            _msg(mid=4001, sender_id=ADMIN_ID, body=eve_dm_body,
+                 created_at=now - timedelta(minutes=20)),
+            _msg(mid=4002, sender_id=STUDENT_ID, body="9",
+                 created_at=now - timedelta(minutes=10)),
+            _msg(mid=4003, sender_id=ADMIN_ID, body=coach_manual,
+                 created_at=now),
+        ]
+        posted_ack = {
+            "id": 4004,
+            "sender": {"community_member_id": ADMIN_ID},
+            "body": "Thanks! Got you down as 9/10.",
+            "created_at": now.isoformat(),
+        }
+        with patch(
+            "circle_api.list_thread_messages_for_admin",
+            new=AsyncMock(return_value=messages),
+        ), patch(
+            "circle_api.post_dm_message",
+            new=AsyncMock(return_value=posted_ack),
+        ):
+            res = await _p._process_thread(
+                db, admin_email=COACH_EMAIL, admin_member_id=ADMIN_ID,
+                coach_name=COACH_NAME, thread=thread,
+                excluded_tags_lower=set(),
+            )
+        assert "interview_eve_score_recorded" in res, (
+            f"score should be captured even with a coach-manual reply "
+            f"present — got {res}"
+        )
+        assert res["score"] == 9
+
+        eve = await db.interview_eve_dms.find_one({"id": eve_record_id}, {"_id": 0})
+        assert eve["score"] == 9
+        assert eve.get("score_raw_text") == "9"
+
+        thread_state = await db.circle_dm_threads.find_one({"id": f"thread:{uuid}"}, {"_id": 0})
+        assert thread_state["state"] == "active", (
+            f"thread should NOT have flipped to human_takeover when score "
+            f"was captured first; got state={thread_state['state']}"
+        )
+    finally:
+        await db.interview_eve_dms.delete_one({"id": eve_record_id})
 
 
 async def _scenario_trust_takeover_trigger():

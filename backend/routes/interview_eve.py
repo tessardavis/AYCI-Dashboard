@@ -97,3 +97,104 @@ async def preview(admin: dict = Depends(require_admin)):
                 })
     return {"target_date": target_date, "candidates": candidates,
             "total": len(candidates)}
+
+
+
+@router.post("/backfill-scores")
+async def backfill_scores(admin: dict = Depends(require_admin), days: int = 3):
+    """Retroactively recover any interview-eve scores that were missed by
+    the bot — typically because the polling bot's lookback guard fired on
+    a coach's manual personal message and short-circuited before the
+    score-capture step. (Fixed structurally on 2026-05-15 by moving score
+    capture above the lookback guard; this endpoint cleans up records
+    sent before that fix landed.)
+
+    For each `interview_eve_dms` record in the last `days` days that
+    still has `score=None`, fetch the thread's most-recent messages via
+    the Circle Headless API, find the latest student message, run
+    `parse_score()` on it, and persist the score if found. Fires the
+    low-score Slack alert too if the parsed score is ≤ threshold.
+    """
+    import circle_api
+    from datetime import datetime, timezone, timedelta
+    days = max(1, min(int(days or 3), 14))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    rows = await db.interview_eve_dms.find(
+        {"score": None, "sent_at": {"$gte": cutoff}}, {"_id": 0},
+    ).to_list(None)
+
+    recovered: list[dict] = []
+    still_pending: list[dict] = []
+    errors: list[dict] = []
+    for rec in rows:
+        thread_uuid = rec.get("thread_uuid")
+        coach_email = rec.get("coach_admin_email") or interview_eve_dm.COACH_EMAIL
+        member_id = rec.get("circle_member_id")
+        if not thread_uuid or not member_id:
+            still_pending.append({"name": rec.get("student_name"),
+                                  "reason": "missing_thread_or_member"})
+            continue
+        try:
+            messages = await circle_api.list_thread_messages_for_admin(
+                db, coach_email, thread_uuid, per_page=20,
+            )
+        except Exception as e:
+            errors.append({"name": rec.get("student_name"), "error": str(e)[:160]})
+            continue
+        if not messages:
+            still_pending.append({"name": rec.get("student_name"), "reason": "no_messages"})
+            continue
+        # Sort oldest -> newest, find latest student message.
+        messages.sort(key=lambda m: m.get("created_at") or "")
+        latest_student = None
+        for m in reversed(messages):
+            sender = (m.get("sender") or {})
+            sid = sender.get("community_member_id") or sender.get("id") or m.get("community_member_id")
+            try:
+                if sid is not None and int(sid) == int(member_id):
+                    latest_student = m
+                    break
+            except (ValueError, TypeError):
+                continue
+        if not latest_student:
+            still_pending.append({"name": rec.get("student_name"),
+                                  "reason": "no_student_reply"})
+            continue
+        body = (
+            latest_student.get("body")
+            or latest_student.get("plain_text")
+            or (latest_student.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+            or latest_student.get("text")
+            or ""
+        ).strip()
+        score = interview_eve_dm.parse_score(body)
+        if score is None:
+            still_pending.append({
+                "name": rec.get("student_name"),
+                "reason": "no_score_parsed",
+                "last_student_msg": body[:140],
+            })
+            continue
+        # Persist + fire Slack alert if low.
+        scored = await interview_eve_dm.maybe_record_score(db, thread_uuid, body)
+        if scored is None:
+            # Could be a race — already recorded. Re-check.
+            fresh = await db.interview_eve_dms.find_one({"id": rec["id"]}, {"_id": 0, "score": 1})
+            recovered.append({
+                "name": rec.get("student_name"),
+                "score": (fresh or {}).get("score"),
+                "raw": body[:140],
+                "note": "already_recorded_by_concurrent_poll",
+            })
+        else:
+            recovered.append({
+                "name": rec.get("student_name"),
+                "score": scored["score"],
+                "raw": body[:140],
+            })
+    return {
+        "scanned": len(rows),
+        "recovered": recovered,
+        "still_pending": still_pending,
+        "errors": errors,
+    }

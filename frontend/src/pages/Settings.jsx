@@ -1778,6 +1778,66 @@ function CoachPlaybookSection({ isAdmin }) {
           )}
         </div>
 
+        {/* --- Bot glossary (collapsible help for the team) --- */}
+        <details className="mb-3 bg-[var(--ayci-paper)] border border-[var(--ayci-border)] rounded p-3" data-testid="bot-glossary">
+          <summary className="text-xs font-semibold text-[var(--ayci-ink)] cursor-pointer select-none">
+            What do these states &amp; buttons mean? <span className="font-normal text-[var(--ayci-ink-muted)]">(click to expand)</span>
+          </summary>
+          <div className="mt-3 space-y-2.5 text-[12px] leading-snug text-[var(--ayci-ink)]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="font-semibold mb-1">Thread states</div>
+                <ul className="space-y-1.5">
+                  <li>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-800 mr-1">active</span>
+                    <span>The bot is watching. It will reply when a student sends a new message.</span>
+                  </li>
+                  <li>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-violet-50 border-violet-200 text-violet-800 mr-1">human takeover</span>
+                    <span>The bot saw a message it didn't write (usually a coach typing in Circle) and silently backed off so a human can handle it. Won't reply again until you re-arm.</span>
+                  </li>
+                  <li>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-800 mr-1">escalated</span>
+                    <span>The bot answered with the holding handoff ("the team will be in touch within 24h") and opened a support ticket — usually because the playbook didn't cover the question or the student asked for a human. Won't reply again until you re-arm.</span>
+                  </li>
+                  <li>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-pink-50 border-pink-200 text-pink-800 mr-1">tag-excluded</span>
+                    <span>The student carries a tag in the "excluded member tags" list (e.g. Boss, Interview week). The bot stays silent — no reply, no ticket, no Slack. Coach handles in Circle.</span>
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-semibold mb-1">Buttons</div>
+                <ul className="space-y-1.5">
+                  <li>
+                    <span className="font-semibold mr-1">Re-arm</span>
+                    <span>Re-enable the bot on a thread that's in <em>escalated</em>, <em>human takeover</em>, or <em>tag-excluded</em>. State flips back to <em>active</em>; the bot replies on the next student message. Uses a "reset cutoff" so old admin messages are ignored.</span>
+                  </li>
+                  <li>
+                    <span className="font-semibold mr-1">Trust &amp; re-arm</span>
+                    <span>(Only on <em>human takeover</em> rows.) Tells the bot "this message was actually mine — please remember it." Adds the message body and id to the bot's known-replies list and re-arms. Use when a cross-environment race made the bot mistake its own reply for a coach's.</span>
+                  </li>
+                  <li>
+                    <span className="font-semibold mr-1">Reset stuck threads</span>
+                    <span>Bulk Re-arm for every thread currently in <em>human takeover</em>. Same effect as Re-arming each one by hand.</span>
+                  </li>
+                  <li>
+                    <span className="font-semibold mr-1">Diagnose a thread</span>
+                    <span>Read-only post-mortem. Paste a name or UUID → see the exact gate that's stopping the bot from replying (or "would reply"). No replies sent, no state changes.</span>
+                  </li>
+                  <li>
+                    <span className="font-semibold mr-1">Poll Now</span>
+                    <span>Runs a full poll cycle immediately instead of waiting for the every-minute cron. Useful after Re-arming to check the result faster.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="bg-amber-50/60 border border-amber-200 rounded p-2 text-[11.5px] text-amber-900">
+              <span className="font-semibold">Important:</span> the bot never replies to the <em>backlog</em> — when it sees a thread for the first time, it just records where it is and waits for the next message. Exception: brand-new DMs from a student less than 10 minutes old will get a reply on first sight (fixed 2026-05-15).
+            </div>
+          </div>
+        </details>
+
         {/* --- Thread state table --- */}
         <div>
           <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
