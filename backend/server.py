@@ -1211,12 +1211,14 @@ async def on_startup():
     # CIRCLE_BOT_ENABLED=false so preview and production don't both poll the
     # same Circle inbox and race each other into human_takeover (each env's
     # bot mistakes the OTHER's reply as a human admin taking over the thread).
-    # Default ENABLED. Treats unset, empty string, and explicit-true values
-    # all as "on". Only set CIRCLE_BOT_ENABLED=false in preview to silence
-    # the bot. Yesterday's outage was caused by this defaulting to false
-    # when Emergent set the env var to an empty string.
-    _cb_env = (os.environ.get("CIRCLE_BOT_ENABLED") or "").strip().lower()
-    circle_bot_enabled = _cb_env not in ("0", "false", "no", "off")
+    # Default ENABLED in production. We use CIRCLE_BOT_DISABLED (inverted
+    # semantics) instead of CIRCLE_BOT_ENABLED so an existing legacy
+    # `CIRCLE_BOT_ENABLED=false` in production env vars no longer silences
+    # the bot — production should always run unless explicitly disabled.
+    # Preview's /app/backend/.env sets CIRCLE_BOT_DISABLED=true so the two
+    # environments don't both poll the same Circle inbox and race.
+    _cb_env = (os.environ.get("CIRCLE_BOT_DISABLED") or "").strip().lower()
+    circle_bot_enabled = _cb_env not in ("1", "true", "yes", "on")
     async def _circle_dm_poll():
         import circle_dm_poll
         import asyncio as _asyncio
@@ -1240,7 +1242,7 @@ async def on_startup():
             replace_existing=True,
             max_instances=1, coalesce=True,
         )
-        logger.info("[scheduler] circle_dm_poll: ENABLED (CIRCLE_BOT_ENABLED=true)")
+        logger.info("[scheduler] circle_dm_poll: ENABLED (CIRCLE_BOT_DISABLED is not set)")
 
         # Watchdog — if a poll hangs (e.g. a Circle API call blocking for 10
         # minutes), `max_instances=1, coalesce=True` would silently drop
@@ -1278,7 +1280,7 @@ async def on_startup():
             replace_existing=True,
         )
     else:
-        logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_ENABLED=true to enable)")
+        logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_DISABLED=false to enable)")
 
     # Independent asyncio loop — runs OUTSIDE APScheduler so if APScheduler
     # ever dies (event-loop crash, broken job store, etc.) the bot keeps
