@@ -1272,6 +1272,36 @@ async def on_startup():
     else:
         logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_ENABLED=true to enable)")
 
+    # Independent asyncio loop — runs OUTSIDE APScheduler so if APScheduler
+    # ever dies (event-loop crash, broken job store, etc.) the bot keeps
+    # polling regardless. Yesterday's outage was APScheduler silently
+    # dropping cron fires for 7+ hours; the watchdog above is itself an
+    # APScheduler job so it died with the rest. This task is fire-and-
+    # forget — created with `asyncio.create_task` and never awaited.
+    # Each iteration: sleep 60s, then run a poll with 90s hard timeout.
+    # Wrapped in `while True` with broad try/except so a single failure
+    # never breaks the loop.
+    if circle_bot_enabled:
+        import asyncio
+        async def _circle_dm_poll_independent_loop():
+            import asyncio
+            # Initial delay so the boot sequence settles before we start.
+            await asyncio.sleep(20)
+            logger.info("[independent-poller] starting circle_dm_poll loop (60s cycle, 90s hard timeout per poll)")
+            while True:
+                try:
+                    await asyncio.wait_for(_circle_dm_poll(), timeout=90)
+                except asyncio.TimeoutError:
+                    logger.warning("[independent-poller] poll cycle timed out (>90s)")
+                except Exception as e:
+                    logger.warning(f"[independent-poller] poll cycle failed: {e}")
+                try:
+                    await asyncio.sleep(60)
+                except Exception:
+                    # Sleep failure (event loop weirdness) — just spin.
+                    pass
+        asyncio.create_task(_circle_dm_poll_independent_loop())
+
     # Interview-eve check-in DMs — 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,
     # asking for a 1-10 support score. Low scores → Slack alert.
