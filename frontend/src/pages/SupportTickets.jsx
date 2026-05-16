@@ -758,6 +758,7 @@ function KanbanBoard({ grouped, teamById, onOpen, onUpdate, selectedIds, onToggl
 function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSelect }) {
   const assignee = ticket.assignee_id ? teamById[ticket.assignee_id] : null;
   const unread = !!ticket.unread;
+  const circleUnread = (ticket.unread_circle_count || 0) > 0;
   return (
     <div
       onClick={onOpen}
@@ -765,9 +766,11 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSele
         "bg-white border rounded-md p-2.5 cursor-pointer hover:shadow-md transition-shadow text-sm group relative",
         selected
           ? "border-[var(--ayci-accent)] ring-2 ring-[var(--ayci-accent)]/40 shadow-sm"
-          : unread
-            ? "border-rose-400 ring-2 ring-rose-200/70 shadow-sm"
-            : ticket.overdue
+          : circleUnread
+            ? "border-violet-400 ring-2 ring-violet-200/70 shadow-sm"
+            : unread
+              ? "border-rose-400 ring-2 ring-rose-200/70 shadow-sm"
+              : ticket.overdue
               ? "border-rose-300 ring-1 ring-rose-200"
               : "border-slate-200",
       ].join(" ")}
@@ -803,6 +806,16 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSele
           {unread && (
             <span className="inline-flex items-center text-[9px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded uppercase tracking-wider">
               New
+            </span>
+          )}
+          {circleUnread && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-violet-700 bg-violet-100 border border-violet-300 px-1.5 py-0.5 rounded uppercase tracking-wider"
+              title={`${ticket.unread_circle_count} new Circle DM ${ticket.unread_circle_count === 1 ? "reply" : "replies"} — last ${relativeAge(ticket.last_circle_activity_at)}`}
+              data-testid={`ticket-circle-unread-${ticket.id}`}
+            >
+              <MessageCircle className="w-2.5 h-2.5" />
+              {ticket.unread_circle_count} new
             </span>
           )}
         </div>

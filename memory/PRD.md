@@ -12,6 +12,16 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-17 — Circle DM follow-ups: forwarded + visible badge on the ticket card
+- **Forwarding** (see 2026-05-17 entry below): escalated threads now forward subsequent student messages to the linked support ticket as internal notes.
+- **NEW — on-card unread badge**: tickets accumulating new Circle DM forwards now show a violet `💬 N new` badge alongside the existing "New" badge on the Kanban card, plus a violet ring around the whole card so the team can spot fresh activity from across the room. Hover-tooltip: "N new Circle DM replies — last X min ago".
+- **Backend changes**:
+  - `_forward_new_msgs_to_ticket()` now stamps `last_circle_activity_at` and `$inc`s `unread_circle_count` on the ticket
+  - `GET /api/tickets/{ticket_id}` clears the badge atomically (`unread_circle_count → 0`, stamps `circle_activity_acknowledged_at` + `_by`) when any coach opens the ticket detail. Global ack — the first responder owns it, matches how the team works.
+- **Regression test** extended: pins both `unread_circle_count` and `last_circle_activity_at` get set on forward.
+- **Files**: `backend/circle_dm_poll.py::_forward_new_msgs_to_ticket`, `backend/routes/tickets.py::get_ticket`, `frontend/src/pages/SupportTickets.jsx` (KanbanCard badge + ring).
+
+
 ### 2026-05-17 — Escalated Circle DM follow-ups now forwarded to the linked ticket
 - **Bug** (reported by Tessa, hit Sehr Khan's thread): once a Circle DM bot escalated a thread (sent holding handoff, opened a ticket), any subsequent student replies were silently dropped. The bot's `_process_thread()` just returned `skipped` for any thread in `escalated` state, so the team only ever saw the original message in the ticket.
 - **Fix** (`backend/circle_dm_poll.py::_process_thread`): for threads in `escalated` state with a linked `escalated_ticket_id`, the bot now:

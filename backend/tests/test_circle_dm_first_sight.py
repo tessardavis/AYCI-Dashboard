@@ -273,6 +273,9 @@ async def _scenario_escalated_thread_forwards_followup_to_ticket():
         assert n["author_name"] == "Test Student (Circle DM)"
         assert n["circle_message_id"] == follow_up_id
         assert ticket["status"] == "open"
+        # Badge fields populated.
+        assert ticket.get("unread_circle_count") == 1
+        assert ticket.get("last_circle_activity_at")
 
         # Thread state still `escalated` but last_seen advanced.
         thread_state = await db.circle_dm_threads.find_one(

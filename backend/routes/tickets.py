@@ -121,6 +121,21 @@ async def get_ticket(ticket_id: str, user: dict = Depends(require_board("tickets
         {"$set": {"user_id": user["id"], "ticket_id": ticket_id, "viewed_at": now_iso}},
         upsert=True,
     )
+    # Clear the Circle-activity unread badge: opening the ticket counts as
+    # the team having seen the forwarded student replies. Global (not
+    # per-user) — once any coach opens it, the badge clears for everyone,
+    # which matches how the team works (the first responder owns it).
+    if (t.get("unread_circle_count") or 0) > 0:
+        await db.tickets.update_one(
+            {"id": ticket_id},
+            {"$set": {
+                "unread_circle_count": 0,
+                "circle_activity_acknowledged_at": now_iso,
+                "circle_activity_acknowledged_by": user.get("email") or user.get("name"),
+            }},
+        )
+        t["unread_circle_count"] = 0
+        t["circle_activity_acknowledged_at"] = now_iso
     # Lazy-match to Monday so the team sees student context without an extra round-trip
     try:
         import student_match as sm

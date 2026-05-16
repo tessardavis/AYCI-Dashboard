@@ -873,9 +873,11 @@ async def _forward_new_msgs_to_ticket(
             "$push": {"notes": {"$each": notes_to_push}},
             "$set": {
                 "updated_at": now,
+                "last_circle_activity_at": now,
                 "status": "open" if existing.get("status") in (
                     "resolved", "closed") else existing.get("status") or "open",
             },
+            "$inc": {"unread_circle_count": len(notes_to_push)},
         },
     )
     logger.info(
