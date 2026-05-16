@@ -176,9 +176,136 @@ def test_first_sight_logic_all_scenarios():
             await _scenario_trust_takeover_trigger()
             await _cleanup()
             await _scenario_eve_score_captured_before_lookback_guard()
+            await _cleanup()
+            await _scenario_escalated_thread_forwards_followup_to_ticket()
         finally:
             await _cleanup()
     asyncio.run(_run_all())
+
+
+async def _scenario_escalated_thread_forwards_followup_to_ticket():
+    """REGRESSION (Sehr Khan bug, 2026-05-17): when a thread is in
+    `escalated` state AND has a linked support ticket, any subsequent
+    student messages must be appended to the ticket as inbound notes,
+    not silently dropped. Pre-fix the bot just skipped the thread."""
+    import circle_dm_poll as _p
+    uuid_thread = "first-sight-test-escalated-followup"
+    ticket_id = "ticket-test-escalated-followup"
+    now = datetime.now(timezone.utc)
+
+    # Seed: thread in escalated state with linked ticket. Bot already
+    # replied with the holding handoff (so `last_seen_message_id` points
+    # to the bot's reply).
+    await db.tickets.update_one(
+        {"id": ticket_id},
+        {"$set": {
+            "id": ticket_id,
+            "student_name": "Test Student",
+            "student_email": "test@example.com",
+            "subject": "Circle DM to Tessa",
+            "description": "Initial student question",
+            "status": "open",
+            "notes": [],
+            "source": "circle_dm",
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }},
+        upsert=True,
+    )
+    await db.circle_dm_threads.update_one(
+        {"id": f"thread:{uuid_thread}"},
+        {"$set": {
+            "id": f"thread:{uuid_thread}",
+            "thread_uuid": uuid_thread,
+            "coach_admin_email": COACH_EMAIL,
+            "student_member_id": STUDENT_ID,
+            "student_name": "Test Student",
+            "state": "escalated",
+            "escalated_at": (now - timedelta(hours=1)).isoformat(),
+            "escalated_ticket_id": ticket_id,
+            "escalation_reason": "playbook_miss",
+            "last_seen_message_id": 5001,  # the bot's holding handoff
+            "sent_message_ids": [5001],
+            "sent_bodies": ["Hi! The team will be in touch."],
+            "last_activity_at": (now - timedelta(hours=1)).isoformat(),
+        }},
+        upsert=True,
+    )
+
+    follow_up_body = "Just to add — it's actually about the September interview"
+    follow_up_id = 5002
+    fetched = [
+        _msg(mid=5000, sender_id=STUDENT_ID, body="initial",
+             created_at=now - timedelta(hours=2)),
+        _msg(mid=5001, sender_id=ADMIN_ID, body="Hi! The team will be in touch.",
+             created_at=now - timedelta(hours=1)),
+        _msg(mid=follow_up_id, sender_id=STUDENT_ID, body=follow_up_body,
+             created_at=now),
+    ]
+    # Inline last_message reflects the follow-up so the fast-path
+    # `inline_last_id > last_seen` check fires.
+    thread = _thread(uuid_thread, _msg(
+        mid=follow_up_id, sender_id=STUDENT_ID, body=follow_up_body,
+        created_at=now,
+    ))
+
+    try:
+        with patch(
+            "circle_api.list_thread_messages_for_admin",
+            new=AsyncMock(return_value=fetched),
+        ):
+            res = await _p._process_thread(
+                db, admin_email=COACH_EMAIL, admin_member_id=ADMIN_ID,
+                coach_name=COACH_NAME, thread=thread,
+                excluded_tags_lower=set(),
+            )
+
+        assert res.get("escalated_forwarded") == uuid_thread, (
+            f"escalated-with-followup must trigger forwarding; got {res}"
+        )
+
+        # Ticket has the new student message as a note.
+        ticket = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+        notes = ticket.get("notes") or []
+        assert len(notes) == 1, f"expected 1 note, got {len(notes)}: {notes}"
+        n = notes[0]
+        assert n["body"] == follow_up_body
+        assert n["author_name"] == "Test Student (Circle DM)"
+        assert n["circle_message_id"] == follow_up_id
+        assert ticket["status"] == "open"
+
+        # Thread state still `escalated` but last_seen advanced.
+        thread_state = await db.circle_dm_threads.find_one(
+            {"id": f"thread:{uuid_thread}"}, {"_id": 0},
+        )
+        assert thread_state["state"] == "escalated"
+        assert thread_state["last_seen_message_id"] == follow_up_id
+
+        # Idempotency: a second run shouldn't double-append. We have to
+        # bump last_seen back to 5001 to simulate a re-poll of the same
+        # window (in real life the second poll would skip because
+        # `inline_last_id <= last_seen`, but we want to prove the
+        # de-dup guard works if anything ever calls forward twice).
+        await db.circle_dm_threads.update_one(
+            {"id": f"thread:{uuid_thread}"},
+            {"$set": {"last_seen_message_id": 5001}},
+        )
+        with patch(
+            "circle_api.list_thread_messages_for_admin",
+            new=AsyncMock(return_value=fetched),
+        ):
+            res2 = await _p._process_thread(
+                db, admin_email=COACH_EMAIL, admin_member_id=ADMIN_ID,
+                coach_name=COACH_NAME, thread=thread,
+                excluded_tags_lower=set(),
+            )
+        assert res2.get("escalated_forwarded") == uuid_thread
+        ticket = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+        assert len(ticket.get("notes") or []) == 1, (
+            "second run must NOT double-append the same circle_message_id"
+        )
+    finally:
+        await db.tickets.delete_one({"id": ticket_id})
 
 
 async def _scenario_eve_score_captured_before_lookback_guard():

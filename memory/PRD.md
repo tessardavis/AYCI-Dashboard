@@ -12,6 +12,21 @@ Robust customer service support ticket system integrating Tally forms, Gmail, Wa
 
 ## Implemented Features (latest first)
 
+### 2026-05-17 — Escalated Circle DM follow-ups now forwarded to the linked ticket
+- **Bug** (reported by Tessa, hit Sehr Khan's thread): once a Circle DM bot escalated a thread (sent holding handoff, opened a ticket), any subsequent student replies were silently dropped. The bot's `_process_thread()` just returned `skipped` for any thread in `escalated` state, so the team only ever saw the original message in the ticket.
+- **Fix** (`backend/circle_dm_poll.py::_process_thread`): for threads in `escalated` state with a linked `escalated_ticket_id`, the bot now:
+  - Fetches messages newer than `last_seen_message_id`
+  - Pushes each STUDENT-sent message into `tickets.notes[]` as an internal-author note (`author_id: "_circle_dm"`), preserving `circle_message_id` for idempotency
+  - Re-opens the ticket if it was previously marked resolved/closed
+  - Bumps `last_seen_message_id` so we don't re-import on the next poll
+  - De-duplicates by `circle_message_id` so a double-poll race never double-appends
+- Only **student** messages are forwarded — admin replies stay in Circle (the team uses the ticket as the canonical thread; team-to-team chat in Circle would cause confusing loops).
+- `human_takeover` and `tag_excluded` states still skip entirely (intentional — coach is actively handling / student is tagged out).
+- New `poll_summary.escalated_forwarded` counter so we can see at a glance how often this is firing.
+- **Regression test**: `tests/test_circle_dm_first_sight.py::_scenario_escalated_thread_forwards_followup_to_ticket` covers the forward path (asserts note inserted with right fields, ticket re-opened, last_seen advanced) AND the idempotency guard (second run doesn't double-append).
+- **Files**: `backend/circle_dm_poll.py` (forward helper + state-router branch), `backend/tests/test_circle_dm_first_sight.py` (new scenario).
+
+
 ### 2026-05-15 (evening 7) — Coach Activity: daily bars now show counts clearly
 - **Counts above every bar**: the Recorded Answer Review and Specific Interview Support charts now render the daily count above each bar (was tooltip-only — required hovering). Days with 0 show a dim "0" so you can see the rhythm at a glance.
 - **Weekday labels added** (Mon-Sun) beneath each day-of-month, with weekends visually faded (60% opacity teal bar + muted labels) so the eye automatically separates work-days from weekend bumps.

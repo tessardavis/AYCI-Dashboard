@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 import asyncio
 from typing import Optional
@@ -208,8 +209,38 @@ async def _process_thread(
 
     state = await _get_thread_state(db, chat_room_uuid)
 
-    # Already escalated / human took over / tag-excluded — silent.
-    if state and state.get("state") in ("escalated", "human_takeover", "tag_excluded"):
+    # Already escalated / human took over / tag-excluded — bot stays
+    # silent, but for escalated threads with a linked ticket we still
+    # need to *forward* any new student messages onto the ticket as
+    # inbound notes. Otherwise follow-up questions from the student
+    # silently vanish — Tessa/Coralie/etc only see the original
+    # message in the ticket and never learn the student replied again.
+    if state and state.get("state") == "escalated" and state.get("escalated_ticket_id"):
+        ticket_id = state["escalated_ticket_id"]
+        # Cheap fast-path: if the inline last message hasn't moved
+        # past `last_seen`, nothing to forward.
+        inline_last = thread.get("last_message") or {}
+        inline_last_id_e = _msg_id(inline_last)
+        last_seen_e = (state or {}).get("last_seen_message_id") or 0
+        if inline_last_id_e is None or inline_last_id_e <= last_seen_e:
+            return {"skipped": "escalated_no_new"}
+        try:
+            await _forward_new_msgs_to_ticket(
+                db, admin_email=admin_email,
+                chat_room_uuid=chat_room_uuid,
+                ticket_id=ticket_id,
+                student_id=student_id,
+                student_name=student_name,
+                admin_member_id=admin_member_id,
+                last_seen=last_seen_e,
+            )
+        except Exception as e:
+            logger.warning(
+                f"[circle-dm] forward to ticket {ticket_id} failed: {e}",
+            )
+        return {"escalated_forwarded": chat_room_uuid}
+
+    if state and state.get("state") in ("human_takeover", "tag_excluded"):
         return {"skipped": state["state"]}
 
     # Fast-path: skip threads with no new messages.
@@ -732,6 +763,8 @@ async def poll_once(db) -> dict:
                 summary["human_takeover"] += 1
             if res.get("tag_excluded"):
                 summary["tag_excluded"] += 1
+            if res.get("escalated_forwarded"):
+                summary["escalated_forwarded"] = summary.get("escalated_forwarded", 0) + 1
             if res.get("skipped"):
                 summary["skipped"] += 1
         summary["coaches"].append(per_coach)
@@ -744,6 +777,111 @@ async def poll_once(db) -> dict:
         upsert=True,
     )
     return summary
+
+
+async def _forward_new_msgs_to_ticket(
+    db, *, admin_email: str, chat_room_uuid: str, ticket_id: str,
+    student_id: int, student_name: str, admin_member_id: int,
+    last_seen: int,
+) -> None:
+    """For an *escalated* thread, fetch any messages newer than
+    `last_seen` and append student messages to the linked support
+    ticket as inbound notes. Also bumps `last_seen_message_id` so we
+    don't re-import on the next poll, and re-opens the ticket if it
+    was closed.
+
+    Only forwards messages sent by the STUDENT — admin replies (made by
+    the team in Circle) aren't pushed back into the ticket because they
+    might create a confusing loop with Coralie's own reply work.
+    """
+    import circle_api
+    messages = await circle_api.list_thread_messages_for_admin(
+        db, admin_email, chat_room_uuid, per_page=20,
+    )
+    if not messages:
+        return
+    messages.sort(key=lambda m: m.get("created_at") or "")
+    latest_id = _msg_id(messages[-1]) or 0
+    new_student_msgs: list[dict] = []
+    for m in messages:
+        mid = _msg_id(m)
+        if mid is None or mid <= last_seen:
+            continue
+        sid = _msg_sender_id(m)
+        if sid != student_id:
+            continue
+        body = _msg_body(m)
+        if not body:
+            continue
+        new_student_msgs.append({"id": mid, "body": body,
+                                  "created_at": m.get("created_at")})
+
+    # Always bump last_seen even when nothing was forwarded (e.g. the
+    # only new messages were admin replies) so we don't keep re-fetching
+    # the same window on every poll.
+    if latest_id > last_seen:
+        await db.circle_dm_threads.update_one(
+            {"id": f"thread:{chat_room_uuid}"},
+            {"$set": {
+                "last_seen_message_id": latest_id,
+                "last_activity_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+
+    if not new_student_msgs:
+        return
+
+    # Make sure we don't double-append the same message if a prior
+    # forwarding run inserted it but the last_seen update raced.
+    existing = await db.tickets.find_one(
+        {"id": ticket_id},
+        {"_id": 0, "notes.circle_message_id": 1, "status": 1},
+    )
+    if not existing:
+        logger.warning(
+            f"[circle-dm] thread {chat_room_uuid} escalated_ticket_id "
+            f"{ticket_id} not found in tickets — skipping forward.",
+        )
+        return
+    already_forwarded_ids = {
+        (n or {}).get("circle_message_id")
+        for n in (existing.get("notes") or [])
+        if (n or {}).get("circle_message_id")
+    }
+
+    notes_to_push: list[dict] = []
+    for m in new_student_msgs:
+        if m["id"] in already_forwarded_ids:
+            continue
+        notes_to_push.append({
+            "id": str(uuid.uuid4()),
+            "author_id": "_circle_dm",
+            "author_name": f"{student_name} (Circle DM)",
+            "body": m["body"],
+            "created_at": m["created_at"] or datetime.now(timezone.utc).isoformat(),
+            "internal": True,
+            "circle_message_id": m["id"],
+        })
+
+    if not notes_to_push:
+        return
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.tickets.update_one(
+        {"id": ticket_id},
+        {
+            "$push": {"notes": {"$each": notes_to_push}},
+            "$set": {
+                "updated_at": now,
+                "status": "open" if existing.get("status") in (
+                    "resolved", "closed") else existing.get("status") or "open",
+            },
+        },
+    )
+    logger.info(
+        f"[circle-dm] forwarded {len(notes_to_push)} student message(s) "
+        f"to ticket {ticket_id} from thread {chat_room_uuid}",
+    )
 
 
 async def reset_thread(db, chat_room_uuid: str) -> bool:
