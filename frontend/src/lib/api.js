@@ -1,6 +1,13 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+// In production, always use relative /api URLs — Vercel's rewrite proxies
+// them to Render. This sidesteps mobile Safari's third-party cookie blocking.
+// In local dev (localhost:3000) we still honour REACT_APP_BACKEND_URL.
+const isLocal =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1");
+const BACKEND_URL = isLocal ? process.env.REACT_APP_BACKEND_URL || "" : "";
 export const API = `${BACKEND_URL}/api`;
 
 export const apiClient = axios.create({
