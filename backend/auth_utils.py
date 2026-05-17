@@ -52,15 +52,24 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def set_auth_cookies(response: Response, access: str, refresh: str) -> None:
-    response.set_cookie(
-        "access_token", access,
-        httponly=True, secure=False, samesite="lax",
-        max_age=60 * 60 * 24, path="/",
+    # Pick cookie attributes based on environment:
+    # - Local dev (PUBLIC_BASE_URL = http://localhost…): SameSite=lax + secure=False
+    #   so cookies work over plain HTTP.
+    # - Production (HTTPS frontend on a different domain from backend, e.g.
+    #   Vercel + Render): SameSite=none + secure=True so the browser actually
+    #   sends them on cross-site XHR/fetch requests.
+    is_https = os.environ.get("PUBLIC_BASE_URL", "").startswith("https://")
+    cookie_kwargs = dict(
+        httponly=True,
+        secure=is_https,
+        samesite="none" if is_https else "lax",
+        path="/",
     )
     response.set_cookie(
-        "refresh_token", refresh,
-        httponly=True, secure=False, samesite="lax",
-        max_age=60 * 60 * 24 * 7, path="/",
+        "access_token", access, max_age=60 * 60 * 24, **cookie_kwargs,
+    )
+    response.set_cookie(
+        "refresh_token", refresh, max_age=60 * 60 * 24 * 7, **cookie_kwargs,
     )
 
 
