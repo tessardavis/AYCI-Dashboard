@@ -978,23 +978,29 @@ function AcademyRow({ student, today }) {
     >
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href={student.monday_url}
-            target="_blank"
-            rel="noreferrer"
-            className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
-          >
-            {student.name}
-          </a>
-          {student.email && (
+          {student.email ? (
             <Link
               to={`/students?email=${encodeURIComponent(student.email)}`}
-              className="opacity-50 hover:opacity-100 text-[var(--ayci-teal)]"
+              className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
               title="Open Student Lookup"
               data-testid={`academy-lookup-link-${student.email}`}
             >
-              <Search className="w-3.5 h-3.5" />
+              {student.name}
             </Link>
+          ) : (
+            <span className="font-semibold text-[var(--ayci-ink)]">{student.name}</span>
+          )}
+          {student.monday_url && (
+            <a
+              href={student.monday_url}
+              target="_blank"
+              rel="noreferrer"
+              className="opacity-50 hover:opacity-100 text-[var(--ayci-teal)]"
+              title="Open in Monday"
+              data-testid={`academy-monday-link-${student.id}`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           )}
           {student.interview_type && (
             <InterviewTypeBadge type={student.interview_type} />
@@ -1041,23 +1047,31 @@ function PrivateCard({ student, today }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href={student.monday_url}
-              target="_blank"
-              rel="noreferrer"
-              className="font-display font-semibold text-base text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
-            >
-              {student.name}
-            </a>
-            {student.email && (
+            {student.email ? (
               <Link
                 to={`/students?email=${encodeURIComponent(student.email)}`}
-                className="opacity-50 hover:opacity-100 text-[var(--ayci-teal)]"
+                className="font-display font-semibold text-base text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
                 title="Open Student Lookup"
                 data-testid={`private-lookup-link-${student.email}`}
               >
-                <Search className="w-3.5 h-3.5" />
+                {student.name}
               </Link>
+            ) : (
+              <span className="font-display font-semibold text-base text-[var(--ayci-ink)]">
+                {student.name}
+              </span>
+            )}
+            {student.monday_url && (
+              <a
+                href={student.monday_url}
+                target="_blank"
+                rel="noreferrer"
+                className="opacity-50 hover:opacity-100 text-[var(--ayci-teal)]"
+                title="Open in Monday"
+                data-testid={`private-monday-link-${student.id}`}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             )}
             <span
               className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] uppercase tracking-wider font-semibold"

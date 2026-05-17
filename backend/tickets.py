@@ -58,7 +58,16 @@ def _now_iso() -> str:
 
 
 def _slack_webhook_url() -> Optional[str]:
-    url = (os.environ.get("SLACK_WEBHOOK_URL") or "").strip()
+    """Webhook for urgent-ticket alerts.
+    Prefers SLACK_URGENT_TICKETS_WEBHOOK_URL (typically pointed at
+    `#circle-support`) so urgent ticket pings land in a dedicated channel.
+    Falls back to the generic SLACK_WEBHOOK_URL for backwards compatibility.
+    """
+    url = (
+        os.environ.get("SLACK_URGENT_TICKETS_WEBHOOK_URL")
+        or os.environ.get("SLACK_WEBHOOK_URL")
+        or ""
+    ).strip()
     return url or None
 
 

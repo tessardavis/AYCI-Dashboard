@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Calendar,
   Loader2,
@@ -713,9 +714,50 @@ function OutcomePicker({
     }
   };
 
+  // Trigger ref + computed menu position. We render the menu through a
+  // portal at document.body and position it with `fixed` coords so it
+  // escapes any `overflow:hidden` ancestor (e.g. the session-card wrapper
+  // that gave the menu its rounded corners). The menu flips above the
+  // trigger if there isn't enough room below it.
+  const triggerRef = useRef(null);
+  const MENU_WIDTH = 200;
+  const MENU_HEIGHT_ESTIMATE = 200;
+  const [menuStyle, setMenuStyle] = useState({});
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const positionMenu = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const flipAbove = spaceBelow < MENU_HEIGHT_ESTIMATE && rect.top > MENU_HEIGHT_ESTIMATE;
+      const top = flipAbove ? rect.top - 4 : rect.bottom + 4;
+      // Align the menu's right edge with the trigger's right edge.
+      const left = Math.max(8, rect.right - MENU_WIDTH);
+      setMenuStyle({
+        position: "fixed",
+        top,
+        left,
+        transform: flipAbove ? "translateY(-100%)" : undefined,
+        width: MENU_WIDTH,
+      });
+    };
+    positionMenu();
+    // If the user scrolls or resizes, just close — simpler than tracking.
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
   return (
     <div className="relative" data-testid={testid}>
       <button
+        ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
         disabled={saving}
         className={
@@ -740,11 +782,12 @@ function OutcomePicker({
           </>
         )}
       </button>
-      {open && (
+      {open && createPortal(
         <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
           <div
-            className="absolute right-0 z-40 mt-1 bg-white rounded-md shadow-lg border border-[var(--ayci-border)] py-1 min-w-[200px]"
+            className="z-[70] bg-white rounded-md shadow-lg border border-[var(--ayci-border)] py-1"
+            style={menuStyle}
             data-testid={`${testid}-menu`}
           >
             {STATUS_OPTIONS.map((opt) => {
@@ -780,7 +823,8 @@ function OutcomePicker({
               </>
             )}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );
