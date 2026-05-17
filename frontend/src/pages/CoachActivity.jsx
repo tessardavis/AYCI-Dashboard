@@ -319,6 +319,7 @@ function DailyBars({ perDay }) {
   const total = counts.reduce((a, b) => a + b, 0);
   const nonZeroDays = counts.filter((c) => c > 0).length;
   const avg = nonZeroDays > 0 ? (total / nonZeroDays).toFixed(1) : "0";
+  const isLong = perDay.length > 14; // cohort/month views
   // UK day-of-week labels (e.g. "Mon"). The `date` field is YYYY-MM-DD;
   // parse as local midday to avoid timezone day-shifts.
   const weekday = (iso) => {
@@ -328,33 +329,107 @@ function DailyBars({ perDay }) {
       return "";
     }
   };
+  const weekdayLong = (iso) => {
+    try {
+      return new Date(iso + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long" });
+    } catch {
+      return "";
+    }
+  };
+  const niceDate = (iso) => {
+    try {
+      return new Date(iso + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    } catch {
+      return iso;
+    }
+  };
   const isWeekend = (iso) => {
     const d = new Date(iso + "T12:00:00Z").getUTCDay();
     return d === 0 || d === 6;
   };
+  // For long ranges (e.g. 28-day cohort), drop the inline count label above
+  // every bar — it's noisy at 28 columns. Keep weekly totals + tooltip-on-hover.
+  const showInlineCounts = !isLong;
+  // Week-boundary detection: insert a visual break at the start of each new
+  // ISO week (Mon = 1). The first column never gets a leading break.
+  const isWeekStart = (iso, idx) => {
+    if (idx === 0) return false;
+    try {
+      return new Date(iso + "T12:00:00Z").getUTCDay() === 1;
+    } catch {
+      return false;
+    }
+  };
+  // Pre-compute weekly totals so we can render a thin "week summary" row
+  // above the bars on long views.
+  const weekTotals = [];
+  if (isLong) {
+    let bucket = { start: perDay[0].date, end: perDay[0].date, count: 0 };
+    perDay.forEach((d, idx) => {
+      if (idx > 0 && isWeekStart(d.date, idx)) {
+        weekTotals.push(bucket);
+        bucket = { start: d.date, end: d.date, count: 0 };
+      }
+      bucket.end = d.date;
+      bucket.count += d.count;
+    });
+    weekTotals.push(bucket);
+  }
   return (
-    <div className="bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3" data-testid="daily-bars">
-      <div className="flex items-end gap-1 h-40">
-        {perDay.map((d) => {
+    <div className="bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3 sm:p-4" data-testid="daily-bars">
+      {isLong && weekTotals.length > 0 && (
+        <div className="flex items-stretch gap-2 mb-3" data-testid="weekly-totals">
+          {weekTotals.map((w, i) => (
+            <div
+              key={w.start}
+              className="flex-1 bg-white border border-[var(--ayci-border)] rounded-md px-2 py-1.5 flex items-center justify-between gap-2 min-w-0"
+              data-testid={`week-total-${i}`}
+            >
+              <div className="min-w-0">
+                <div className="text-[9px] uppercase tracking-wider font-display font-semibold text-[var(--ayci-ink-muted)] leading-tight">
+                  Week {i + 1}
+                </div>
+                <div className="text-[10px] text-[var(--ayci-ink-muted)] truncate leading-tight">
+                  {niceDate(w.start)} – {niceDate(w.end)}
+                </div>
+              </div>
+              <div className="font-display font-bold text-base text-[var(--ayci-ink)] tabular-nums shrink-0">
+                {w.count}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={"flex items-end gap-1 " + (isLong ? "h-56" : "h-40")}>
+        {perDay.map((d, idx) => {
           // Reserve top 18% of the bar area for the count label so tall
           // bars don't push the number out of view.
           const pct = (d.count / max) * 82;
           const weekend = isWeekend(d.date);
+          const weekBreak = isWeekStart(d.date, idx);
           return (
-            <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0 h-full">
+            <div
+              key={d.date}
+              className={
+                "flex-1 flex flex-col items-center gap-1 min-w-[16px] h-full relative group " +
+                (weekBreak ? "ml-1.5 pl-1.5 border-l border-slate-200" : "")
+              }
+            >
               <div className="flex-1 w-full flex flex-col justify-end items-center">
-                <span
-                  className={
-                    "text-[10px] font-semibold tabular-nums leading-none mb-0.5 " +
-                    (d.count > 0 ? "text-[var(--ayci-ink)]" : "text-slate-300")
-                  }
-                  data-testid={`bar-count-${d.date}`}
-                >
-                  {d.count}
-                </span>
+                {showInlineCounts && (
+                  <span
+                    className={
+                      "text-[10px] font-semibold tabular-nums leading-none mb-0.5 " +
+                      (d.count > 0 ? "text-[var(--ayci-ink)]" : "text-slate-300")
+                    }
+                    data-testid={`bar-count-${d.date}`}
+                  >
+                    {d.count}
+                  </span>
+                )}
                 <div
                   className={
-                    "w-full rounded-t-sm hover:opacity-80 transition-opacity " +
+                    "w-full rounded-t-sm transition-all duration-150 origin-bottom group-hover:opacity-90 group-hover:scale-y-[1.03] " +
                     (d.count === 0
                       ? "bg-slate-200"
                       : weekend
@@ -365,7 +440,9 @@ function DailyBars({ perDay }) {
                     height: d.count > 0 ? `${pct}%` : "2px",
                     minHeight: d.count > 0 ? "4px" : "2px",
                   }}
-                  title={`${d.date}: ${d.count} ${d.count === 1 ? "post" : "posts"}`}
+                  data-testid={`bar-${d.date}`}
+                  data-count={d.count}
+                  title={`${weekdayLong(d.date)}, ${niceDate(d.date)} · ${d.count} ${d.count === 1 ? "post" : "posts"}`}
                 />
               </div>
               <div className="flex flex-col items-center w-full">
@@ -379,6 +456,21 @@ function DailyBars({ perDay }) {
                   {d.date.slice(8)}
                 </span>
               </div>
+              {/* Rich hover tooltip */}
+              <div
+                className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                data-testid={`bar-tooltip-${d.date}`}
+              >
+                <div className="bg-[var(--ayci-ink)] text-white text-[11px] rounded-md px-2.5 py-1.5 shadow-lg whitespace-nowrap">
+                  <div className="font-semibold leading-tight">
+                    {weekdayLong(d.date)}, {niceDate(d.date)}
+                  </div>
+                  <div className="opacity-90 tabular-nums leading-tight mt-0.5">
+                    {d.count} {d.count === 1 ? "post" : "posts"}
+                  </div>
+                </div>
+                <div className="w-2 h-2 bg-[var(--ayci-ink)] rotate-45 mx-auto -mt-1" />
+              </div>
             </div>
           );
         })}
@@ -391,7 +483,9 @@ function DailyBars({ perDay }) {
           <span className="mx-2 text-slate-300">·</span>
           Peak <strong className="text-[var(--ayci-ink)] tabular-nums">{max}</strong>
         </span>
-        <span className="hidden sm:inline opacity-70">Weekends shown faded</span>
+        <span className="hidden sm:inline opacity-70">
+          {isLong ? "Weekends faded · Week breaks shown · Hover for details" : "Weekends shown faded"}
+        </span>
       </div>
     </div>
   );
