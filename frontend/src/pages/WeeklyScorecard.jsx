@@ -6,7 +6,7 @@ import Sparkline from "@/components/Sparkline";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { Filter, X, RefreshCw, Download, ChevronDown } from "lucide-react";
+import { Filter, X, RefreshCw, Download, ChevronDown, Sparkles } from "lucide-react";
 import MobileScorecard from "@/components/MobileScorecard";
 import PulseCard from "@/components/PulseCard";
 import SupportTicketsWidget from "@/components/SupportTicketsWidget";
@@ -138,6 +138,9 @@ export default function WeeklyScorecard() {
         }
         return [...prev, data];
       });
+      // Confirmation toast — cells commit on blur, so without this users have
+      // no signal whether a stray click saved a value.
+      toast.success("Saved");
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally {
@@ -236,7 +239,11 @@ export default function WeeklyScorecard() {
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-[var(--ayci-border)] bg-white text-sm font-medium hover:border-[var(--ayci-accent)] hover:text-[var(--ayci-accent)] transition-colors disabled:opacity-50"
               title="Auto-compute the 6 supported metrics from Calendly, Circle, Tally and Monday for the current week"
             >
-              <RefreshCw className={"w-4 h-4 " + (autoFilling ? "animate-spin" : "")} />
+              {autoFilling ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
               {autoFilling ? "Computing…" : "Auto-fill week"}
             </button>
             <button

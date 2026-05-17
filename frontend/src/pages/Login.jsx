@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const passwordRef = useRef(null);
+
+  // On failed login, clear the password and re-focus the field so the user
+  // can immediately retry without having to click back into it.
+  const handleLoginFailure = (message) => {
+    toast.error(message || "Login failed");
+    setPassword("");
+    setTimeout(() => passwordRef.current?.focus(), 0);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,10 +27,10 @@ export default function Login() {
     try {
       const res = await login(email, password);
       if (!res.ok) {
-        toast.error(res.error || "Login failed");
+        handleLoginFailure(res.error);
       }
     } catch (err) {
-      toast.error(err?.message || "Login failed");
+      handleLoginFailure(err?.message);
     } finally {
       setLoading(false);
     }
@@ -110,6 +119,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                ref={passwordRef}
                 data-testid="login-password-input"
               />
             </div>

@@ -192,3 +192,7 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Local migration artifacts — never commit (raw DB dumps + secrets)
+migration_dumps/
+migration_pull.py

@@ -28,7 +28,9 @@ const NAV_GROUPS = [
     type: "group",
     id: "growth",
     label: "Growth",
-    defaultOpen: false,
+    // Default open: the landing route (/) lives inside this group, so leaving
+    // it collapsed hides the user's current page on first visit.
+    defaultOpen: true,
     items: [
       { to: "/", label: "Weekly Scorecard", icon: LineChart, testid: "sidebar-nav-scorecard", board: "weekly_scorecard", end: true },
       { to: "/rocks", label: "Quarterly Rocks", icon: Mountain, testid: "sidebar-nav-rocks", board: "quarterly_rocks" },

@@ -2,6 +2,9 @@ import { Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
+// Keep these two maps in sync with the route table in App.js and the
+// NAV_GROUPS list in AppShell.jsx. Board IDs use snake_case; route paths
+// often use kebab-case, which is why we can't just build one from the other.
 const BOARD_LABELS = {
   weekly_scorecard: "Weekly Scorecard",
   quarterly_rocks: "Quarterly Rocks",
@@ -10,13 +13,37 @@ const BOARD_LABELS = {
   interviews: "Upcoming Interviews",
   students: "Student Lookup",
   at_risk: "Students at Risk",
+  coach_activity: "Coach Activity",
+  spotlight: "Spotlight Coaching",
+  leaderboard: "Cohort Leaderboard",
+  tickets: "Support Tickets",
+  private_videos: "Private-Tier Videos",
   settings: "Settings",
+  bot: "Settings",
+};
+
+const BOARD_TO_PATH = {
+  weekly_scorecard: "/",
+  quarterly_rocks: "/rocks",
+  launches: "/launches",
+  cohort: "/cohort",
+  interviews: "/interviews",
+  students: "/students",
+  at_risk: "/at-risk",
+  coach_activity: "/coach-activity",
+  spotlight: "/spotlight",
+  leaderboard: "/leaderboard",
+  tickets: "/tickets",
+  private_videos: "/private-videos",
+  settings: "/settings",
+  bot: "/settings",
 };
 
 export default function NotAuthorized({ board }) {
   const { user } = useAuth();
   const allowed = (user?.board_access || []).filter((b) => b !== "settings");
-  const fallbackTo = allowed[0] ? `/${allowed[0] === "weekly_scorecard" ? "" : allowed[0]}` : "/";
+  const fallbackBoard = allowed[0];
+  const fallbackTo = fallbackBoard ? BOARD_TO_PATH[fallbackBoard] || "/" : "/";
 
   return (
     <div
@@ -40,7 +67,7 @@ export default function NotAuthorized({ board }) {
             className="inline-block text-sm bg-[var(--ayci-accent)] text-white px-4 py-2 rounded-md hover:bg-[var(--ayci-accent-hover)] transition-colors"
             data-testid="not-authorized-back-btn"
           >
-            Go to {BOARD_LABELS[allowed[0]]}
+            Go to {BOARD_LABELS[fallbackBoard] || fallbackBoard}
           </Link>
         ) : (
           <p className="text-xs text-[var(--ayci-ink-muted)] italic">
