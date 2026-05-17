@@ -1,0 +1,88 @@
+# Render Blueprint — describes how to deploy this repo on Render.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# To deploy: go to Render Dashboard → New → Blueprint, then connect this repo.
+# Render reads this file and creates the services automatically.
+services:
+  - type: web
+    name: ayci-dashboard-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    region: frankfurt          # closest to UK; switch to oregon for US
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
+    autoDeploy: true           # redeploy on every push to main
+    envVars:
+      # Pinned values — version locked, not secrets.
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: SYNC_TIMEZONE
+        value: Europe/London
+      - key: STRIPE_UPGRADE_MIN_GBP
+        value: "90"
+      - key: CIRCLE_BOT_DISABLED
+        value: "true"
+      - key: GOOGLE_SERVICE_ACCOUNT_FILE
+        value: /etc/secrets/google_service_account.json
+
+      # Secrets — left blank here so Render prompts you to fill them in the
+      # dashboard. Don't ever put real secret values in this file (it's
+      # tracked in Git).
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: GMAIL_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DRIVE_PRIVATE_TIER_FOLDER_ID
+        sync: false
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: CIRCLE_API_TOKEN
+        sync: false
+      - key: CIRCLE_HEADLESS_TOKEN
+        sync: false
+      - key: CALENDLY_TOKEN
+        sync: false
+      - key: CONVERTKIT_API_KEY
+        sync: false
+      - key: CONVERTKIT_API_SECRET
+        sync: false
+      - key: CONVERTKIT_WAITLIST_TAG
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: TALLY_API_KEY
+        sync: false
+      - key: TRANSISTOR_API_KEY
+        sync: false
+      - key: WATI_BASE_URL
+        sync: false
+      - key: WATI_ACCESS_TOKEN
+        sync: false
+      - key: WATI_PHONE_NUMBER
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: YOUTUBE_CHANNEL_HANDLE
+        sync: false
+      - key: EMERGENT_LLM_KEY
+        sync: false
