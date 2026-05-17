@@ -129,9 +129,8 @@ async def _build_context(db, email: str, name: str) -> dict | None:
 
 async def _llm_brief(ctx: dict) -> list[str]:
     """Ask Claude Sonnet 4.5 for exactly 3 short briefing lines."""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    key = os.environ.get("EMERGENT_LLM_KEY")
-    if not key:
+    from llm_client import get_client, complete
+    if get_client() is None:
         return []
 
     system = (
@@ -164,13 +163,7 @@ async def _llm_brief(ctx: dict) -> list[str]:
     ]
     user_text = "\n".join(p for p in parts if p)
 
-    chat = LlmChat(
-        api_key=key,
-        session_id=f"call-brief-{ctx.get('email','x')}",
-        system_message=system,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-    resp = await chat.send_message(UserMessage(text=user_text))
-    text = (resp or "").strip()
+    text = (await complete(system=system, user=user_text, max_tokens=400)).strip()
     if not text:
         return []
     lines = [ln.strip(" -•").strip() for ln in text.splitlines() if ln.strip()]

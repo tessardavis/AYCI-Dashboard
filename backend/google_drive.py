@@ -392,15 +392,10 @@ def _strip_html(html: str) -> str:
 
 
 async def _summarise(doc_name: str, doc_text: str) -> str:
-    """Use Emergent LLM (Claude) to summarise the private-tier doc."""
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise RuntimeError("emergentintegrations not available")
-
-    key = os.environ.get("EMERGENT_LLM_KEY")
-    if not key:
-        raise RuntimeError("EMERGENT_LLM_KEY not configured")
+    """Use Claude to summarise the private-tier doc."""
+    from llm_client import get_client, complete
+    if get_client() is None:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
     text = doc_text[:MAX_DOC_CHARS]
     prompt = (
@@ -420,12 +415,12 @@ async def _summarise(doc_name: str, doc_text: str) -> str:
         "Keep the whole brief under 220 words."
     )
 
-    session_id = f"drive-summary-{doc_name[:40]}"
-    chat = LlmChat(api_key=key, session_id=session_id, system_message="Concise, factual briefing writer.")
-    chat = chat.with_model("anthropic", "claude-sonnet-4-5-20250929")
-
-    response = await chat.send_message(UserMessage(text=prompt))
-    return str(response).strip()
+    response = await complete(
+        system="Concise, factual briefing writer.",
+        user=prompt,
+        max_tokens=600,
+    )
+    return response.strip()
 
 
 async def summarise_student_doc(db, student_name: str, student_email: str) -> dict:

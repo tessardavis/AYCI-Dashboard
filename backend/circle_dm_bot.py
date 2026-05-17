@@ -156,10 +156,9 @@ async def _generate_reply(
 
     Returns {reply: str, resolved: bool}.
     """
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    from llm_client import get_client, complete
 
-    key = os.environ.get("EMERGENT_LLM_KEY")
-    if not key:
+    if get_client() is None:
         # Fail open — if the LLM is down, escalate every DM rather than ignore.
         return {"reply": _holding_reply(sender_name, coach_name), "resolved": False}
 
@@ -191,13 +190,8 @@ async def _generate_reply(
         "5. Plain text only — no markdown, no headers."
     )
 
-    chat = LlmChat(
-        api_key=key,
-        session_id=f"circle-dm-{uuid.uuid4().hex[:8]}",
-        system_message=system,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
     try:
-        resp = await chat.send_message(UserMessage(text=message))
+        resp = await complete(system=system, user=message, max_tokens=600)
     except Exception as e:
         logger.warning(f"[circle-dm-bot] Claude call failed: {e}")
         return {"reply": _holding_reply(sender_name, coach_name), "resolved": False}
