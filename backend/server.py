@@ -11,7 +11,6 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
-from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -126,37 +125,6 @@ async def me(user: dict = Depends(get_current_user)):
             else (user.get("board_access") or [])
         ),
     }
-
-
-# --- ONE-OFF MIGRATION ENDPOINTS (DELETE AFTER MIGRATING OFF EMERGENT) ------
-@api.get("/admin/migration/collections")
-async def admin_migration_list_collections(admin: dict = Depends(require_admin)):
-    """List every collection and its document count."""
-    names = sorted(await db.list_collection_names())
-    out = []
-    for name in names:
-        try:
-            count = await db[name].estimated_document_count()
-        except Exception:
-            count = -1
-        out.append({"name": name, "count": count})
-    return {"collections": out}
-
-
-@api.get("/admin/migration/dump/{collection_name}", response_class=PlainTextResponse)
-async def admin_migration_dump_collection(
-    collection_name: str, admin: dict = Depends(require_admin)
-):
-    """Return every document in the named collection as MongoDB Extended JSON,
-    one document per line, suitable for `mongoimport`."""
-    from bson import json_util
-    if collection_name not in await db.list_collection_names():
-        raise HTTPException(404, f"Collection {collection_name!r} not found")
-    lines = []
-    async for doc in db[collection_name].find({}):
-        lines.append(json_util.dumps(doc))
-    return "\n".join(lines)
-# ----------------------------------------------------------------------------
 
 
 # --- User admin (admin-only) -----------------------------------------------
