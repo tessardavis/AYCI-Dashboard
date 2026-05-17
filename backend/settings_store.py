@@ -41,7 +41,7 @@ async def set_cohort_milestones(db, milestones: list[str]) -> list[str]:
 DEFAULT_COACH_SPACES = {
     "recorded_answer_space_id": 2529508,    # /c/recorded-answer-review-apr-26/
     "interview_support_space_id": 2529509,  # /c/specific-interview-support-apr-26/
-    "recorded_answer_start": "2026-04-04",
+    "recorded_answer_start": "2026-05-04",
     "interview_support_start": "2026-04-23",
 }
 
