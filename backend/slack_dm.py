@@ -49,6 +49,31 @@ async def set_bot_token(db, value: str) -> dict:
     return {"ok": True, "configured": bool(value)}
 
 
+# -------------------------------------------------------- Email override
+async def _resolve_slack_email(db, email: str) -> str:
+    """If the team member registered an explicit `slack_email` (because
+    their Slack account uses a different address than the one they log
+    into the dashboard with), use that for the Slack lookup. Otherwise
+    pass the original through.
+
+    Resolution: users.email → users.team_member_id → team_members.slack_email
+    """
+    if not email:
+        return email
+    email_l = email.strip().lower()
+    user = await db.users.find_one(
+        {"email": email_l}, {"_id": 0, "team_member_id": 1}
+    )
+    tm_id = (user or {}).get("team_member_id")
+    if not tm_id:
+        return email_l
+    member = await db.team_members.find_one(
+        {"id": tm_id}, {"_id": 0, "slack_email": 1}
+    )
+    override = ((member or {}).get("slack_email") or "").strip().lower()
+    return override or email_l
+
+
 # -------------------------------------------------------- Email-cached lookup
 async def _user_id_for_email(db, token: str, email: str) -> Optional[str]:
     """Look up a Slack user_id by email. Cache the result indefinitely in
@@ -94,6 +119,7 @@ async def dm_user(db, email: str, text: str, *, blocks: Optional[list] = None) -
         return {"ok": False, "error": "no bot token configured"}
     if not email:
         return {"ok": False, "error": "no email provided"}
+    email = await _resolve_slack_email(db, email)
     user_id = await _user_id_for_email(db, token, email)
     if not user_id:
         return {"ok": False, "error": f"no Slack account for {email}"}
