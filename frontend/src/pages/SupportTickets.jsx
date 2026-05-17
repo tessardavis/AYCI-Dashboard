@@ -1473,7 +1473,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             const nonReplyAuthorIds = new Set([
               "_whatsapp", "_whatsapp_outbound",
               "_gmail", "_gmail_outbound",
-              "_circle_dm_outbound",
+              "_circle_dm", "_circle_dm_outbound",
             ]);
             const teamNotes = (t.notes || []).filter(
               (n) => !nonReplyAuthorIds.has(n.author_id),
@@ -1564,7 +1564,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
 
 // -------------------- Conversation thread (newest-first) --------------------
 
-const STUDENT_AUTHOR_IDS = new Set(["_whatsapp", "_gmail"]);
+const STUDENT_AUTHOR_IDS = new Set(["_whatsapp", "_gmail", "_circle_dm"]);
 const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound", "_circle_dm_outbound"]);
 
 // Renders the entire ticket conversation (original message + every reply +
