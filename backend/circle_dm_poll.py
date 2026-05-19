@@ -352,33 +352,15 @@ async def _process_thread(
                         db, chat_room_uuid, student_text_for_score,
                     )
                     if scored_early is not None:
-                        _first = (student_name or "there").split(" ")[0]
-                        _coach_first = (coach_name or "").split(" ")[0] or "the team"
-                        ack = (
-                            f"Thanks {_first}! Got you down as "
-                            f"{scored_early['score']}/10 — sending you all "
-                            f"the best for tomorrow. You've got this 💪\n\n"
-                            f"{_coach_first}"
-                        )
-                        posted_ack = await circle_api.post_dm_message(
-                            db, admin_email, chat_room_uuid, ack,
-                        )
-                        ack_posted_id = _msg_id(posted_ack) if posted_ack else None
-                        new_sent_ids = list(sent_ids)
-                        if ack_posted_id:
-                            new_sent_ids.append(ack_posted_id)
-                        new_sent_bodies = list(sent_bodies)
-                        new_sent_bodies.append(ack)
+                        # Score captured. Don't auto-reply — Coralie (the
+                        # real coach) follows up manually so students get a
+                        # human response rather than another bot message.
+                        # Still bump last_seen_message_id so the AI reply
+                        # path below doesn't fire on this same message.
                         await _save_thread_state(db, chat_room_uuid, {
                             "state": "active",
-                            "last_seen_message_id": max(
-                                latest_id or 0, ack_posted_id or 0,
-                            ),
-                            "sent_message_ids": new_sent_ids[-200:],
-                            "sent_bodies": new_sent_bodies[-20:],
+                            "last_seen_message_id": latest_id or 0,
                             "last_activity_at": datetime.now(timezone.utc).isoformat(),
-                            "last_reply_text": ack,
-                            "last_reply_at": datetime.now(timezone.utc).isoformat(),
                         })
                         return {"interview_eve_score_recorded": chat_room_uuid,
                                 "score": scored_early["score"]}

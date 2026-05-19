@@ -187,7 +187,10 @@ async def _generate_reply(
         "aren't in the playbook.\n"
         "4. If the message is just hello / a greeting / very short with no "
         "question, output `NEEDS_HUMAN`.\n"
-        "5. Plain text only — no markdown, no headers."
+        "5. Plain text only, no markdown, no headers.\n"
+        "6. Never use em-dashes (—) or en-dashes (–). Use a regular hyphen "
+        "(-), comma, or full stop instead. This is a hard rule — the team "
+        "has flagged that the AI 'voice' should not include them."
     )
 
     try:
@@ -199,6 +202,10 @@ async def _generate_reply(
     draft = (resp or "").strip()
     if not draft or draft.upper().startswith("NEEDS_HUMAN"):
         return {"reply": _holding_reply(sender_name, coach_name), "resolved": False}
+    # Safety net: even with the system-prompt rule, the LLM occasionally
+    # slips an em- or en-dash through. Strip both unconditionally so the
+    # 'voice' rule from the team is guaranteed.
+    draft = draft.replace("—", "-").replace("–", "-")
     if len(draft) > 600:
         draft = draft[:600].rsplit(" ", 1)[0] + "…"
     return {"reply": draft, "resolved": True}

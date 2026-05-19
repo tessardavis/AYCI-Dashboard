@@ -56,7 +56,7 @@ def _build_dm_body(first_name: str) -> str:
     coach_first = (COACH_DISPLAY_NAME or "").split(" ")[0] or "the team"
     return (
         f"Hi {first_name}! 💪 Hope you're feeling good about tomorrow's interview. "
-        f"Quick check-in — on a scale of 1 to 10, how supported do you feel heading in? "
+        f"Quick check-in: on a scale of 1 to 10, how supported do you feel heading in? "
         f"Just pop a number back and if anything's not quite right we'll be in touch "
         f"tonight to help.\n\n"
         f"You've got this!\n{coach_first}"
@@ -334,7 +334,7 @@ async def _slack_alert_low_score(rec: dict, score: int) -> None:
     name = rec.get("student_name") or rec.get("student_email") or "Unknown"
     tier = rec.get("tier") or "Academy"
     msg = (
-        f":warning: *Low interview-eve confidence — {score}/10* "
+        f":warning: *Low interview-eve confidence: {score}/10* "
         f"({'Private Tier' if is_private else 'Academy'})\n"
         f"• Student: *{name}* ({tier})\n"
         f"• Interview: tomorrow ({rec.get('interview_date')})\n"
