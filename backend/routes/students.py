@@ -80,11 +80,28 @@ async def _run_lookup_fanout(
     drive_summary = None
     student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
     if student_name:
+        # Bound the Drive call — it has no internal timeout and has been
+        # observed hanging the whole lookup endpoint when the Drive API is
+        # slow. Cap at 10s; on timeout return a 'not found' so the rest of
+        # the page still renders.
         try:
-            drive_link = await gdrive.find_student_doc_link(db, student_name)
+            drive_link = await asyncio.wait_for(
+                gdrive.find_student_doc_link(db, student_name),
+                timeout=10,
+            )
+        except asyncio.TimeoutError:
+            drive_link = {"found": False, "error": "drive_lookup_timeout"}
         except Exception as e:
             drive_link = {"found": False, "error": str(e)}
-        drive_summary = await _get_inline_summary(email)
+        # The inline summary read is a Mongo query so it should be fast, but
+        # cap it too to be safe.
+        try:
+            drive_summary = await asyncio.wait_for(
+                _get_inline_summary(email),
+                timeout=5,
+            )
+        except asyncio.TimeoutError:
+            drive_summary = None
         if (drive_link or {}).get("found") and not drive_summary and not skip_drive_summary:
             asyncio.create_task(_prewarm_drive_summary(student_name, email))
 
