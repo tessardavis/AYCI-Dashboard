@@ -1325,10 +1325,19 @@ async def on_startup():
     # Interview-eve check-in DMs — 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,
     # asking for a 1-10 support score. Low scores → Slack alert.
+    # Wrapped in run_audited so each run lands in db.scheduler_runs and a
+    # Slack heartbeat goes out — answers 'did the 19:00 job fire?' without
+    # needing Render logs.
     async def _interview_eve_dms():
         import interview_eve_dm
+        from scheduler_audit import run_audited
         try:
-            res = await interview_eve_dm.send_interview_eve_dms(db)
+            res = await run_audited(
+                db,
+                "interview_eve_dms",
+                lambda: interview_eve_dm.send_interview_eve_dms(db),
+                announce_summary_keys=["sent", "skipped", "errors"],
+            )
             logger.info(f"[scheduler] interview_eve_dms: {res}")
         except Exception as e:
             logger.warning(f"[scheduler] interview_eve_dms failed: {e}")
@@ -1506,6 +1515,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     today_calls as routes_today_calls,
     circle as routes_circle,
     interview_eve as routes_interview_eve,
+    scheduler as routes_scheduler,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1514,7 +1524,7 @@ for _r in (
     routes_notifications.router, routes_pulse.router, routes_spotlight.router,
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
     routes_wati.router, routes_private_videos.router, routes_today_calls.router,
-    routes_circle.router, routes_interview_eve.router,
+    routes_circle.router, routes_interview_eve.router, routes_scheduler.router,
 ):
     app.include_router(_r)
 
