@@ -140,16 +140,10 @@ async def coach_activity_over_allowance_acks(
     return {"acks": rows}
 
 
-@router.get("/coach-activity/debug-comments/{post_id}")
-async def coach_activity_debug_comments(
-    post_id: int,
-    admin: dict = Depends(require_admin),
-):
-    """Diagnostic: dump Circle's raw /comments response for one post and
-    show how our matching logic interprets each comment. Use this to figure
-    out why a post is still in 'Awaiting coach reply' when it's actually
-    been replied to (typically: comment author shape that _comment_author_name
-    doesn't extract, or a coach display name that the roster doesn't match)."""
+async def _diagnose_post_comments(post_id: int) -> dict:
+    """Fetch Circle comments for one post and report how the coach-roster
+    matching logic interprets each one. Shared between debug-comments
+    (by post_id) and debug-comments-by-url (by Circle URL)."""
     import httpx
     import coach_activity as coach_act
     from connectors import CIRCLE_BASE, _circle_headers, TIMEOUT
@@ -201,3 +195,71 @@ async def coach_activity_debug_comments(
         "raw_first": raw[0] if raw else None,
         "raw_all": raw,
     }
+
+
+@router.get("/coach-activity/debug-comments/{post_id}")
+async def coach_activity_debug_comments(
+    post_id: int,
+    admin: dict = Depends(require_admin),
+):
+    """Diagnostic: dump Circle's raw /comments response for one post and
+    show how our matching logic interprets each comment. Use this to figure
+    out why a post is still in 'Awaiting coach reply' when it's actually
+    been replied to (typically: comment author shape that _comment_author_name
+    doesn't extract, or a coach display name that the roster doesn't match)."""
+    return await _diagnose_post_comments(post_id)
+
+
+@router.get("/coach-activity/debug-comments-by-url")
+async def coach_activity_debug_comments_by_url(
+    url: str,
+    admin: dict = Depends(require_admin),
+):
+    """Same diagnostic as debug-comments/{post_id} but accepts a Circle post
+    URL (e.g. https://ayci-academy.circle.so/c/<space>/<post-slug>). Looks
+    up the numeric post_id by listing posts in the two tracked spaces and
+    matching by slug, then runs the standard diagnostic."""
+    import httpx
+    from urllib.parse import urlparse
+    import coach_activity as coach_act
+    from connectors import TIMEOUT
+
+    path = urlparse(url).path
+    parts = [p for p in path.split("/") if p]
+    # Expected shape: /c/<space-slug>/<post-slug>[/...]
+    if len(parts) < 3 or parts[0] != "c":
+        return {
+            "error": "URL must look like https://<community>.circle.so/c/<space>/<post-slug>",
+            "parsed_path": path,
+        }
+    post_slug = parts[2]
+
+    spaces_to_search = [
+        ("recorded_answer_review", coach_act.RECORDED_ANSWER_SPACE_ID),
+        ("interview_support", coach_act.INTERVIEW_SUPPORT_SPACE_ID),
+    ]
+    found_post_id: int | None = None
+    searched: list[dict] = []
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        for label, sid in spaces_to_search:
+            posts = await coach_act._circle_list_posts_in_space(c, sid)
+            searched.append({"space": label, "space_id": sid, "post_count": len(posts)})
+            for p in posts:
+                p_slug = p.get("slug")
+                p_url = p.get("url") or ""
+                if p_slug == post_slug or p_url.rstrip("/").endswith("/" + post_slug):
+                    found_post_id = p.get("id")
+                    break
+            if found_post_id:
+                break
+
+    if not found_post_id:
+        return {
+            "error": f"No post matching slug '{post_slug}' found in the tracked spaces",
+            "post_slug": post_slug,
+            "searched": searched,
+        }
+
+    result = await _diagnose_post_comments(found_post_id)
+    result["matched_post_slug"] = post_slug
+    return result
