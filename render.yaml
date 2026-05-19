@@ -8,7 +8,8 @@ services:
     name: ayci-dashboard-backend
     runtime: python
     rootDir: backend
-    plan: free
+    plan: starter             # always-warm; free tier cold-starts hurt UX
+
     region: frankfurt          # closest to UK; switch to oregon for US
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
