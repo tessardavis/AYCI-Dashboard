@@ -124,29 +124,65 @@ function Stat({ label, value, tone, testid }) {
 
 function StatGroup({ title, stats, tones, testidPrefix }) {
   const avg = stats.avg_score;
+  const reply = stats.reply_rate;
+  const noReply = stats.no_reply ?? 0;
+  const replied = stats.replied ?? 0;
+  const closedCases = replied + noReply;
   const avgTone =
     avg == null ? "bg-slate-100 text-slate-600 border-slate-300"
     : avg <= 5 ? "bg-rose-100 text-rose-900 border-rose-300"
     : avg <= 7 ? "bg-amber-100 text-amber-900 border-amber-300"
     : "bg-emerald-100 text-emerald-900 border-emerald-300";
+  const replyTone =
+    reply == null ? "bg-slate-100 text-slate-600 border-slate-300"
+    : reply >= 75 ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+    : reply >= 50 ? "bg-amber-100 text-amber-900 border-amber-300"
+    : "bg-rose-100 text-rose-900 border-rose-300";
   return (
     <div data-testid={`${testidPrefix}-group`}>
-      <div className="flex items-center justify-between gap-2 mb-1.5">
+      <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
         <div className="text-[11px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">{title}</div>
-        <div
-          className={`px-2 py-0.5 ${avgTone} border rounded-full text-[11px] font-bold uppercase tracking-wider tabular-nums`}
-          data-testid={`${testidPrefix}-avg`}
-          title={avg == null ? "No scores received yet in this window" : `Average score across ${stats.replied} replies in the last 7 days`}
-        >
-          Avg {avg == null ? "—" : `${avg}/10`}
+        <div className="flex items-center gap-1">
+          <div
+            className={`px-2 py-0.5 ${replyTone} border rounded-full text-[11px] font-bold uppercase tracking-wider tabular-nums`}
+            data-testid={`${testidPrefix}-reply-rate`}
+            title={
+              closedCases === 0
+                ? "No closed interview-eve cases yet — reply rate appears once interviews start happening"
+                : `${replied} replied out of ${closedCases} past interviews (still-pending future interviews are excluded so the rate isn't artificially deflated)`
+            }
+          >
+            Reply {reply == null ? "—" : `${reply}%`}
+          </div>
+          <div
+            className={`px-2 py-0.5 ${avgTone} border rounded-full text-[11px] font-bold uppercase tracking-wider tabular-nums`}
+            data-testid={`${testidPrefix}-avg`}
+            title={avg == null ? "No scores received yet in this window" : `Average score across ${replied} replies in the last 7 days`}
+          >
+            Avg {avg == null ? "—" : `${avg}/10`}
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Stat label="Sent" value={stats.sent} tone={tones.sent} testid={`${testidPrefix}-sent`} />
-        <Stat label="Replied" value={stats.replied} tone={tones.replied} testid={`${testidPrefix}-replied`} />
-        <Stat label="Pending" value={stats.pending} tone={tones.pending} testid={`${testidPrefix}-pending`} />
+        <Stat label="Replied" value={replied} tone={tones.replied} testid={`${testidPrefix}-replied`} />
+        <Stat
+          label="Pending"
+          value={stats.pending}
+          tone={tones.pending}
+          testid={`${testidPrefix}-pending`}
+        />
         <Stat label="Low ≤5" value={stats.low_score} tone={tones.low} testid={`${testidPrefix}-low`} />
       </div>
+      {noReply > 0 && (
+        <div
+          className="text-[11px] text-[var(--ayci-ink-muted)] italic mt-1"
+          data-testid={`${testidPrefix}-no-reply-note`}
+          title="Interview date has passed without a score — too late for the score to be meaningful, no action required"
+        >
+          {noReply} past interview-eve DM{noReply === 1 ? "" : "s"} didn't get a reply
+        </div>
+      )}
     </div>
   );
 }

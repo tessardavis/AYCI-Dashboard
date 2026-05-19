@@ -42,13 +42,35 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
 
     def _stats(subset: list[dict]) -> dict:
         scored = [r for r in subset if r.get("score") is not None]
+        # 'Pending' = future interviews still in play; 'no_reply' = past
+        # interviews where the student never replied (too late for the score
+        # to be meaningful). Splitting these makes the dashboard honest:
+        # 'pending' is something the team can still chase, 'no_reply' is
+        # a closed miss.
+        pending_future = [
+            r for r in subset
+            if r.get("score") is None
+            and (r.get("interview_date") or "9999") >= today
+        ]
+        no_reply_past = [
+            r for r in subset
+            if r.get("score") is None
+            and (r.get("interview_date") or "9999") < today
+        ]
         avg = round(sum(r["score"] for r in scored) / len(scored), 1) if scored else None
+        # Reply rate over 'closed' cases only — still-pending future
+        # interviews could still reply, so excluding them from the
+        # denominator avoids artificially deflating the rate.
+        closed = len(scored) + len(no_reply_past)
+        reply_rate = round(len(scored) * 100 / closed, 1) if closed else None
         return {
             "sent": len(subset),
             "replied": len(scored),
-            "pending": len(subset) - len(scored),
+            "pending": len(pending_future),
+            "no_reply": len(no_reply_past),
             "low_score": sum(1 for r in subset if (r.get("score") or 99) <= 5),
             "avg_score": avg,
+            "reply_rate": reply_rate,
         }
 
     private_rows = [r for r in rows if r.get("is_private_tier")]
