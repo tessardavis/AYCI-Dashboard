@@ -152,23 +152,44 @@ async def send_interview_eve_dms(db) -> dict:
             summary["details"].append({"name": student.get("name"), "skip": "no_email"})
             continue
 
-        # Skip if we already DM'd this student for tomorrow's interview (idempotent).
-        existing = await db.interview_eve_dms.find_one(
-            {"student_email": email, "interview_date": target_date},
-            {"_id": 0, "id": 1},
+        # Atomic claim: try to insert a placeholder row for this
+        # (student, date) pair. If we created it (upserted_id is set) we
+        # own the slot and proceed. If a parallel invocation got there
+        # first, upserted_id is None and we skip - prevents duplicate
+        # DMs when the cron double-fires (e.g. container restart near
+        # 19:00 racing with the scheduled fire).
+        rec_id = f"eve:{target_date}:{email}"
+        claim = await db.interview_eve_dms.update_one(
+            {"id": rec_id},
+            {"$setOnInsert": {
+                "id": rec_id,
+                "student_email": email,
+                "interview_date": target_date,
+                "claimed_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
         )
-        if existing:
+        if claim.upserted_id is None:
             summary["skipped"] += 1
             summary["details"].append({"name": student.get("name"), "skip": "already_sent"})
             continue
 
+        # Helper: roll back the placeholder claim if anything below fails
+        # so the next scheduled run can retry this student. Without this,
+        # a transient failure (e.g. no chat room) would permanently lock
+        # them out for this interview_date.
+        async def _release_claim():
+            await db.interview_eve_dms.delete_one({"id": rec_id})
+
         member = await _find_circle_member_by_email(db, email)
         if not member:
+            await _release_claim()
             summary["skipped"] += 1
             summary["details"].append({"name": student.get("name"), "skip": "no_circle_member"})
             continue
         member_id = member.get("id")
         if not member_id:
+            await _release_claim()
             summary["skipped"] += 1
             continue
 
@@ -177,11 +198,13 @@ async def send_interview_eve_dms(db) -> dict:
 
         room_uuid = await _ensure_dm_chat_room(COACH_EMAIL, member_id)
         if not room_uuid:
+            await _release_claim()
             summary["errors"].append(f"{email}: no chat room")
             continue
 
         posted = await circle_api.post_dm_message(db, COACH_EMAIL, room_uuid, body)
         if posted is None:
+            await _release_claim()
             summary["errors"].append(f"{email}: post failed")
             continue
 

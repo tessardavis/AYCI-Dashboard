@@ -1346,6 +1346,11 @@ async def on_startup():
         id="interview_eve_dms",
         replace_existing=True,
         misfire_grace_time=3600,
+        # Prevent the job running twice in parallel and collapse multiple
+        # pending firings (e.g. one missed + one scheduled within the
+        # misfire window) into a single run. Without this, a container
+        # restart near 19:00 has been observed double-firing the job.
+        max_instances=1, coalesce=True,
     )
 
     # Pre-warm Student Lookup cache for every private-tier student at 05:30 UK.
