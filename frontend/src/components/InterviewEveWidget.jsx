@@ -48,6 +48,7 @@ export default function InterviewEveWidget() {
           <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
             Last 7 days · DMs sent from Coralie's account the evening before each interview asking for a 1-10 support score.
           </p>
+          <SchedulerStatus run={data.last_scheduler_run} />
         </div>
         <button
           onClick={load}
@@ -146,6 +147,41 @@ function StatGroup({ title, stats, tones, testidPrefix }) {
         <Stat label="Pending" value={stats.pending} tone={tones.pending} testid={`${testidPrefix}-pending`} />
         <Stat label="Low ≤5" value={stats.low_score} tone={tones.low} testid={`${testidPrefix}-low`} />
       </div>
+    </div>
+  );
+}
+
+function SchedulerStatus({ run }) {
+  if (!run) {
+    return (
+      <div
+        className="mt-1.5 text-[11px] text-[var(--ayci-ink-muted)] italic"
+        data-testid="interview-eve-scheduler-status"
+        title="No audited cron runs yet — the audit started after this paper trail was added. The next run will be logged."
+      >
+        Cron status: no audited runs yet (next: Mon-Fri 19:00 UK)
+      </div>
+    );
+  }
+  const startedAt = run.started_at ? new Date(run.started_at) : null;
+  const when = startedAt
+    ? startedAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "(unknown time)";
+  const ok = run.status === "ok";
+  const result = run.result || {};
+  const summary = ok
+    ? `sent=${result.sent ?? 0} · skipped=${result.skipped ?? 0} · errors=${result.errors ?? 0}`
+    : `error: ${(run.error || "unknown").slice(0, 120)}`;
+  const dotTone = ok ? "bg-emerald-500" : "bg-rose-500";
+  const labelTone = ok ? "text-emerald-700" : "text-rose-700";
+  return (
+    <div
+      className="mt-1.5 flex items-center gap-1.5 text-[11px]"
+      data-testid="interview-eve-scheduler-status"
+    >
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotTone}`} />
+      <span className={`font-semibold ${labelTone}`}>{ok ? "Last cron ok" : "Last cron FAILED"}</span>
+      <span className="text-[var(--ayci-ink-muted)]">· {when} · {summary}</span>
     </div>
   );
 }

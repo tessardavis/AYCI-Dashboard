@@ -54,6 +54,14 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
     private_rows = [r for r in rows if r.get("is_private_tier")]
     other_rows = [r for r in rows if not r.get("is_private_tier")]
 
+    # Last audited run of the scheduler job — lets the widget show
+    # "did the 19:00 cron fire last night?" without log access.
+    last_run_doc = await db.scheduler_runs.find_one(
+        {"job_id": "interview_eve_dms"},
+        {"_id": 0},
+        sort=[("started_at", -1)],
+    )
+
     return {
         "window_days": 7,
         "counts": _stats(rows),
@@ -63,6 +71,7 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
         "private_tier_rows": [r for r in private_rows if r.get("score") is not None][:50],
         "today": today,
         "tomorrow": tomorrow,
+        "last_scheduler_run": last_run_doc,
     }
 
 

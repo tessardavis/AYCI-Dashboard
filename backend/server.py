@@ -1325,9 +1325,8 @@ async def on_startup():
     # Interview-eve check-in DMs — 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,
     # asking for a 1-10 support score. Low scores → Slack alert.
-    # Wrapped in run_audited so each run lands in db.scheduler_runs and a
-    # Slack heartbeat goes out — answers 'did the 19:00 job fire?' without
-    # needing Render logs.
+    # Wrapped in run_audited so each run lands in db.scheduler_runs (the
+    # Interview-eve widget reads the latest one) and failures ping Slack.
     async def _interview_eve_dms():
         import interview_eve_dm
         from scheduler_audit import run_audited
@@ -1336,7 +1335,6 @@ async def on_startup():
                 db,
                 "interview_eve_dms",
                 lambda: interview_eve_dm.send_interview_eve_dms(db),
-                announce_summary_keys=["sent", "skipped", "errors"],
             )
             logger.info(f"[scheduler] interview_eve_dms: {res}")
         except Exception as e:

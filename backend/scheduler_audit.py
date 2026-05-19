@@ -50,18 +50,18 @@ async def run_audited(
     job_id: str,
     fn: Callable[[], Awaitable[Any]],
     *,
-    announce_success: bool = True,
+    announce_success: bool = False,
     announce_summary_keys: Optional[list[str]] = None,
 ) -> Any:
     """
     Run `fn` and record an audit doc to `db.scheduler_runs`.
 
     On exception: writes status='failed' with the error, pings Slack, re-raises.
-    On success: writes status='ok' with the result. If `announce_success` is
-    True, also pings Slack with a one-line summary. `announce_summary_keys`
-    controls which keys from a dict result get included in the heartbeat
-    (e.g. ['sent', 'skipped', 'errors']); if omitted, the whole result dict
-    is included.
+    On success: writes status='ok' with the result. Success is silent by
+    default — the dashboard surfaces the audit history. Set
+    `announce_success=True` for jobs where you want a Slack heartbeat every
+    run. `announce_summary_keys` controls which keys from a dict result get
+    included in the heartbeat.
     """
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
