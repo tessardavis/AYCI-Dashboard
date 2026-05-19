@@ -9,7 +9,7 @@ import launches as launches_mod
 import over_allowance_alerts as over_alerts
 
 from db import db
-from deps import require_board
+from deps import require_admin, require_board
 
 router = APIRouter(prefix="/api", tags=["coach"])
 
@@ -138,3 +138,66 @@ async def coach_activity_over_allowance_acks(
         {}, {"_id": 0},
     ).sort("acked_at", -1).limit(50).to_list(50)
     return {"acks": rows}
+
+
+@router.get("/coach-activity/debug-comments/{post_id}")
+async def coach_activity_debug_comments(
+    post_id: int,
+    admin: dict = Depends(require_admin),
+):
+    """Diagnostic: dump Circle's raw /comments response for one post and
+    show how our matching logic interprets each comment. Use this to figure
+    out why a post is still in 'Awaiting coach reply' when it's actually
+    been replied to (typically: comment author shape that _comment_author_name
+    doesn't extract, or a coach display name that the roster doesn't match)."""
+    import httpx
+    import coach_activity as coach_act
+    from connectors import CIRCLE_BASE, _circle_headers, TIMEOUT
+
+    raw: list[dict] = []
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        page = 1
+        while page <= 20:
+            r = await c.get(
+                f"{CIRCLE_BASE}/comments",
+                headers=_circle_headers(),
+                params={"post_id": int(post_id), "per_page": 100, "page": page},
+            )
+            if r.status_code != 200:
+                return {
+                    "post_id": post_id,
+                    "error": f"Circle API returned {r.status_code}",
+                    "body_snippet": r.text[:500],
+                }
+            body = r.json()
+            recs = body.get("records") or body.get("data") or []
+            raw.extend(recs)
+            if len(recs) < 100:
+                break
+            page += 1
+
+    interpreted = []
+    for cm in raw:
+        name = coach_act._comment_author_name(cm)
+        email = coach_act._comment_author_email(cm)
+        canon = coach_act._coach_canonical(name, email)
+        interpreted.append({
+            "comment_id": cm.get("id"),
+            "parent_comment_id": cm.get("parent_comment_id"),
+            "extracted_name": name,
+            "extracted_email": email,
+            "matched_coach": canon,
+            "is_recognised_coach": canon is not None,
+            "top_level_keys": sorted(list(cm.keys())),
+            "body_preview": (cm.get("body") or cm.get("rich_text_body") or "")[:120],
+        })
+
+    answered = any(row["is_recognised_coach"] for row in interpreted)
+    return {
+        "post_id": post_id,
+        "comment_count": len(raw),
+        "would_be_marked_answered": answered,
+        "interpreted": interpreted,
+        "raw_first": raw[0] if raw else None,
+        "raw_all": raw,
+    }
