@@ -10,11 +10,17 @@ export default function InterviewEveWidget() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [version, setVersion] = useState(null);
+
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/interview-eve/summary");
+      const [{ data }, verRes] = await Promise.all([
+        apiClient.get("/interview-eve/summary"),
+        apiClient.get("/version").catch(() => null),
+      ]);
       setData(data);
+      setVersion(verRes?.data || null);
     } catch (err) {
       setData(null);
     } finally {
@@ -48,7 +54,7 @@ export default function InterviewEveWidget() {
           <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
             Last 7 days · DMs sent from Coralie's account the evening before each interview asking for a 1-10 support score.
           </p>
-          <SchedulerStatus run={data.last_scheduler_run} />
+          <SchedulerStatus run={data.last_scheduler_run} version={version} />
         </div>
         <button
           onClick={load}
@@ -187,15 +193,25 @@ function StatGroup({ title, stats, tones, testidPrefix }) {
   );
 }
 
-function SchedulerStatus({ run }) {
+function SchedulerStatus({ run, version }) {
+  const versionTail = version?.commit && version.commit !== "unknown" ? (
+    <span
+      className="text-[var(--ayci-ink-muted)] font-mono"
+      title={`Running container SHA: ${version.commit_full || version.commit}. If this doesn't match the latest commit on main, the deploy didn't actually flush — try "Clear build cache & deploy" on Render.`}
+      data-testid="interview-eve-version-sha"
+    >
+      · v{version.commit}
+    </span>
+  ) : null;
   if (!run) {
     return (
       <div
-        className="mt-1.5 text-[11px] text-[var(--ayci-ink-muted)] italic"
+        className="mt-1.5 text-[11px] text-[var(--ayci-ink-muted)] italic flex items-center gap-1.5 flex-wrap"
         data-testid="interview-eve-scheduler-status"
         title="No audited cron runs yet — the audit started after this paper trail was added. The next run will be logged."
       >
-        Cron status: no audited runs yet (next: Mon-Fri 19:00 UK)
+        <span>Cron status: no audited runs yet (next: Mon-Fri 19:00 UK)</span>
+        {versionTail}
       </div>
     );
   }
@@ -212,12 +228,13 @@ function SchedulerStatus({ run }) {
   const labelTone = ok ? "text-emerald-700" : "text-rose-700";
   return (
     <div
-      className="mt-1.5 flex items-center gap-1.5 text-[11px]"
+      className="mt-1.5 flex items-center gap-1.5 text-[11px] flex-wrap"
       data-testid="interview-eve-scheduler-status"
     >
       <span className={`inline-block w-1.5 h-1.5 rounded-full ${dotTone}`} />
       <span className={`font-semibold ${labelTone}`}>{ok ? "Last cron ok" : "Last cron FAILED"}</span>
       <span className="text-[var(--ayci-ink-muted)]">· {when} · {summary}</span>
+      {versionTail}
     </div>
   );
 }

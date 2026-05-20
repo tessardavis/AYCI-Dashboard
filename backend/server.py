@@ -1494,6 +1494,13 @@ async def root():
     return {"service": "ayci-team-dashboard", "ok": True}
 
 
+@api.get("/version")
+async def version():
+    # Render injects RENDER_GIT_COMMIT at build time.
+    sha = os.environ.get("RENDER_GIT_COMMIT", "")
+    return {"commit": (sha or "unknown")[:7], "commit_full": sha or None}
+
+
 # --- Mount routers --------------------------------------------------------
 app.include_router(api)
 
