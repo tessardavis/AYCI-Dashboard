@@ -328,7 +328,7 @@ async def maybe_record_score(db, thread_uuid: str, student_text: str) -> Optiona
     if score is None:
         return None
     now = datetime.now(timezone.utc).isoformat()
-    await db.interview_eve_dms.update_one(
+    res = await db.interview_eve_dms.update_one(
         {"id": rec_id},
         {"$set": {
             "score": score,
@@ -336,8 +336,13 @@ async def maybe_record_score(db, thread_uuid: str, student_text: str) -> Optiona
             "score_raw_text": student_text[:200],
         }},
     )
+    logger.info(
+        f"[interview-eve] score-write rec_id={rec_id} score={score} "
+        f"matched={res.matched_count} modified={res.modified_count}"
+    )
     rec["score"] = score
     rec["score_received_at"] = now
+    rec["score_raw_text"] = student_text[:200]
 
     if score <= SCORE_LOW_THRESHOLD:
         await _slack_alert_low_score(rec, score)
