@@ -1496,9 +1496,14 @@ async def root():
 
 @api.get("/version")
 async def version():
-    # Render injects RENDER_GIT_COMMIT at build time.
+    # Render injects RENDER_GIT_COMMIT / RENDER_GIT_REPO_SLUG at build time.
     sha = os.environ.get("RENDER_GIT_COMMIT", "")
-    return {"commit": (sha or "unknown")[:7], "commit_full": sha or None}
+    return {
+        "commit": (sha or "unknown")[:7],
+        "commit_full": sha or None,
+        "repo": os.environ.get("RENDER_GIT_REPO_SLUG") or None,
+        "branch": os.environ.get("RENDER_GIT_BRANCH") or None,
+    }
 
 
 # --- Mount routers --------------------------------------------------------

@@ -20,7 +20,22 @@ export default function InterviewEveWidget() {
         apiClient.get("/version").catch(() => null),
       ]);
       setData(data);
-      setVersion(verRes?.data || null);
+      const ver = verRes?.data || null;
+      if (ver?.repo && ver?.branch && ver.commit_full) {
+        try {
+          const ghRes = await fetch(
+            `https://api.github.com/repos/${ver.repo}/commits/${ver.branch}`,
+            { headers: { Accept: "application/vnd.github+json" } },
+          );
+          if (ghRes.ok) {
+            const ghJson = await ghRes.json();
+            const head = ghJson?.sha || "";
+            ver.github_head = head ? head.slice(0, 7) : null;
+            ver.matches_head = head ? head === ver.commit_full : null;
+          }
+        } catch { /* GitHub fetch failed — leave matches_head unset */ }
+      }
+      setVersion(ver);
     } catch (err) {
       setData(null);
     } finally {
@@ -194,15 +209,41 @@ function StatGroup({ title, stats, tones, testidPrefix }) {
 }
 
 function SchedulerStatus({ run, version }) {
-  const versionTail = version?.commit && version.commit !== "unknown" ? (
-    <span
-      className="text-[var(--ayci-ink-muted)] font-mono"
-      title={`Running container SHA: ${version.commit_full || version.commit}. If this doesn't match the latest commit on main, the deploy didn't actually flush — try "Clear build cache & deploy" on Render.`}
-      data-testid="interview-eve-version-sha"
-    >
-      · v{version.commit}
-    </span>
-  ) : null;
+  let versionTail = null;
+  if (version?.commit && version.commit !== "unknown") {
+    const running = version.commit;
+    if (version.matches_head === true) {
+      versionTail = (
+        <span
+          className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[10px] flex items-center gap-1"
+          title={`Running v${running} — matches latest commit on main. Deploy is up to date.`}
+          data-testid="interview-eve-version-sha"
+        >
+          ✓ deploy up to date · v{running}
+        </span>
+      );
+    } else if (version.matches_head === false) {
+      versionTail = (
+        <span
+          className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[10px] flex items-center gap-1"
+          title={`Running v${running} but GitHub main is at v${version.github_head}. Render didn't pick up the latest push — go to Render → Manual Deploy → "Clear build cache & deploy".`}
+          data-testid="interview-eve-version-sha"
+        >
+          ⚠ deploy stale · running v{running}, main v{version.github_head}
+        </span>
+      );
+    } else {
+      versionTail = (
+        <span
+          className="text-[var(--ayci-ink-muted)] font-mono"
+          title={`Running container SHA: ${version.commit_full || running}. (Couldn't reach GitHub to verify it matches main.)`}
+          data-testid="interview-eve-version-sha"
+        >
+          · v{running}
+        </span>
+      );
+    }
+  }
   if (!run) {
     return (
       <div
