@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useDeployVersion } from "@/hooks/useDeployVersion";
+import DeployBadge from "@/components/DeployBadge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -417,6 +419,7 @@ function EveCheckInsWidget() {
   const [collapsed, setCollapsed] = useState(false);
   const [draftScores, setDraftScores] = useState({}); // record_id -> "1".."10"
   const [savingId, setSavingId] = useState(null);
+  const version = useDeployVersion();
 
   const load = async () => {
     setLoading(true);
@@ -597,6 +600,7 @@ function EveCheckInsWidget() {
             <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
               Auto-DMs sent at 7pm UK the night before each interview. The bot records the student's 1-10 confidence reply.
             </p>
+            <div className="mt-1"><DeployBadge version={version} /></div>
           </div>
         </div>
         <div className="flex items-center gap-2">
