@@ -99,12 +99,31 @@ async def build_sla_digest_payload(db) -> dict:
     return {"text": f"AYCI Coach SLA Digest — {total} unanswered posts", "blocks": blocks}
 
 
-async def send_sla_digest(db) -> dict:
-    """Build + POST the digest. Returns a status dict (never raises)."""
+async def send_sla_digest(db, *, force: bool = False) -> dict:
+    """Build + POST the digest. Returns a status dict (never raises).
+
+    Atomic daily-claim guard: only the first call per UTC day actually
+    posts; subsequent calls (cron re-fire, parallel container during a
+    deploy, accidental manual trigger) see the claim and no-op. Pass
+    `force=True` to bypass the claim (used by the admin /test endpoint).
+    """
     url = _webhook_url()
     if not url:
         logger.warning("[slack] SLACK_WEBHOOK_URL not set — skipping daily digest.")
         return {"sent": False, "reason": "SLACK_WEBHOOK_URL not configured"}
+
+    today_key = f"sla_digest:{datetime.now(timezone.utc).date().isoformat()}"
+    if not force:
+        claim = await db.scheduler_claims.update_one(
+            {"_id": today_key},
+            {"$setOnInsert": {"_id": today_key,
+                              "claimed_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        if claim.upserted_id is None:
+            logger.info(f"[slack] SLA digest already sent today ({today_key}) — skipping")
+            return {"sent": False, "reason": "already_sent_today", "claim_key": today_key}
+
     try:
         payload = await build_sla_digest_payload(db)
         async with httpx.AsyncClient(timeout=20) as c:
@@ -113,6 +132,12 @@ async def send_sla_digest(db) -> dict:
         logger.info("[slack] SLA digest sent")
         return {"sent": True, "status_code": r.status_code, "items": payload.get("text")}
     except Exception as e:
+        # Roll back the claim so a manual retry or the next cron can try again.
+        if not force:
+            try:
+                await db.scheduler_claims.delete_one({"_id": today_key})
+            except Exception:
+                pass
         logger.exception("[slack] SLA digest failed")
         return {"sent": False, "error": str(e)}
 

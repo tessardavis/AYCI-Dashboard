@@ -1050,6 +1050,7 @@ async def on_startup():
         CronTrigger(hour=8, minute=0, timezone=tz),
         id="daily_sla_digest",
         replace_existing=True,
+        max_instances=1, coalesce=True,
     )
 
     async def _spotlight_reminders_tick():
