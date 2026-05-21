@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, AlertTriangle, Video, MessageSquare, Users2, Clock, ExternalLink, BadgeCheck, Inbox, X } from "lucide-react";
+import { Loader2, RefreshCw, AlertTriangle, Video, MessageSquare, Users2, Clock, ExternalLink, BadgeCheck, Inbox, X, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -83,7 +83,125 @@ export default function CoachActivity() {
           <CircleSpaceCard space={data.recorded_answers} primaryNoun="video" showRateLimit onDismiss={() => load(true)} />
           <CircleSpaceCard space={data.interview_support} primaryNoun="post" showRateLimit={false} onDismiss={() => load(true)} />
           <PrivateVideosCard data={data.private_videos} />
+          <DebugPostInspector />
         </>
+      )}
+    </div>
+  );
+}
+
+// Paste a Circle post URL → see Circle's raw comments + how our coach-matcher
+// reads each one. Use when a post is flagged "unanswered" but you've replied.
+function DebugPostInspector() {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const inspect = async () => {
+    if (!url.trim()) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const { data } = await apiClient.get("/coach-activity/debug-comments-by-url", {
+        params: { url: url.trim() }, timeout: 60000,
+      });
+      setResult(data);
+    } catch (err) {
+      setError(formatApiErrorDetail(err.response?.data?.detail) || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-5" data-testid="debug-post-inspector">
+      <div className="flex items-start gap-2 mb-3">
+        <Search className="w-5 h-5 text-slate-500 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="font-display font-bold text-lg text-[var(--ayci-ink)]">Inspect a flagged post</h3>
+          <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
+            Paste a Circle post URL to see what comments the matcher finds and which it recognises as coach replies. Use when a post is flagged "unanswered" but you've already replied.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") inspect(); }}
+          placeholder="https://ayci-academy.circle.so/c/recorded-answer-review/..."
+          className="flex-1 min-w-[280px] text-sm border border-[var(--ayci-border)] rounded px-3 py-2"
+          data-testid="debug-post-url"
+        />
+        <button
+          type="button"
+          onClick={inspect}
+          disabled={loading || !url.trim()}
+          className="text-sm font-medium px-4 py-2 rounded-md bg-[var(--ayci-teal)] text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+          data-testid="debug-post-inspect"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+          {loading ? "Inspecting…" : "Inspect"}
+        </button>
+      </div>
+      {error && (
+        <div className="mt-3 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+      {result && (
+        <div className="mt-4 space-y-3">
+          <div className={`text-sm px-3 py-2 rounded border ${
+            result.would_be_marked_answered
+              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+              : "bg-amber-50 border-amber-300 text-amber-900"
+          }`}>
+            <strong>{result.would_be_marked_answered ? "✓ Counted as answered" : "✗ Counted as unanswered"}</strong>
+            {" — "}{result.comment_count} comment{result.comment_count === 1 ? "" : "s"} returned by Circle
+            {result.error && <div className="mt-1 text-xs">{result.error}</div>}
+          </div>
+          {(result.interpreted || []).length > 0 && (
+            <div className="border border-[var(--ayci-border)] rounded overflow-hidden">
+              <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 border-b border-[var(--ayci-border)]">
+                How the matcher reads each comment
+              </div>
+              <div className="divide-y divide-[var(--ayci-border)]">
+                {result.interpreted.map((c, i) => (
+                  <div key={c.comment_id || i} className="px-3 py-2 text-xs flex items-start gap-2 flex-wrap">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      c.is_recognised_coach
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-slate-100 text-slate-700"
+                    }`}>
+                      {c.is_recognised_coach ? `✓ ${c.matched_coach}` : "✗ no match"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-[11px]">
+                        name=<strong>{c.extracted_name || "(none)"}</strong>
+                        {" · "}email=<strong>{c.extracted_email || "(none)"}</strong>
+                      </div>
+                      {c.body_preview && (
+                        <div className="text-[var(--ayci-ink-muted)] mt-0.5 italic">"{c.body_preview}"</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(result.interpreted || []).length === 0 && !result.error && (
+            <div className="text-sm text-[var(--ayci-ink-muted)] italic">
+              Circle returned zero comments for this post. If you replied with a voice note, it might be a separate Circle artefact the comments API doesn't surface — share what you see in Circle and we'll dig.
+            </div>
+          )}
+          <details className="text-xs">
+            <summary className="cursor-pointer text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)]">Raw JSON</summary>
+            <pre className="mt-2 bg-slate-50 border border-[var(--ayci-border)] rounded p-2 overflow-x-auto text-[10px] leading-relaxed">{JSON.stringify(result, null, 2)}</pre>
+          </details>
+        </div>
       )}
     </div>
   );
