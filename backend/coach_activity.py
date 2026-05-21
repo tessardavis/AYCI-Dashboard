@@ -137,18 +137,50 @@ async def _circle_list_posts_in_space(client: httpx.AsyncClient, space_id: int) 
     return out
 
 
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
 async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int) -> list[dict]:
-    """Pulls every comment for one post."""
+    """Pulls every comment for one post. Retries transient failures with
+    exponential backoff. Raises on terminal failure so the caller can
+    distinguish 'no comments' from 'fetch broken' instead of silently
+    flagging the post as unanswered when Circle just hiccuped."""
     out: list[dict] = []
     page = 1
     while page <= 20:
-        r = await client.get(
-            f"{CIRCLE_BASE}/comments",
-            headers=_circle_headers(),
-            params={"post_id": int(post_id), "per_page": 100, "page": page},
-        )
-        if r.status_code != 200:
-            break
+        r = None
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                r = await client.get(
+                    f"{CIRCLE_BASE}/comments",
+                    headers=_circle_headers(),
+                    params={"post_id": int(post_id), "per_page": 100, "page": page},
+                )
+                if r.status_code == 200:
+                    break
+                if r.status_code in _RETRYABLE_STATUS:
+                    last_err = httpx.HTTPStatusError(
+                        f"Circle /comments {r.status_code}",
+                        request=r.request, response=r,
+                    )
+                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    continue
+                # Non-retryable status (401/403/404 etc.) — treat as end of
+                # pagination to preserve old behaviour for genuinely missing
+                # posts. We've at least seen ONE response, so don't raise.
+                return out
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                last_err = e
+                await asyncio.sleep(0.5 * (2 ** attempt))
+                continue
+        else:
+            # All 3 attempts failed with a retryable error — bubble up so
+            # analyse_circle_space marks the post fetch_failed rather than
+            # silently treating it as having zero comments.
+            raise last_err or RuntimeError(
+                f"Circle /comments post_id={post_id} page={page} failed after retries"
+            )
         body = r.json()
         recs = body.get("records") or body.get("data") or []
         out.extend(recs)
@@ -227,14 +259,20 @@ async def analyse_circle_space(
     # Fan out comment lookups in parallel (cap concurrency)
     sem = asyncio.Semaphore(8)
     comments_by_post: dict[int, list[dict]] = {}
+    fetch_failed_post_ids: set[int] = set()
 
     async def _load(p: dict, client: httpx.AsyncClient):
         async with sem:
             try:
                 cs = await _circle_list_comments_for_post(client, p["id"])
-            except Exception:
-                cs = []
-            comments_by_post[p["id"]] = cs
+                comments_by_post[p["id"]] = cs
+            except Exception as e:
+                logger.warning(
+                    f"[coach-activity] comments fetch failed for post {p['id']} "
+                    f"({p.get('name')!r}): {type(e).__name__}: {e}"
+                )
+                fetch_failed_post_ids.add(p["id"])
+                comments_by_post[p["id"]] = []
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         await asyncio.gather(*(_load(p, c) for p in in_window))
@@ -267,10 +305,14 @@ async def analyse_circle_space(
     ]
     per_coach.sort(key=lambda x: x["replies"], reverse=True)
 
-    # Unanswered (> 24 h, no coach reply)
+    # Unanswered (> 24 h, no coach reply). Posts whose comment fetch failed
+    # are EXCLUDED — a transient 5xx/429 from Circle shouldn't surface as a
+    # false-positive SLA breach. They'll re-evaluate on the next cache refresh.
     unanswered: list[dict] = []
     for p in in_window:
         if p["id"] in answered_post_ids:
+            continue
+        if p["id"] in fetch_failed_post_ids:
             continue
         try:
             created = datetime.fromisoformat((p.get("created_at") or "").replace("Z", "+00:00"))
@@ -358,6 +400,7 @@ async def analyse_circle_space(
         "per_day": per_day,
         "per_coach": per_coach,
         "unanswered": unanswered,
+        "fetch_failed_count": len(fetch_failed_post_ids),
         "rate_limited": rate_limited,
         "last_refreshed": now.isoformat(),
     }
