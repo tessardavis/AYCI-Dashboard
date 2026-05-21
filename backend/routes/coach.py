@@ -175,6 +175,17 @@ async def _diagnose_post_comments(post_id: int) -> dict:
         name = coach_act._comment_author_name(cm)
         email = coach_act._comment_author_email(cm)
         canon = coach_act._coach_canonical(name, email)
+        # Circle returns rich_text_body as a structured dict (tiptap doc) on
+        # voice-note + emoji-heavy comments — strip out the fallback text so
+        # we don't try to slice a dict.
+        body_text = (
+            cm.get("body")
+            or (cm.get("rich_text_body") or {}).get("circle_ios_fallback_text")
+            or cm.get("plain_text")
+            or ""
+        )
+        if not isinstance(body_text, str):
+            body_text = str(body_text)
         interpreted.append({
             "comment_id": cm.get("id"),
             "parent_comment_id": cm.get("parent_comment_id"),
@@ -183,7 +194,7 @@ async def _diagnose_post_comments(post_id: int) -> dict:
             "matched_coach": canon,
             "is_recognised_coach": canon is not None,
             "top_level_keys": sorted(list(cm.keys())),
-            "body_preview": (cm.get("body") or cm.get("rich_text_body") or "")[:120],
+            "body_preview": body_text[:120],
         })
 
     answered = any(row["is_recognised_coach"] for row in interpreted)
