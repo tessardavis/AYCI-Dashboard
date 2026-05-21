@@ -105,11 +105,17 @@ function DebugPostInspector() {
     setResult(null);
     try {
       const { data } = await apiClient.get("/coach-activity/debug-comments-by-url", {
-        params: { url: url.trim() }, timeout: 60000,
+        params: { url: url.trim() }, timeout: 120000,
       });
       setResult(data);
     } catch (err) {
-      setError(formatApiErrorDetail(err.response?.data?.detail) || err.message);
+      const parts = [];
+      if (err.response?.status) parts.push(`HTTP ${err.response.status}`);
+      const detail = formatApiErrorDetail(err.response?.data?.detail);
+      if (detail && detail !== "Something went wrong. Please try again.") parts.push(detail);
+      if (err.message && !parts.some((p) => p.includes(err.message))) parts.push(err.message);
+      if (err.code) parts.push(`(${err.code})`);
+      setError(parts.join(" · ") || "Request failed with no detail.");
     } finally {
       setLoading(false);
     }
