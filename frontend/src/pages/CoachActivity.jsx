@@ -160,15 +160,28 @@ function DebugPostInspector() {
       )}
       {result && (
         <div className="mt-4 space-y-3">
-          <div className={`text-sm px-3 py-2 rounded border ${
-            result.would_be_marked_answered
-              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-              : "bg-amber-50 border-amber-300 text-amber-900"
-          }`}>
-            <strong>{result.would_be_marked_answered ? "✓ Counted as answered" : "✗ Counted as unanswered"}</strong>
-            {" — "}{result.comment_count} comment{result.comment_count === 1 ? "" : "s"} returned by Circle
-            {result.error && <div className="mt-1 text-xs">{result.error}</div>}
-          </div>
+          {result.error && result.comment_count === undefined ? (
+            <div className="text-sm px-3 py-2 rounded border bg-rose-50 border-rose-300 text-rose-900">
+              <strong>Lookup failed:</strong> {result.error}
+              {result.searched && (
+                <ul className="mt-1 text-xs list-disc pl-5">
+                  {result.searched.map((s, i) => (
+                    <li key={i}>{s.space}: {s.error ? `error — ${s.error}` : `${s.post_count} posts`}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <div className={`text-sm px-3 py-2 rounded border ${
+              result.would_be_marked_answered
+                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                : "bg-amber-50 border-amber-300 text-amber-900"
+            }`}>
+              <strong>{result.would_be_marked_answered ? "✓ Counted as answered" : "✗ Counted as unanswered"}</strong>
+              {" — "}{result.comment_count} comment{result.comment_count === 1 ? "" : "s"} returned by Circle
+              {result.error && <div className="mt-1 text-xs">{result.error}</div>}
+            </div>
+          )}
           {(result.interpreted || []).length > 0 && (
             <div className="border border-[var(--ayci-border)] rounded overflow-hidden">
               <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 border-b border-[var(--ayci-border)]">

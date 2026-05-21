@@ -240,18 +240,38 @@ async def coach_activity_debug_comments_by_url(
     ]
     found_post_id: int | None = None
     searched: list[dict] = []
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        for label, sid in spaces_to_search:
-            posts = await coach_act._circle_list_posts_in_space(c, sid)
-            searched.append({"space": label, "space_id": sid, "post_count": len(posts)})
-            for p in posts:
-                p_slug = p.get("slug")
-                p_url = p.get("url") or ""
-                if p_slug == post_slug or p_url.rstrip("/").endswith("/" + post_slug):
-                    found_post_id = p.get("id")
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+            for label, sid in spaces_to_search:
+                try:
+                    posts = await coach_act._circle_list_posts_in_space(c, sid)
+                except httpx.HTTPStatusError as e:
+                    searched.append({
+                        "space": label, "space_id": sid, "post_count": 0,
+                        "error": f"Circle API {e.response.status_code}: {e.response.text[:200]}",
+                    })
+                    continue
+                except httpx.HTTPError as e:
+                    searched.append({
+                        "space": label, "space_id": sid, "post_count": 0,
+                        "error": f"Circle API network error: {type(e).__name__}: {e}",
+                    })
+                    continue
+                searched.append({"space": label, "space_id": sid, "post_count": len(posts)})
+                for p in posts:
+                    p_slug = p.get("slug")
+                    p_url = p.get("url") or ""
+                    if p_slug == post_slug or p_url.rstrip("/").endswith("/" + post_slug):
+                        found_post_id = p.get("id")
+                        break
+                if found_post_id:
                     break
-            if found_post_id:
-                break
+    except Exception as e:
+        return {
+            "error": f"Unexpected error while searching spaces: {type(e).__name__}: {e}",
+            "post_slug": post_slug,
+            "searched": searched,
+        }
 
     if not found_post_id:
         return {
@@ -260,6 +280,15 @@ async def coach_activity_debug_comments_by_url(
             "searched": searched,
         }
 
-    result = await _diagnose_post_comments(found_post_id)
+    try:
+        result = await _diagnose_post_comments(found_post_id)
+    except Exception as e:
+        return {
+            "error": f"Found post {found_post_id} but comments fetch failed: {type(e).__name__}: {e}",
+            "post_slug": post_slug,
+            "post_id": found_post_id,
+            "searched": searched,
+        }
     result["matched_post_slug"] = post_slug
+    result["searched"] = searched
     return result
