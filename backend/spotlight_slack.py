@@ -180,26 +180,29 @@ async def check_and_send_reminders(db, *, lookahead_min: int = 35, lookback_min:
             continue
         if not (lower <= dt <= upper):
             continue
-        # Idempotency: have we already sent this reminder?
-        sent_doc = await db.spotlight_reminders_sent.find_one({"session_id": s.get("id")})
-        if sent_doc:
+        # Atomic claim: only the first call per session_id wins. Stops a
+        # parallel scheduler tick (e.g. old + new dyno during a deploy)
+        # from double-sending in the window between find_one + upsert.
+        claim = await db.spotlight_reminders_sent.update_one(
+            {"session_id": s.get("id")},
+            {"$setOnInsert": {
+                "session_id": s.get("id"),
+                "session_name": s.get("name"),
+                "starts_at": starts_at,
+                "sent_at": now,
+            }},
+            upsert=True,
+        )
+        if claim.upserted_id is None:
             skipped += 1
             continue
         slack_payload = _format_session_blocks(s)
         result = await _post_to_slack(slack_payload)
         if result.get("sent"):
-            await db.spotlight_reminders_sent.update_one(
-                {"session_id": s.get("id")},
-                {"$set": {
-                    "session_id": s.get("id"),
-                    "session_name": s.get("name"),
-                    "starts_at": starts_at,
-                    "sent_at": now,
-                }},
-                upsert=True,
-            )
             sent += 1
         else:
+            # Send failed — roll back the claim so the next tick can retry.
+            await db.spotlight_reminders_sent.delete_one({"session_id": s.get("id")})
             logger.warning(f"[spotlight-slack] failed to send for session {s.get('id')}: {result}")
     return {"checked": len(sessions), "sent": sent, "skipped": skipped}
 

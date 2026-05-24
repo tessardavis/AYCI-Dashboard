@@ -1065,6 +1065,7 @@ async def on_startup():
         CronTrigger(minute="*/5", timezone=tz),
         id="spotlight_reminders",
         replace_existing=True,
+        max_instances=1, coalesce=True,
     )
 
     async def _hourly_prewarm_upcoming_calls():
