@@ -1166,6 +1166,7 @@ async def on_startup():
         CronTrigger(minute="*/5", timezone=tz),
         id="circle_video_alerts",
         replace_existing=True,
+        max_instances=1, coalesce=True,
     )
 
     # Over-allowance booking detector (every 5 min). For every Private Plus /

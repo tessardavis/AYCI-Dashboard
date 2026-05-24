@@ -106,23 +106,31 @@ async def check_and_send(db) -> dict:
         if key in dismissed:
             skipped += 1
             continue
-        existing = await db.circle_video_alerts_sent.find_one({"_id": key})
-        if existing:
-            skipped += 1
-            continue
-        text = f"🎬 *{name}* posted *{count} videos* this week (week of {week_start}) in Recorded Answer Review."
-        post_result = await _post(db, text)
-        if post_result.get("sent"):
-            await db.circle_video_alerts_sent.insert_one({
+        # Atomic claim: only the first call per (member, week) wins. Stops
+        # parallel scheduler ticks (e.g. old + new dyno during a deploy)
+        # from double-sending in the window between find_one + insert_one.
+        claim = await db.circle_video_alerts_sent.update_one(
+            {"_id": key},
+            {"$setOnInsert": {
                 "_id": key,
                 "name": name,
                 "week_start": week_start,
                 "count_at_alert": count,
                 "sent_at": datetime.now(timezone.utc).isoformat(),
-            })
+            }},
+            upsert=True,
+        )
+        if claim.upserted_id is None:
+            skipped += 1
+            continue
+        text = f"🎬 *{name}* posted *{count} videos* this week (week of {week_start}) in Recorded Answer Review."
+        post_result = await _post(db, text)
+        if post_result.get("sent"):
             sent += 1
             logger.info(f"[circle-video-alerts] sent for {name} ({count}/wk, week {week_start})")
         else:
+            # Send failed — roll back the claim so the next tick can retry.
+            await db.circle_video_alerts_sent.delete_one({"_id": key})
             logger.warning(f"[circle-video-alerts] failed to post for {name}: {post_result}")
 
     return {"sent": sent, "skipped": skipped, "candidates": len(rate_limited)}
