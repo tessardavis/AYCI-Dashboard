@@ -17,8 +17,11 @@ async def sla_unanswered_count(user: dict = Depends(get_current_user)):
 
 
 @router.post("/notifications/slack/test")
-async def slack_test_send(admin: dict = Depends(require_admin)):
+async def slack_test_send(
+    force: bool = False,
+    admin: dict = Depends(require_admin),
+):
     """Admin-only: send the SLA digest to Slack right now (manual trigger).
-    Bypasses the daily-claim guard so testing works regardless of whether
-    today's scheduled digest already fired."""
-    return await sla_notifications.send_sla_digest(db, force=True)
+    Respects today's atomic daily-claim guard by default — call with
+    `?force=true` to bypass it (e.g. when iterating on the digest copy)."""
+    return await sla_notifications.send_sla_digest(db, force=force)

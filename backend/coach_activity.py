@@ -7,7 +7,7 @@ coaching team can see, at a glance:
   - How many videos / posts students have submitted each day since cohort
     Day 1.
   - How many of those each coach has replied to (Circle comment by a coach).
-  - Which posts have NO coach reply after 24 h (escalation flag).
+  - Which posts have NO coach reply after 48 h (escalation flag).
   - Students posting more than 3 videos in a calendar week (rate-limit flag).
   - Private-tier video submissions on Monday board 5083952249 — total
     submitted vs total each coach has been assigned to reply to.
@@ -51,13 +51,13 @@ INTERVIEW_SUPPORT_START = date(2026, 4, 23) # Thu 23 Apr — interview support
 # attempted against email first, then exact lowercase, then alias contains, then
 # fuzzy SequenceMatcher (0.82 threshold).
 COACH_ROSTER: list[tuple[str, list[str], list[str]]] = [
-    ("Zinnirah Zainodin",   [],                          []),
-    ("Anne Beh",            [],                          []),
-    ("Charlotte Wyeth",     [],                          ["charlotte w"]),
-    ("Anoop Chidambaram",   ["anoop.chidam@gmail.com"],  ["anoopkishore", "anoop kishore"]),
-    ("Kat Priddis",         [],                          []),
-    ("Tessa Davis",         [],                          []),
-    ("Becky Platt",         [],                          []),
+    ("Zinnirah Zainodin",   ["zzainodin86@gmail.com"],            []),
+    ("Anne Beh",            ["anne.beh@nhs.net"],                 []),
+    ("Charlotte Wyeth",     ["charlottewyeth22@googlemail.com"],  ["charlotte w"]),
+    ("Anoop Chidambaram",   ["anoop.chidam@gmail.com"],           ["anoopkishore", "anoop kishore"]),
+    ("Kat Priddis",         ["katherinelouisa.priddis@nhs.net"],  []),
+    ("Tessa Davis",         ["tessa@medicalinterviewprep.com"],   []),
+    ("Becky Platt",         ["becky.platt2@nhs.net"],             []),
 ]
 COACHES: list[str] = [c[0] for c in COACH_ROSTER]
 _EMAIL_TO_COACH: dict[str, str] = {
@@ -73,7 +73,7 @@ _ALIAS_TO_COACH: list[tuple[str, str]] = [
     for alias in aliases
 ]
 
-NO_REPLY_SLA_HOURS = 24
+NO_REPLY_SLA_HOURS = 48
 WEEKLY_VIDEO_LIMIT = 3
 COACH_FUZZY_THRESHOLD = 0.82
 
@@ -166,10 +166,17 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
                     )
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
-                # Non-retryable status (401/403/404 etc.) — treat as end of
-                # pagination to preserve old behaviour for genuinely missing
-                # posts. We've at least seen ONE response, so don't raise.
-                return out
+                # 404 = post deleted/inaccessible — return what we've got
+                # (an empty list on page 1). Genuine, not a flag-worthy event.
+                if r.status_code == 404:
+                    return out
+                # 401/403 (or any other non-retryable status) = real failure.
+                # Raise so the caller marks this post fetch_failed instead of
+                # silently flagging it as unanswered.
+                raise httpx.HTTPStatusError(
+                    f"Circle /comments {r.status_code}",
+                    request=r.request, response=r,
+                )
             except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_err = e
                 await asyncio.sleep(0.5 * (2 ** attempt))
@@ -266,6 +273,18 @@ async def analyse_circle_space(
             try:
                 cs = await _circle_list_comments_for_post(client, p["id"])
                 comments_by_post[p["id"]] = cs
+                # Cross-check against the post listing's comments_count: if
+                # Circle says the post has N>0 comments but our fetch came
+                # back empty, treat the same as a 5xx — exclude rather than
+                # falsely flag as unanswered.
+                expected = int(p.get("comments_count") or 0)
+                if expected > 0 and not cs:
+                    logger.warning(
+                        f"[coach-activity] post {p['id']} ({p.get('name')!r}) "
+                        f"reports comments_count={expected} but /comments returned "
+                        f"0 records — marking fetch_failed"
+                    )
+                    fetch_failed_post_ids.add(p["id"])
             except Exception as e:
                 logger.warning(
                     f"[coach-activity] comments fetch failed for post {p['id']} "
@@ -305,9 +324,10 @@ async def analyse_circle_space(
     ]
     per_coach.sort(key=lambda x: x["replies"], reverse=True)
 
-    # Unanswered (> 24 h, no coach reply). Posts whose comment fetch failed
-    # are EXCLUDED — a transient 5xx/429 from Circle shouldn't surface as a
-    # false-positive SLA breach. They'll re-evaluate on the next cache refresh.
+    # Unanswered (> NO_REPLY_SLA_HOURS, no coach reply). Posts whose comment
+    # fetch failed are EXCLUDED — a transient 5xx/429/empty-response from
+    # Circle shouldn't surface as a false-positive SLA breach. They'll
+    # re-evaluate on the next cache refresh.
     unanswered: list[dict] = []
     for p in in_window:
         if p["id"] in answered_post_ids:
