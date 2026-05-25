@@ -10,6 +10,7 @@ Circle has no email-search endpoint — members list is cached in Mongo
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
@@ -33,6 +34,11 @@ from connectors import (
 
 CACHE_TTL_HOURS = 24
 ACADEMY_MEMBERS_BOARD_ID = "1956295952"
+# Monday column IDs are stable for the life of a board (column re-creation is
+# rare and would also require dashboard re-config). Cache the discovered
+# email-column ID per board so we skip the schema GraphQL call — that's the
+# first of two sequential Monday calls on every cold Student Lookup.
+MONDAY_SCHEMA_CACHE_TTL_HOURS = 24
 
 
 def _normalise(s: str) -> str:
@@ -116,21 +122,54 @@ async def stripe_lookup(email: str) -> dict:
             all_charges: list[dict] = []
 
             for cust in customers:
-                cid = cust["id"]
                 customer_links.append({
-                    "id": cid,
-                    "url": f"https://dashboard.stripe.com/customers/{cid}",
+                    "id": cust["id"],
+                    "url": f"https://dashboard.stripe.com/customers/{cust['id']}",
                     "name": cust.get("name"),
                     "created": cust.get("created"),
                 })
 
-                # Charges
-                cr = await c.get(
+            # Charges + subscriptions per customer, all in parallel. Previously
+            # 2N sequential GETs (charges → subscriptions, per customer);
+            # this collapses to a single gather that takes max(slowest call).
+            async def _fetch_charges(cid: str) -> tuple[str, Any]:
+                rr = await c.get(
                     f"{STRIPE_API}/charges",
                     auth=_stripe_auth(),
                     params={"customer": cid, "limit": 100},
                 )
-                if cr.status_code == 200:
+                return cid, rr
+
+            async def _fetch_subs(cid: str) -> tuple[str, Any]:
+                rr = await c.get(
+                    f"{STRIPE_API}/subscriptions",
+                    auth=_stripe_auth(),
+                    params={"customer": cid, "status": "all", "limit": 100},
+                )
+                return cid, rr
+
+            tasks = []
+            for cust in customers:
+                tasks.append(_fetch_charges(cust["id"]))
+                tasks.append(_fetch_subs(cust["id"]))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            charges_by_cid: dict[str, Any] = {}
+            subs_by_cid: dict[str, Any] = {}
+            for i, res in enumerate(results):
+                if isinstance(res, Exception):
+                    continue
+                cid, rr = res
+                # Even indices were charges, odd were subs (per the append order).
+                if i % 2 == 0:
+                    charges_by_cid[cid] = rr
+                else:
+                    subs_by_cid[cid] = rr
+
+            for cust in customers:
+                cid = cust["id"]
+                cr = charges_by_cid.get(cid)
+                if cr is not None and cr.status_code == 200:
                     for ch in cr.json().get("data", []):
                         net = int(ch.get("amount", 0)) - int(ch.get("amount_refunded", 0))
                         if ch.get("status") == "succeeded" and not ch.get("refunded") and net > 0:
@@ -154,13 +193,8 @@ async def stripe_lookup(email: str) -> dict:
                             })
                         total_refunded += int(ch.get("amount_refunded", 0))
 
-                # Subscriptions
-                sr = await c.get(
-                    f"{STRIPE_API}/subscriptions",
-                    auth=_stripe_auth(),
-                    params={"customer": cid, "status": "all", "limit": 100},
-                )
-                if sr.status_code == 200:
+                sr = subs_by_cid.get(cid)
+                if sr is not None and sr.status_code == 200:
                     for s in sr.json().get("data", []):
                         item = (s.get("items", {}).get("data") or [{}])[0]
                         price = item.get("price", {}) or {}
@@ -309,7 +343,58 @@ async def circle_lookup(db, email: str) -> dict:
 
 
 # -------------------------------------------------------------------- Monday
-async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, name_hint: Optional[str] = None) -> dict:
+async def _get_monday_email_col_id(db, board_id: str, client: httpx.AsyncClient) -> Optional[str]:
+    """Discover the email column ID on a Monday board, with a 24h Mongo cache.
+    Returns None if no email column is found (caller falls back to scan)."""
+    cache_key = f"monday_schema:{board_id}:email_col"
+    cached = await db.fn_cache.find_one({"_id": cache_key}, {"_id": 0, "col_id": 1, "cached_at": 1})
+    if cached:
+        cached_at = cached.get("cached_at")
+        if isinstance(cached_at, datetime):
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=timezone.utc)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=MONDAY_SCHEMA_CACHE_TTL_HOURS)
+            if cached_at > cutoff:
+                # cached value of None is stored as empty string so we can
+                # tell "we checked and there's no email column" apart from
+                # "no cache entry yet".
+                col_id = cached.get("col_id") or None
+                return col_id
+
+    schema_q = f"""
+    query {{
+      boards(ids: [{int(board_id)}]) {{
+        id
+        columns {{ id title type }}
+      }}
+    }}
+    """
+    r = await client.post(
+        MONDAY_URL,
+        headers={**_monday_headers(), "Content-Type": "application/json"},
+        json={"query": schema_q},
+    )
+    r.raise_for_status()
+    body = r.json()
+    if body.get("errors"):
+        raise RuntimeError(f"Monday GraphQL error: {body['errors']}")
+    boards = body.get("data", {}).get("boards") or []
+    if not boards:
+        return None
+    columns = boards[0].get("columns") or []
+    email_col = next((col for col in columns
+                      if col.get("type") == "email"
+                      or "email" in (col.get("title") or "").lower()), None)
+    col_id = (email_col or {}).get("id") or ""
+    await db.fn_cache.update_one(
+        {"_id": cache_key},
+        {"$set": {"_id": cache_key, "col_id": col_id, "cached_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return col_id or None
+
+
+async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, name_hint: Optional[str] = None, db=None) -> dict:
     """
     Search the Academy Members board for items whose email column matches.
     Uses items_page_by_column_values for server-side filtering. Falls back
@@ -322,37 +407,43 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
     """
     try:
         target = email.strip().lower()
-        schema_q = f"""
-        query {{
-          boards(ids: [{int(board_id)}]) {{
-            id
-            name
-            columns {{ id title type }}
-          }}
-        }}
-        """
         async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-            r = await c.post(
-                MONDAY_URL,
-                headers={**_monday_headers(), "Content-Type": "application/json"},
-                json={"query": schema_q},
-            )
-            r.raise_for_status()
-            body = r.json()
-            if body.get("errors"):
-                raise RuntimeError(f"Monday GraphQL error: {body['errors']}")
-            boards = body.get("data", {}).get("boards") or []
-            if not boards:
-                return {"found": False, "data": None, "error": "board not found"}
-            columns = boards[0].get("columns") or []
-            email_col = next((col for col in columns
-                              if col.get("type") == "email"
-                              or "email" in (col.get("title") or "").lower()), None)
+            # Resolve the email column id (24h Mongo-cached). When db is
+            # supplied this is one fewer sequential Monday call on the cold
+            # path. Without db, fall through to the legacy inline schema
+            # fetch so callers that don't have a db handle (cron pre-warm
+            # variants) still work.
+            email_col_id: Optional[str] = None
+            if db is not None:
+                try:
+                    email_col_id = await _get_monday_email_col_id(db, board_id, c)
+                except Exception:
+                    email_col_id = None
+            if email_col_id is None and db is None:
+                schema_q = f"""
+                query {{
+                  boards(ids: [{int(board_id)}]) {{
+                    columns {{ id title type }}
+                  }}
+                }}
+                """
+                rs = await c.post(
+                    MONDAY_URL,
+                    headers={**_monday_headers(), "Content-Type": "application/json"},
+                    json={"query": schema_q},
+                )
+                rs.raise_for_status()
+                bs = rs.json()
+                cols = ((bs.get("data") or {}).get("boards") or [{}])[0].get("columns") or []
+                ec = next((col for col in cols
+                           if col.get("type") == "email"
+                           or "email" in (col.get("title") or "").lower()), None)
+                email_col_id = (ec or {}).get("id")
 
             items: list[dict] = []
             used_fallback = False
 
-            if email_col:
+            if email_col_id:
                 search_q = """
                 query ($boardId: ID!, $colId: String!, $value: String!) {
                   items_page_by_column_values(
@@ -383,7 +474,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         "query": search_q,
                         "variables": {
                             "boardId": str(board_id),
-                            "colId": email_col["id"],
+                            "colId": email_col_id,
                             "value": target,
                         },
                     },

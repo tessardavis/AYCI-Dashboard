@@ -249,7 +249,7 @@ async def _academy_lookup(db, email: str) -> dict:
         return {}
     try:
         import student_lookup
-        result = await student_lookup.monday_lookup(email)
+        result = await student_lookup.monday_lookup(email, db=db)
     except Exception as e:
         logger.warning(f"[private-videos] academy_lookup failed for {email}: {e}")
         return {}

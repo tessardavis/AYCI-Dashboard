@@ -61,7 +61,7 @@ async def _run_lookup_fanout(
     keep costs at $0/day — summaries still generate on-demand when the
     coach opens the doc card."""
     monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
-        lookup.monday_lookup(email, name_hint=name),
+        lookup.monday_lookup(email, name_hint=name, db=db),
         lookup.circle_lookup(db, email),
         lookup.stripe_lookup(email),
         lookup.convertkit_lookup(email),
