@@ -5,8 +5,9 @@ Why this exists: building the leaderboard response on-demand takes ~30s
 (dominated by a single 1.7MB find_one on `circle_members_cache`).
 Coaches open the leaderboard *before each live Curriculum / General
 Coaching session*, so the cost of computing it lands on the user. We
-pre-warm a ~20-min window ahead of every such session so opening the
-page is a single sub-100ms Mongo read.
+keep the cache warm for a window ahead of every such session (see
+PREWARM_WINDOW_MINUTES) so opening the page is a single sub-100ms
+Mongo read.
 
 Storage: `db.leaderboard_response_cache`, one doc per cohort:
     { _id: "Apr '26", payload: {...full endpoint response...}, computed_at: <utc> }
@@ -32,14 +33,22 @@ UK_TZ = ZoneInfo("Europe/London")
 # Order matters for prewarm — active cohort first so it's hottest if budget is tight.
 ACTIVE_COHORTS = ["Apr '26", "Feb '26", "April '25"]
 
-# How long before a session we want the cache warm. The endpoint will accept
-# a cache up to CACHE_MAX_AGE_MINUTES old; the warmer fires when a session
-# is starting within PREWARM_WINDOW_MINUTES. The window is set wider than the
-# spotlight Slack reminder (which fires ~30 min ahead) so the cache is already
-# hot by the time the team clicks through from that ping. Max-age exceeds the
-# window so a warm stays valid right through the session start.
-PREWARM_WINDOW_MINUTES = 40
-CACHE_MAX_AGE_MINUTES = 50
+# Start keeping the cache warm this many minutes before a Curriculum /
+# General Coaching session, so the team can open the leaderboard any time in
+# the run-up and get an instant page.
+PREWARM_WINDOW_MINUTES = 300  # 5 hours
+
+# Within the warm window the every-5-min tick would otherwise recompute on
+# every fire (~60×/session × 3 cohorts), hammering the Mongo cluster for no
+# benefit since the data barely moves. Throttle: only re-warm a cohort whose
+# cached copy is older than this. Keeps the leaderboard ≤30 min stale while
+# recomputing ~10×/session instead of ~180×.
+REWARM_INTERVAL_MINUTES = 30
+
+# The reader accepts a cache up to this old. Must exceed REWARM_INTERVAL +
+# tick interval (5 min) so a read never falls in the gap between a cache going
+# stale and the next tick re-warming it.
+CACHE_MAX_AGE_MINUTES = 60
 
 
 async def _compute_response(db, cohort: str, limit: int = 25) -> dict:
@@ -156,7 +165,15 @@ async def warm_for_upcoming_sessions(db) -> dict:
         return {"checked": len(sessions), "warmed": []}
 
     warmed = []
+    skipped = []
     for cohort in ACTIVE_COHORTS:
+        # Throttle: skip if this cohort's cache is still fresh enough. Without
+        # this the every-5-min tick would recompute all cohorts on every fire
+        # for the whole 5h window.
+        fresh = await read_cached(db, cohort, max_age_minutes=REWARM_INTERVAL_MINUTES)
+        if fresh:
+            skipped.append(cohort)
+            continue
         try:
             res = await prewarm(db, cohort)
             warmed.append(res)
@@ -167,4 +184,5 @@ async def warm_for_upcoming_sessions(db) -> dict:
         "checked": len(sessions),
         "imminent_sessions": [s.get("name") for s in imminent],
         "warmed": warmed,
+        "skipped_fresh": skipped,
     }
