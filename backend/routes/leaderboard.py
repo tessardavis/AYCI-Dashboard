@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 import leaderboard
+import leaderboard_cache
 import leaderboard_snapshots
 from db import db
 from deps import require_admin, require_board
@@ -13,17 +14,25 @@ router = APIRouter(prefix="/api", tags=["leaderboard"])
 async def cohort_leaderboard(
     cohort: str = "Apr '26",
     limit: int = 25,
+    refresh: bool = False,
     user: dict = Depends(require_board("leaderboard")),
 ):
     """Top-`limit` members of the given cohort, ranked by Circle badge count
     (total tags − cohort tags − private-tier tags). Includes each member's
     specific badges + their week-over-week delta (if a prior snapshot exists)
-    and the biggest-climbers list for that cohort."""
-    # Compute the full ranked list ONCE and pass it into the helpers. Each
-    # call to get_top_leaderboard does a ~1.7MB Mongo fetch of the Circle
-    # members cache; calling it 4× per request (as the helpers used to) put
-    # this endpoint above the frontend's 30s timeout and showed the page
-    # as empty.
+    and the biggest-climbers list for that cohort.
+
+    Reads from `leaderboard_response_cache` (pre-warmed before each live
+    Curriculum / General Coaching session) when fresh. Falls back to the
+    ~30s on-demand compute if the cache is missing or stale. Pass
+    `refresh=true` to force the live compute."""
+    if not refresh:
+        cached = await leaderboard_cache.read_cached(db, cohort)
+        if cached:
+            return cached
+
+    # Live compute. Build the full ranked list ONCE and pass it into the
+    # helpers — each call to get_top_leaderboard does a ~1.7MB Mongo fetch.
     full = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
     deltas = await leaderboard_snapshots.get_week_over_week(
         db, cohort, days=7, current_rows=full,
@@ -44,6 +53,13 @@ async def cohort_leaderboard(
         "total": len(rows),
         "biggest_climbers": climbers,
     }
+
+
+@router.post("/leaderboard/cohort/prewarm")
+async def prewarm_leaderboard(cohort: str = "Apr '26", admin: dict = Depends(require_admin)):
+    """Admin-only: force a leaderboard cache warm right now. Useful for
+    iterating on the prewarm logic or refreshing manually before a session."""
+    return await leaderboard_cache.prewarm(db, cohort)
 
 
 @router.post("/leaderboard/snapshot")

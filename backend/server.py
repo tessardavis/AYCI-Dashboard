@@ -1067,6 +1067,17 @@ async def on_startup():
             await spotlight_slack.check_and_send_reminders(db)
         except Exception as e:
             logger.warning(f"[scheduler] spotlight reminders failed: {e}")
+        # Piggyback on the every-5-min tick: if a live Curriculum / General
+        # Coaching session is starting soon, pre-warm the Cohort Leaderboard
+        # cache so coaches opening the page right before the session see it
+        # instantly instead of waiting ~30s for the live compute.
+        try:
+            import leaderboard_cache
+            res = await leaderboard_cache.warm_for_upcoming_sessions(db)
+            if res.get("warmed"):
+                logger.info(f"[scheduler] leaderboard prewarm: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] leaderboard prewarm failed: {e}")
 
     scheduler.add_job(
         _spotlight_reminders_tick,
