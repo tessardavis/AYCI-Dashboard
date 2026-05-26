@@ -25,7 +25,7 @@ export default function CohortLeaderboard() {
     try {
       const { data } = await apiClient.get("/leaderboard/cohort", {
         params: { cohort: c, limit: 25 },
-        timeout: 30000,
+        timeout: 90000,
       });
       setData(data);
     } catch (e) {
