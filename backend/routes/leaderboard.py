@@ -19,17 +19,24 @@ async def cohort_leaderboard(
     (total tags − cohort tags − private-tier tags). Includes each member's
     specific badges + their week-over-week delta (if a prior snapshot exists)
     and the biggest-climbers list for that cohort."""
-    rows = await leaderboard.get_top_leaderboard(
-        db, cohort_tag=cohort, limit=max(1, min(int(limit), 100))
+    # Compute the full ranked list ONCE and pass it into the helpers. Each
+    # call to get_top_leaderboard does a ~1.7MB Mongo fetch of the Circle
+    # members cache; calling it 4× per request (as the helpers used to) put
+    # this endpoint above the frontend's 30s timeout and showed the page
+    # as empty.
+    full = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
+    deltas = await leaderboard_snapshots.get_week_over_week(
+        db, cohort, days=7, current_rows=full,
     )
-    deltas = await leaderboard_snapshots.get_week_over_week(db, cohort, days=7)
+    capped = max(1, min(int(limit), 100))
+    rows = full[:capped]
     for r in rows:
         d = deltas.get(r.get("email") or "")
         r["delta"] = d["delta"] if d else None
         r["new_badges"] = d["new_badges"] if d else []
         r["delta_snapshot_date"] = d.get("snapshot_date") if d else None
     climbers = await leaderboard_snapshots.get_biggest_climbers(
-        db, cohort, days=7, limit=5
+        db, cohort, days=7, limit=5, current_rows=full, deltas=deltas,
     )
     return {
         "cohort": cohort,

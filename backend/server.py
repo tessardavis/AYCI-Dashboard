@@ -925,6 +925,14 @@ async def _scheduled_sync() -> None:
 async def on_startup():
     try:
         await db.users.create_index("email", unique=True)
+        # Without this compound index every Cohort Leaderboard request
+        # COLLSCANs 34K+ snapshot rows; combined with 4× redundant calls to
+        # get_top_leaderboard that pushed the endpoint past the 30s frontend
+        # timeout and rendered the page empty.
+        await db.leaderboard_snapshots.create_index(
+            [("cohort", 1), ("snapshot_date", -1)],
+            name="cohort_snapshot_date",
+        )
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
     await _seed_admin()

@@ -75,17 +75,26 @@ async def snapshot_all_active_cohorts(db) -> dict:
     return results
 
 
-async def get_week_over_week(db, cohort: str, days: int = 7) -> dict[str, dict]:
+async def get_week_over_week(
+    db,
+    cohort: str,
+    days: int = 7,
+    *,
+    current_rows: Optional[list[dict]] = None,
+) -> dict[str, dict]:
     """Return `{email: {prev_score, delta, new_badges}}` for a cohort.
 
     `prev_score` is the score from ~`days` ago (uses the newest snapshot
     strictly older than `today - days + 1`). If no prior snapshot exists, we
-    return an empty dict for that member (delta unknown, not 0)."""
+    return an empty dict for that member (delta unknown, not 0).
+
+    Pass `current_rows` (output of `get_top_leaderboard`) to skip the extra
+    fetch when the caller already has it — saves a ~1.7MB Mongo read."""
     today = datetime.now(UK_TZ).date()
     cutoff_date = (today - timedelta(days=days)).isoformat()
     rows = db.leaderboard_snapshots.find(
         {"cohort": cohort, "snapshot_date": {"$lte": cutoff_date}},
-        {"_id": 0},
+        {"_id": 0, "email": 1, "score": 1, "badges": 1, "snapshot_date": 1},
     ).sort("snapshot_date", -1)
     # Pick latest snapshot per email
     best: dict[str, dict] = {}
@@ -94,7 +103,7 @@ async def get_week_over_week(db, cohort: str, days: int = 7) -> dict[str, dict]:
         if email and email not in best:
             best[email] = r
     # Compute deltas against current state
-    current = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
+    current = current_rows if current_rows is not None else await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
     out: dict[str, dict] = {}
     for c in current:
         email = c.get("email")
@@ -117,12 +126,21 @@ async def get_week_over_week(db, cohort: str, days: int = 7) -> dict[str, dict]:
 
 
 async def get_biggest_climbers(
-    db, cohort: str, days: int = 7, limit: int = 5
+    db,
+    cohort: str,
+    days: int = 7,
+    limit: int = 5,
+    *,
+    current_rows: Optional[list[dict]] = None,
+    deltas: Optional[dict[str, dict]] = None,
 ) -> list[dict]:
     """Top-`limit` members by positive delta over `days`. Returns list of
-    `{email, name, delta, current_score, prev_score, new_badges, avatar_url}`."""
-    current = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
-    deltas = await get_week_over_week(db, cohort, days=days)
+    `{email, name, delta, current_score, prev_score, new_badges, avatar_url}`.
+
+    Pass `current_rows` + `deltas` if the caller already has them to avoid
+    re-fetching the 1.7MB Circle members cache and re-scanning snapshots."""
+    current = current_rows if current_rows is not None else await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
+    deltas = deltas if deltas is not None else await get_week_over_week(db, cohort, days=days, current_rows=current)
     by_email = {c["email"]: c for c in current if c.get("email")}
     climbers = []
     for email, d in deltas.items():
