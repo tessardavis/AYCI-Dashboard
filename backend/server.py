@@ -1561,6 +1561,39 @@ async def diag_mongo():
     return results
 
 
+@api.get("/diag/lookup-fanout")
+async def diag_lookup_fanout(email: str):
+    """No-auth wrapper around the Student Lookup fan-out. Used purely for
+    debugging when authed /students/lookup hangs — lets us hit the same
+    code path directly to see if the issue is in the fan-out itself or
+    something else (auth, framework, network)."""
+    import asyncio as _asyncio
+    import time as _time
+    from routes.students import _run_lookup_fanout as _fanout
+    t0 = _time.monotonic()
+    try:
+        payload = await _asyncio.wait_for(_fanout(email, name=None), timeout=35.0)
+        return {
+            "ok": True,
+            "elapsed_ms": int((_time.monotonic() - t0) * 1000),
+            "found_on": [
+                k for k in ("monday", "circle", "stripe", "convertkit", "calendly", "tally")
+                if (payload.get(k) or {}).get("found")
+            ],
+            "errors": {
+                k: (payload.get(k) or {}).get("error")
+                for k in ("monday", "circle", "stripe", "convertkit", "calendly", "tally")
+                if (payload.get(k) or {}).get("error")
+            },
+        }
+    except _asyncio.TimeoutError:
+        return {"ok": False, "elapsed_ms": int((_time.monotonic() - t0) * 1000),
+                "error": "fanout_timeout_at_35s"}
+    except Exception as e:
+        return {"ok": False, "elapsed_ms": int((_time.monotonic() - t0) * 1000),
+                "error": f"{type(e).__name__}: {e}"}
+
+
 # --- Mount routers --------------------------------------------------------
 app.include_router(api)
 
