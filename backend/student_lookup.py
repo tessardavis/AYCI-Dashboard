@@ -46,6 +46,34 @@ def _normalise(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", s.lower())).strip()
 
 
+# In-process cache for the Circle members list used by name_search. The Mongo
+# document is ~1.7MB and the cross-region read from Atlas takes several
+# seconds — well over the 8s frontend timeout on the autocomplete endpoint.
+# Read once per process and keep a slim (name + email + avatar) projection in
+# memory; everything after the first call is sub-millisecond.
+_NAME_INDEX_TTL_SECONDS = 30 * 60  # 30 min
+_name_index_cache: dict = {"loaded_at": 0.0, "members": []}
+
+
+async def _get_name_index(db) -> list[dict]:
+    import time as _time
+    now = _time.monotonic()
+    if (
+        _name_index_cache["members"]
+        and (now - _name_index_cache["loaded_at"]) < _NAME_INDEX_TTL_SECONDS
+    ):
+        return _name_index_cache["members"]
+    doc = await db.circle_members_cache.find_one(
+        {"_id": "all"},
+        # Only the fields name_search needs — cuts the read substantially.
+        {"_id": 0, "members.name": 1, "members.email": 1, "members.avatar_url": 1},
+    )
+    members = (doc or {}).get("members", []) if doc else []
+    _name_index_cache["members"] = members
+    _name_index_cache["loaded_at"] = now
+    return members
+
+
 async def name_search(db, query: str, limit: int = 10) -> list[dict]:
     """
     Fuzzy search by name. Looks up Circle's slim member cache (which has
@@ -57,10 +85,9 @@ async def name_search(db, query: str, limit: int = 10) -> list[dict]:
     target = _normalise(query)
     parts = target.split()
 
-    doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
-    if not doc:
+    members = await _get_name_index(db)
+    if not members:
         return []
-    members = doc.get("members", [])
 
     scored: list[tuple[int, dict]] = []
     for m in members:

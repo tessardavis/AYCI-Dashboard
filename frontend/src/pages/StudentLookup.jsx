@@ -70,7 +70,9 @@ export default function StudentLookup() {
       try {
         const { data } = await apiClient.get(`/students/name-search`, {
           params: { q: trimmed, limit: 8 },
-          timeout: 8000,
+          // 30s — the first name-search after a backend restart has to read
+          // a 1.7MB Mongo doc; subsequent calls are in-memory.
+          timeout: 30000,
         });
         setSuggestions(data || []);
         setShowSuggestions(true);
