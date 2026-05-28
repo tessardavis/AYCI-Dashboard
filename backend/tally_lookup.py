@@ -57,11 +57,20 @@ def _answer_str(ans) -> str:
 
 
 async def _fetch_all_submissions() -> list[dict]:
-    """Pull all submissions across paginated pages."""
+    """Pull all submissions across paginated pages.
+
+    Bounded to 20 pages (≈2000 submissions) AND 10s wall-clock so a cold
+    Tally refresh can never exhaust the per-platform budget in the
+    Student Lookup fan-out. The form sees maybe 1-2 submissions/day in
+    practice, so 2000 is plenty; if we ever need more we'll page on
+    demand.
+    """
+    import time as _time
     out: list[dict] = []
     page = 1
+    deadline = _time.monotonic() + 10.0
     async with httpx.AsyncClient(timeout=30) as c:
-        while page <= 50:
+        while page <= 20 and _time.monotonic() < deadline:
             r = await c.get(
                 f"{TALLY_BASE}/forms/{INTERVIEW_FORM_ID}/submissions",
                 headers=_tally_headers(),

@@ -1,7 +1,9 @@
 """Student Lookup, name search, at-risk dashboard, drive summary."""
 import asyncio
+import logging
+import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Awaitable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -13,7 +15,45 @@ import tally_lookup as tally
 from db import db
 from deps import require_board
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["students"])
+
+# Per-platform wall-clock budgets. One stuck call must not block the
+# whole page — without these, a hung Tally/Calendly pagination loop
+# would block the endpoint until the frontend gives up at 90s.
+PLATFORM_TIMEOUTS = {
+    "circle":     5.0,   # in-memory match after the 24h members cache is built
+    "convertkit": 10.0,  # subscriber lookup + tags (2 sequential calls)
+    "stripe":     15.0,  # customer search + parallel charges/subs per customer
+    "calendly":   12.0,
+    "tally":      12.0,
+    "monday":     15.0,  # server-side search; sometimes slow GraphQL
+}
+
+
+async def _bounded_platform(
+    name: str,
+    coro: Awaitable[Any],
+    budget: float,
+) -> dict:
+    """Run a single platform lookup with a wall-clock budget and timing log."""
+    t0 = time.monotonic()
+    try:
+        result = await asyncio.wait_for(coro, timeout=budget)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.info(f"[lookup] {name} ok in {elapsed_ms}ms")
+        if isinstance(result, dict):
+            return result
+        return {"found": False, "data": None, "error": "unexpected_shape"}
+    except asyncio.TimeoutError:
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.warning(f"[lookup] {name} TIMEOUT after {elapsed_ms}ms (budget {budget}s)")
+        return {"found": False, "data": None, "error": f"{name}_timeout"}
+    except Exception as e:
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.warning(f"[lookup] {name} failed in {elapsed_ms}ms: {e}")
+        return {"found": False, "data": None, "error": str(e)}
 
 
 async def _get_inline_summary(email: str) -> Optional[dict]:
@@ -60,22 +100,14 @@ async def _run_lookup_fanout(
     pre-generation (Claude API call). Used by the daily prewarm cron to
     keep costs at $0/day — summaries still generate on-demand when the
     coach opens the doc card."""
-    monday_t, circle_t, stripe_t, ck_t, calendly_t, tally_t = await asyncio.gather(
-        lookup.monday_lookup(email, name_hint=name, db=db),
-        lookup.circle_lookup(db, email),
-        lookup.stripe_lookup(email),
-        lookup.convertkit_lookup(email),
-        lookup.calendly_lookup(email),
-        tally.lookup_student(db, email),
-        return_exceptions=True,
+    monday_safe, circle_safe, stripe_safe, ck_safe, calendly_safe, tally_safe = await asyncio.gather(
+        _bounded_platform("monday",     lookup.monday_lookup(email, name_hint=name, db=db), PLATFORM_TIMEOUTS["monday"]),
+        _bounded_platform("circle",     lookup.circle_lookup(db, email),                     PLATFORM_TIMEOUTS["circle"]),
+        _bounded_platform("stripe",     lookup.stripe_lookup(email),                         PLATFORM_TIMEOUTS["stripe"]),
+        _bounded_platform("convertkit", lookup.convertkit_lookup(email),                     PLATFORM_TIMEOUTS["convertkit"]),
+        _bounded_platform("calendly",   lookup.calendly_lookup(email),                       PLATFORM_TIMEOUTS["calendly"]),
+        _bounded_platform("tally",      tally.lookup_student(db, email),                     PLATFORM_TIMEOUTS["tally"]),
     )
-
-    def _safe(result):
-        if isinstance(result, Exception):
-            return {"found": False, "data": None, "error": str(result)}
-        return result
-
-    monday_safe = _safe(monday_t)
     drive_link = None
     drive_summary = None
     student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
@@ -108,11 +140,11 @@ async def _run_lookup_fanout(
     return {
         "email": email,
         "monday": monday_safe,
-        "circle": _safe(circle_t),
-        "stripe": _safe(stripe_t),
-        "convertkit": _safe(ck_t),
-        "calendly": _safe(calendly_t),
-        "tally": _safe(tally_t),
+        "circle": circle_safe,
+        "stripe": stripe_safe,
+        "convertkit": ck_safe,
+        "calendly": calendly_safe,
+        "tally": tally_safe,
         "drive": drive_link,
         "drive_summary": drive_summary,
     }
