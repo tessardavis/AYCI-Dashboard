@@ -23,11 +23,11 @@ router = APIRouter(prefix="/api", tags=["students"])
 # whole page — without these, a hung Tally/Calendly pagination loop
 # would block the endpoint until the frontend gives up at 90s.
 PLATFORM_TIMEOUTS = {
-    "circle":     5.0,   # in-memory match after the 24h members cache is built
+    "circle":     12.0,  # 1.7MB Mongo read from Atlas — 5s was too tight
     "convertkit": 10.0,  # subscriber lookup + tags (2 sequential calls)
     "stripe":     15.0,  # customer search + parallel charges/subs per customer
     "calendly":   12.0,
-    "tally":      12.0,
+    "tally":      15.0,  # multi-MB Mongo cache read
     "monday":     15.0,  # server-side search; sometimes slow GraphQL
 }
 
