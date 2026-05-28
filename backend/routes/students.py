@@ -208,13 +208,42 @@ async def students_lookup(
         raise HTTPException(400, "Valid email required")
     email = email.strip().lower()
 
+    # Bound each phase so a slow Mongo or stuck fan-out can't hang the route
+    # past the frontend's 90s ceiling. Timing is logged so we can see in
+    # Render logs which phase is the bottleneck for a given request.
+    req_t0 = time.monotonic()
     if not refresh:
-        cached = await _read_lookup_cache(email)
+        try:
+            cached = await asyncio.wait_for(_read_lookup_cache(email), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"[lookup] cache_read TIMEOUT for {email}")
+            cached = None
+        cache_ms = int((time.monotonic() - req_t0) * 1000)
         if cached:
+            logger.info(f"[lookup] {email} cache HIT in {cache_ms}ms")
             return cached
+        logger.info(f"[lookup] {email} cache MISS ({cache_ms}ms), running fan-out")
 
-    payload = await _run_lookup_fanout(email, name=name)
-    await _write_lookup_cache(email, payload)
+    fanout_t0 = time.monotonic()
+    try:
+        payload = await asyncio.wait_for(
+            _run_lookup_fanout(email, name=name),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        fanout_ms = int((time.monotonic() - fanout_t0) * 1000)
+        logger.error(f"[lookup] {email} fan-out TIMEOUT after {fanout_ms}ms")
+        raise HTTPException(504, "Lookup timed out — try again in a moment")
+    fanout_ms = int((time.monotonic() - fanout_t0) * 1000)
+    logger.info(f"[lookup] {email} fan-out done in {fanout_ms}ms")
+
+    try:
+        await asyncio.wait_for(_write_lookup_cache(email, payload), timeout=3.0)
+    except asyncio.TimeoutError:
+        logger.warning(f"[lookup] cache_write TIMEOUT for {email}")
+
+    total_ms = int((time.monotonic() - req_t0) * 1000)
+    logger.info(f"[lookup] {email} TOTAL {total_ms}ms")
     return payload
 
 
