@@ -1528,6 +1528,39 @@ async def version():
     }
 
 
+@api.get("/diag/mongo")
+async def diag_mongo():
+    """No-auth Mongo health probe. Returns ping + a few representative
+    find_one timings so we can diagnose whether Mongo (not the per-platform
+    fan-out) is the bottleneck for slow / hanging endpoints.
+
+    No PII is returned — only existence flags + latency."""
+    import asyncio as _asyncio
+    import time as _time
+    results: dict = {}
+
+    async def _timed(label: str, coro, budget: float):
+        t0 = _time.monotonic()
+        try:
+            out = await _asyncio.wait_for(coro, timeout=budget)
+            ms = int((_time.monotonic() - t0) * 1000)
+            results[label] = {"ok": True, "ms": ms, "exists": bool(out)}
+        except _asyncio.TimeoutError:
+            ms = int((_time.monotonic() - t0) * 1000)
+            results[label] = {"ok": False, "ms": ms, "error": "timeout"}
+        except Exception as e:
+            ms = int((_time.monotonic() - t0) * 1000)
+            results[label] = {"ok": False, "ms": ms, "error": str(e)[:120]}
+
+    await _timed("ping", db.command("ping"), 5.0)
+    await _timed("users_find_one", db.users.find_one({}, {"_id": 1}), 5.0)
+    await _timed("student_lookup_cache_find_one",
+                 db.student_lookup_cache.find_one({}, {"_id": 1}), 5.0)
+    await _timed("circle_members_cache_meta",
+                 db.circle_members_cache.find_one({"_id": "all"}, {"cached_at": 1}), 5.0)
+    return results
+
+
 # --- Mount routers --------------------------------------------------------
 app.include_router(api)
 
