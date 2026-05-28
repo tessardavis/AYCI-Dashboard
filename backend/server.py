@@ -935,6 +935,23 @@ async def on_startup():
         )
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
+
+    # Warm the in-process name-search index so the first coach to open
+    # Student Lookup after a deploy doesn't pay the ~5-10s cold-read cost
+    # of pulling the 1.7MB members doc from Mongo Atlas. Fire-and-forget —
+    # boot should not block on this.
+    async def _warm_name_index():
+        try:
+            import time as _time
+            t0 = _time.monotonic()
+            members = await lookup._get_name_index(db)
+            ms = int((_time.monotonic() - t0) * 1000)
+            logger.info(f"[startup] Name-search index warmed: {len(members)} members in {ms}ms")
+        except Exception as e:
+            logger.warning(f"[startup] Name-search index warm failed: {e}")
+    import asyncio as _asyncio
+    _asyncio.create_task(_warm_name_index())
+
     await _seed_admin()
     await _seed_team()
     await _seed_metrics()
