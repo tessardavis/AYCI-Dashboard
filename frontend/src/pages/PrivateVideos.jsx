@@ -35,9 +35,31 @@ function formatUkDate(iso) {
   }
 }
 
+// Auto-assignment helper: prefer the team_member_id linked on the user record,
+// fall back to matching the team_member by name (case-insensitive, substring
+// either direction). Returns "" if no usable match — caller then leaves the
+// assignee dropdown blank.
+function pickAutoAssignee(users, currentUser) {
+  if (!users || !currentUser) return "";
+  // 1. Authoritative link — server set this via _autolink_users_to_team_members.
+  const tmid = currentUser.team_member_id;
+  if (tmid && users.some((u) => u.id === tmid)) return tmid;
+  // 2. Name match (case-insensitive substring either direction). Handles the
+  //    case where the user record hasn't been auto-linked yet.
+  const myName = (currentUser.name || "").trim().toLowerCase();
+  if (myName) {
+    const byName = users.find((u) => {
+      const tn = (u.name || "").trim().toLowerCase();
+      if (!tn) return false;
+      return tn === myName || tn.includes(myName) || myName.includes(tn);
+    });
+    if (byName) return byName.id;
+  }
+  return "";
+}
+
 export default function PrivateVideos() {
   const { user } = useAuth();
-  const currentTeamMemberId = user?.team_member_id || null;
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -269,7 +291,7 @@ export default function PrivateVideos() {
         <EditModal
           item={editing}
           users={users}
-          currentTeamMemberId={currentTeamMemberId}
+          autoAssigneeId={pickAutoAssignee(users, user)}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -660,17 +682,11 @@ function InlineReplyLink({ item, onSaved }) {
   );
 }
 
-function EditModal({ item, users, currentTeamMemberId, onClose, onSaved }) {
+function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
   const [statusLabel, setStatusLabel] = useState(item.status || "");
-  // Auto-default Assignee to the current user if the row has none. Coach
-  // can still re-pick a teammate from the dropdown. Only applied when the
-  // current user is linked to a team_member AND is in the assignable list.
-  const initialAssignee =
-    item.assignee_id ||
-    (currentTeamMemberId && users.some((u) => u.id === currentTeamMemberId)
-      ? currentTeamMemberId
-      : "");
-  const [assigneeId, setAssigneeId] = useState(initialAssignee);
+  // Auto-default Assignee to the current user (resolved by parent) if the
+  // row has none. Coach can still re-pick a teammate from the dropdown.
+  const [assigneeId, setAssigneeId] = useState(item.assignee_id || autoAssigneeId || "");
   const [replied, setReplied] = useState((item.replied || "").slice(0, 10));
   const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
   const [saving, setSaving] = useState(false);
