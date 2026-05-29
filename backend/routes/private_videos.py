@@ -289,12 +289,10 @@ async def _build_send_to_circle_payload(item_id: str) -> dict:
     if not reply_url:
         raise HTTPException(400, "Add the voicenote URL first (Reply link field)")
 
+    # Note: we resolve the Zapier URL here but DON'T raise if it's missing.
+    # Preview must still work so the coach can verify content. The /send-to-circle
+    # route checks this itself before POSTing.
     zapier_url = await _get_zapier_url()
-    if not zapier_url:
-        raise HTTPException(
-            400,
-            "Zapier webhook not configured — set it in Settings → Integrations → 'Zapier Circle reply webhook'",
-        )
 
     # Resolve assignee name for the payload
     assignee_name = None
@@ -432,6 +430,7 @@ async def send_to_circle_preview(
         "message_text": built["message_text"],
         "destination": built["destination"],
         "destination_label": "Circle Group DM (private_chat_url)" if built["destination"] else None,
+        "zapier_configured": bool(built["zapier_url"]),
         "student_name": built["student_name"],
         "student_email": built["student_email"],
         "first_name": built["first_name"],
@@ -445,6 +444,7 @@ async def send_to_circle_preview(
         "payload": built["payload"],
         "warnings": [
             w for w in [
+                None if built["zapier_url"] else "Zapier webhook NOT configured — Send now will fail. Set it in Settings → Integrations → 'Zapier Circle reply webhook'.",
                 None if built["destination"] else "No private_chat_url on this row — Zapier may not know which DM to post to",
                 None if built["tally_video_url"] else "No student video URL on this row — message won't include the student's original video",
                 None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance — 'submission X of Y' line will be omitted",
@@ -463,6 +463,11 @@ async def send_to_circle(
     stamp `replied_at = now` and flip status → Done."""
     built = await _build_send_to_circle_payload(item_id)
     zapier_url = built["zapier_url"]
+    if not zapier_url:
+        raise HTTPException(
+            400,
+            "Zapier webhook not configured — set it in Settings → Integrations → 'Zapier Circle reply webhook'",
+        )
     payload = built["payload"]
     now_iso = payload["event"]["triggerTime"]
 

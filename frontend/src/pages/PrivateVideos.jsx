@@ -844,10 +844,16 @@ function EditModal({ item, users, onClose, onSaved }) {
                 </Button>
                 <Button
                   onClick={sendFromPreview}
-                  disabled={sending || !preview.destination}
+                  disabled={sending || !preview.destination || !preview.zapier_configured}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   data-testid="pv-edit-send-confirmed"
-                  title={!preview.destination ? "Can't send — no destination Circle DM URL on this row" : "Deliver this message now"}
+                  title={
+                    !preview.zapier_configured
+                      ? "Zapier webhook not configured (see warning above) — Send will fail"
+                      : !preview.destination
+                        ? "Can't send — no destination Circle DM URL on this row"
+                        : "Deliver this message now"
+                  }
                 >
                   {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                   Send now
