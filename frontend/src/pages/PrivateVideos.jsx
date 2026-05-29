@@ -567,12 +567,19 @@ function InlineReplyLink({ item, onSaved }) {
     const url = value.trim();
     setSaving(true);
     try {
+      // Inline edit only stores the URL. The row is NOT marked Done and the
+      // Replied date is NOT set — completion belongs to "Send to Circle" in
+      // the edit modal, which actually delivers the voicenote to the student.
+      // Previously this auto-marked Done and looked like the reply had been
+      // sent when it hadn't.
       await apiClient.patch(`/private-videos/${item.id}`, {
         reply_link: url,
-        replied: url ? new Date().toISOString().slice(0, 10) : null,
-        status_label: url ? "Done" : item.status,
       });
-      toast.success(url ? "Reply saved · marked Done" : "Reply cleared");
+      toast.success(
+        url
+          ? "Reply link saved — open Edit → Send to Circle to deliver"
+          : "Reply link cleared"
+      );
       onSaved?.();
       setEditing(false);
     } catch (e) {
