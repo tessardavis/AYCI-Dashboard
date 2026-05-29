@@ -153,12 +153,22 @@ export default function PrivateVideos() {
       }
       return true;
     });
-    // Oldest submission first — the longest-waiting student rises to the top
-    // so the team naturally clears the queue in fairness order.
+    // Active queue (not Done) — oldest submission first; the longest-waiting
+    // student rises to the top so the team clears the queue fairly.
+    // Done queue — newest-replied first so the most recently completed rows
+    // are easy to find / re-open. (Tessa explicitly asked for this on
+    // 2026-05-29 because Done rows used to bury recent completions.)
     rows.sort((a, b) => {
+      const aDone = (a.status || "").toLowerCase() === "done";
+      const bDone = (b.status || "").toLowerCase() === "done";
+      if (aDone && bDone) {
+        const ax = a.replied ? new Date(a.replied).getTime() : 0;
+        const bx = b.replied ? new Date(b.replied).getTime() : 0;
+        return bx - ax; // newest-replied first
+      }
       const ax = a.submitted ? new Date(a.submitted).getTime() : 0;
       const bx = b.submitted ? new Date(b.submitted).getTime() : 0;
-      return ax - bx;
+      return ax - bx; // oldest-submitted first
     });
     return rows;
   }, [items, search, statusFilter, assigneeFilter, showDone]);
@@ -736,13 +746,29 @@ function InlineReplyLink({ item, onSaved }) {
 }
 
 function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
+  const originalReplyLink = item.reply_link?.url || "";
   const [statusLabel, setStatusLabel] = useState(item.status || "");
   // Auto-default Assignee to the current user (resolved by parent) if the
   // row has none. Coach can still re-pick a teammate from the dropdown.
   const [assigneeId, setAssigneeId] = useState(item.assignee_id || autoAssigneeId || "");
-  const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
+  const [replyLink, setReplyLink] = useState(originalReplyLink);
   // No editable "Replied date" — the backend stamps it automatically when
   // Send now succeeds. Showing an empty date field made it look amendable.
+
+  // If the coach is editing a Done row's reply link, flip the status
+  // dropdown out of "Done" automatically — saving without re-sending
+  // shouldn't leave the row marked as delivered. They can manually pick
+  // "Done" again if they really want to keep the old completion stamp.
+  useEffect(() => {
+    if (
+      statusLabel === "Done" &&
+      replyLink.trim() &&
+      replyLink.trim() !== originalReplyLink.trim()
+    ) {
+      setStatusLabel("New");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replyLink]);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(null);       // null = preview not opened
