@@ -264,14 +264,23 @@ async def set_zapier_webhook(
     return {"ok": True, "configured": bool(url)}
 
 
-@router.post("/{item_id}/send-to-circle")
-async def send_to_circle(
-    item_id: str,
-    user: dict = Depends(require_board("private_videos")),
-):
-    """POST the voicenote URL to the configured Zapier webhook (which then
-    posts a fixed message into the student's Circle Group DM). On success,
-    stamp `replied_at = now` and flip status → Done."""
+async def _build_send_to_circle_payload(item_id: str) -> dict:
+    """Resolve everything that will be sent to Zapier for this row WITHOUT
+    actually sending. Used by both /send-to-circle (which then POSTs and
+    marks Done) and /send-to-circle-preview (which just returns this).
+
+    Raises HTTPException with the same shape as the live endpoint so
+    error handling is identical in both flows.
+
+    Returns a dict with:
+      - row              the Mongo row (so callers can reuse fields)
+      - zapier_url       the configured Zapier webhook
+      - message_text     the exact rendered message body
+      - payload          the full JSON we'd POST to Zapier
+      - destination      the student's Circle Group DM URL (private_chat_url)
+      - student_name / first_name / coach_name / sub_num / total / topic /
+        video_url / reply_url / tier — for the UI to show in the preview
+    """
     row = await db.private_video_submissions.find_one({"id": item_id}, {"_id": 0})
     if not row:
         raise HTTPException(404, "Submission not found")
@@ -389,6 +398,73 @@ async def send_to_circle(
         "message_text": message_text,
         "message": message_text,  # alias
     }
+
+    return {
+        "row": row,
+        "zapier_url": zapier_url,
+        "message_text": message_text,
+        "payload": payload,
+        "destination": row.get("private_chat_url"),
+        "student_name": student_name,
+        "first_name": first_name,
+        "student_email": row.get("email"),
+        "coach_name": coach_name,
+        "submission_number": sub_num,
+        "total_allowance": total,
+        "topic": topic,
+        "tally_video_url": video_url,
+        "reply_url": reply_url,
+        "tier": tier,
+    }
+
+
+@router.get("/{item_id}/send-to-circle-preview")
+async def send_to_circle_preview(
+    item_id: str,
+    user: dict = Depends(require_board("private_videos")),
+):
+    """Return exactly what /send-to-circle would deliver — rendered message,
+    destination Circle DM URL, full Zapier payload — WITHOUT sending or
+    marking the row Done. Used by the dashboard's Preview button so the
+    coach can verify recipient + content before firing the real webhook."""
+    built = await _build_send_to_circle_payload(item_id)
+    return {
+        "message_text": built["message_text"],
+        "destination": built["destination"],
+        "destination_label": "Circle Group DM (private_chat_url)" if built["destination"] else None,
+        "student_name": built["student_name"],
+        "student_email": built["student_email"],
+        "first_name": built["first_name"],
+        "coach_name": built["coach_name"],
+        "submission_number": built["submission_number"],
+        "total_allowance": built["total_allowance"],
+        "tier": built["tier"],
+        "topic": built["topic"],
+        "tally_video_url": built["tally_video_url"],
+        "reply_url": built["reply_url"],
+        "payload": built["payload"],
+        "warnings": [
+            w for w in [
+                None if built["destination"] else "No private_chat_url on this row — Zapier may not know which DM to post to",
+                None if built["tally_video_url"] else "No student video URL on this row — message won't include the student's original video",
+                None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance — 'submission X of Y' line will be omitted",
+            ] if w
+        ],
+    }
+
+
+@router.post("/{item_id}/send-to-circle")
+async def send_to_circle(
+    item_id: str,
+    user: dict = Depends(require_board("private_videos")),
+):
+    """POST the voicenote URL to the configured Zapier webhook (which then
+    posts a fixed message into the student's Circle Group DM). On success,
+    stamp `replied_at = now` and flip status → Done."""
+    built = await _build_send_to_circle_payload(item_id)
+    zapier_url = built["zapier_url"]
+    payload = built["payload"]
+    now_iso = payload["event"]["triggerTime"]
 
     try:
         async with httpx.AsyncClient(timeout=20) as c:

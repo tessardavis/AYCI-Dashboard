@@ -577,7 +577,7 @@ function InlineReplyLink({ item, onSaved }) {
       });
       toast.success(
         url
-          ? "Reply link saved — open Edit → Send to Circle to deliver"
+          ? "Reply link saved — open Edit → Preview → Send now to deliver"
           : "Reply link cleared"
       );
       onSaved?.();
@@ -663,6 +663,47 @@ function EditModal({ item, users, onClose, onSaved }) {
   const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [preview, setPreview] = useState(null);       // null = preview not opened
+  const [previewing, setPreviewing] = useState(false);
+
+  const openPreview = async () => {
+    const url = (replyLink || "").trim();
+    if (!url) {
+      toast.error("Add the voicenote URL first");
+      return;
+    }
+    setPreviewing(true);
+    try {
+      // Save current modal state first so the preview reflects what'd actually be sent
+      await apiClient.patch(`/private-videos/${item.id}`, {
+        status_label: statusLabel,
+        assignee_id: assigneeId || "",
+        replied: replied || null,
+        reply_link: url,
+      });
+      const { data } = await apiClient.get(
+        `/private-videos/${item.id}/send-to-circle-preview`,
+      );
+      setPreview(data);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Preview failed");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const sendFromPreview = async () => {
+    setSending(true);
+    try {
+      await apiClient.post(`/private-videos/${item.id}/send-to-circle`);
+      toast.success("Sent to Circle ✓ — marked Done");
+      onSaved();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Send failed");
+    } finally {
+      setSending(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -679,34 +720,6 @@ function EditModal({ item, users, onClose, onSaved }) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const sendToCircle = async () => {
-    const url = (replyLink || "").trim();
-    if (!url) {
-      toast.error("Add the voicenote URL first");
-      return;
-    }
-    if (!window.confirm(
-      `Post this voicenote to ${item.first_name || item.name}'s Circle Group DM via Zapier?\n\n${url}\n\nThis can't be undone.`
-    )) return;
-    setSending(true);
-    try {
-      // Save first so the URL is persisted on the row before the webhook fires
-      await apiClient.patch(`/private-videos/${item.id}`, {
-        status_label: statusLabel,
-        assignee_id: assigneeId || "",
-        replied: replied || null,
-        reply_link: url,
-      });
-      await apiClient.post(`/private-videos/${item.id}/send-to-circle`);
-      toast.success("Sent to Circle ✓ — marked Done");
-      onSaved();
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Send failed");
-    } finally {
-      setSending(false);
     }
   };
 
@@ -773,36 +786,97 @@ function EditModal({ item, users, onClose, onSaved }) {
             <div className="text-xs text-[var(--ayci-ink-muted)] bg-sky-50 border border-sky-200 rounded p-2 flex items-start gap-2">
               <MessageCircle className="w-3.5 h-3.5 text-sky-700 mt-0.5 shrink-0" />
               <div>
-                Clicking <strong>Send to Circle</strong> below posts the voicenote to{" "}
+                Clicking <strong>Preview message</strong> below shows the exact rendered message + destination. From the preview you click <strong>Send now</strong> to post the voicenote to{" "}
                 <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-sky-700 font-semibold hover:underline">
                   this Circle Group DM
                 </a>{" "}
-                via Zapier and marks the submission Done.
+                via Zapier (marks the submission Done).
+              </div>
+            </div>
+          )}
+
+          {preview && (
+            <div className="border-2 border-emerald-400 bg-emerald-50/60 rounded-md p-3 space-y-2.5">
+              <div className="flex items-start gap-2">
+                <Send className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">Preview — nothing has been sent yet</div>
+                  <div className="text-[11px] text-emerald-700/80 mt-0.5">
+                    Verify the destination + message below. Then click <strong>Send now</strong> to deliver, or <strong>Back</strong> to edit.
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs space-y-1.5">
+                <div><span className="font-semibold">To:</span> {preview.student_name} ({preview.student_email})</div>
+                <div>
+                  <span className="font-semibold">Destination DM:</span>{" "}
+                  {preview.destination ? (
+                    <a href={preview.destination} target="_blank" rel="noreferrer" className="text-sky-700 hover:underline break-all">{preview.destination}</a>
+                  ) : (
+                    <span className="text-red-700 font-semibold">⚠ MISSING</span>
+                  )}
+                </div>
+                <div><span className="font-semibold">Coach:</span> {preview.coach_name}</div>
+                {preview.submission_number && preview.total_allowance && (
+                  <div><span className="font-semibold">Counter:</span> submission {preview.submission_number} of {preview.total_allowance}</div>
+                )}
+                {!!preview.warnings?.length && (
+                  <div className="bg-amber-100 border border-amber-300 rounded p-2 mt-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">Warnings</div>
+                    <ul className="list-disc ml-4 text-[11px] text-amber-900 space-y-0.5">
+                      {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label>Message that will be posted</Label>
+                <pre className="text-xs bg-white border border-slate-200 rounded p-3 whitespace-pre-wrap font-sans leading-relaxed">{preview.message_text}</pre>
               </div>
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 flex-wrap">
-            <Button variant="outline" onClick={onClose} disabled={saving || sending}>Cancel</Button>
-            <Button
-              variant="outline"
-              onClick={save}
-              disabled={saving || sending}
-              data-testid="pv-edit-save"
-            >
-              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save
-            </Button>
-            <Button
-              onClick={sendToCircle}
-              disabled={saving || sending || !replyLink.trim()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              data-testid="pv-edit-send-circle"
-              title={!replyLink.trim() ? "Add the voicenote URL first" : "Save + post to Circle Group DM via Zapier"}
-            >
-              {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Send to Circle
-            </Button>
+            {preview ? (
+              <>
+                <Button variant="outline" onClick={() => setPreview(null)} disabled={sending}>
+                  ← Back
+                </Button>
+                <Button
+                  onClick={sendFromPreview}
+                  disabled={sending || !preview.destination}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="pv-edit-send-confirmed"
+                  title={!preview.destination ? "Can't send — no destination Circle DM URL on this row" : "Deliver this message now"}
+                >
+                  {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  Send now
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={onClose} disabled={saving || sending || previewing}>Cancel</Button>
+                <Button
+                  variant="outline"
+                  onClick={save}
+                  disabled={saving || sending || previewing}
+                  data-testid="pv-edit-save"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={openPreview}
+                  disabled={saving || sending || previewing || !replyLink.trim()}
+                  data-testid="pv-edit-preview"
+                  title={!replyLink.trim() ? "Add the voicenote URL first" : "See exactly what will be sent before sending"}
+                >
+                  {previewing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Preview message
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
