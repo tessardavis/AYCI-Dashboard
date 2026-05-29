@@ -524,6 +524,29 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
         <div className="text-[11px] text-[var(--ayci-ink-muted)]">
           {item.email || "no email"}
         </div>
+        {(item.interview_date || item.interview_type) && (
+          <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-0.5 flex items-center gap-1.5 flex-wrap">
+            {item.interview_date && (
+              <span title="Student's interview date (from Academy Members)">
+                <span className="font-semibold">Interview:</span> {formatUkDate(item.interview_date)}
+              </span>
+            )}
+            {item.interview_type && (
+              <span
+                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                  item.interview_type.toLowerCase() === "locum"
+                    ? "bg-blue-50 text-blue-800 border-blue-200"
+                    : item.interview_type.toLowerCase() === "substantive"
+                      ? "bg-purple-50 text-purple-800 border-purple-200"
+                      : "bg-slate-50 text-slate-700 border-slate-200"
+                }`}
+                title="Interview type (from Academy Members)"
+              >
+                {item.interview_type}
+              </span>
+            )}
+          </div>
+        )}
       </td>
       <td className="px-3 py-2.5 max-w-[300px]">
         <div className="text-sm text-[var(--ayci-ink)] line-clamp-2">{item.question || "—"}</div>

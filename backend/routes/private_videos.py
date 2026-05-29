@@ -315,12 +315,19 @@ async def _build_send_to_circle_payload(item_id: str) -> dict:
 
     # Self-heal any fields we couldn't capture at ingest time (older
     # Monday-migrated rows, or Tally rows where the Academy Members lookup
-    # was racy / failed). Re-hit the Academy Members board if tier, total
-    # allowance, OR the click-through Circle DM URL is missing — and persist
-    # what we find back to the row so future previews don't re-fetch.
+    # was racy / failed). Re-hit the Academy Members board if anything's
+    # missing and persist what we find back to the row so future previews
+    # don't re-fetch.
     tier = row.get("tier")
     private_chat_url_resolved = row.get("private_chat_url") or None
-    if not total or not tier or not private_chat_url_resolved:
+    needs_lookup = (
+        not total
+        or not tier
+        or not private_chat_url_resolved
+        or not row.get("interview_date")
+        or not row.get("interview_type")
+    )
+    if needs_lookup:
         try:
             academy = await pv_store._academy_lookup(db, row.get("email") or "")
             if academy:
@@ -330,12 +337,10 @@ async def _build_send_to_circle_payload(item_id: str) -> dict:
                     private_chat_url_resolved = academy["private_chat_url"]
                 # Persist the rescued fields back so we never re-look them up.
                 updates = {}
-                if academy.get("tier") and not row.get("tier"):
-                    updates["tier"] = academy["tier"]
-                if academy.get("total_allowance") and not row.get("total_allowance"):
-                    updates["total_allowance"] = academy["total_allowance"]
-                if academy.get("private_chat_url") and not row.get("private_chat_url"):
-                    updates["private_chat_url"] = academy["private_chat_url"]
+                for field in ("tier", "total_allowance", "private_chat_url",
+                              "interview_date", "interview_type"):
+                    if academy.get(field) and not row.get(field):
+                        updates[field] = academy[field]
                 if updates:
                     try:
                         await db.private_video_submissions.update_one(

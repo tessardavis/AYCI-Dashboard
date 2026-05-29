@@ -148,6 +148,7 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         "replied": row.get("replied_at"),
         "private_chat": row.get("private_chat_url"),
         "interview_date": row.get("interview_date"),
+        "interview_type": row.get("interview_type"),
         # assignee — return the team_member id + name (was Monday person id + name in legacy)
         "assignee_id": row.get("assignee_team_member_id"),
         "assignee_name": (assignee or {}).get("name"),
@@ -243,8 +244,13 @@ async def update_submission(db, submission_id: str, patch: dict) -> dict:
 
 # ------------------------------------------------------------- Enrichment
 async def _academy_lookup(db, email: str) -> dict:
-    """Pull the student's row from Monday Academy Members → tier, private chat
-    URL, allowance baseline. Returns {} on miss/error so ingest never fails."""
+    """Pull the student's row from Monday Academy Members → tier, private
+    chat URL, allowance baseline, interview date + type. Returns {} on
+    miss/error so ingest never fails.
+
+    Note: `student_lookup.monday_lookup` returns `data.columns` keyed by
+    column TITLE, not by column id, so we look up by the human-readable
+    title from the board schema."""
     if not email:
         return {}
     try:
@@ -256,18 +262,15 @@ async def _academy_lookup(db, email: str) -> dict:
     if not result.get("found"):
         return {}
     cols = (result.get("data") or {}).get("columns") or {}
-    # Tier: dropdown_mkqxgqbq
-    tier_text = ""
-    for col_id, c in cols.items():
-        if col_id == "dropdown_mkqxgqbq":
-            tier_text = (c.get("text") or "").strip().lower()
-            break
-    # Private chat URL: text_mky9xzew
-    private_chat = ""
-    for col_id, c in cols.items():
-        if col_id == "text_mky9xzew":
-            private_chat = (c.get("text") or "").strip()
-            break
+
+    def _txt(title: str) -> str:
+        return ((cols.get(title) or {}).get("text") or "").strip()
+
+    tier_text = _txt("Tier").lower()
+    private_chat = _txt("Private Chat Link")
+    interview_date = _txt("Interview Date") or None
+    interview_type = _txt("Interview Type") or None
+
     # Allowances dict already computed by lookup
     allowances = (result.get("data") or {}).get("allowances") or {}
     video_allowance = ((allowances.get("videos") or {}).get("allowance")) or None
@@ -278,6 +281,8 @@ async def _academy_lookup(db, email: str) -> dict:
         "tier": tier_text or None,
         "private_chat_url": private_chat or None,
         "total_allowance": video_allowance,
+        "interview_date": interview_date,
+        "interview_type": interview_type,
     }
 
 
@@ -383,7 +388,8 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         "replied_at": None,
         "reply_link": None,
         "private_chat_url": academy.get("private_chat_url"),
-        "interview_date": None,
+        "interview_date": academy.get("interview_date"),
+        "interview_type": academy.get("interview_type"),
         "tier": academy.get("tier"),
         "data_source": "tally",
         "created_at": now,
