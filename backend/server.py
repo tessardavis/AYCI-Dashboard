@@ -933,6 +933,20 @@ async def on_startup():
             [("cohort", 1), ("snapshot_date", -1)],
             name="cohort_snapshot_date",
         )
+        # url_shortlinks: idempotent shorten() relies on unique long_url;
+        # /v/{code} redirect lookup hits unique code. Drop any pre-self-
+        # hosted rows (is.gd era — they stored `short_url` instead of
+        # `code`, which would collide with the new unique index).
+        old_shortlinks_cleared = await db.url_shortlinks.delete_many(
+            {"code": {"$exists": False}}
+        )
+        if old_shortlinks_cleared.deleted_count:
+            logger.info(
+                f"Cleared {old_shortlinks_cleared.deleted_count} pre-self-hosted "
+                f"url_shortlinks docs"
+            )
+        await db.url_shortlinks.create_index("long_url", unique=True)
+        await db.url_shortlinks.create_index("code", unique=True)
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
 
@@ -1609,6 +1623,21 @@ async def diag_lookup_fanout(email: str):
     except Exception as e:
         return {"ok": False, "elapsed_ms": int((_time.monotonic() - t0) * 1000),
                 "error": f"{type(e).__name__}: {e}"}
+
+
+# --- Shortlink redirect -------------------------------------------------
+# Tally video URLs in outbound coach messages get shortened to /v/{code}.
+# This is the redirect that turns those codes back into the original target.
+# Mounted on `app` (not `api`) so the resulting URL is /v/abc123 — short.
+from fastapi.responses import RedirectResponse  # noqa: E402
+
+
+@app.get("/v/{code}")
+async def shortlink_redirect(code: str):
+    row = await db.url_shortlinks.find_one({"code": code}, {"_id": 0, "long_url": 1})
+    if not row or not row.get("long_url"):
+        raise HTTPException(404, "Shortlink not found")
+    return RedirectResponse(url=row["long_url"], status_code=302)
 
 
 # --- Mount routers --------------------------------------------------------
