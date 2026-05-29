@@ -580,9 +580,9 @@ function InlineAssignee({ item, users, onSaved }) {
   );
 }
 
-// Click "+ Reply" / pencil → tiny inline input → patch in place. The same
-// PATCH endpoint also auto-flips status to Done and stamps `replied` so the
-// row immediately moves out of the active queue.
+// Click "+ Reply" / pencil → tiny inline input → patch in place. Only the
+// reply_link is stored; status + replied date are set later when the coach
+// actually sends via the modal's Preview → Send now flow.
 function InlineReplyLink({ item, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(item.reply_link?.url || "");
@@ -687,8 +687,9 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
   // Auto-default Assignee to the current user (resolved by parent) if the
   // row has none. Coach can still re-pick a teammate from the dropdown.
   const [assigneeId, setAssigneeId] = useState(item.assignee_id || autoAssigneeId || "");
-  const [replied, setReplied] = useState((item.replied || "").slice(0, 10));
   const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
+  // No editable "Replied date" — the backend stamps it automatically when
+  // Send now succeeds. Showing an empty date field made it look amendable.
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(null);       // null = preview not opened
@@ -706,7 +707,6 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
       await apiClient.patch(`/private-videos/${item.id}`, {
         status_label: statusLabel,
         assignee_id: assigneeId || "",
-        replied: replied || null,
         reply_link: url,
       });
       const { data } = await apiClient.get(
@@ -739,7 +739,6 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
       await apiClient.patch(`/private-videos/${item.id}`, {
         status_label: statusLabel,
         assignee_id: assigneeId || "",
-        replied: replied || null,
         reply_link: replyLink,
       });
       toast.success("Saved");
@@ -792,10 +791,6 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
                 <option value="">Unassigned</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-            </div>
-            <div>
-              <Label>Replied date</Label>
-              <input type="date" value={replied} onChange={(e) => setReplied(e.target.value)} className={inputCls} data-testid="pv-edit-replied" />
             </div>
             <div>
               <Label>Reply link (voicenote URL)</Label>
