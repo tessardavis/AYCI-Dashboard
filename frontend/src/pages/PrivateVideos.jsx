@@ -12,6 +12,7 @@ import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 
 const STATUS_OPTIONS = ["New", "Working on it", "Done", "Update name"];
 const STATUS_TONE = {
@@ -35,6 +36,8 @@ function formatUkDate(iso) {
 }
 
 export default function PrivateVideos() {
+  const { user } = useAuth();
+  const currentTeamMemberId = user?.team_member_id || null;
   const [items, setItems] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -266,6 +269,7 @@ export default function PrivateVideos() {
         <EditModal
           item={editing}
           users={users}
+          currentTeamMemberId={currentTeamMemberId}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -656,9 +660,17 @@ function InlineReplyLink({ item, onSaved }) {
   );
 }
 
-function EditModal({ item, users, onClose, onSaved }) {
+function EditModal({ item, users, currentTeamMemberId, onClose, onSaved }) {
   const [statusLabel, setStatusLabel] = useState(item.status || "");
-  const [assigneeId, setAssigneeId] = useState(item.assignee_id || "");
+  // Auto-default Assignee to the current user if the row has none. Coach
+  // can still re-pick a teammate from the dropdown. Only applied when the
+  // current user is linked to a team_member AND is in the assignable list.
+  const initialAssignee =
+    item.assignee_id ||
+    (currentTeamMemberId && users.some((u) => u.id === currentTeamMemberId)
+      ? currentTeamMemberId
+      : "");
+  const [assigneeId, setAssigneeId] = useState(initialAssignee);
   const [replied, setReplied] = useState((item.replied || "").slice(0, 10));
   const [replyLink, setReplyLink] = useState(item.reply_link?.url || "");
   const [saving, setSaving] = useState(false);

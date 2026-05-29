@@ -327,7 +327,19 @@ async def _build_send_to_circle_payload(item_id: str) -> dict:
 
     coach_name = assignee_name or "Your AYCI coach"
     topic = (row.get("question") or "").strip() or "your latest submission"
-    video_url = row.get("tally_video_url") or ""
+    video_url_raw = row.get("tally_video_url") or ""
+
+    # Tally video URLs are ~200 chars (signed storage URL with access token).
+    # Shorten via is.gd, cached in Mongo so repeat previews are idempotent.
+    # If shortening fails (network / rate limit), fall back to the raw URL.
+    video_url = video_url_raw
+    if video_url_raw:
+        try:
+            import url_shortener
+            video_url = await url_shortener.shorten(db, video_url_raw)
+        except Exception as e:
+            logger.info(f"[private-videos] tally video url shorten skipped: {e}")
+            video_url = video_url_raw
 
     # Compose the full message body. Zapier just relays `message_text` into
     # the Circle DM; copy lives in code so we can iterate without re-wiring
@@ -446,6 +458,7 @@ async def send_to_circle_preview(
             w for w in [
                 None if built["zapier_url"] else "Zapier webhook NOT configured — Send now will fail. Set it in Settings → Integrations → 'Zapier Circle reply webhook'.",
                 None if built["destination"] else "No private_chat_url on this row — Zapier may not know which DM to post to",
+                None if built["row"].get("assignee_team_member_id") else "No coach assigned — message will say 'Your AYCI coach' instead of your name. Pick an assignee in the form above before sending.",
                 None if built["tally_video_url"] else "No student video URL on this row — message won't include the student's original video",
                 None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance — 'submission X of Y' line will be omitted",
             ] if w
