@@ -320,31 +320,48 @@ Once that's done, Phase 1 work can start.
 
 ---
 
-## 10. Private Videos board (`5083952249`) — almost done
+## 10. Private Videos board (`5083952249`) — code-ready, team not migrated
 
-**Surprise finding from the 2026-05-29 audit.** The Mongo-backed replacement for this board is already implemented; we just need to finish the cutover.
+**Correction (2026-05-29):** I initially called this "almost done" based on the code state. Tessa clarified the team is still working on Monday for Private Videos — Tally → Monday only, the dashboard's webhook isn't wired, and coaches haven't switched. So this is a real migration, not just code cleanup. The good news: the dashboard's *page* is already feature-complete, so the work is mainly cutover + change-management, not UI build.
 
-### Current state
+### Code state today
 
-- `backend/private_videos_store.py` — Mongo-backed CRUD (collection `db.private_video_submissions`). Used by every route handler.
-- `backend/routes/private_videos.py` — wired to `private_videos_store` (`import private_videos_store as pv_store`). All read/write endpoints use Mongo.
-- **Tally form** writes directly into Mongo via `POST /api/private-videos/tally-webhook` → `pv_store.ingest_tally_submission`. Idempotent on `tally_submission_id`. No Monday call.
-- `backend/private_videos.py` — the legacy Monday-direct module. **Zero callers** in the codebase (confirmed via grep). Dead code.
-- `pv_store.sync_from_monday` + `migrate_from_monday` exist only as manually-triggered admin endpoints (`POST /api/private-videos/migrate-from-monday`, `POST .../sync-from-monday`). **No cron** runs them.
-- The 19 columns on board `5083952249` are: Name, Assigned to, Status, Member First/Last Name + Email, Submitted, Question, Link to Tally video, Link to video, Link to reply, Send-reply button, Total allowance, Submission number, Replied, Private Chat Link, Gdrive File ID, board_relation to Academy Members, Interview Date. The Mongo `private_video_submissions` doc covers all of these (verify in `ingest_tally_submission` row shape).
+- `backend/private_videos_store.py` — Mongo-backed CRUD on `db.private_video_submissions`. Used by every route handler.
+- `backend/routes/private_videos.py` — wired to `private_videos_store`. All read/write endpoints use Mongo.
+- `frontend/src/pages/PrivateVideos.jsx` — feature-complete UI: search, status + assignee filters, stat pills, inline assignee dropdown, inline reply link edit, edit modal (status / assignee / replied / reply link), "Send to Circle" reply flow, video player, Circle DM jump, per-row Tally / Monday source badge, "Sync from Monday" button.
+- `pv_store.ingest_tally_submission` accepts a Tally webhook and writes to Mongo (idempotent on `tally_submission_id`). **Currently NOT wired in Tally** — the form still POSTs to Monday.
+- `backend/private_videos.py` — legacy Monday-direct module. **Zero callers.** Dead code, safe to delete after cutover.
+- `pv_store.sync_from_monday` + `migrate_from_monday` exist only as admin endpoints. **No cron behind them.** These will be the bridge during transition.
 
-### What's left
+### Team state today
 
-| Step | What | Effort |
-|---|---|---|
-| PV-1 | Confirm Tally form `0Qr5py` is configured to POST to the prod webhook URL (`https://<vercel-domain>/api/private-videos/tally-webhook` or direct to Render). Check in Tally admin. | 5 min |
-| PV-2 | Confirm there's nothing outside the codebase still writing to the Monday board (Zapier zaps, Monday automations, manual coach edits in Monday UI). Audit on the Monday side. | 15 min |
-| PV-3 | Run `pv_store.migrate_from_monday` one final time to pick up any rows added since the last sync, then **archive** the Monday board (don't delete — keep as historical reference). | 10 min |
-| PV-4 | Delete the dead `backend/private_videos.py` module + the two admin sync endpoints (`migrate-from-monday`, `sync-from-monday`) after PV-3 confirms Mongo is canonical. | 30 min code, single PR |
-| PV-5 | Update `backend/private_videos_store.py` docstrings to drop "replaces Monday" wording (no longer aspirational). | 5 min |
+- Tally → Monday only (native Tally-Monday integration or Zapier).
+- Coaches log into the Monday board to edit Status, Assignee, Replied, Reply link.
+- The dashboard Private Videos page exists but isn't part of anyone's daily workflow yet.
 
-**Open question for Tessa on Private Videos:**
-- A. Are coaches still editing Private Videos rows in the Monday UI today, or has the team already moved their workflow into the dashboard's Private Videos page? (Answer determines whether PV-2 needs a careful audit or can be a quick check.)
+### Cutover plan
 
-This board is so close to done that we can knock it out **before** the bigger Academy Members migration if you want a quick win. The two projects don't conflict — different collections, different code paths.
+| Step | What | Owner | Effort |
+|---|---|---|---|
+| PV-A | Sit down with one coach for 10 min and walk through the dashboard's Private Videos page. List anything they think is missing or worse than Monday (column they need, action they can't take, etc.). | Tessa | 15 min + Loom share |
+| PV-B | Close any real gaps PV-A surfaces. Most likely a small UI tweak or two; if it's a bigger gap, decide whether to defer it. | Me | depends on gap |
+| PV-C | Run `POST /api/private-videos/migrate-from-monday` to backfill Mongo with every existing Monday row. Verify counts match. | Me + Tessa to verify | 30 min |
+| PV-D | Set up a 5-min cron running `sync_from_monday(preserve_team_edits=True)` so coach edits on Monday flow into Mongo during the transition. (Right now this only runs on a manual button.) | Me | 1 h |
+| PV-E | Re-point Tally form `0Qr5py` webhook from Monday → `https://ayci-dashboard.onrender.com/api/private-videos/tally-webhook`. From this moment new submissions land in Mongo as the primary record; the Monday-side row is whatever Tally's old integration still creates (parallel). | Tessa (Tally admin) | 5 min |
+| PV-F | Announce to the team: "from now on edit on the dashboard, not Monday." Run for 1-2 weeks. Watch the per-row data-source badge to confirm new rows are Tally-ingested. | Tessa | 0 |
+| PV-G | Turn off the Tally → Monday integration entirely. Stop the sync_from_monday cron. Archive the Monday board (read-only, don't delete). | Tessa + me | 30 min |
+| PV-H | Delete `backend/private_videos.py` + the admin sync endpoints + the "Sync from Monday" button. Update docstrings. | Me | 30 min |
+
+### Open questions for Tessa on Private Videos
+
+1. **Coach demo.** Want me to set up a Loom-style walkthrough script of the dashboard's Private Videos page that you can send to one coach for feedback (PV-A)? Or you'll show them yourself?
+2. **Cron cadence.** During the transition, how often should we pull edits from Monday? Every 5 min feels right but it depends on how active the editing is. Could also be 15 min or hourly.
+3. **Migration test run.** Want to dry-run PV-C against a staging DB first, or go straight against prod and roll back if needed? (Migration is idempotent and only writes — no destructive ops — so prod-direct is reasonable.)
+4. **Tally webhook URL.** I should confirm whether Tally should POST to Vercel (which rewrites to Render) or direct to Render (`https://ayci-dashboard.onrender.com/api/private-videos/tally-webhook`). I'll check the existing routes when we get to PV-E.
+
+### Priority decision
+
+The Private Videos cutover is small enough to do **alongside** the Academy Members audit/spec without conflict (different collections, different routes, different team workflow). It could also serve as a useful "first cutover" to derisk the bigger one — same pattern (re-point Tally, mirror Monday, swap reads, train team, archive board) at a smaller scale.
+
+**Recommendation:** do PV-A this week (15 min with one coach), then schedule the rest while the Academy Members workflow walkthrough is being planned.
 
