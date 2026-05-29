@@ -1,8 +1,11 @@
-# Monday Replacement Spec — Academy Members Board
+# Monday Replacement Spec — Academy Members + Private Videos Boards
 
-**Goal:** Replace the Monday "Academy Members" board (id `1956295952`) with a Mongo `students` collection as the source of truth. Driver: speed / reliability — Monday API is slow and rate-limited.
+**Goal:** Replace the Monday boards we control with Mongo collections as the source of truth. Driver: speed / reliability — Monday API is slow and rate-limited.
 
-**Scope:** Only the Academy Members board. Other Monday boards (private videos `5083952249`, cohort, scorecard boards) stay on Monday.
+**Scope (updated 2026-05-29):**
+1. **Academy Members** (`1956295952`) — primary scope, multi-week project. See §§ 1–9 below.
+2. **Private Videos** (`5083952249`) — *already mostly migrated*; only cleanup + cutover remains. See §10 below.
+3. Other Monday boards (cohort, scorecard, internal team boards) **stay on Monday**.
 
 **Status:** Phase 0 — audit + spec. **Nothing in this doc has been implemented.**
 
@@ -314,3 +317,34 @@ Collection: `students`. One document per student. `_id` = stable internal UUID; 
 - Decisions on the open questions in §7.
 
 Once that's done, Phase 1 work can start.
+
+---
+
+## 10. Private Videos board (`5083952249`) — almost done
+
+**Surprise finding from the 2026-05-29 audit.** The Mongo-backed replacement for this board is already implemented; we just need to finish the cutover.
+
+### Current state
+
+- `backend/private_videos_store.py` — Mongo-backed CRUD (collection `db.private_video_submissions`). Used by every route handler.
+- `backend/routes/private_videos.py` — wired to `private_videos_store` (`import private_videos_store as pv_store`). All read/write endpoints use Mongo.
+- **Tally form** writes directly into Mongo via `POST /api/private-videos/tally-webhook` → `pv_store.ingest_tally_submission`. Idempotent on `tally_submission_id`. No Monday call.
+- `backend/private_videos.py` — the legacy Monday-direct module. **Zero callers** in the codebase (confirmed via grep). Dead code.
+- `pv_store.sync_from_monday` + `migrate_from_monday` exist only as manually-triggered admin endpoints (`POST /api/private-videos/migrate-from-monday`, `POST .../sync-from-monday`). **No cron** runs them.
+- The 19 columns on board `5083952249` are: Name, Assigned to, Status, Member First/Last Name + Email, Submitted, Question, Link to Tally video, Link to video, Link to reply, Send-reply button, Total allowance, Submission number, Replied, Private Chat Link, Gdrive File ID, board_relation to Academy Members, Interview Date. The Mongo `private_video_submissions` doc covers all of these (verify in `ingest_tally_submission` row shape).
+
+### What's left
+
+| Step | What | Effort |
+|---|---|---|
+| PV-1 | Confirm Tally form `0Qr5py` is configured to POST to the prod webhook URL (`https://<vercel-domain>/api/private-videos/tally-webhook` or direct to Render). Check in Tally admin. | 5 min |
+| PV-2 | Confirm there's nothing outside the codebase still writing to the Monday board (Zapier zaps, Monday automations, manual coach edits in Monday UI). Audit on the Monday side. | 15 min |
+| PV-3 | Run `pv_store.migrate_from_monday` one final time to pick up any rows added since the last sync, then **archive** the Monday board (don't delete — keep as historical reference). | 10 min |
+| PV-4 | Delete the dead `backend/private_videos.py` module + the two admin sync endpoints (`migrate-from-monday`, `sync-from-monday`) after PV-3 confirms Mongo is canonical. | 30 min code, single PR |
+| PV-5 | Update `backend/private_videos_store.py` docstrings to drop "replaces Monday" wording (no longer aspirational). | 5 min |
+
+**Open question for Tessa on Private Videos:**
+- A. Are coaches still editing Private Videos rows in the Monday UI today, or has the team already moved their workflow into the dashboard's Private Videos page? (Answer determines whether PV-2 needs a careful audit or can be a quick check.)
+
+This board is so close to done that we can knock it out **before** the bigger Academy Members migration if you want a quick win. The two projects don't conflict — different collections, different code paths.
+
