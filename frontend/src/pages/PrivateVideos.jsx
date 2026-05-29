@@ -178,6 +178,32 @@ export default function PrivateVideos() {
     return c;
   }, [items]);
 
+  // Row-level Send: quick confirm dialog (student name + destination URL),
+  // then fire /send-to-circle directly. For full preview flow the coach
+  // can still go through Edit → Preview message → Send now in the modal.
+  const sendNow = async (item) => {
+    const replyUrl = item.reply_link?.url;
+    if (!replyUrl) {
+      toast.error("No voicenote link saved yet — paste one into the row first");
+      return;
+    }
+    const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name || item.email;
+    const dest = item.private_chat;
+    const confirmText =
+      `Send voicenote to ${studentName} via Circle DM?\n\n` +
+      `Destination: ${dest || "(no Circle DM URL on this row — Send will fail)"}\n\n` +
+      `Voicenote: ${replyUrl}\n\n` +
+      `This can't be undone.`;
+    if (!window.confirm(confirmText)) return;
+    try {
+      await apiClient.post(`/private-videos/${item.id}/send-to-circle`);
+      toast.success(`Sent to ${studentName} ✓`);
+      load(true);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Send failed");
+    }
+  };
+
   return (
     <div className="p-4 lg:p-10 max-w-[1700px] mx-auto" data-testid="private-videos-page">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -280,7 +306,14 @@ export default function PrivateVideos() {
                   </td>
                 </tr>
               ) : filtered.map((it) => (
-                <Row key={it.id} item={it} users={users} onEdit={() => setEditing(it)} onSaved={() => load(true)} />
+                <Row
+                  key={it.id}
+                  item={it}
+                  users={users}
+                  onEdit={() => setEditing(it)}
+                  onSaved={() => load(true)}
+                  onSend={sendNow}
+                />
               ))}
             </tbody>
           </table>
@@ -427,10 +460,11 @@ function EmptyStateMigrate({ onMigrated }) {
   );
 }
 
-function Row({ item, users, onEdit, onSaved }) {
+function Row({ item, users, onEdit, onSaved, onSend }) {
   const assignee = item.assignee_name || (users.find((u) => u.id === item.assignee_id) || {}).name || null;
   const tally = item.tally_video?.url || item.video?.url;
   const reply = item.reply_link?.url;
+  const replyReady = !!reply;
   const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name;
   const subNum = item.submission_number;
   const total = item.total_allowance;
@@ -507,10 +541,29 @@ function Row({ item, users, onEdit, onSaved }) {
             </a>
           )}
           <InlineReplyLink item={item} onSaved={onSaved} />
+          {replyReady && (
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap"
+              title="A voicenote URL is saved on this row — it's ready to send."
+              data-testid={`pv-voicenote-ready-${item.id}`}
+            >
+              ✓ Voicenote
+            </span>
+          )}
           {item.private_chat && (
             <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-xs text-sky-700 hover:underline flex items-center gap-0.5" title="Open Circle DM thread">
               <ExternalLink className="w-3 h-3" /> Circle
             </a>
+          )}
+          {replyReady && (
+            <button
+              onClick={() => onSend?.(item)}
+              className="text-xs px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold inline-flex items-center gap-0.5"
+              title="Send the voicenote to this student's Circle DM. You'll get a quick confirm before it fires."
+              data-testid={`pv-send-${item.id}`}
+            >
+              <Send className="w-3 h-3" /> Send
+            </button>
           )}
           <button
             onClick={onEdit}
