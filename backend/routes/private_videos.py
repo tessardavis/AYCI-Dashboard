@@ -313,15 +313,37 @@ async def _build_send_to_circle_payload(item_id: str) -> dict:
     if sub_num and total:
         pulse_name = f"{student_name} video {sub_num} of {total}"
 
-    # Resolve tier on the fly if the row doesn't have it (e.g. older
-    # Monday-migrated rows). This makes total_allowance more reliable.
+    # Self-heal any fields we couldn't capture at ingest time (older
+    # Monday-migrated rows, or Tally rows where the Academy Members lookup
+    # was racy / failed). Re-hit the Academy Members board if tier, total
+    # allowance, OR the click-through Circle DM URL is missing — and persist
+    # what we find back to the row so future previews don't re-fetch.
     tier = row.get("tier")
-    if not total or not tier:
+    private_chat_url_resolved = row.get("private_chat_url") or None
+    if not total or not tier or not private_chat_url_resolved:
         try:
             academy = await pv_store._academy_lookup(db, row.get("email") or "")
             if academy:
                 tier = tier or academy.get("tier")
                 total = total or academy.get("total_allowance")
+                if not private_chat_url_resolved and academy.get("private_chat_url"):
+                    private_chat_url_resolved = academy["private_chat_url"]
+                # Persist the rescued fields back so we never re-look them up.
+                updates = {}
+                if academy.get("tier") and not row.get("tier"):
+                    updates["tier"] = academy["tier"]
+                if academy.get("total_allowance") and not row.get("total_allowance"):
+                    updates["total_allowance"] = academy["total_allowance"]
+                if academy.get("private_chat_url") and not row.get("private_chat_url"):
+                    updates["private_chat_url"] = academy["private_chat_url"]
+                if updates:
+                    try:
+                        await db.private_video_submissions.update_one(
+                            {"id": item_id}, {"$set": updates}
+                        )
+                        row.update(updates)
+                    except Exception as ue:
+                        logger.info(f"[private-videos] persist academy rescue skipped: {ue}")
         except Exception as e:
             logger.info(f"[private-videos] academy lookup skipped for {item_id}: {e}")
 
