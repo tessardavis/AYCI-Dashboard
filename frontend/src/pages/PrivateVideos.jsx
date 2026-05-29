@@ -980,10 +980,15 @@ const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-
 // endpoint and show progress so the user knows it's working.
 function InlineVideo({ itemId }) {
   const [errored, setErrored] = useState(false);
-  const [status, setStatus] = useState("loading");
+  // Lazy-load: don't poll / transcode until the coach clicks Play. The
+  // transcode is 10-30s on first hit and most coaches don't need to watch
+  // every video to compose a reply — they have the question text already.
+  const [started, setStarted] = useState(false);
+  const [status, setStatus] = useState("idle");
   const proxyUrl = `${API}/private-videos/${itemId}/video`;
 
   useEffect(() => {
+    if (!started) return;
     let cancelled = false;
     let pollTimer = null;
     const poll = async () => {
@@ -1005,7 +1010,25 @@ function InlineVideo({ itemId }) {
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [itemId]);
+  }, [itemId, started]);
+
+  if (!started) {
+    return (
+      <button
+        type="button"
+        onClick={() => setStarted(true)}
+        className="w-full aspect-video rounded-md bg-slate-100 border border-slate-200 hover:bg-slate-200/70 hover:border-slate-300 transition flex flex-col items-center justify-center gap-2 text-[var(--ayci-ink-muted)] px-4 text-center group"
+        data-testid="pv-video-play"
+        title="Load and play the student's video (first load ~10-30s while we transcode for your browser)"
+      >
+        <div className="w-12 h-12 rounded-full bg-white border border-slate-300 group-hover:border-[var(--ayci-accent)] group-hover:bg-[var(--ayci-accent)] flex items-center justify-center transition">
+          <Video className="w-5 h-5 text-[var(--ayci-accent)] group-hover:text-white transition" />
+        </div>
+        <div className="text-xs font-semibold text-[var(--ayci-ink)]">Play student video</div>
+        <div className="text-[10px]">First load ~10-30s · cached after that</div>
+      </button>
+    );
+  }
 
   if (errored || status === "error" || status === "no_video") {
     // Inline `<video>` couldn't play. We ALWAYS route the fallback to our
