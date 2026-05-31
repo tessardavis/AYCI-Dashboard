@@ -267,15 +267,18 @@ async def set_zapier_webhook(
 async def _build_send_to_circle_payload(
     item_id: str,
     current_user: Optional[dict] = None,
+    override_assignee: bool = False,
 ) -> dict:
     """Resolve everything that will be sent to Zapier for this row WITHOUT
     actually sending. Used by both /send-to-circle (which then POSTs and
     marks Done) and /send-to-circle-preview (which just returns this).
 
-    If the row has no assignee_team_member_id AND `current_user` has one,
-    auto-assign to the current user and persist back to the row. This
-    means row-level Send (which bypasses the Edit modal's dropdown
-    auto-default) still records who actually sent the message.
+    Assignee handling:
+      - override_assignee=False (Preview path) — auto-assign current user
+        ONLY if the row has no assignee yet. Respects modal-set assignment.
+      - override_assignee=True (Send path) — always set assignee to the
+        current user, overriding any existing value. Whoever clicks Send
+        gets credited; the message body says their name.
 
     Raises HTTPException with the same shape as the live endpoint so
     error handling is identical in both flows.
@@ -302,21 +305,24 @@ async def _build_send_to_circle_payload(
     # route checks this itself before POSTing.
     zapier_url = await _get_zapier_url()
 
-    # Auto-assign the current user if the row has no assignee. Keeps row-level
-    # Send (which doesn't open the modal) consistent with modal Send (where the
-    # frontend pre-selects the current user). Persist so the Done queue
-    # actually records who responded.
-    if not row.get("assignee_team_member_id") and current_user:
+    # Set the assignee. On the Send path (override_assignee=True) whoever
+    # clicks Send becomes the assignee — overrides any previous value so the
+    # Done queue + the message body reflect the actual sender. On the
+    # Preview path we only auto-assign when the row was empty so we don't
+    # silently overwrite a coach's manual choice in the modal.
+    if current_user:
         user_tmid = current_user.get("team_member_id")
         if user_tmid:
-            try:
-                await db.private_video_submissions.update_one(
-                    {"id": item_id},
-                    {"$set": {"assignee_team_member_id": user_tmid}},
-                )
-                row["assignee_team_member_id"] = user_tmid
-            except Exception as e:
-                logger.info(f"[private-videos] auto-assign persist skipped: {e}")
+            should_persist = override_assignee or not row.get("assignee_team_member_id")
+            if should_persist and row.get("assignee_team_member_id") != user_tmid:
+                try:
+                    await db.private_video_submissions.update_one(
+                        {"id": item_id},
+                        {"$set": {"assignee_team_member_id": user_tmid}},
+                    )
+                    row["assignee_team_member_id"] = user_tmid
+                except Exception as e:
+                    logger.info(f"[private-videos] auto-assign persist skipped: {e}")
 
     # Resolve assignee name for the payload
     assignee_name = None
@@ -525,7 +531,9 @@ async def send_to_circle(
     """POST the voicenote URL to the configured Zapier webhook (which then
     posts a fixed message into the student's Circle Group DM). On success,
     stamp `replied_at = now` and flip status → Done."""
-    built = await _build_send_to_circle_payload(item_id, current_user=user)
+    built = await _build_send_to_circle_payload(
+        item_id, current_user=user, override_assignee=True,
+    )
     zapier_url = built["zapier_url"]
     if not zapier_url:
         raise HTTPException(
