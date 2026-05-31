@@ -171,7 +171,12 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
 
 # ------------------------------------------------------------- Read
 async def list_submissions(db, *, force: bool = False) -> dict:
-    """Return every submission, sorted New → Working → Done, then submitted desc."""
+    """Return every submission, sorted New → Working → Done, then submitted desc.
+
+    Side effect: pre-warm the video cache for the top active rows (status
+    != "done") so by the time a coach opens an Edit modal the transcode is
+    already finished. Idempotent — pv_cache.prepare bails fast if the file
+    is already cached."""
     rows = await db.private_video_submissions.find(
         {}, {"_id": 0}
     ).to_list(2000)
@@ -183,6 +188,29 @@ async def list_submissions(db, *, force: bool = False) -> dict:
         return (STATUS_ORDER.get(s, 99), -sub_num)
 
     rows.sort(key=_sort_key)
+
+    # Fire-and-forget pre-warm for the first 20 non-Done rows that have a
+    # Tally video URL. These are the ones a coach is most likely to open
+    # next. Concurrent transcodes are throttled to 1 by the cache module so
+    # this doesn't overload the server — just builds a queue that drains in
+    # the background.
+    try:
+        import asyncio as _asyncio
+        import private_video_cache as pv_cache
+        warmed = 0
+        for r in rows:
+            if warmed >= 20:
+                break
+            if (r.get("status") or "").lower() == "done":
+                continue
+            tv = r.get("tally_video_url")
+            if not tv or not r.get("id"):
+                continue
+            _asyncio.create_task(pv_cache.prepare(r["id"], tv))
+            warmed += 1
+    except Exception as e:
+        logger.info(f"[private-videos] list-time pre-warm skipped: {e}")
+
     team_by_id = await _team_members_by_id(db)
     items = [_decorate(r, team_by_id) for r in rows]
     return {"items": items, "fetched_at": _now_iso(), "source": "db"}

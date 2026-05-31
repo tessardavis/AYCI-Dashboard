@@ -1033,12 +1033,22 @@ const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-
 // endpoint and show progress so the user knows it's working.
 function InlineVideo({ itemId }) {
   const [errored, setErrored] = useState(false);
-  // Lazy-load: don't poll / transcode until the coach clicks Play. The
-  // transcode is 10-30s on first hit and most coaches don't need to watch
-  // every video to compose a reply — they have the question text already.
+  // Don't render the <video> until the coach clicks Play (avoids burning
+  // bandwidth and confusing browsers with an empty src). BUT — eagerly fire
+  // ONE status call on mount so the backend starts downloading + transcoding
+  // in the background. By the time the coach clicks Play, the transcode is
+  // usually finished or close to it.
   const [started, setStarted] = useState(false);
   const [status, setStatus] = useState("idle");
   const proxyUrl = `${API}/private-videos/${itemId}/video`;
+
+  // Eager kickoff on mount — single fire-and-forget request. Hitting
+  // /video/status triggers pv_cache.prepare server-side (idempotent).
+  useEffect(() => {
+    apiClient
+      .get(`/private-videos/${itemId}/video/status`)
+      .catch(() => {});
+  }, [itemId]);
 
   useEffect(() => {
     if (!started) return;
@@ -1051,7 +1061,9 @@ function InlineVideo({ itemId }) {
         setStatus(data.status);
         if (data.status === "ready") return;
         if (data.status === "error" || data.status === "no_video") return;
-        pollTimer = setTimeout(poll, 3000);
+        // Poll fast — the transcode could finish at any time; 1.5s feels
+        // responsive without hammering the server.
+        pollTimer = setTimeout(poll, 1500);
       } catch {
         if (!cancelled) {
           setStatus("error");
