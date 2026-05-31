@@ -118,6 +118,28 @@ export default function PrivateVideos() {
     })();
   }, []);
 
+  // Auto-refresh the row list every 60s so new Tally submissions appear
+  // without the coach needing to hit Refresh. Quiet — uses load() with no
+  // toast; if it fails it just retries on the next tick. Pauses when the
+  // browser tab is hidden so we don't burn requests on a background tab.
+  useEffect(() => {
+    let timer = null;
+    const tick = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        timer = setTimeout(tick, 60_000);
+        return;
+      }
+      try {
+        await load(true);
+      } catch {
+        // Silent — manual refresh button still works
+      }
+      timer = setTimeout(tick, 60_000);
+    };
+    timer = setTimeout(tick, 60_000);
+    return () => { if (timer) clearTimeout(timer); };
+  }, []);
+
   const syncFromMonday = async () => {
     setSyncingMonday(true);
     try {
