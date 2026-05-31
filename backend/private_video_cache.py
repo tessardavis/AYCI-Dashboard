@@ -157,6 +157,12 @@ async def _transcode_to_h264(item_id: str) -> None:
         _ffmpeg_exe(),
         "-y",  # overwrite
         "-loglevel", "error",
+        # Single thread — Render's instance has very limited CPU and the
+        # default ffmpeg behaviour (use all cores) was saturating it,
+        # making concurrent HTTP requests (e.g. the /video/status polling)
+        # take 2-4s instead of the usual <100ms. Slower per-transcode but
+        # the whole app stays responsive while encoding runs.
+        "-threads", "1",
         "-i", str(src),
         "-c:v", "libx264",
         "-preset", "ultrafast",
