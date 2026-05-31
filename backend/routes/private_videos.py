@@ -77,8 +77,24 @@ async def stream_video(
         raise HTTPException(404, "No video on this submission")
 
     import private_video_cache as pv_cache
+    import asyncio as _asyncio
     try:
-        path = await pv_cache.ensure_ready(item_id, src)
+        # Bound the wait under Render's 60s gateway timeout. If the
+        # transcode isn't done in 45s, return a clean 503 with a
+        # Retry-After so the browser doesn't sit through Render's 502
+        # error page. The transcode keeps running in the background; the
+        # next request will likely succeed.
+        path = await _asyncio.wait_for(
+            pv_cache.ensure_ready(item_id, src),
+            timeout=45.0,
+        )
+    except _asyncio.TimeoutError:
+        logger.info(f"[private-videos] proxy wait exceeded for {item_id} — still transcoding")
+        raise HTTPException(
+            503,
+            "Video is still being prepared — refresh in 30-60s.",
+            headers={"Retry-After": "30"},
+        )
     except Exception as e:
         logger.warning(f"[private-videos] cache prepare failed: {e}")
         raise HTTPException(502, "Video preparation failed")
