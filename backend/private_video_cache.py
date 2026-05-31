@@ -43,8 +43,10 @@ MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _locks: dict[str, asyncio.Lock] = {}
-# Limit concurrent transcodes — ffmpeg is CPU-heavy
-_transcode_sema = asyncio.Semaphore(1)
+# Two concurrent transcodes. Each is single-threaded (-threads 1), so total
+# CPU footprint is 2 threads — fits Render Standard with headroom. Halves
+# the worst-case "row N in queue" wait time for coaches.
+_transcode_sema = asyncio.Semaphore(2)
 # Track transcode tasks so the status endpoint can report progress
 _transcode_tasks: dict[str, asyncio.Task] = {}
 
@@ -166,11 +168,13 @@ async def _transcode_to_h264(item_id: str) -> None:
         "-i", str(src),
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "28",                # was 25 — slightly more compressed, indistinguishable for talking-head review
-        # Scale to 720p (preserving aspect ratio); divisor -2 keeps even dimensions for libx264.
-        # iPhones record 1080p; coaches don't need 1080p to assess interview answers.
-        # Cuts transcode time ~30% and file size ~40%.
-        "-vf", "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'",
+        "-crf", "28",                # was 25 — indistinguishable for talking-head review
+        # Cap longest dimension at 1280. Fits within a 1280x1280 box,
+        # only downscales (force_original_aspect_ratio=decrease), preserves
+        # aspect ratio. Landscape 1920x1080 → 1280x720; portrait
+        # 1080x1920 → 720x1280. iPhones record 1080p; coaches don't need
+        # full resolution for review.
+        "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-b:a", "96k",               # was 128k — voice-only content fine at 96
