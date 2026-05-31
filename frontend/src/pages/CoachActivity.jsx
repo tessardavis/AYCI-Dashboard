@@ -574,13 +574,16 @@ function DailyBars({ perDay }) {
                     "w-full rounded-t-sm transition-all duration-150 origin-bottom group-hover:opacity-90 group-hover:scale-y-[1.03] " +
                     (d.count === 0
                       ? "bg-slate-200"
-                      : weekend
-                      ? "bg-[var(--ayci-teal)]/60"
                       : "bg-[var(--ayci-teal)]")
                   }
                   style={{
                     height: d.count > 0 ? `${pct}%` : "2px",
                     minHeight: d.count > 0 ? "4px" : "2px",
+                    // Weekend bars get a subtle fade via inline opacity —
+                    // the Tailwind `/60` opacity modifier doesn't work when
+                    // the colour is a CSS variable, so bars were rendering
+                    // with no visible background at all (looked empty).
+                    opacity: d.count > 0 && weekend ? 0.6 : 1,
                   }}
                   data-testid={`bar-${d.date}`}
                   data-count={d.count}
