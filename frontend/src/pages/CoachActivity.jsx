@@ -40,7 +40,12 @@ export default function CoachActivity() {
     }
   };
 
-  useEffect(() => { load(false); }, []);
+  useEffect(() => {
+    // Honour ?refresh=true in the URL — busts the 30-min server cache on
+    // initial load, useful after fixing Circle API tokens / changing config.
+    const params = new URLSearchParams(window.location.search);
+    load(params.get("refresh") === "true");
+  }, []);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6" data-testid="coach-activity-page">
