@@ -35,7 +35,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path(os.environ.get("PRIVATE_VIDEO_CACHE_DIR", "/tmp/private_video_cache"))
-MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(10 * 1024 ** 3)))  # 10 GB
+# Render's /tmp is hard-capped at 2 GB; instance gets EVICTED when exceeded
+# (whole cache vanishes + every video re-transcodes from scratch). Keep
+# headroom for the OS / other libs by capping at 1.2 GB.
+MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.2 * 1024 ** 3))))
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -182,6 +185,14 @@ async def _transcode_to_h264(item_id: str) -> None:
             raise RuntimeError(f"ffmpeg failed: {stderr.decode(errors='replace')[:500]}")
     tmp.replace(dst)
     logger.info(f"[pv-cache] transcoded {dst.name} ({dst.stat().st_size} bytes)")
+    # Free disk: the H.264 copy is what we serve from now on. Keeping the
+    # original .bin doubles the per-video footprint and contributed to
+    # /tmp eviction on Render's 2 GB cap. (If we ever need to re-transcode
+    # we re-download from Tally — rare.)
+    try:
+        _path_orig(item_id).unlink(missing_ok=True)
+    except OSError as e:
+        logger.info(f"[pv-cache] could not remove original after transcode: {e}")
 
 
 def get_status(item_id: str) -> Status:

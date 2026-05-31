@@ -189,17 +189,18 @@ async def list_submissions(db, *, force: bool = False) -> dict:
 
     rows.sort(key=_sort_key)
 
-    # Fire-and-forget pre-warm for the first 20 non-Done rows that have a
-    # Tally video URL. These are the ones a coach is most likely to open
-    # next. Concurrent transcodes are throttled to 1 by the cache module so
-    # this doesn't overload the server — just builds a queue that drains in
-    # the background.
+    # Fire-and-forget pre-warm for the first 5 non-Done rows that have a
+    # Tally video URL. Render's /tmp is hard-capped at 2 GB; warming too
+    # many got us evicted (whole cache wiped, every video re-transcodes
+    # from scratch). 5 keeps us well under the cap while still covering
+    # the typical active queue. Concurrent transcodes are throttled to 1
+    # by the cache module.
     try:
         import asyncio as _asyncio
         import private_video_cache as pv_cache
         warmed = 0
         for r in rows:
-            if warmed >= 20:
+            if warmed >= 5:
                 break
             if (r.get("status") or "").lower() == "done":
                 continue

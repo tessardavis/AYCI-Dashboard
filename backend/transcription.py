@@ -174,7 +174,12 @@ async def transcribe_and_save(db, item_id: str, src_url: str) -> Optional[dict]:
         logger.info(f"[transcription] download failed for {item_id}: {e}")
         return None
 
-    video_path = pv_cache._path_orig(item_id)
+    # Prefer the transcoded .h264.mp4 (the original .bin is deleted after
+    # transcode to save disk). Audio track is identical in both — Whisper
+    # only cares about audio.
+    video_path = pv_cache._path_h264(item_id)
+    if not video_path.exists():
+        video_path = pv_cache._path_orig(item_id)
     if not video_path.exists():
         logger.info(f"[transcription] no source file for {item_id}")
         return None
@@ -182,6 +187,14 @@ async def transcribe_and_save(db, item_id: str, src_url: str) -> Optional[dict]:
     transcript = await transcribe(video_path)
     if not transcript:
         return None
+
+    # Clean up the audio extract — we won't need it again. Keeps /tmp lean
+    # on Render's 2 GB cap.
+    try:
+        audio_path = video_path.with_suffix(".audio.m4a")
+        audio_path.unlink(missing_ok=True)
+    except OSError:
+        pass
 
     try:
         await db.private_video_submissions.update_one(
