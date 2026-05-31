@@ -250,11 +250,13 @@ async def migrate_from_monday(admin: dict = Depends(require_admin)):
 
 @router.post("/sync-from-monday")
 async def sync_from_monday(user: dict = Depends(require_board("private_videos"))):
-    """Pull new + updated submissions from the Monday board. Mirrors
-    everything (status, assignee, reply_link, replied_at) so anything you
-    mark Done in Monday flips to Done here on the next sync. Use this
-    while Monday is the source of truth for replies."""
-    return await pv_store.sync_from_monday(db, preserve_team_edits=False)
+    """Pull new + updated submissions from the Monday board. Refreshes only
+    the Tally-source fields (name / email / video URL / question /
+    submission counter) — never overwrites status / assignee / reply_link
+    / replied_at, because the team now sends replies through the dashboard
+    (which Monday doesn't know about), and a stray sync would otherwise
+    flip Done rows back to New."""
+    return await pv_store.sync_from_monday(db, preserve_team_edits=True)
 
 
 @router.get("/stats")
