@@ -7,7 +7,7 @@
  * New submissions arrive via Tally webhook (form 0Qr5py → POST
  * /api/private-videos/tally-webhook) — no Monday automation involved.
  */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
@@ -1117,19 +1117,73 @@ function InlineVideo({ itemId }) {
     );
   }
 
+  return <ReadyVideo proxyUrl={proxyUrl} onError={() => setErrored(true)} />;
+}
+
+// Persist playback speed across sessions so a coach who watches at 1.5×
+// once doesn't have to re-pick on every video. localStorage scoped to the
+// dashboard origin.
+const SPEED_STORAGE_KEY = "pv-playback-rate";
+const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
+
+function ReadyVideo({ proxyUrl, onError }) {
+  const videoRef = useRef(null);
+  const [rate, setRate] = useState(() => {
+    try {
+      const stored = parseFloat(localStorage.getItem(SPEED_STORAGE_KEY) || "1");
+      return SPEED_OPTIONS.includes(stored) ? stored : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate;
+    }
+    try {
+      localStorage.setItem(SPEED_STORAGE_KEY, String(rate));
+    } catch {
+      // localStorage disabled — fine, just lose the persistence
+    }
+  }, [rate]);
+
   return (
     <div className="space-y-1.5">
       <video
+        ref={videoRef}
         src={proxyUrl}
         controls
         playsInline
         preload="metadata"
         className="w-full max-h-[60vh] rounded-md bg-black"
-        onError={() => setErrored(true)}
+        onError={onError}
+        onLoadedMetadata={(e) => {
+          // Apply the current rate as soon as the video is loaded enough to play
+          e.currentTarget.playbackRate = rate;
+        }}
         data-testid="pv-video-player"
       >
         Your browser can't play this video.
       </video>
+      <div className="flex items-center gap-1 text-[11px] text-[var(--ayci-ink-muted)]">
+        <span className="font-semibold mr-1">Speed:</span>
+        {SPEED_OPTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setRate(s)}
+            className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold transition ${
+              rate === s
+                ? "bg-[var(--ayci-accent)] text-white border-[var(--ayci-accent)]"
+                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+            }`}
+            data-testid={`pv-speed-${s}`}
+          >
+            {s === 1 ? "1×" : `${s}×`}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

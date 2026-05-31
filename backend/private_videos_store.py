@@ -400,6 +400,18 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         f"[private-videos] ingested Tally submission for {email} "
         f"(#{prior_count + 1}, tier={academy.get('tier')})"
     )
+
+    # Pre-warm the video cache so the first coach to open this row gets
+    # instant playback instead of waiting 10-30s for the HEVC → H.264
+    # transcode. Fire-and-forget — never blocks the webhook response.
+    if video_url:
+        try:
+            import asyncio as _asyncio
+            import private_video_cache as pv_cache
+            _asyncio.create_task(pv_cache.prepare(row["id"], video_url))
+        except Exception as e:
+            logger.info(f"[private-videos] pre-warm skipped: {e}")
+
     return {"ok": True, "id": row["id"]}
 
 
