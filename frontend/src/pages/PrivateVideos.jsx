@@ -357,6 +357,13 @@ export default function PrivateVideos() {
           item={editing}
           users={users}
           autoAssigneeId={pickAutoAssignee(users, user)}
+          previousSubmissions={items.filter(
+            (it) =>
+              it.email &&
+              editing.email &&
+              it.email.toLowerCase() === editing.email.toLowerCase() &&
+              it.id !== editing.id,
+          )}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -511,7 +518,20 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
       </td>
       <td className="px-3 py-2.5">
         <div className="font-semibold text-[var(--ayci-ink)] flex items-center gap-2 flex-wrap">
-          <span>{studentName}</span>
+          {item.private_chat ? (
+            <a
+              href={item.private_chat}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--ayci-ink)] hover:text-sky-700 hover:underline decoration-sky-300"
+              title="Open this student's Circle Group DM"
+              data-testid={`pv-name-link-${item.id}`}
+            >
+              {studentName}
+            </a>
+          ) : (
+            <span>{studentName}</span>
+          )}
           {hasCount && (
             <span
               className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 whitespace-nowrap"
@@ -790,7 +810,7 @@ function InlineReplyLink({ item, onSaved }) {
   );
 }
 
-function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
+function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onClose, onSaved }) {
   const originalReplyLink = item.reply_link?.url || "";
   const [statusLabel, setStatusLabel] = useState(item.status || "");
   // Auto-default Assignee to the current user (resolved by parent) if the
@@ -904,6 +924,14 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
 
           {(item.tally_video?.url || item.video?.url) && (
             <TranscriptPanel itemId={item.id} hasTranscript={item.has_transcript} />
+          )}
+
+          {previousSubmissions.length > 0 && (
+            <PreviousSubmissionsPanel
+              previous={previousSubmissions}
+              users={users}
+              privateChatUrl={item.private_chat}
+            />
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1342,6 +1370,119 @@ function TranscriptPanel({ itemId, hasTranscript }) {
               )}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviousSubmissionsPanel({ previous, users, privateChatUrl }) {
+  const [open, setOpen] = useState(false);
+  // Sort newest-first so the most recent past submission is at the top.
+  const sorted = useMemo(() => {
+    const arr = [...previous];
+    arr.sort((a, b) => {
+      const ax = a.submitted ? new Date(a.submitted).getTime() : 0;
+      const bx = b.submitted ? new Date(b.submitted).getTime() : 0;
+      return bx - ax;
+    });
+    return arr;
+  }, [previous]);
+
+  return (
+    <div className="border border-slate-200 rounded-md">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-50 transition"
+        data-testid="pv-history-toggle"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)]">
+            Previous submissions
+          </span>
+          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-300">
+            {sorted.length}
+          </span>
+          {privateChatUrl && (
+            <a
+              href={privateChatUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs text-sky-700 hover:underline flex items-center gap-0.5"
+              title="Open this student's Circle Group DM"
+            >
+              <MessageCircle className="w-3 h-3" /> Open chat
+            </a>
+          )}
+        </span>
+        <span className="text-xs text-[var(--ayci-ink-muted)]">{open ? "Hide ▲" : "Show ▼"}</span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100 max-h-[40vh] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="text-[9px] uppercase tracking-wider text-[var(--ayci-ink-muted)] border-b border-slate-100">
+              <tr>
+                <th className="text-left py-1.5 pr-2 font-semibold">Submitted</th>
+                <th className="text-left py-1.5 pr-2 font-semibold">Question</th>
+                <th className="text-left py-1.5 pr-2 font-semibold">Coach</th>
+                <th className="text-left py-1.5 pr-2 font-semibold whitespace-nowrap">Replied</th>
+                <th className="text-left py-1.5 font-semibold">Links</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((p) => {
+                const coach = p.assignee_name
+                  || (users.find((u) => u.id === p.assignee_id) || {}).name
+                  || "—";
+                const reply = p.reply_link?.url;
+                const video = p.tally_video?.url || p.video?.url;
+                return (
+                  <tr key={p.id} className="border-b border-slate-50 last:border-b-0 align-top">
+                    <td className="py-1.5 pr-2 whitespace-nowrap text-[var(--ayci-ink-muted)]">
+                      {p.submitted ? formatUkDate(p.submitted) : "—"}
+                    </td>
+                    <td className="py-1.5 pr-2 max-w-[260px]">
+                      <div className="line-clamp-2 text-[var(--ayci-ink)]">{p.question || "—"}</div>
+                    </td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap">{coach}</td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap text-[var(--ayci-ink-muted)]">
+                      {p.replied ? formatUkDate(p.replied) : <span className="italic">not yet</span>}
+                    </td>
+                    <td className="py-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {video && (
+                          <a
+                            href={`${API}/private-videos/${p.id}/video`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-rose-700 hover:underline inline-flex items-center gap-0.5"
+                            title="Watch this student's earlier submission"
+                          >
+                            <Video className="w-3 h-3" /> Video
+                          </a>
+                        )}
+                        {reply && (
+                          <a
+                            href={reply}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-700 hover:underline inline-flex items-center gap-0.5"
+                            title="Listen to the past coach voicenote reply"
+                          >
+                            <MessageCircle className="w-3 h-3" /> Reply
+                          </a>
+                        )}
+                        {!video && !reply && <span className="text-[var(--ayci-ink-muted)] italic">—</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
