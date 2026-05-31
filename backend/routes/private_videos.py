@@ -151,6 +151,52 @@ async def assignable_users(
     return {"users": await pv_store.get_team_users(db)}
 
 
+@router.get("/{item_id}/transcript")
+async def get_transcript(
+    item_id: str,
+    user: dict = Depends(require_board("private_videos")),
+):
+    """Return the AI-generated transcript for this submission.
+
+    Status flow:
+      - "ready"      → transcript exists, returned in `transcript`
+      - "generating" → transcription has been kicked off but is still running
+                        (frontend polls until "ready")
+      - "no_audio"   → row has no Tally video to transcribe
+      - "disabled"   → OPENAI_API_KEY isn't set on the backend
+      - "error"      → kickoff failed
+    """
+    row = await db.private_video_submissions.find_one(
+        {"id": item_id},
+        {"_id": 0, "transcript": 1, "tally_video_url": 1},
+    )
+    if not row:
+        raise HTTPException(404, "Submission not found")
+
+    existing = row.get("transcript")
+    if existing and existing.get("text"):
+        return {"status": "ready", "transcript": existing}
+
+    src = row.get("tally_video_url")
+    if not src:
+        return {"status": "no_audio", "transcript": None}
+
+    import transcription
+    if not transcription.configured():
+        return {"status": "disabled", "transcript": None}
+
+    # Lazy-kick: fire-and-forget. Coach's UI will poll until status == ready.
+    import asyncio as _asyncio
+    try:
+        _asyncio.create_task(
+            transcription.transcribe_and_save(db, item_id, src)
+        )
+    except Exception as e:
+        logger.warning(f"[private-videos] transcript kickoff failed: {e}")
+        return {"status": "error", "transcript": None, "error": str(e)[:200]}
+    return {"status": "generating", "transcript": None}
+
+
 # ------------------------------------------------------------- WRITE
 class PrivateVideoPatch(BaseModel):
     status_label: Optional[str] = None

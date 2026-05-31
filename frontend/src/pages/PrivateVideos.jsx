@@ -880,6 +880,10 @@ function EditModal({ item, users, autoAssigneeId, onClose, onSaved }) {
             </div>
           )}
 
+          {(item.tally_video?.url || item.video?.url) && (
+            <TranscriptPanel itemId={item.id} hasTranscript={item.has_transcript} />
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <Label>Status</Label>
@@ -1184,6 +1188,128 @@ function ReadyVideo({ proxyUrl, onError }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function formatTimestamp(secs) {
+  const total = Math.max(0, Math.floor(secs || 0));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function TranscriptPanel({ itemId, hasTranscript }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState(hasTranscript ? "ready" : "idle");
+  const [transcript, setTranscript] = useState(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
+
+  // Fetch + poll the transcript. Only kicks off when the panel is opened
+  // (lazy — no point spending an API roundtrip if the coach doesn't care).
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    let pollTimer = null;
+
+    const fetchOnce = async () => {
+      try {
+        const { data } = await apiClient.get(`/private-videos/${itemId}/transcript`);
+        if (cancelled) return;
+        setStatus(data.status || "error");
+        if (data.transcript) setTranscript(data.transcript);
+        setLoadedOnce(true);
+        // Keep polling while it's still being generated
+        if (data.status === "generating") {
+          pollTimer = setTimeout(fetchOnce, 4000);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setStatus("error");
+          setLoadedOnce(true);
+        }
+      }
+    };
+    fetchOnce();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [open, itemId]);
+
+  return (
+    <div className="border border-slate-200 rounded-md">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-50 transition"
+        data-testid="pv-transcript-toggle"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)]">Transcript</span>
+          {hasTranscript && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+              Ready
+            </span>
+          )}
+          {!hasTranscript && open && status === "generating" && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Generating
+            </span>
+          )}
+        </span>
+        <span className="text-xs text-[var(--ayci-ink-muted)]">{open ? "Hide ▲" : "Show ▼"}</span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100">
+          {!loadedOnce && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] py-2 flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+            </div>
+          )}
+          {loadedOnce && status === "disabled" && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] italic py-2">
+              Transcription not configured on this server (OpenAI key missing).
+            </div>
+          )}
+          {loadedOnce && status === "no_audio" && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] italic py-2">
+              No audio on this submission — nothing to transcribe.
+            </div>
+          )}
+          {loadedOnce && status === "error" && (
+            <div className="text-xs text-rose-700 italic py-2">
+              Transcription failed. Try again later — the row will be re-processed.
+            </div>
+          )}
+          {loadedOnce && status === "generating" && (
+            <div className="text-xs text-[var(--ayci-ink-muted)] py-2 flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Whisper is transcribing — usually ~30s for a 2-minute video.
+            </div>
+          )}
+          {loadedOnce && status === "ready" && transcript && (
+            <div className="text-sm leading-relaxed text-[var(--ayci-ink)] max-h-[40vh] overflow-y-auto pt-1">
+              {transcript.segments && transcript.segments.length > 0 ? (
+                <div className="space-y-1.5">
+                  {transcript.segments.map((seg, i) => (
+                    <div key={i} className="flex gap-2">
+                      <span className="text-[10px] text-[var(--ayci-ink-muted)] font-mono shrink-0 pt-0.5 w-9">
+                        {formatTimestamp(seg.start)}
+                      </span>
+                      <span>{seg.text}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap">{transcript.text || "(empty)"}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

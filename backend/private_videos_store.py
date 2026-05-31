@@ -149,6 +149,10 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         "private_chat": row.get("private_chat_url"),
         "interview_date": row.get("interview_date"),
         "interview_type": row.get("interview_type"),
+        # AI transcript availability — full text fetched via separate endpoint
+        # so the list response stays small. has_transcript drives the
+        # Transcript chip in the row UI.
+        "has_transcript": bool((row.get("transcript") or {}).get("text")),
         # assignee — return the team_member id + name (was Monday person id + name in legacy)
         "assignee_id": row.get("assignee_team_member_id"),
         "assignee_name": (assignee or {}).get("name"),
@@ -404,6 +408,8 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     # Pre-warm the video cache so the first coach to open this row gets
     # instant playback instead of waiting 10-30s for the HEVC → H.264
     # transcode. Fire-and-forget — never blocks the webhook response.
+    # Also schedule transcription (OpenAI Whisper) in parallel so the
+    # transcript is ready alongside the playable video.
     if video_url:
         try:
             import asyncio as _asyncio
@@ -411,6 +417,14 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
             _asyncio.create_task(pv_cache.prepare(row["id"], video_url))
         except Exception as e:
             logger.info(f"[private-videos] pre-warm skipped: {e}")
+        try:
+            import asyncio as _asyncio
+            import transcription
+            _asyncio.create_task(
+                transcription.transcribe_and_save(db, row["id"], video_url)
+            )
+        except Exception as e:
+            logger.info(f"[private-videos] transcription kickoff skipped: {e}")
 
     return {"ok": True, "id": row["id"]}
 
