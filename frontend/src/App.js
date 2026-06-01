@@ -8,6 +8,7 @@ import WeeklyScorecard from "@/pages/WeeklyScorecard";
 import QuarterlyRocks from "@/pages/QuarterlyRocks";
 import LaunchDashboard from "@/pages/LaunchDashboard";
 import StudentLookup from "@/pages/StudentLookup";
+import StudentsDB from "@/pages/StudentsDB";
 import StudentsAtRisk from "@/pages/StudentsAtRisk";
 import UpcomingInterviews from "@/pages/UpcomingInterviews";
 import CohortDashboard from "@/pages/CohortDashboard";
@@ -66,6 +67,7 @@ function App() {
                 <Route path="/launches" element={<BoardGuard board="launches"><LaunchDashboard /></BoardGuard>} />
                 <Route path="/cohort" element={<BoardGuard board="cohort"><CohortDashboard /></BoardGuard>} />
                 <Route path="/students" element={<BoardGuard board="students"><StudentLookup /></BoardGuard>} />
+                <Route path="/students-db" element={<BoardGuard board="students"><StudentsDB /></BoardGuard>} />
                 <Route path="/at-risk" element={<BoardGuard board="at_risk"><StudentsAtRisk /></BoardGuard>} />
                 <Route path="/interviews" element={<BoardGuard board="interviews"><UpcomingInterviews /></BoardGuard>} />
                 <Route path="/coach-activity" element={<BoardGuard board="coach_activity"><CoachActivity /></BoardGuard>} />

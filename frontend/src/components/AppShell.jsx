@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { to: "/spotlight", label: "Spotlight Coaching", icon: Sparkles, testid: "sidebar-nav-spotlight", board: "spotlight" },
       { to: "/private-videos", label: "Private-Tier Videos", icon: Video, testid: "sidebar-nav-private-videos", board: "private_videos" },
       { to: "/students", label: "Student Lookup", icon: Search, testid: "sidebar-nav-students", board: "students" },
+      { to: "/students-db", label: "Students (DB)", icon: Search, testid: "sidebar-nav-students-db", board: "students" },
     ],
   },
   {
