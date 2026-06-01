@@ -933,6 +933,18 @@ async def on_startup():
             [("cohort", 1), ("snapshot_date", -1)],
             name="cohort_snapshot_date",
         )
+        # Support tickets — without these, every list call COLLSCANs the
+        # whole tickets collection + sorts in-memory. With ~2k tickets and
+        # ~5k view records that's noticeably slow on first load AND every
+        # reload after Resolved/Closed.
+        await db.tickets.create_index([("created_at", -1)], name="created_at_desc")
+        await db.tickets.create_index("status")
+        await db.tickets.create_index("assignee_id", sparse=True)
+        await db.ticket_views.create_index(
+            [("user_id", 1), ("ticket_id", 1)],
+            name="user_ticket",
+        )
+
         # url_shortlinks: idempotent shorten() relies on unique long_url;
         # /v/{code} redirect lookup hits unique code. Drop any pre-self-
         # hosted rows (is.gd era — they stored `short_url` instead of
