@@ -56,6 +56,12 @@ _name_index_cache: dict = {"loaded_at": 0.0, "members": []}
 
 
 async def _get_name_index(db) -> list[dict]:
+    """Returns the full slim member list (name + email + avatar + a few
+    other fields) cached in process memory for 30 min.
+
+    Used by both name_search (which only needs name/email/avatar) AND
+    circle_lookup (which needs the wider slim shape). One cache, one
+    Mongo read per 30 min, regardless of how many lookups happen."""
     import time as _time
     now = _time.monotonic()
     if (
@@ -63,11 +69,11 @@ async def _get_name_index(db) -> list[dict]:
         and (now - _name_index_cache["loaded_at"]) < _NAME_INDEX_TTL_SECONDS
     ):
         return _name_index_cache["members"]
-    doc = await db.circle_members_cache.find_one(
-        {"_id": "all"},
-        # Only the fields name_search needs — cuts the read substantially.
-        {"_id": 0, "members.name": 1, "members.email": 1, "members.avatar_url": 1},
-    )
+    # Load the whole slim doc — circle_lookup needs the extra fields
+    # (created_at, last_seen_at, member_tags, profile_url). Memory cost is
+    # ~1.7MB once per process; saves us the same 1.7MB Mongo read on
+    # every lookup.
+    doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
     members = (doc or {}).get("members", []) if doc else []
     _name_index_cache["members"] = members
     _name_index_cache["loaded_at"] = now
@@ -344,9 +350,22 @@ async def _circle_get_cached_members(db) -> tuple[list[dict], str]:
 
 
 async def circle_lookup(db, email: str) -> dict:
+    """Look up a Circle member by email.
+
+    Reads from the in-process members cache (_get_name_index) so we
+    don't pull the 1.7MB Mongo doc on every request. The cache itself
+    falls back to _circle_get_cached_members on a cold start, which
+    handles the 24h Circle-API refresh logic."""
     try:
         target = email.strip().lower()
-        members, source = await _circle_get_cached_members(db)
+        # Try the in-process cache first (sub-millisecond once warmed).
+        members = await _get_name_index(db)
+        source = "in_memory"
+        # If the in-memory cache is empty (very first call after a deploy
+        # and the Mongo doc is also missing), fall through to the full
+        # Mongo-or-refresh path so we don't miss this lookup entirely.
+        if not members:
+            members, source = await _circle_get_cached_members(db)
         match = next((m for m in members if m.get("email") == target), None)
         if not match:
             return {"found": False, "data": None, "error": None, "cache": source, "total_members_searched": len(members)}
