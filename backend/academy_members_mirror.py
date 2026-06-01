@@ -132,11 +132,29 @@ def _extract_row(item: dict) -> dict:
     }
 
 
+# Fields that, once a coach has edited them in the dashboard, the
+# 15-min Monday sync must NOT overwrite. Tracked per-row in
+# `dashboard_edited_fields` — listing a field name there pins it to the
+# dashboard value. When we eventually retire Monday, this will be the
+# full schema; for now coaches add fields as they edit them.
+PROTECTED_FIELDS = {
+    "name", "first_name", "surname", "email", "circle_email",
+    "tier", "cohort_joined", "interview_date", "speciality", "hospital",
+    "interview_type", "private_chat_url", "video_allowance",
+    "videos_submitted",
+}
+
+
 async def full_sync(db) -> dict:
     """Pull every Academy Members row from Monday and upsert into Mongo.
 
     Stale rows (members removed from the board since the last sync) are
     deleted afterward so we don't keep ghosts around.
+
+    Coach edits made via the dashboard are protected — for any field
+    name listed in a row's `dashboard_edited_fields` array, this sync
+    does NOT overwrite. Lets us migrate to dashboard-only edits one
+    field at a time without losing changes mid-transition.
 
     Returns a summary dict for logging / the admin endpoint."""
     started = time.monotonic()
@@ -199,14 +217,37 @@ async def full_sync(db) -> dict:
             if not items:
                 break
 
-            # Upsert this batch
+            # Upsert this batch — but skip any fields the dashboard has
+            # claimed via dashboard_edited_fields.
             for it in items:
                 row = _extract_row(it)
                 seen_ids.add(row["_id"])
                 try:
+                    # Load existing row's edited-fields list so we can
+                    # filter the Monday-supplied values before writing.
+                    existing = await db.academy_members.find_one(
+                        {"_id": row["_id"]},
+                        {"_id": 0, "dashboard_edited_fields": 1},
+                    )
+                    edited = set(((existing or {}).get("dashboard_edited_fields") or []))
+                    # Always write the column dicts + sync metadata.
+                    write = {
+                        "columns": row["columns"],
+                        "columns_by_id": row["columns_by_id"],
+                        "synced_at": row["synced_at"],
+                        "url": row["url"],
+                        "monday_created_at": row["monday_created_at"],
+                    }
+                    # For protected scalar fields, only write if NOT
+                    # dashboard-edited.
+                    for f in PROTECTED_FIELDS:
+                        if f in edited:
+                            continue
+                        if f in row:
+                            write[f] = row[f]
                     await db.academy_members.update_one(
                         {"_id": row["_id"]},
-                        {"$set": row},
+                        {"$set": write},
                         upsert=True,
                     )
                     total += 1
