@@ -278,6 +278,14 @@ async def handle_webhook(db, payload: dict) -> dict:
         except (TypeError, ValueError):
             pass
 
+    # WhatsApp opt-out keyword — student is unsubscribing, not asking for
+    # support. Wati's BSP handles the underlying opt-out flagging; we just
+    # skip ticket creation/append so the support queue doesn't fill with
+    # these. Case-insensitive, tolerant to trailing punctuation/whitespace.
+    if text and text.strip().strip(".!?,;:").upper() == "STOP":
+        logger.info(f"[wati] ignored STOP opt-out wa={wa_id} msg_id={msg_id}")
+        return {"action": "ignored", "reason": "STOP opt-out keyword"}
+
     body_text = text or media_caption or f"[{msg_type} message — no text body]"
 
     # Download media to GridFS if present
