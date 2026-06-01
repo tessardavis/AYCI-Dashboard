@@ -92,6 +92,37 @@ def _allowance(cols_by_id: dict[str, dict], specs: list[tuple[str, str]]) -> dic
     }
 
 
+async def _fetch_items_from_mirror(db, start_str: str, end_str: str) -> list[dict]:
+    """Query the Mongo academy_members mirror for rows with interview_date
+    in [start, end]. Reshape into the same {id, name, url, column_values}
+    structure Monday's items_page returns so the downstream loop works
+    without changes."""
+    cursor = db.academy_members.find(
+        {"interview_date": {"$gte": start_str, "$lte": end_str}},
+        {"_id": 1, "name": 1, "url": 1, "columns_by_id": 1},
+    )
+    items: list[dict] = []
+    async for row in cursor:
+        cols_by_id = row.get("columns_by_id") or {}
+        # Re-flatten dict into list-of-objects shape (Monday's items_page output).
+        column_values = [
+            {
+                "id": cid,
+                "text": entry.get("text"),
+                "type": entry.get("type"),
+                "column": {"title": entry.get("title")},
+            }
+            for cid, entry in cols_by_id.items()
+        ]
+        items.append({
+            "id": row.get("_id"),
+            "name": row.get("name"),
+            "url": row.get("url"),
+            "column_values": column_values,
+        })
+    return items
+
+
 async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
     """
     Returns:
@@ -101,62 +132,84 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         "private":  [ {full fields + allowances}, ... ],
       }
     Both lists are sorted by interview_date ascending.
+
+    Mongo-first: when a db handle is supplied AND the academy_members
+    mirror has rows, read from it (sub-100ms). Otherwise fall through to
+    live Monday GraphQL — used by callers without db, and as a safety
+    net if the mirror is empty (right after deploy, before the first
+    sync completes).
     """
     today = datetime.now(timezone.utc).date()
     end = today + timedelta(days=days)
     start_str = today.isoformat()
     end_str = end.isoformat()
 
-    query = """
-    query ($boardId: ID!, $dates: CompareValue!, $limit: Int!, $cursor: String) {
-      boards(ids: [$boardId]) {
-        items_page(
-          limit: $limit,
-          cursor: $cursor,
-          query_params: {
-            rules: [
-              { column_id: "%s", compare_value: $dates, operator: between }
-            ]
-          }
-        ) {
-          cursor
-          items {
-            id
-            name
-            url
-            column_values { id text column { title } }
+    items: list[dict] = []
+    source = "monday_live"
+
+    if db is not None:
+        try:
+            items = await _fetch_items_from_mirror(db, start_str, end_str)
+            if items:
+                source = "mongo_mirror"
+        except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).info(
+                f"[upcoming-interviews] mirror read failed, falling back to Monday: {e}"
+            )
+
+    if not items:
+        # Live Monday fallback — either no db, mirror not yet populated,
+        # or Mongo errored. Same query as before.
+        query = """
+        query ($boardId: ID!, $dates: CompareValue!, $limit: Int!, $cursor: String) {
+          boards(ids: [$boardId]) {
+            items_page(
+              limit: $limit,
+              cursor: $cursor,
+              query_params: {
+                rules: [
+                  { column_id: "%s", compare_value: $dates, operator: between }
+                ]
+              }
+            ) {
+              cursor
+              items {
+                id
+                name
+                url
+                column_values { id text column { title } }
+              }
+            }
           }
         }
-      }
-    }
-    """ % COL_INTERVIEW_DATE
+        """ % COL_INTERVIEW_DATE
 
-    items: list[dict] = []
-    cursor: str | None = None
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        while True:
-            r = await c.post(
-                MONDAY_URL,
-                headers={**_monday_headers(), "Content-Type": "application/json"},
-                json={
-                    "query": query,
-                    "variables": {
-                        "boardId": str(ACADEMY_MEMBERS_BOARD_ID),
-                        "dates": [start_str, end_str],
-                        "limit": 100,
-                        "cursor": cursor,
+        cursor: str | None = None
+        async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+            while True:
+                r = await c.post(
+                    MONDAY_URL,
+                    headers={**_monday_headers(), "Content-Type": "application/json"},
+                    json={
+                        "query": query,
+                        "variables": {
+                            "boardId": str(ACADEMY_MEMBERS_BOARD_ID),
+                            "dates": [start_str, end_str],
+                            "limit": 100,
+                            "cursor": cursor,
+                        },
                     },
-                },
-            )
-            r.raise_for_status()
-            body = r.json()
-            if body.get("errors"):
-                raise RuntimeError(f"Monday error: {body['errors']}")
-            page = (body.get("data", {}).get("boards") or [{}])[0].get("items_page") or {}
-            items.extend(page.get("items") or [])
-            cursor = page.get("cursor")
-            if not cursor or not (page.get("items") or []):
-                break
+                )
+                r.raise_for_status()
+                body = r.json()
+                if body.get("errors"):
+                    raise RuntimeError(f"Monday error: {body['errors']}")
+                page = (body.get("data", {}).get("boards") or [{}])[0].get("items_page") or {}
+                items.extend(page.get("items") or [])
+                cursor = page.get("cursor")
+                if not cursor or not (page.get("items") or []):
+                    break
 
     academy: list[dict] = []
     private: list[dict] = []
@@ -286,6 +339,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         "window": {"start": start_str, "end": end_str, "days": days},
         "academy": academy,
         "private": private,
+        "source": source,  # "mongo_mirror" or "monday_live" — diagnostic only
     }
 
 
