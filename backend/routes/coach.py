@@ -303,3 +303,61 @@ async def coach_activity_debug_comments_by_url(
     result["matched_post_slug"] = post_slug
     result["searched"] = searched
     return result
+
+
+@router.get("/coach-activity/debug-fetch-failures/{space_id}")
+async def coach_activity_debug_fetch_failures(
+    space_id: int,
+    admin: dict = Depends(require_admin),
+):
+    """List every post in a space whose /comments fetch currently fails,
+    plus the underlying Circle response (status code + body preview).
+    Use this to figure out why fetch_failed_count is non-zero — is it a
+    pattern (old posts, certain authors, certain post types)?"""
+    import httpx
+    import coach_activity as coach_act
+    from connectors import CIRCLE_BASE, _circle_headers, TIMEOUT
+
+    failures: list[dict] = []
+    successes = 0
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        posts = await coach_act._circle_list_posts_in_space(c, space_id)
+        for p in posts:
+            pid = p.get("id")
+            if not pid:
+                continue
+            try:
+                r = await c.get(
+                    f"{CIRCLE_BASE}/comments",
+                    headers=_circle_headers(),
+                    params={"post_id": int(pid), "per_page": 1, "page": 1},
+                )
+                if r.status_code == 200:
+                    successes += 1
+                    continue
+                failures.append({
+                    "post_id": pid,
+                    "post_name": p.get("name"),
+                    "post_url": p.get("url"),
+                    "post_author_email": coach_act._post_author_email(p),
+                    "post_author_name": coach_act._post_author_name(p),
+                    "post_created_at": p.get("created_at"),
+                    "status_code": r.status_code,
+                    "body_preview": r.text[:300],
+                })
+            except Exception as e:
+                failures.append({
+                    "post_id": pid,
+                    "post_name": p.get("name"),
+                    "post_url": p.get("url"),
+                    "post_created_at": p.get("created_at"),
+                    "error": f"{type(e).__name__}: {e}",
+                })
+
+    return {
+        "space_id": space_id,
+        "total_posts": len(posts),
+        "successful_fetches": successes,
+        "failure_count": len(failures),
+        "failures": failures,
+    }
