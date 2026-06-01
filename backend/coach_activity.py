@@ -137,20 +137,42 @@ async def _circle_list_posts_in_space(client: httpx.AsyncClient, space_id: int) 
     return out
 
 
-_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
+_MAX_RETRY_ATTEMPTS = 6   # was 3 — Circle's /comments API was flakier than expected,
+                          # transient 5xx/429 was leaving ~13% of posts unanswered
+                          # in the dashboard's per-coach reply count
+
+
+def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
+    """Backoff for the next retry attempt (0-indexed).
+    Sequence: 0.5, 1.0, 2.0, 4.0, 8.0, 12.0 seconds, each with up to 25%
+    random jitter so concurrent retries don't sync up and dogpile Circle.
+    If the response has a Retry-After header, honour that (clamped to the
+    same upper bound) — Circle uses this for 429s."""
+    base = min(0.5 * (2 ** attempt), 12.0)
+    if response is not None:
+        ra = response.headers.get("retry-after")
+        if ra:
+            try:
+                base = max(base, min(float(ra), 12.0))
+            except ValueError:
+                pass
+    import random as _random
+    return base * (1.0 + _random.random() * 0.25)
 
 
 async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int) -> list[dict]:
     """Pulls every comment for one post. Retries transient failures with
-    exponential backoff. Raises on terminal failure so the caller can
-    distinguish 'no comments' from 'fetch broken' instead of silently
-    flagging the post as unanswered when Circle just hiccuped."""
+    exponential backoff (+ jitter, + Retry-After). Raises on terminal
+    failure so the caller can distinguish 'no comments' from 'fetch
+    broken' instead of silently flagging the post as unanswered when
+    Circle just hiccuped."""
     out: list[dict] = []
     page = 1
     while page <= 20:
         r = None
         last_err: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(_MAX_RETRY_ATTEMPTS):
             try:
                 r = await client.get(
                     f"{CIRCLE_BASE}/comments",
@@ -164,7 +186,7 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
                         f"Circle /comments {r.status_code}",
                         request=r.request, response=r,
                     )
-                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    await asyncio.sleep(_retry_delay(attempt, r))
                     continue
                 # 404 = post deleted/inaccessible — return what we've got
                 # (an empty list on page 1). Genuine, not a flag-worthy event.
@@ -179,12 +201,17 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
                 )
             except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_err = e
-                await asyncio.sleep(0.5 * (2 ** attempt))
+                await asyncio.sleep(_retry_delay(attempt))
                 continue
         else:
-            # All 3 attempts failed with a retryable error — bubble up so
+            # All retries failed with transient errors — bubble up so
             # analyse_circle_space marks the post fetch_failed rather than
             # silently treating it as having zero comments.
+            logger.warning(
+                f"[coach-activity] /comments post_id={post_id} page={page} "
+                f"gave up after {_MAX_RETRY_ATTEMPTS} retries: "
+                f"{type(last_err).__name__ if last_err else 'unknown'}: {last_err}"
+            )
             raise last_err or RuntimeError(
                 f"Circle /comments post_id={post_id} page={page} failed after retries"
             )
@@ -263,8 +290,10 @@ async def analyse_circle_space(
         if (p.get("created_at") or "") >= cutoff_iso
     ]
 
-    # Fan out comment lookups in parallel (cap concurrency)
-    sem = asyncio.Semaphore(8)
+    # Fan out comment lookups in parallel. Lowered 8 → 4 to reduce the
+    # chance of triggering Circle's rate limit (429s); the longer/tougher
+    # retry path now picks up the slack if any do bounce.
+    sem = asyncio.Semaphore(4)
     comments_by_post: dict[int, list[dict]] = {}
     fetch_failed_post_ids: set[int] = set()
 
