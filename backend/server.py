@@ -945,6 +945,14 @@ async def on_startup():
             name="user_ticket",
         )
 
+        # academy_members mirror — primary lookup by email; range query on
+        # interview_date for the Upcoming Interviews page; synced_at for
+        # stale-row checks.
+        await db.academy_members.create_index("email", sparse=True)
+        await db.academy_members.create_index("circle_email", sparse=True)
+        await db.academy_members.create_index("interview_date", sparse=True)
+        await db.academy_members.create_index([("synced_at", -1)])
+
         # url_shortlinks: idempotent shorten() relies on unique long_url;
         # /v/{code} redirect lookup hits unique code. Drop any pre-self-
         # hosted rows (is.gd era — they stored `short_url` instead of
@@ -1088,6 +1096,29 @@ async def on_startup():
         id="daily_phase_breakdown_refresh",
         replace_existing=True,
     )
+
+    # Academy Members Mongo mirror — refresh every 15 minutes so the
+    # Student Lookup + Upcoming Interviews pages don't have to hit Monday
+    # on each request. Idempotent; ~5-10s per run for a ~3.5k row board.
+    async def _academy_members_mirror_sync():
+        try:
+            import academy_members_mirror
+            res = await academy_members_mirror.full_sync(db)
+            logger.info(f"[scheduler] academy_members mirror: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] academy_members mirror failed: {e}")
+
+    scheduler.add_job(
+        _academy_members_mirror_sync,
+        CronTrigger(minute="*/15", timezone=tz),
+        id="academy_members_mirror",
+        replace_existing=True,
+    )
+    # Also run once shortly after startup so the cache is populated
+    # before the next 15-min tick — coaches who open the dashboard right
+    # after a deploy still get fresh data.
+    import asyncio as _asyncio
+    _asyncio.create_task(_academy_members_mirror_sync())
 
     async def _daily_sla_digest():
         import sla_notifications
@@ -1557,6 +1588,31 @@ async def on_shutdown():
 @api.get("/")
 async def root():
     return {"service": "ayci-team-dashboard", "ok": True}
+
+
+@api.post("/admin/academy-mirror/sync")
+async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
+    """Manually trigger a full sync of the Academy Members Mongo mirror
+    from Monday. Returns the sync summary. Normally runs every 15 min via
+    the scheduler — use this when you've just edited rows on Monday and
+    want the dashboard to see them immediately."""
+    import academy_members_mirror
+    return await academy_members_mirror.full_sync(db)
+
+
+@api.get("/admin/academy-mirror/status")
+async def admin_academy_mirror_status(admin: dict = Depends(require_admin)):
+    """Quick health check: how many rows in the mirror, and how old is
+    the most recent sync? Useful for confirming the scheduled job is
+    actually running."""
+    count = await db.academy_members.count_documents({})
+    most_recent = await db.academy_members.find_one(
+        {}, {"_id": 0, "synced_at": 1}, sort=[("synced_at", -1)],
+    )
+    return {
+        "row_count": count,
+        "last_synced_at": (most_recent or {}).get("synced_at"),
+    }
 
 
 @api.get("/version")
