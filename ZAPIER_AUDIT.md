@@ -60,7 +60,7 @@ These create or update rows on the Academy Members board when a student fills a 
 | 4 | `[AYGI 2025] - Signups to Monday B...` (dupe?) | ❓ | ❓ | Possibly the row Tessa saw twice in the list. Same name as zap 2 — check if it's actually one zap or two. |
 | 5 | `Onboarding Form Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Two-step zap. Likely fires after the Kajabi zap above triggers the onboarding form (zap 1's last step). **Migration:** add this endpoint's payload handling to the same `/api/students-db/intake` endpoint — merge with the Kajabi intake on email. |
 | 6 | `Onboarding Form (Higher Tiers) Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Same 2-step pattern as zap 5. Higher-tier variant of the onboarding form (likely Private Plus / VIP). **Same migration plan**: merge into the dashboard intake endpoint. |
-| 7 | `Non members Tally to Monday` | ❓ Tally (non-Academy signups?) | ❓ Create Monday row? | What board? |
+| 7 | `Non members Tally to Monday` (v1) | **Tally: New Submission** | 1. **monday.com: Create Item** | 2-step zap. Same shape as zaps 5 and 6 — Tally submission creates a Monday row. "Non members" suggests it's for people who aren't AYCI students yet (lead capture?). Need to know which Monday board — could be Academy Members or a separate Leads board. |
 | 8 | `Tally Form to Monday → Video sub...` | ❓ Tally video submission | ❓ Update Monday (private videos board?) | Probably Private Videos board, not Academy Members — verify. |
 | 9 | `Grid Tally Form to Monday → Video...` | ❓ Tally (Grid product) | ❓ Update Monday | Likely different board (Grid). |
 | 10 | `3. New Tally from submission → Update Monday Contact` (Has Draft, v19, **ACTIVE**) | **Tally: New Submission** | 1. AI by Zapier: Analyze and Return Data <br> 2. Paths (Contact ID Exists / No Contact ID) <br> 3. *Contact ID Exists*: monday Update Item → Create Subitem → Filter ×2 → Update Item → Get Column Values → Filter → Delay 1hr → Update Item <br> 4. *No Contact ID*: Look for existing contact → sub-Paths (Existing / New) → either Update Item or **Create Item** then Create Subitem + Update chain | **The big one.** Massive zap — Tally submission triggers a full upsert + subitem creation + delayed status update chain. AI step extracts data from the Tally answer. **Needs:** the `intake` + `update-by-email` endpoints plus a way to record subitems (likely as `dashboard_edited_fields`-style entries on the academy_members doc rather than a separate collection). |
@@ -113,7 +113,7 @@ These trigger on a Monday event and write to a Monday column. Once Monday is ret
 | 35 | `1b. When button clicked in the cont...` | ❓ Monday button | ❓ | |
 | 36 | `7. Deep Dive access - From Monday` | ❓ Monday | ❓ Grant access | |
 | 37 | `7b. Speciality Space access - From...` | ❓ Monday | ❓ Grant access | |
-| 38 | `9. Wins Updates` | ❓ Monday | ❓ Update something | |
+| 38 | `9. Wins Updates` (v9) | **Circle: New Post** (2 min poll) | 1. Formatter Text <br> 2. Slack: Send Private Channel Message <br> 3. **monday: Get Items by Column Value** <br> 4. **monday: Update Item** <br> 5. **monday (3.6.0): Get Items by Column Value** <br> 6. **monday: Update Item** | Watches Circle for new "win" posts → Slack ping + updates TWO Monday rows (likely the student row AND a separate stats row). Two Monday lookups in sequence suggest cross-board updates. **Migrate:** `update-by-email` endpoint × 2 calls, plus a Slack helper. |
 
 ### 🔴 P1 — Cohort lifecycle zaps that READ + WRITE Monday (audited)
 
@@ -154,12 +154,12 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 61 | `AYCI SEP-25 Academy Mini-Webina...` | |
 | 62 | `[AYGI 2025] On Circle` | |
 | 63 | `Legacy Members Cohort Upgrade` | |
-| 64 | `AYCI Waitlist Registrations - New W...` | |
-| 65 | `AYCI Waitlist Registrations - Website` | |
+| 64 | `AYCI Waitlist Registrations - New Website` (v12) | **Kajabi: Waitlist Reg - new website** → Kit (Add to waitlist form) → Kit (waitlist - new website tag) → Kit (waitlist - all tag) → **monday: Create Item** → Google Sheets: Create row → Kit: Add Subscriber to Form. **Migrate:** add `intake` endpoint variant or branch on Kajabi offer to set `stage=waitlist` instead of `enrolled`. |
+| 65 | `AYCI Waitlist Registrations - Website` (Has Draft, v25) | **Kajabi: Waitlist Reg - website** → Code (JS) → Kit (Add Tag / Remove Tag / Add to form / website tag / all tag) → **monday: Create Item** → Google Sheets (Modify Cohort For New + Create row) → Kit Add Tag → Paths (utm_source / no utm_source) → Kit add/remove tags. Older website waitlist zap with heavy tag-management logic. v25 — most-iterated zap so far. Same migration as 64. |
 | 66 | `AYCI Academy Boss Option A - manually tagged` (Has Draft, v11, **ACTIVE**) | 🔴 P1. Circle New Tagged Member → Find Member → Filter → **Kit Add Tag** → **monday Get Items by Column Value** → Formatter Text + Utilities → Filter → **monday Update Item**. Same lookup+update pattern as zaps 39/40 — covered by `update-by-email` endpoint (task #31). Has unsaved draft. |
 | 67 | `AYCI testimonial cal...` | |
 | 68 | `Student Wins Tracking - First Mess...` | |
-| 69 | `8c. Substantive success form - Add...` | |
+| 69 | `8c. Substantive success form - Add Boss Tag on Monday` (v5) | **monday: Specific Column Value Changed** → Filter → Delay After Queue → **monday: Get Items by Column Value** → Paths (A / B) → each path **monday: Update Item**. READ+WRITE Monday. Same pattern as the cohort lifecycle zaps — covered by `update-by-email` (task #31). |
 | 70 | `8b. Substantive success form - tags...` | |
 | 71 | `Badge Allocation` | |
 | 72 | `2. When Cohort Tag added in Circle...` | Reads Circle → may write Monday |
