@@ -221,6 +221,8 @@ class PrivateVideoPatch(BaseModel):
     reply_link: Optional[str] = None
     private_chat_url: Optional[str] = None
     interview_date: Optional[str] = None
+    tier: Optional[str] = None
+    total_allowance: Optional[int] = None
 
 
 @router.patch("/{item_id}")

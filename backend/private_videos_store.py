@@ -256,6 +256,15 @@ async def update_submission(db, submission_id: str, patch: dict) -> dict:
         allowed["private_chat_url"] = (patch["private_chat_url"] or "").strip() or None
     if "interview_date" in patch:
         allowed["interview_date"] = patch["interview_date"] or None
+    # Tier + total_allowance: editable so the team can fix rows where the
+    # Monday Academy Members lookup didn't populate them (e.g. student
+    # missing from Monday, or Monday tier dropdown blank). Empty string =
+    # clear the override back to null.
+    if "tier" in patch:
+        t = (patch["tier"] or "").strip()
+        allowed["tier"] = t or None
+    if "total_allowance" in patch:
+        allowed["total_allowance"] = _to_int(patch["total_allowance"])
 
     if not allowed:
         return {"ok": False, "reason": "no editable fields supplied"}

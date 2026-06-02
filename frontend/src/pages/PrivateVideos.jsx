@@ -93,29 +93,13 @@ export default function PrivateVideos() {
   };
 
   useEffect(() => {
-    // First load: show whatever's in our DB instantly, then quietly sync
-    // from Monday in the background so the count stays in lock-step with
-    // the Monday board (which is the source of truth for replies right
-    // now). The team gets a fresh-from-Monday view every time they open
-    // this page, no manual button click needed.
-    (async () => {
-      await load();
-      try {
-        setSyncingMonday(true);
-        const { data } = await apiClient.post(
-          "/private-videos/sync-from-monday",
-          {},
-          { timeout: 180000 },
-        );
-        if ((data?.created ?? 0) > 0 || (data?.updated ?? 0) > 0) {
-          await load(true);
-        }
-      } catch {
-        // Silent — initial load was already successful, this is just a refresh
-      } finally {
-        setSyncingMonday(false);
-      }
-    })();
+    // First load: just show what's in our DB. Don't auto-sync from Monday
+    // on every page open — that POST has a 180s timeout and was the
+    // dominant cause of slow opens. The 60s auto-refresh tick below keeps
+    // the row list current via the Tally webhook + native ingest; click
+    // the "Sync from Monday" button manually if you suspect Monday has
+    // moved ahead (rare, since Tally is now the source for new rows).
+    load();
   }, []);
 
   // Auto-refresh the row list every 60s so new Tally submissions appear
@@ -832,6 +816,10 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
   const [assigneeId, setAssigneeId] = useState(item.assignee_id || autoAssigneeId || "");
   const [replyLink, setReplyLink] = useState(originalReplyLink);
   const [privateChatUrl, setPrivateChatUrl] = useState(item.private_chat || "");
+  const [tier, setTier] = useState(item.tier || "");
+  const [totalAllowance, setTotalAllowance] = useState(
+    item.total_allowance != null ? String(item.total_allowance) : ""
+  );
   // No editable "Replied date" — the backend stamps it automatically when
   // Send now succeeds. Showing an empty date field made it look amendable.
 
@@ -895,11 +883,14 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
   const save = async () => {
     setSaving(true);
     try {
+      const allowanceTrimmed = totalAllowance.trim();
       await apiClient.patch(`/private-videos/${item.id}`, {
         status_label: statusLabel,
         assignee_id: assigneeId || "",
         reply_link: replyLink,
         private_chat_url: privateChatUrl,
+        tier: tier,
+        total_allowance: allowanceTrimmed === "" ? null : Number(allowanceTrimmed),
       });
       toast.success("Saved");
       onSaved();
@@ -1027,6 +1018,33 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
               <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
                 Only set this when the row is missing one — it normally
                 fills in automatically from Academy Members at ingest.
+              </div>
+            </div>
+            <div>
+              <Label>Tier</Label>
+              <input
+                type="text"
+                value={tier}
+                onChange={(e) => setTier(e.target.value)}
+                placeholder="VIP / PP / Academy"
+                className={inputCls}
+                data-testid="pv-edit-tier"
+              />
+            </div>
+            <div>
+              <Label>Total video allowance</Label>
+              <input
+                type="number"
+                min="0"
+                value={totalAllowance}
+                onChange={(e) => setTotalAllowance(e.target.value)}
+                placeholder="15 (PP) / 30 (VIP)"
+                className={inputCls}
+                data-testid="pv-edit-total-allowance"
+              />
+              <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
+                Drives the &quot;N/total&quot; badge on the row. Leave blank
+                to clear back to none.
               </div>
             </div>
           </div>
