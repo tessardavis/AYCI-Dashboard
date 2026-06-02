@@ -201,21 +201,22 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 ## Audit status (2026-06-02)
 
 - **80** zaps audited initially.
-- **8** retired during the audit:
+- **9** retired during the audit + migration:
   - ✅ `Send Circle group message with coach response` (zap 73 — off)
   - ✅ `AYCI Support tickets - Tally to Monday - (Paris)` (zap 83 — deleted)
   - ✅ 4 × SEP-25 cohort zaps (rows 3, 59, 60, 61 — deleted)
   - ✅ `Tally Form to Monday → Video submission` (zap 8 — off)
   - ✅ `When Cloudconvert process is finished` (zap 76 — off)
-- **72** zaps currently active.
+  - ✅ `Mock interview - Tessa - update Monday Contacts board (Oksana)` (zap 19d — off, no longer doing Tessa-led mock interviews)
+- **71** zaps currently active.
 - **~10** Grid (AYGI) zaps deferred until Jan 2027.
 - **~6** Paeds ST3 / Finchley Now zaps permanently out of scope.
-- **~56** zaps in the actual AYCI migration target.
+- **~55** zaps in the actual AYCI migration target.
 - **0** unaudited rows remaining — full audit complete.
 
 ## Migration progress (2026-06-02)
 
-**6 zaps re-pointed to the dashboard (Monday writes removed):**
+**8 zaps re-pointed to the dashboard (Monday writes removed):**
 
 | # | Zap | Pattern | Fields written |
 |---|---|---|---|
@@ -225,6 +226,8 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 | 30 | Milestone 4 - Monday board status update | simple update | `milestone_4: "Yes"` |
 | 31 | Milestone 5 - Monday board status update | simple update | `milestone_5: "Yes"` |
 | 14 | [AYCI JUNE-26] Mock interview - Becky | **read-modify-write** | `mock_interview_1: "Booked - Becky"` (uses `previous_values` for eligibility filter) |
+| 14b | [AYCI JUNE-26] Mock interview - Anoop | **read-modify-write** | `mock_interview_1: "Booked - Anoop"` |
+| 14c | [AYCI JUNE-26] Mock interview - Charlotte | **read-modify-write** | `mock_interview_1: "Booked - Charlotte"` |
 
 **Two migration patterns established:**
 
@@ -233,15 +236,17 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 **Dashboard primitives now used in production:**
 
-- `POST /api/students-db/update-by-email` — 6 zaps live
+- `POST /api/students-db/update-by-email` — 8 zaps live
 - `POST /api/students-db/intake` — 0 zaps yet
 - Outbound webhook dispatcher — 0 subscribers yet
 
+**Note on team consolidation:** the 3 active Mock Interview zaps could in principle collapse into 1 if subscribing to a Calendly team-wide trigger worked. Tested 2026-06-02 — Calendly's Zapier OAuth scope is per-user even for the team Owner, so each coach's zap still needs its own Calendly account connection. True consolidation would require Calendly's organization-level webhooks (separate setup, deferred).
+
 **Suggested next batch** (~5-7 zaps, same patterns):
 
-- Mock Interview - Anoop, Charlotte (+ possibly Tessa) — clones of zap 14, just change `Booked - X` value
-- 8g: 15 minute call booked - Charlotte / Tessa — simple update
-- 8c. Substantive success form - Add Boss Tag — simple update on column change
+- 3 × `1:1 Round Robin` zaps (Anoop, Charlotte, Becky) — read-modify-write + AI step that picks which Call slot to fill
+- 2 × `8g: 15 minute call booked` zaps (Charlotte, Tessa) — simple update
+- `8c. Substantive success form - Add Boss Tag` — read-modify-write on column change
 
 ## Schema additions during migration
 
