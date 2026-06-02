@@ -138,10 +138,22 @@ def _extract_row(item: dict) -> dict:
 # dashboard value. When we eventually retire Monday, this will be the
 # full schema; for now coaches add fields as they edit them.
 PROTECTED_FIELDS = {
+    # Scalar columns the mirror extracts from Monday today
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "video_allowance",
     "videos_submitted",
+    # Fields not yet extracted by the mirror but tracked on the row when
+    # automations (Zapier) write them. Adding new ones here is the standard
+    # path for migrating a zap — the mirror won't extract or clobber these,
+    # and dashboard_edited_fields keeps them safe regardless.
+    "intro_post",
+    "milestone_1", "milestone_2", "milestone_3", "milestone_4", "milestone_5",
+    "private_spaces",
+    "testimonial_requested", "testimonial_fu_1",
+    # Mock interview + 1:1 status fields (used by Calendly zaps 14, 18)
+    "mock_interview_status",
+    "call_1_status", "call_2_status", "call_3_status", "call_4_status",
 }
 
 

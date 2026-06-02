@@ -24,7 +24,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from db import db
@@ -210,18 +210,6 @@ async def update_student(
 # Auth: shared secret in `X-Webhook-Secret`. Set ZAPIER_WEBHOOK_SECRET on
 # Render and paste the same string into each zap's Webhooks step header.
 
-class StudentUpdateByEmail(BaseModel):
-    """Lookup key is `email` — matches against `email` OR `circle_email` on
-    academy_members (zaps sometimes have one, sometimes the other).
-    Anything in `fields` is applied. Allowlisted to PROTECTED_FIELDS so the
-    automation can't accidentally write `_id` or `columns_by_id`."""
-    email: str
-    fields: dict[str, Any]
-
-    class Config:
-        extra = "forbid"
-
-
 def _check_webhook_secret(x_webhook_secret: Optional[str]) -> None:
     expected = (os.environ.get("ZAPIER_WEBHOOK_SECRET") or "").strip()
     if not expected:
@@ -230,9 +218,37 @@ def _check_webhook_secret(x_webhook_secret: Optional[str]) -> None:
         raise HTTPException(401, "Invalid webhook secret")
 
 
+def _parse_email_and_fields(body: dict) -> tuple[str, dict]:
+    """Accept both nested and flat payload shapes so the Zapier Webhooks
+    step is easy to configure:
+
+      Nested (what Postman / a hand-written client sends):
+        {"email": "x@y.z", "fields": {"milestone_1": "Yes"}}
+
+      Flat (what's natural in Zapier's key/value UI):
+        {"email": "x@y.z", "milestone_1": "Yes"}
+
+    Returns (email, fields_dict)."""
+    if not isinstance(body, dict):
+        raise HTTPException(400, "payload must be an object")
+    email = body.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise HTTPException(400, "email is required")
+    nested = body.get("fields")
+    if isinstance(nested, dict) and nested:
+        return email, nested
+    # Flat mode: everything except `email` and a small set of reserved
+    # top-level keys is treated as a field to set.
+    reserved = {"email", "source"}
+    flat = {k: v for k, v in body.items() if k not in reserved}
+    if not flat:
+        raise HTTPException(400, "fields must be non-empty")
+    return email, flat
+
+
 @router.post("/students-db/update-by-email")
 async def update_student_by_email(
-    payload: StudentUpdateByEmail,
+    request: Request,
     x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
 ):
     """Find a student by email (or circle_email) and update fields.
@@ -241,14 +257,15 @@ async def update_student_by_email(
     can branch on that response. Returns 400 if any field is not in the
     automation allowlist."""
     _check_webhook_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
 
-    email_l = (payload.email or "").strip().lower()
-    if not email_l:
-        raise HTTPException(400, "email is required")
-    if not payload.fields:
-        raise HTTPException(400, "fields must be non-empty")
+    email, fields = _parse_email_and_fields(body)
+    email_l = email.strip().lower()
 
-    bad = set(payload.fields.keys()) - PROTECTED_FIELDS
+    bad = set(fields.keys()) - PROTECTED_FIELDS
     if bad:
         raise HTTPException(
             400, f"Fields not writable by automation: {sorted(bad)}"
@@ -261,7 +278,7 @@ async def update_student_by_email(
         # Surface as 404 so the zap's existing not-found branch fires.
         raise HTTPException(404, f"No student found for email={email_l}")
 
-    set_fields: dict[str, Any] = dict(payload.fields)
+    set_fields: dict[str, Any] = dict(fields)
     # Normalise email-ish fields (matches PATCH + mirror behaviour)
     for k in ("email", "circle_email"):
         if k in set_fields and set_fields[k] is not None:
@@ -320,22 +337,6 @@ PROTECTED_FIELDS = _protected_fields_set()
 # academy_members row → update tier + provided fields; otherwise insert
 # a new row with _id="auto:<uuid>".
 
-class StudentIntake(BaseModel):
-    """A signup event from upstream (Kajabi, Tally, waitlist).
-
-    `email` is the dedup key — case-insensitive match against existing
-    academy_members rows. `fields` is everything else to set (tier, cohort,
-    name, dates, etc.); allowlisted to PROTECTED_FIELDS plus a few intake-
-    only fields (stage, source) tracked on the row for audit.
-    """
-    email: str
-    fields: dict[str, Any]
-    source: Optional[str] = None  # e.g. "kajabi", "tally-onboarding", "waitlist"
-
-    class Config:
-        extra = "forbid"
-
-
 # Extra fields the intake endpoint can set on a row in addition to the
 # normal scalar columns. Tracked so we know who/what created the row.
 INTAKE_ONLY_FIELDS = {"stage", "source", "intake_payload_meta"}
@@ -343,7 +344,7 @@ INTAKE_ONLY_FIELDS = {"stage", "source", "intake_payload_meta"}
 
 @router.post("/students-db/intake")
 async def intake_student(
-    payload: StudentIntake,
+    request: Request,
     x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
 ):
     """Upsert a student row by email.
@@ -358,23 +359,28 @@ async def intake_student(
 
     The endpoint deliberately does NOT branch on offer name or do tier
     lookups itself — the zap (or future intake-routing logic) supplies
-    `fields.tier` directly. Keeps this endpoint a thin primitive."""
-    _check_webhook_secret(x_webhook_secret)
+    `fields.tier` directly. Keeps this endpoint a thin primitive.
 
-    email_l = (payload.email or "").strip().lower()
-    if not email_l:
-        raise HTTPException(400, "email is required")
-    if not payload.fields:
-        raise HTTPException(400, "fields must be non-empty")
+    Accepts both nested (`{email, fields:{...}, source}`) and flat
+    (`{email, tier, cohort_joined, ..., source}`) payload shapes."""
+    _check_webhook_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    email, fields = _parse_email_and_fields(body)
+    email_l = email.strip().lower()
+    source = body.get("source")
 
     allowed = PROTECTED_FIELDS | INTAKE_ONLY_FIELDS
-    bad = set(payload.fields.keys()) - allowed
+    bad = set(fields.keys()) - allowed
     if bad:
         raise HTTPException(
             400, f"Fields not writable by intake: {sorted(bad)}"
         )
 
-    set_fields: dict[str, Any] = dict(payload.fields)
+    set_fields: dict[str, Any] = dict(fields)
     # Normalise email-ish fields (matches PATCH + mirror behaviour)
     for k in ("email", "circle_email"):
         if k in set_fields and set_fields[k] is not None:
@@ -382,8 +388,8 @@ async def intake_student(
 
     # Always carry the lookup email and source through to the row
     set_fields.setdefault("email", email_l)
-    if payload.source:
-        set_fields["source"] = payload.source
+    if source:
+        set_fields["source"] = source
 
     existing = await db.academy_members.find_one(
         {"$or": [{"email": email_l}, {"circle_email": email_l}]},
