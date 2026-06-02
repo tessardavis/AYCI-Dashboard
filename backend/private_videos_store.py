@@ -95,6 +95,54 @@ def _to_int(v) -> Optional[int]:
         return None
 
 
+# Fields that describe the STUDENT, not the individual submission. When a
+# coach edits any of these on a row we persist the value to
+# `student_overrides` (keyed by email) and back-fill every other row for
+# the same student, so a one-time fix sticks for past + future submissions.
+STUDENT_LEVEL_FIELDS = (
+    "tier",
+    "total_allowance",
+    "private_chat_url",
+    "interview_date",
+    "interview_type",
+)
+
+
+async def _get_student_override(db, email: str) -> dict:
+    """Return the saved per-student override doc (or {} if none).
+    Only the STUDENT_LEVEL_FIELDS are honoured by the ingest path."""
+    if not email:
+        return {}
+    doc = await db.student_overrides.find_one(
+        {"_id": email.strip().lower()}, {"_id": 0}
+    )
+    return doc or {}
+
+
+async def _apply_student_override(db, email: str, values: dict) -> int:
+    """Persist student-level field values for `email` and back-fill every
+    existing row for the same student so the UI immediately reflects the
+    correction. Returns the number of historical rows updated."""
+    email = (email or "").strip().lower()
+    if not email:
+        return 0
+    overrides = {k: v for k, v in values.items() if k in STUDENT_LEVEL_FIELDS}
+    if not overrides:
+        return 0
+    overrides["updated_at"] = _now_iso()
+    await db.student_overrides.update_one(
+        {"_id": email},
+        {"$set": {"_id": email, "email": email, **overrides}},
+        upsert=True,
+    )
+    # Back-fill every existing submission for this email.
+    res = await db.private_video_submissions.update_many(
+        {"email": email},
+        {"$set": {**overrides, "updated_at": _now_iso()}},
+    )
+    return int(res.modified_count or 0)
+
+
 # --------------------------------------------------- Decorators (legacy shape)
 async def _team_members_by_id(db) -> dict:
     """{team_member_id: {id, name, role_title}} — used to decorate assignee."""
@@ -276,11 +324,28 @@ async def update_submission(db, submission_id: str, patch: dict) -> dict:
     if res.matched_count == 0:
         return {"ok": False, "reason": "submission not found"}
 
+    # If the patch touched student-level fields, persist them to
+    # student_overrides and back-fill every other row for this student.
+    # One edit on any of the student's submissions now sticks across past
+    # AND future submissions (no more re-fixing each new row).
     fresh = await db.private_video_submissions.find_one(
         {"id": submission_id}, {"_id": 0}
     )
+    student_patch = {k: allowed[k] for k in STUDENT_LEVEL_FIELDS if k in allowed}
+    back_filled = 0
+    if student_patch and (fresh or {}).get("email"):
+        back_filled = await _apply_student_override(db, fresh["email"], student_patch)
+        # Re-read so the response reflects the back-fill timestamp.
+        fresh = await db.private_video_submissions.find_one(
+            {"id": submission_id}, {"_id": 0}
+        )
+
     team_by_id = await _team_members_by_id(db)
-    return {"ok": True, "item": _decorate(fresh, team_by_id)}
+    return {
+        "ok": True,
+        "item": _decorate(fresh, team_by_id),
+        "back_filled_rows": back_filled,
+    }
 
 
 # ------------------------------------------------------------- Enrichment
@@ -497,8 +562,18 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     # Submission number = N+1 where N is prior submissions for this email
     prior_count = await db.private_video_submissions.count_documents({"email": email})
 
-    # Enrich from Academy Members (tier + allowance + Circle DM URL)
+    # Enrich from Academy Members (tier + allowance + Circle DM URL) then
+    # apply any per-student overrides the team has saved via the Edit modal
+    # (student_overrides collection). Overrides win — that's the whole
+    # point: a coach who corrected Maha's tier/allowance/DM URL once
+    # shouldn't have to redo it on every new submission.
     academy = await _academy_lookup(db, email)
+    override = await _get_student_override(db, email)
+
+    def _pick(key):
+        if key in override and override[key] not in (None, ""):
+            return override[key]
+        return academy.get(key)
 
     now = _now_iso()
     row = {
@@ -511,16 +586,16 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         "submitted_at": submitted_at,
         "question": question,
         "tally_video_url": video_url,
-        "total_allowance": academy.get("total_allowance"),
+        "total_allowance": _pick("total_allowance"),
         "submission_number": prior_count + 1,
         "status": "new",
         "assignee_team_member_id": None,
         "replied_at": None,
         "reply_link": None,
-        "private_chat_url": academy.get("private_chat_url"),
-        "interview_date": academy.get("interview_date"),
-        "interview_type": academy.get("interview_type"),
-        "tier": academy.get("tier"),
+        "private_chat_url": _pick("private_chat_url"),
+        "interview_date": _pick("interview_date"),
+        "interview_type": _pick("interview_type"),
+        "tier": _pick("tier"),
         "data_source": "tally",
         "created_at": now,
         "updated_at": now,
