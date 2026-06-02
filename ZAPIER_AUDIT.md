@@ -69,8 +69,8 @@ These create or update rows on the Academy Members board when a student fills a 
 
 | # | Zap name | Trigger | Key actions | Notes |
 |---|---|---|---|---|
-| 11 | `Boost & Go Sales - Arub` | ❓ Stripe purchase? | ❓ Update tier / create row | "Boost & Go" is a product tier. |
-| 12 | `AYCI - Sales - Arub` | ❓ | ❓ | Implied by location "AYCI - Sales - Arub". |
+| 11 | `Boost & Go Sales - Arub` (v28) | **Kajabi: New Purchase** | 1. Paths split by tier: Boost & Go No Presentation / B+G Plus No Presentation / Boost & Go Presentation / B+G Plus Presentation <br> 2. Each tier path: Kit Add Tag → Slack ×2 → **monday: Get Items by Column Value** → Paths (Contact Found vs Not Found) → either **monday: Update Item** OR Slack alert | Kajabi-triggered Boost & Go sales zap. Looks up student on Academy Members; updates if found, Slack-alerts if not. **Migrate:** `intake-kajabi` endpoint + `update-by-email` (tasks #31, #32). |
+| 12 | `AYCI - Sales - Arub` | (folder, not a zap) | — | Turns out this is just the parent folder name for zap 11. Remove from list. |
 | 13 | ~~`New Lead To Monday`~~ | **Out of scope** | — | Lives in Finchley Now folder. Trigger is Gmail (New Labeled Email), writes to the Finchley Now Monday board, not Academy Members. **Move to P3 — not part of this migration.** |
 
 ### 🟡 P1 — Interview / Calendly → Monday writes
@@ -163,7 +163,7 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 70 | `8b. Substantive success form - tags...` | |
 | 71 | `Badge Allocation` | |
 | 72 | `2. When Cohort Tag added in Circle...` | Reads Circle → may write Monday |
-| 73 | `Send Circle group message with co...` | Probably Private Videos zap (already migrated) |
+| 73 | `Send Circle group message with coach response` (Has Draft, v11) | **Webhooks: Catch Hook** → monday Get Column Values → Formatter Text → Zapier Tables Get coach list → Formatter Format list → URL Shortener → **Circle Start Group Chat** → **monday: Update Item** → Filter (only if Gdrive file ID) → Google Drive Delete File. **This is the Private Videos zap** — reads/writes the Private Videos board (5083952249), not Academy Members. Already replicated by the dashboard's `/api/private-videos/send-response`. Safe to turn off once the dashboard path is the only sender. Has unsaved draft. |
 | 74 | `Grid Send Circle group message wit...` | Grid version of above |
 | 75 | `Temp tag for Circle DM auto reply -...` | |
 | 76 | `When Cloudconvert process is finis...` | Video processing |
