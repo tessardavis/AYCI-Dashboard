@@ -263,9 +263,13 @@ async def full_sync(db) -> dict:
     deleted = 0
     if seen_ids and not errors:
         # Only purge if the sync ran cleanly — never wipe rows because of a
-        # half-failed sync.
+        # half-failed sync. Exclude rows that originated in the dashboard
+        # (auto: ids), which won't appear in the Monday feed but are
+        # legitimate.
         try:
-            res = await db.academy_members.delete_many({"_id": {"$nin": list(seen_ids)}})
+            res = await db.academy_members.delete_many({
+                "_id": {"$nin": list(seen_ids), "$not": {"$regex": "^auto:"}},
+            })
             deleted = res.deleted_count
         except Exception as e:
             logger.info(f"[academy-mirror] stale purge skipped: {e}")
