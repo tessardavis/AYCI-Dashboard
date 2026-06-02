@@ -7,20 +7,26 @@ same row AND mark the edited field in `dashboard_edited_fields` so the
 next Monday sync doesn't clobber the change.
 
 Routes:
-  GET  /api/students-db                  list, with filters + search
-  GET  /api/students-db/{monday_item_id} one row
+  GET   /api/students-db                  list, with filters + search
+  GET   /api/students-db/{monday_item_id} one row
   PATCH /api/students-db/{monday_item_id} update fields (protected from sync)
+  POST  /api/students-db/update-by-email  Zapier-callable lookup+update
+                                          (replaces Monday Get Items + Update Item)
 """
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from db import db
 from deps import require_board
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["students-db"])
 
@@ -179,3 +185,106 @@ async def update_student(
 
     fresh = await db.academy_members.find_one({"_id": monday_item_id})
     return fresh
+
+
+# ----------------------------------------------------- Zapier-callable update
+# Replaces the Monday "Get Items by Column Value + Update Item" pair used by
+# ~40 zaps. Zap re-point: swap both Monday steps for one Webhooks-by-Zapier
+# POST to this endpoint with the email + fields to change.
+#
+# Auth: shared secret in `X-Webhook-Secret`. Set ZAPIER_WEBHOOK_SECRET on
+# Render and paste the same string into each zap's Webhooks step header.
+
+class StudentUpdateByEmail(BaseModel):
+    """Lookup key is `email` — matches against `email` OR `circle_email` on
+    academy_members (zaps sometimes have one, sometimes the other).
+    Anything in `fields` is applied. Allowlisted to PROTECTED_FIELDS so the
+    automation can't accidentally write `_id` or `columns_by_id`."""
+    email: str
+    fields: dict[str, Any]
+
+    class Config:
+        extra = "forbid"
+
+
+def _check_webhook_secret(x_webhook_secret: Optional[str]) -> None:
+    expected = (os.environ.get("ZAPIER_WEBHOOK_SECRET") or "").strip()
+    if not expected:
+        raise HTTPException(503, "Webhook auth not configured")
+    if (x_webhook_secret or "").strip() != expected:
+        raise HTTPException(401, "Invalid webhook secret")
+
+
+@router.post("/students-db/update-by-email")
+async def update_student_by_email(
+    payload: StudentUpdateByEmail,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Find a student by email (or circle_email) and update fields.
+
+    Returns 404 if no match — zaps' existing Slack-alert fallback paths
+    can branch on that response. Returns 400 if any field is not in the
+    automation allowlist."""
+    _check_webhook_secret(x_webhook_secret)
+
+    email_l = (payload.email or "").strip().lower()
+    if not email_l:
+        raise HTTPException(400, "email is required")
+    if not payload.fields:
+        raise HTTPException(400, "fields must be non-empty")
+
+    bad = set(payload.fields.keys()) - PROTECTED_FIELDS
+    if bad:
+        raise HTTPException(
+            400, f"Fields not writable by automation: {sorted(bad)}"
+        )
+
+    row = await db.academy_members.find_one(
+        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+        {"_id": 1, "dashboard_edited_fields": 1, "email": 1, "circle_email": 1},
+    )
+    if not row:
+        # Surface as 404 so the zap's existing not-found branch fires.
+        raise HTTPException(404, f"No student found for email={email_l}")
+
+    set_fields: dict[str, Any] = dict(payload.fields)
+    # Normalise email-ish fields (matches PATCH + mirror behaviour)
+    for k in ("email", "circle_email"):
+        if k in set_fields and set_fields[k] is not None:
+            set_fields[k] = str(set_fields[k]).strip().lower() or None
+
+    now = datetime.now(timezone.utc)
+    update_set: dict[str, Any] = dict(set_fields)
+    update_set["dashboard_edited_at"] = now
+    update_set["dashboard_edited_by"] = "zapier"
+
+    new_protected = set(row.get("dashboard_edited_fields") or [])
+    new_protected.update(set_fields.keys())
+    update_set["dashboard_edited_fields"] = sorted(new_protected)
+
+    await db.academy_members.update_one(
+        {"_id": row["_id"]}, {"$set": update_set}
+    )
+    logger.info(
+        f"[students-db] zapier update email={email_l} "
+        f"id={row['_id']} fields={list(set_fields.keys())}"
+    )
+
+    return {
+        "ok": True,
+        "id": row["_id"],
+        "matched_on": "email" if row.get("email") == email_l else "circle_email",
+        "updated_fields": sorted(set_fields.keys()),
+    }
+
+
+# Re-export so the webhook endpoint can use the same allowlist as the sync.
+# Imported lazily to avoid a module-load cycle.
+def _protected_fields_set() -> set[str]:
+    try:
+        from academy_members_mirror import PROTECTED_FIELDS as _PF
+        return set(_PF)
+    except Exception:
+        return EDITABLE_FIELDS
+
+PROTECTED_FIELDS = _protected_fields_set()
