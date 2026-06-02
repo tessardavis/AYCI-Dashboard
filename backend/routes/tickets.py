@@ -418,4 +418,5 @@ async def tally_webhook(request: Request, background: BackgroundTasks):
     if pending_files:
         ticket["attachments"] = await tickets_mod._fetch_tally_attachments(db, pending_files)
     await db.tickets.insert_one(ticket)
+    background.add_task(tickets_mod.notify_new_tally_ticket, db, ticket)
     return {"ok": True, "ticket_id": ticket["id"]}

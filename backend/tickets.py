@@ -165,6 +165,82 @@ async def maybe_send_urgent_slack(db, ticket: dict) -> None:
         ticket["slack_urgent_sent"] = True
 
 
+async def _circle_profile_url_for(db, email: str) -> Optional[str]:
+    """Find Circle profile URL for a student email via the slim members cache."""
+    if not email:
+        return None
+    try:
+        from student_lookup import _get_name_index  # local import to avoid cycle
+        members = await _get_name_index(db)
+        email_l = email.strip().lower()
+        for m in members:
+            if (m.get("email") or "").lower() == email_l:
+                return m.get("profile_url") or m.get("public_profile_url")
+    except Exception as e:
+        logger.warning(f"[tickets] circle profile lookup failed: {e}")
+    return None
+
+
+async def _post_slack_new_tally_ticket(ticket: dict, circle_profile_url: Optional[str]) -> bool:
+    """Post a new-Tally-ticket alert to the circle enquiries Slack channel.
+    Returns True on success. Skipped silently if no webhook configured."""
+    url = (os.environ.get("SLACK_CIRCLE_ENQUIRIES_WEBHOOK_URL") or "").strip()
+    if not url:
+        return False
+
+    student = ticket.get("student_name") or ticket.get("student_email") or "Unknown"
+    email = ticket.get("student_email") or ""
+    subject = ticket.get("subject") or "(no subject)"
+    desc = (ticket.get("description") or "").strip()
+    if len(desc) > 500:
+        desc = desc[:500] + "…"
+    category = (ticket.get("category") or "other").title()
+    base_url = (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
+    ticket_link = f"{base_url}/tickets" if base_url else None
+
+    fields = [
+        {"type": "mrkdwn", "text": f"*Email*\n{email or '—'}"},
+        {"type": "mrkdwn", "text": f"*Category*\n{category}"},
+    ]
+    if circle_profile_url:
+        fields.append({"type": "mrkdwn", "text": f"*Circle profile*\n<{circle_profile_url}|Open profile>"})
+    if ticket_link:
+        fields.append({"type": "mrkdwn", "text": f"*Dashboard*\n<{ticket_link}|Open Tickets>"})
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"🎫 New support ticket — {student}", "emoji": True},
+        },
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{subject}*"}},
+        {"type": "section", "fields": fields},
+    ]
+    if desc:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"```{desc}```"}})
+
+    payload = {
+        "text": f"🎫 New support ticket — {student}: {subject}",
+        "blocks": blocks,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(url, json=payload)
+            if r.status_code >= 300:
+                logger.warning(f"[tickets] Slack new-ticket post returned {r.status_code}: {r.text}")
+                return False
+        return True
+    except Exception as e:
+        logger.warning(f"[tickets] Slack new-ticket post failed: {e}")
+        return False
+
+
+async def notify_new_tally_ticket(db, ticket: dict) -> None:
+    """Post the circle-enquiries Slack alert for a freshly-created Tally ticket.
+    Best-effort: any failure is logged but doesn't raise."""
+    profile_url = await _circle_profile_url_for(db, ticket.get("student_email") or "")
+    await _post_slack_new_tally_ticket(ticket, profile_url)
+
+
 async def maybe_send_assignment_dm(
     db, ticket: dict, assignee_team_id: str, actor_user_id: Optional[str] = None,
 ) -> None:
@@ -375,6 +451,7 @@ async def sync_tally(db) -> dict:
         if pending_files:
             ticket["attachments"] = await _fetch_tally_attachments(db, pending_files)
         await db.tickets.insert_one(ticket)
+        await notify_new_tally_ticket(db, ticket)
         inserted += 1
 
     return {"inserted": inserted, "scanned": len(submissions)}
