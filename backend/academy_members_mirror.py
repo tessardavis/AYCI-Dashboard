@@ -153,6 +153,9 @@ PROTECTED_FIELDS = {
     "testimonial_requested", "testimonial_fu_1",
     # Mock interview + 1:1 status fields (used by Calendly zaps 14, 18)
     "mock_interview_status",
+    "mock_interview_1", "mock_interview_2", "gold_call", "platinum_call",
+    "mock_interview_cohort_before_april",
+    "call_1", "call_2", "call_3", "call_4",
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
 }
 
