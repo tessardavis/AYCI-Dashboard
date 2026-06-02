@@ -67,7 +67,7 @@ These create or update rows on the Academy Members board when a student fills a 
 | 5 | `Onboarding Form Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Two-step zap. Likely fires after the Kajabi zap above triggers the onboarding form (zap 1's last step). **Migration:** add this endpoint's payload handling to the same `/api/students-db/intake` endpoint — merge with the Kajabi intake on email. |
 | 6 | `Onboarding Form (Higher Tiers) Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Same 2-step pattern as zap 5. Higher-tier variant of the onboarding form (likely Private Plus / VIP). **Same migration plan**: merge into the dashboard intake endpoint. |
 | 7 | `Non members Tally to Monday` (v1) | **Tally: New Submission** | 1. **monday.com: Create Item** | 2-step zap. Same shape as zaps 5 and 6 — Tally submission creates a Monday row. "Non members" suggests it's for people who aren't AYCI students yet (lead capture?). Need to know which Monday board — could be Academy Members or a separate Leads board. |
-| 8 | `Tally Form to Monday → Video submission` (Has Draft, v12) | **Tally: New Submission** | Paths (MOV File / Not MOV File) → MOV path: monday Create Item Link → CloudConvert. Not MOV path: monday Create Item. | This is the **Private Videos intake zap** (creates the row on the Private Videos board when a student submits a video). The CloudConvert step handles MOV→MP4 conversion. **Already replaced by the dashboard's `/api/private-videos/intake-tally` endpoint** if that's hooked up — but the zap is still here. Sibling: zap 73 (already retired) was the response side; this is the inbound side. |
+| 8 | ~~`Tally Form to Monday → Video submission`~~ ✅ **OFF** (confirmed 2026-06-02) | **Tally: New Submission** | Paths (MOV / Not MOV) → monday Create Item Link → CloudConvert / monday Create Item. | Was the Private Videos intake zap. Already replaced by the dashboard's `/api/private-videos/tally-webhook`. |
 | 9 | `Grid Tally Form to Monday → Video submission` (v7) | **Tally: New Submission** | monday Create Item | 2-step zap. Grid (AYGI) variant of zap 8 — much simpler (no MOV path). Touches a different Monday board (Grid Private Videos). |
 | 10 | `3. New Tally from submission → Update Monday Contact` (Has Draft, v19, **ACTIVE**) | **Tally: New Submission** | 1. AI by Zapier: Analyze and Return Data <br> 2. Paths (Contact ID Exists / No Contact ID) <br> 3. *Contact ID Exists*: monday Update Item → Create Subitem → Filter ×2 → Update Item → Get Column Values → Filter → Delay 1hr → Update Item <br> 4. *No Contact ID*: Look for existing contact → sub-Paths (Existing / New) → either Update Item or **Create Item** then Create Subitem + Update chain | **The big one.** Massive zap — Tally submission triggers a full upsert + subitem creation + delayed status update chain. AI step extracts data from the Tally answer. **Needs:** the `intake` + `update-by-email` endpoints plus a way to record subitems (likely as `dashboard_edited_fields`-style entries on the academy_members doc rather than a separate collection). |
 
@@ -174,7 +174,7 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 73 | ~~`Send Circle group message with coach response`~~ ✅ **TURNED OFF 2026-06-02** | **Webhooks: Catch Hook** → monday Get Column Values → Formatter Text → Zapier Tables Get coach list → Formatter Format list → URL Shortener → **Circle Start Group Chat** → **monday: Update Item** → Filter (only if Gdrive file ID) → Google Drive Delete File. **Was the Private Videos zap** — read/wrote the Private Videos board (5083952249). Replaced by the dashboard's `/api/private-videos/send-response`. **First zap retired in this migration.** |
 | 74 | `Grid Send Circle group message with coach response` (Has Draft, v7) | Webhooks Catch Hook → monday Get Column Values → Formatter → Zapier Tables (coach list) → Formatter → URL Shortener → Formatter Extract URL → **Circle Start Group Chat** → **monday Update Item**. **Grid/AYGI variant of zap 73 (retired).** When dashboard handles the Grid coach-reply path, this can be retired too. |
 | 75 | `Temp tag for Circle DM auto reply - interview week exclusion (Paris)` (v5) | **Google Calendar: New or updated interview date event** → Filter → Formatter (Get pulse ID) → monday Find Items → Formatter (Get circle email) → Circle Find Member → Circle Tag Member with interview week → **Delay 7 days** → Circle remove interview week tag. Adds a temporary Circle tag during interview week so a DM auto-reply (in zap X) excludes them. Reads monday but doesn't write. 🟡 READ_MONDAY. |
-| 76 | `When Cloudconvert process is finished upload to Gdrive and update Monday` (v3) | **CloudConvert: Job Finished** → Filter (ACYI Private Videos only) → Formatter Get Pulse ID → Google Drive Upload File → Add File Sharing Preference → **monday Update Item**. **Fully replaced** by `private_videos_store.py:ingest_tally_submission()` which calls `pv_cache.prepare()` on every Tally submission (eager transcode, same timing as CloudConvert was doing) + queues a Whisper transcription task. **Safe to retire.** |
+| 76 | ~~`When Cloudconvert process is finished upload to Gdrive and update Monday`~~ ✅ **OFF** (confirmed 2026-06-02) | **CloudConvert: Job Finished** → Filter → Formatter → Google Drive Upload + Share → **monday Update Item**. Was the post-transcode plumbing. Already replaced by `pv_cache.prepare()` (eager transcode) + Whisper transcription on Tally submission. |
 
 
 ### 🟤 P3 — Different products (Finchley Now / Paeds ST3)
@@ -201,15 +201,16 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 ## Audit status (2026-06-02)
 
 - **80** zaps audited initially.
-- **6** retired during the audit:
+- **8** retired during the audit:
   - ✅ `Send Circle group message with coach response` (zap 73 — off)
   - ✅ `AYCI Support tickets - Tally to Monday - (Paris)` (zap 83 — deleted)
   - ✅ 4 × SEP-25 cohort zaps (rows 3, 59, 60, 61 — deleted)
-- **74** zaps currently active.
+  - ✅ `Tally Form to Monday → Video submission` (zap 8 — off)
+  - ✅ `When Cloudconvert process is finished` (zap 76 — off)
+- **72** zaps currently active.
 - **~10** Grid (AYGI) zaps deferred until Jan 2027.
 - **~6** Paeds ST3 / Finchley Now zaps permanently out of scope.
-- **~58** zaps in the actual AYCI migration target.
-- **2** more zaps ready to retire (pending Tessa's action): zap 8 (`Tally Form to Monday → Video submission`) and zap 76 (`When Cloudconvert process is finished`).
+- **~56** zaps in the actual AYCI migration target.
 - **0** unaudited rows remaining — full audit complete.
 
 ## Primitive endpoints needed (covers ~95% of remaining AYCI zaps)
