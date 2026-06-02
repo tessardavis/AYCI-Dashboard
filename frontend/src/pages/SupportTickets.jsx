@@ -836,12 +836,19 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSele
         <span className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
           {relativeAge(ticket.updated_at || ticket.created_at)}
-          {(ticket.attachments || []).length > 0 && (
-            <span className="ml-1 inline-flex items-center gap-0.5 text-slate-600" title={`${ticket.attachments.length} attachment(s)`}>
-              <Paperclip className="w-3 h-3" />
-              {ticket.attachments.length}
-            </span>
-          )}
+          {(() => {
+            // `attachments_count` is sent by the list endpoint (lightweight).
+            // Fall back to the full `attachments` array length for the
+            // detail-modal path that hydrates the full ticket shape.
+            const n = ticket.attachments_count ?? (ticket.attachments || []).length;
+            if (!n) return null;
+            return (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-slate-600" title={`${n} attachment(s)`}>
+                <Paperclip className="w-3 h-3" />
+                {n}
+              </span>
+            );
+          })()}
         </span>
         {assignee ? (
           <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 truncate max-w-[100px]">

@@ -1,4 +1,5 @@
 """Support Tickets — REST endpoints + Tally webhook + sync."""
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -54,13 +55,41 @@ async def list_tickets(
             {"description": rx},
         ]
 
-    rows = await db.tickets.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
-    # Build a map of (this user's last-viewed timestamp per ticket) so we can
-    # mark each card as having "new" activity since they last opened it.
-    views = await db.ticket_views.find(
-        {"user_id": user["id"]},
-        {"_id": 0, "ticket_id": 1, "viewed_at": 1},
-    ).to_list(5000)
+    # Project away the heavy `notes` array (full reply/note history per
+    # ticket — kB to 10s of kB per active ticket, not rendered in the list
+    # view) and the full `attachments` array contents. The Kanban card only
+    # needs the attachment count, which we re-attach below as a scalar.
+    # Detail endpoint (GET /tickets/{id}) is unchanged and still returns
+    # everything.
+    list_projection = {
+        "_id": 0,
+        "notes": 0,
+        "attachments": 0,
+    }
+
+    # Parallelise the two Mongo reads — tickets list + this user's view
+    # timestamps. Previously sequential, ~doubled the cross-region Atlas
+    # round-trip cost on every page open.
+    rows, views = await asyncio.gather(
+        db.tickets.find(query, list_projection).sort("created_at", -1).to_list(2000),
+        db.ticket_views.find(
+            {"user_id": user["id"]},
+            {"_id": 0, "ticket_id": 1, "viewed_at": 1},
+        ).to_list(5000),
+    )
+
+    # We dropped the full attachments array via projection; re-fetch just
+    # the counts in one $unwind+$group pass so the paperclip chip still
+    # works without sending the full payload.
+    attach_counts: dict = {}
+    pipeline = [
+        {"$match": {**query, "attachments": {"$exists": True, "$ne": []}}},
+        {"$project": {"id": 1, "n": {"$size": "$attachments"}}},
+    ]
+    async for doc in db.tickets.aggregate(pipeline):
+        if doc.get("n"):
+            attach_counts[doc.get("id")] = doc["n"]
+
     viewed_map = {v["ticket_id"]: v["viewed_at"] for v in views}
     now = datetime.now(timezone.utc)
     for r in rows:
@@ -73,6 +102,7 @@ async def list_tickets(
         upd = r.get("updated_at") or r.get("created_at") or ""
         r["unread"] = (not last_view) or (last_view < upd)
         r["last_viewed_at"] = last_view
+        r["attachments_count"] = attach_counts.get(r["id"], 0)
     return {"tickets": rows}
 
 
