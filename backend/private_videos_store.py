@@ -358,12 +358,12 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     if not sub_id:
         return {"ignored": True, "reason": "no submissionId"}
 
-    # Idempotency guard
+    # Idempotency guard — but allow resends to heal partial ingests where
+    # an earlier extraction missed the question / video URL.
     existing = await db.private_video_submissions.find_one(
-        {"tally_submission_id": sub_id}, {"_id": 0, "id": 1}
+        {"tally_submission_id": sub_id},
+        {"_id": 0, "id": 1, "question": 1, "tally_video_url": 1},
     )
-    if existing:
-        return {"ignored": True, "reason": "already ingested", "id": existing["id"]}
 
     fields = data.get("fields") or []
     first = (_extract_tally_field(fields, TALLY_QID_FIRST) or "").strip()
@@ -449,6 +449,41 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         or payload.get("createdAt")
         or _now_iso()
     )
+
+    # Resend-heal path: row already exists for this submissionId. Patch only
+    # the fields the prior ingest left empty (typically question / video URL
+    # when Tally field-key shape changed) and exit. Never overwrites coach
+    # edits — they touch status/assignee/reply, not the source fields.
+    if existing:
+        patch: dict = {}
+        if not (existing.get("question") or "").strip() and question:
+            patch["question"] = question
+        if not existing.get("tally_video_url") and video_url:
+            patch["tally_video_url"] = video_url
+        if patch:
+            patch["updated_at"] = _now_iso()
+            await db.private_video_submissions.update_one(
+                {"id": existing["id"]}, {"$set": patch}
+            )
+            # If we just learned the video URL, kick off the cache + transcript
+            # pipelines that the original ingest skipped.
+            if "tally_video_url" in patch:
+                try:
+                    import asyncio as _asyncio
+                    import private_video_cache as pv_cache
+                    _asyncio.create_task(pv_cache.prepare(existing["id"], video_url))
+                except Exception as e:
+                    logger.info(f"[private-videos] pre-warm skipped on heal: {e}")
+                try:
+                    import asyncio as _asyncio
+                    import transcription
+                    _asyncio.create_task(
+                        transcription.transcribe_and_save(db, existing["id"], video_url)
+                    )
+                except Exception as e:
+                    logger.info(f"[private-videos] transcription skipped on heal: {e}")
+            return {"ok": True, "id": existing["id"], "healed": list(patch.keys())}
+        return {"ignored": True, "reason": "already ingested", "id": existing["id"]}
 
     # Submission number = N+1 where N is prior submissions for this email
     prior_count = await db.private_video_submissions.count_documents({"email": email})
