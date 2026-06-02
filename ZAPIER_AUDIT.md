@@ -54,7 +54,7 @@ These create or update rows on the Academy Members board when a student fills a 
 
 | # | Zap name | Trigger | Key actions | Notes |
 |---|---|---|---|---|
-| 1 | `[AYCI JUNE-26] - Signups to Monday Board` | ❓ Tally form (cohort enrolment?) | ❓ Create row on Academy Members | Cohort-specific naming — re-points each new cohort. |
+| 1 | `[AYCI JUNE-26] - Signups to Monday Board (OD)` | **Kajabi: New Purchase** | 1. Lookup cohort start/end dates (Zapier Tables) <br> 2. Split by tier (Academy / Academy Private Plus / Academy VIP / Legacy Upgrade to Private Plus / Legacy Upgrade to Academy) <br> 3. **For new tiers: Create Item on Academy Members** <br> 4. **For legacy upgrades: Find by email + Update Item** <br> 5. Add email to trigger Tally onboarding form | **Migration:** dashboard endpoint `POST /api/students-db/intake-kajabi` that takes the Kajabi purchase payload, looks up academy_members by email (upsert), sets tier + cohort + dates, fires the Tally onboarding trigger downstream. |
 | 2 | `[AYGI 2025] - Signups to Monday B...` | ❓ Tally form | ❓ Create row | AYGI = different programme? Same pattern. |
 | 3 | `AYCI SEP 25 - Signups to Monday B...` | ❓ Tally form | ❓ Create row | Old cohort — might be off but shows On. |
 | 4 | `[AYGI 2025] - Signups to Monday B...` (dupe?) | ❓ | ❓ | |
