@@ -372,6 +372,23 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     email = (email_raw or "").strip().lower() if isinstance(email_raw, str) else ""
     question = (_extract_tally_field(fields, TALLY_QID_QUESTION) or "").strip()
 
+    # Tally regenerates field keys when the form is edited, so key matching
+    # alone breaks silently. Fall back to label/type matching for the visible
+    # inputs (question textarea + video file upload).
+    if not question:
+        for f in fields:
+            label = (f.get("label") or "").strip().lower()
+            ftype = (f.get("type") or "").upper()
+            value = f.get("value")
+            if (
+                "question" in label
+                and ftype in ("TEXTAREA", "INPUT_TEXT")
+                and isinstance(value, str)
+                and value.strip()
+            ):
+                question = value.strip()
+                break
+
     # Hidden field fallback. The form pre-fills `name`, `lastname`, `email`
     # via URL params, but Tally has shipped this two different ways:
     #   1) Legacy: one field at TALLY_QID_HIDDEN whose value is a dict
@@ -412,8 +429,17 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
             pass
         return {"ignored": True, "reason": "no email"}
 
-    # Video upload: Tally returns a list of files
+    # Video upload: Tally returns a list of files. Match by key, then fall
+    # back to the first FILE_UPLOAD-typed field with a non-empty value list.
     video_value = _extract_tally_field(fields, TALLY_QID_VIDEO)
+    if not (isinstance(video_value, list) and video_value):
+        video_value = None
+        for f in fields:
+            if (f.get("type") or "").upper() == "FILE_UPLOAD":
+                v = f.get("value")
+                if isinstance(v, list) and v:
+                    video_value = v
+                    break
     video_url = None
     if isinstance(video_value, list) and video_value:
         video_url = (video_value[0] or {}).get("url")
