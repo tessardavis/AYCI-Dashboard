@@ -831,6 +831,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
   // row has none. Coach can still re-pick a teammate from the dropdown.
   const [assigneeId, setAssigneeId] = useState(item.assignee_id || autoAssigneeId || "");
   const [replyLink, setReplyLink] = useState(originalReplyLink);
+  const [privateChatUrl, setPrivateChatUrl] = useState(item.private_chat || "");
   // No editable "Replied date" — the backend stamps it automatically when
   // Send now succeeds. Showing an empty date field made it look amendable.
 
@@ -898,6 +899,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
         status_label: statusLabel,
         assignee_id: assigneeId || "",
         reply_link: replyLink,
+        private_chat_url: privateChatUrl,
       });
       toast.success("Saved");
       onSaved();
@@ -1011,6 +1013,21 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                 className={inputCls}
                 data-testid="pv-edit-reply"
               />
+            </div>
+            <div className="lg:col-span-2">
+              <Label>Circle group DM URL (private chat)</Label>
+              <input
+                type="url"
+                value={privateChatUrl}
+                onChange={(e) => setPrivateChatUrl(e.target.value)}
+                placeholder="https://ayci-academy.circle.so/messages/…"
+                className={inputCls}
+                data-testid="pv-edit-private-chat-url"
+              />
+              <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
+                Only set this when the row is missing one — it normally
+                fills in automatically from Academy Members at ingest.
+              </div>
             </div>
           </div>
 
