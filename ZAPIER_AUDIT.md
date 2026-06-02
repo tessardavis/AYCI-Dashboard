@@ -61,8 +61,8 @@ These create or update rows on the Academy Members board when a student fills a 
 | 5 | `Onboarding Form Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Two-step zap. Likely fires after the Kajabi zap above triggers the onboarding form (zap 1's last step). **Migration:** add this endpoint's payload handling to the same `/api/students-db/intake` endpoint — merge with the Kajabi intake on email. |
 | 6 | `Onboarding Form (Higher Tiers) Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Same 2-step pattern as zap 5. Higher-tier variant of the onboarding form (likely Private Plus / VIP). **Same migration plan**: merge into the dashboard intake endpoint. |
 | 7 | `Non members Tally to Monday` (v1) | **Tally: New Submission** | 1. **monday.com: Create Item** | 2-step zap. Same shape as zaps 5 and 6 — Tally submission creates a Monday row. "Non members" suggests it's for people who aren't AYCI students yet (lead capture?). Need to know which Monday board — could be Academy Members or a separate Leads board. |
-| 8 | `Tally Form to Monday → Video sub...` | ❓ Tally video submission | ❓ Update Monday (private videos board?) | Probably Private Videos board, not Academy Members — verify. |
-| 9 | `Grid Tally Form to Monday → Video...` | ❓ Tally (Grid product) | ❓ Update Monday | Likely different board (Grid). |
+| 8 | `Tally Form to Monday → Video submission` (Has Draft, v12) | **Tally: New Submission** | Paths (MOV File / Not MOV File) → MOV path: monday Create Item Link → CloudConvert. Not MOV path: monday Create Item. | This is the **Private Videos intake zap** (creates the row on the Private Videos board when a student submits a video). The CloudConvert step handles MOV→MP4 conversion. **Already replaced by the dashboard's `/api/private-videos/intake-tally` endpoint** if that's hooked up — but the zap is still here. Sibling: zap 73 (already retired) was the response side; this is the inbound side. |
+| 9 | `Grid Tally Form to Monday → Video submission` (v7) | **Tally: New Submission** | monday Create Item | 2-step zap. Grid (AYGI) variant of zap 8 — much simpler (no MOV path). Touches a different Monday board (Grid Private Videos). |
 | 10 | `3. New Tally from submission → Update Monday Contact` (Has Draft, v19, **ACTIVE**) | **Tally: New Submission** | 1. AI by Zapier: Analyze and Return Data <br> 2. Paths (Contact ID Exists / No Contact ID) <br> 3. *Contact ID Exists*: monday Update Item → Create Subitem → Filter ×2 → Update Item → Get Column Values → Filter → Delay 1hr → Update Item <br> 4. *No Contact ID*: Look for existing contact → sub-Paths (Existing / New) → either Update Item or **Create Item** then Create Subitem + Update chain | **The big one.** Massive zap — Tally submission triggers a full upsert + subitem creation + delayed status update chain. AI step extracts data from the Tally answer. **Needs:** the `intake` + `update-by-email` endpoints plus a way to record subitems (likely as `dashboard_edited_fields`-style entries on the academy_members doc rather than a separate collection). |
 
 ### 🔴 P0 — Stripe / Sales → Monday writes
@@ -80,21 +80,23 @@ These create or update rows on the Academy Members board when a student fills a 
 | 14 | `[AYCI JUNE-26] Mock interview - Becky` | **Calendly: VIP (Mock interview) calls** | 1. monday: Get Items by Column Value <br> 2. monday: read mock interview current status <br> 3. **monday: Update mock interview status** <br> 4. Filter (check if eligible) <br> 5. Formatter Date/Time <br> 6. Circle: Find Member <br> 7. Slack: Alert OD call limit reached | Mock interview booked in Calendly → updates `mock_interview_status` column on Academy Members. Three identical sibling zaps for **Becky / Anoop / Charlotte** — assumed Tessa version too. **Migrate:** same `update-by-email` endpoint (task #31). |
 | 14b | `[AYCI JUNE-26] Mock interview - Anoop` | Same as 14 | Same structure | Sibling of 14. |
 | 14c | `[AYCI JUNE-26] Mock interview - Charlotte` | Same as 14 | Same structure | Sibling of 14. |
-| 15 | `8g: 15 minute call booked - Charlotte` | ❓ Calendly | ❓ Update Monday | |
-| 16 | `8g: 15 minute call booked - Tessa` | ❓ Calendly | ❓ Update Monday | |
+| 15 | `8g: 15 minute call booked - Charlotte` | **Calendly: Invitee Created** | monday Get Items by Column Value → **monday Update Item** → Slack | 4-step zap. Same lookup+update + Slack alert pattern. Covered by `update-by-email`. |
+| 16 | `8g: 15 minute call booked - Tessa` (Has Draft) | **Calendly: Invitee Created** | Same as 15 | Sibling of 15. |
 | 17 | `AYCI 1:1 Call booking reminders - D...` | ❓ Calendly / Monday | ❓ Send reminder | Might not write to Monday. |
 | 18 | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Anoop)` | **Calendly: Invitee Created** | 1. monday: Get Items by Column Value (look up student) <br> 2. monday: Get Column Values <br> 3. AI by Zapier × 2 (decide call number?) <br> 4. Paths (Call 1 / Call 2 / Call 3 / Call 4 / Fallback) <br> 5. Each call path: **monday: Update Item** (mark which 1:1 call number this is) <br> 6. Fallback: Formatter Date/Time → Circle Find Member → Slack alert | Round-robin 1:1 call booking. Uses AI step to pick which of the 4 call slots gets marked. Three sibling zaps: **Anoop / Charlotte / Becky**. **Migrate:** same update-by-email endpoint — but the AI step is the interesting bit, it works out which call slot to fill. May want to replicate that as backend logic eventually. |
 | 18b | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Charlotte)` | Same as 18 | Same | Sibling of 18. |
 | 18c | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Becky)` | Same as 18 | Same | Sibling of 18. |
-| 19 | `[TVA Test] VIP 1:1 Calls - Tessa - up...` | ❓ | ❓ | "TVA Test" — test zap, may be inactive. |
+| 19 | `[TVA Test] VIP 1:1 Calls - Tessa - update Monday Contacts board` (Has Draft) | **Calendly: VIP calls booked Tessa** | Same Round-Robin shape as 18 (Becky/Anoop/Charlotte) — AI by Zapier steps + Paths for Call 1–4 + Fallback. | Tessa version of the Round-Robin zap family. Sibling of 18/18b/18c. |
+| 19c | `Private Plus + VIP 1:1 Calls - Becky - update Monday Contacts board (Oksana)` | **Calendly: PP + VIP calls booked Becky** | Filter (VIP/PP only) → monday Find student → monday Get call bookings status → AI ×2 → Paths Call 1–4 + Fallback → each path Update Item; Fallback also Slacks | Slightly more complex variant of 18 — has an extra Filter for VIP/PP only. Same migration plan. |
+| 19d | `Mock interview - Tessa - update Monday Contacts board (Oksana)` | **Calendly: VIP (Mock interview) calls** | Same as 14 (Becky/Anoop/Charlotte) — lookup + update mock_interview_status + Slack alert. | Tessa version of the Mock Interview family. Sibling of 14/14b/14c. |
 | 19b | `[AYCI JUNE-26] AYCI testimonial calls booked to Monday post-cohort metrics (OD)` (Has Draft) | **Calendly: AYCI Interview booked** | 1. monday: Find student in post-cohort... <br> 2. **monday: Update column 'Zap -...'** | 3-step zap. Testimonial call booking → flips a column in the post-cohort metrics view. Has unsaved draft. |
 | 20 | `New Interview Date` | ❓ Calendly | ❓ Set Interview Date on Monday | Critical for Upcoming Interviews. |
 | 21 | `4. Send Interview date form follow...` | ❓ | ❓ | |
 | 22 | `5. When interview date is updated in...` | ❓ Monday | ❓ Trigger followup | 🟡 READ_MONDAY. |
 | 23 | `6. When Interview status changes to...` | ❓ Monday | ❓ Followup | 🟡 READ_MONDAY. |
 | 24 | `8. Collect interview Feedback via D...` | ❓ | ❓ | |
-| 25 | `Request Grid interview dates` | ❓ | ❓ | Grid product. |
-| 26 | `Interview date - New Grid Tally fro...` | ❓ Grid Tally | ❓ Set interview date | Grid product. |
+| 25 | `Request Grid interview dates` | **monday: Specific Column Value Changed** | Filter → Circle Find Member → Circle Send Direct Message | Grid (AYGI) zap. Doesn't write back to Monday, just DMs the student via Circle when status changes. 🟡 READ_MONDAY. |
+| 26 | `Interview date - New Grid Tally from submission → Update Monday Contact` (Has Draft) | **Tally: New Submission** | monday Find Items → Paths (Circle Email Exists / Does Not Exist) → if exists: **monday Update Item** + Google Calendar Create Event. If not: Slack alert. | Grid (AYGI) interview-date zap. Updates Monday + creates a calendar event for the interview. |
 
 ### 🟣 P2 — Monday-internal status flows
 
@@ -107,11 +109,11 @@ These trigger on a Monday event and write to a Monday column. Once Monday is ret
 | 29 | `Milestone 3 - Monday board status ...` | ❓ Monday status | ❓ | |
 | 30 | `Milestone 4 - Monday board status ...` | ❓ Monday status | ❓ | |
 | 31 | `Milestone 5 - Monday board status ...` | ❓ Monday status | ❓ | |
-| 32 | `When Reminder date changes in Mo...` | ❓ Monday date change | ❓ | |
+| 32 | `When Reminder date changes in Monday check validity and either push it to a future date if needed` | **monday: Specific Columns Values Changed** | Formatter (Today as YYYY-MM-DD) → Paths (Push Reminder Past Dates / Reminder OK) → each path **monday: Set triggers**. | Pure Monday-internal — adjusts a date column to a future date if it's been left in the past. Becomes a backend cron job when Monday's retired. |
 | 33 | `0. When contact added to Monday, ...` | ❓ Monday item created | ❓ | Probably triggers downstream onboarding. |
 | 34 | `1.1. When Client email is added in t...` | ❓ Monday email column updated | ❓ | |
 | 35 | `1b. When button clicked in the cont...` | ❓ Monday button | ❓ | |
-| 36 | `7. Deep Dive access - From Monday` | ❓ Monday | ❓ Grant access | |
+| 36 | `7. Deep Dive access - From Monday` (Has Draft, v10) | **monday: Specific Column Value Changed** | Filter → Delay (queue) → Zapier Tables (already-run dedup) → Filter → Zapier Tables (prevent future runs) → **monday Get Column Values** → Circle Find Member → Paths (Not Previously Enrolled / Previously Enrolled) → Circle Add to Space + Tag + DM + **monday Update Item** | Substantial Monday→Circle access-granting zap. Uses Zapier Tables as a dedup store (interesting — the dashboard's equivalent would use Mongo). |
 | 37 | `7b. Speciality Space access - From...` | ❓ Monday | ❓ Grant access | |
 | 38 | `9. Wins Updates` (v9) | **Circle: New Post** (2 min poll) | 1. Formatter Text <br> 2. Slack: Send Private Channel Message <br> 3. **monday: Get Items by Column Value** <br> 4. **monday: Update Item** <br> 5. **monday (3.6.0): Get Items by Column Value** <br> 6. **monday: Update Item** | Watches Circle for new "win" posts → Slack ping + updates TWO Monday rows (likely the student row AND a separate stats row). Two Monday lookups in sequence suggest cross-board updates. **Migrate:** `update-by-email` endpoint × 2 calls, plus a Slack helper. |
 
@@ -144,11 +146,11 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 51 | `[AYCI JUNE-26] 1:1 Calls - Round Ro...` (x3) | |
 | 52 | `[AYCI JUNE-26] AYCI testimonial cal...` | |
 | 53 | `[AYCI] Private Chat for the Boost & Go` | 🔴 P1. Same pattern as zaps 46/47 (Private Chat). Trigger: monday Specific Column Value Changed → Filter → Circle Find Member → monday Get + Update Item → Paths (Boost & Go - No Presentation / B+G Plus - No Presentation / Boost & Go - Presentation / B+G Plus - Presentation) → each: Circle Tag, coach lookup table, Formatter, Start Group Chat, Filter, Slack, Send DM. v17 — heavy iteration. |
-| 54 | `[AYGI 2025] Private Chat for the VIP...` | |
-| 55 | `[AYGI 2025] Shortlisted` | |
-| 56 | `[AYGI 2025] Not Shortlisted` | |
-| 57 | `[AYGI 2025] Private Chat for the VIP...` | |
-| 58 | `[AYGI] On Circle (OD)` | |
+| 54 | `[AYGI 2025] Private Chat for the VIP members (OD/TRD) - when they join Circle` (Has Draft, v7) | **monday: Specific Column Value Changed** → Filter ×2 → Circle Find Member → monday Get Column Values + Update Item → Circle Tag → Zapier Tables (coach list) → Formatter → Circle Start Group Chat → Filter → Slack → Circle Send DM. AYGI variant of zaps 46/47. |
+| 55 | `[AYGI 2025] Shortlisted` (v4) | **Kit: Subscriber Added to Tag** → monday Find Items → **monday Update Item** → Slack. Marks AYGI shortlist status on Monday. |
+| 56 | `[AYGI 2025] Not Shortlisted` (v3) | **Kit: Subscriber Added to Tag** → monday Find Items → **monday Update Item** → Slack. Sibling of 55 for not-shortlisted candidates. |
+| 57 | `[AYGI 26 - Oks...] [AYGI] On Circle (OD)` (Has Draft, v3) | **Circle: New Tagged Member** → Find Member → Filter → monday Get Items by Column Value → Paths (On Monday Board / Not) → On: monday Get + Update Item / Not: Slack alert. AYGI variant of zap 39. |
+| 58 | `[AYGI 2025] Signups to Monday Board (OD/TRD)` (v3) | **Kajabi: New Purchase** → Filter (AYGI only) → Paths (Gold / AYGI Pods / AYGI VIP / Legacy Upgrade to Pods / Legacy Upgrade to VIP) → new tier: Create Item + Delay + Add email to trigger tally. Legacy: Get Items + Update Item. This is **zap 2 in this doc** — re-confirmed. Same migration as 1/2/3. |
 | 59 | `[AYCI SEP-25] On Circle - not in spa...` | |
 | 60 | `New SEP-25 Circle member (OD)` | |
 | 61 | `AYCI SEP-25 Academy Mini-Webina...` | |
@@ -164,9 +166,9 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 71 | `Badge Allocation` | |
 | 72 | `2. When Cohort Tag added in Circle...` | Reads Circle → may write Monday |
 | 73 | ~~`Send Circle group message with coach response`~~ ✅ **TURNED OFF 2026-06-02** | **Webhooks: Catch Hook** → monday Get Column Values → Formatter Text → Zapier Tables Get coach list → Formatter Format list → URL Shortener → **Circle Start Group Chat** → **monday: Update Item** → Filter (only if Gdrive file ID) → Google Drive Delete File. **Was the Private Videos zap** — read/wrote the Private Videos board (5083952249). Replaced by the dashboard's `/api/private-videos/send-response`. **First zap retired in this migration.** |
-| 74 | `Grid Send Circle group message wit...` | Grid version of above |
-| 75 | `Temp tag for Circle DM auto reply -...` | |
-| 76 | `When Cloudconvert process is finis...` | Video processing |
+| 74 | `Grid Send Circle group message with coach response` (Has Draft, v7) | Webhooks Catch Hook → monday Get Column Values → Formatter → Zapier Tables (coach list) → Formatter → URL Shortener → Formatter Extract URL → **Circle Start Group Chat** → **monday Update Item**. **Grid/AYGI variant of zap 73 (retired).** When dashboard handles the Grid coach-reply path, this can be retired too. |
+| 75 | `Temp tag for Circle DM auto reply - interview week exclusion (Paris)` (v5) | **Google Calendar: New or updated interview date event** → Filter → Formatter (Get pulse ID) → monday Find Items → Formatter (Get circle email) → Circle Find Member → Circle Tag Member with interview week → **Delay 7 days** → Circle remove interview week tag. Adds a temporary Circle tag during interview week so a DM auto-reply (in zap X) excludes them. Reads monday but doesn't write. 🟡 READ_MONDAY. |
+| 76 | `When Cloudconvert process is finished upload to Gdrive and update Monday` (v3) | **CloudConvert: Job Finished** → Filter (ACYI Private Videos only) → Formatter Get Pulse ID → Google Drive Upload File → Add File Sharing Preference → **monday Update Item**. Part of the Private Videos transcoding pipeline. **Already replaced by the dashboard's pv_cache transcoding flow.** Once Tessa confirms no traffic, can retire. |
 
 
 ### 🟤 P3 — Different products (Finchley Now / Paeds ST3)
@@ -175,9 +177,9 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 | # | Zap name | Product |
 |---|---|---|
-| 77 | `[Paeds ST3] Crash course - Purchas...` | Paeds ST3 |
-| 78 | `[Paeds ST3] Crash course - Update...` | Paeds ST3 |
-| 79 | `[Paeds ST3] Crash course - Sales to...` | Paeds ST3 |
+| 77 | `[Paeds ST3] Crash course - Purchased - not on Circle` | Paeds ST3 — monday New Item → 3-day Delay → check Circle status → Slack alert if not on Circle |
+| 78 | `[Paeds ST3] Crash course - Update Kit/Monday - In PST3 circle space` | Paeds ST3 — Circle tag → Find member → monday Find Items → Paths (sign-up email matches / doesn't) → Kit/monday updates |
+| 79 | `[Paeds ST3] Crash course - Sales to Monday board` | Paeds ST3 — Kajabi New Purchase → Slack → Kit → Circle Find Member → Paths (Exists / Not on Circle) → monday Create Item. Same shape as the AYCI Kajabi signup zaps but for Paeds ST3 board |
 | 80 | `Content alert` | Finchley Now |
 | 81 | `FN Internal Event` | Finchley Now |
 | 82 | `Finchley Now Event - External` | Finchley Now |
