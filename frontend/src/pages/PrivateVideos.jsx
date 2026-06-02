@@ -8,7 +8,7 @@
  * /api/private-videos/tally-webhook) — no Monday automation involved.
  */
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info, User } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -532,6 +532,18 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
           ) : (
             <span>{studentName}</span>
           )}
+          {item.email && (
+            <a
+              href={`/students?email=${encodeURIComponent(item.email)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-slate-400 hover:text-sky-700"
+              title="Open student lookup card"
+              data-testid={`pv-student-lookup-link-${item.id}`}
+            >
+              <User className="w-3.5 h-3.5" />
+            </a>
+          )}
           {hasCount && (
             <span
               className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 whitespace-nowrap"
@@ -899,7 +911,21 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-slate-200 flex items-start justify-between gap-3">
           <div>
-            <div className="font-display text-lg font-extrabold text-[var(--ayci-ink)]">{item.name}</div>
+            <div className="font-display text-lg font-extrabold text-[var(--ayci-ink)] flex items-center gap-2">
+              <span>{item.name}</span>
+              {item.email && (
+                <a
+                  href={`/students?email=${encodeURIComponent(item.email)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-slate-400 hover:text-sky-700"
+                  title="Open student lookup card"
+                  data-testid={`pv-modal-student-lookup-link-${item.id}`}
+                >
+                  <User className="w-4 h-4" />
+                </a>
+              )}
+            </div>
             <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
               {item.email} · video {item.submission_number}/{item.total_allowance}
             </div>
