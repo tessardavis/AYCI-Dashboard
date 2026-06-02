@@ -110,22 +110,30 @@ These trigger on a Monday event and write to a Monday column. Once Monday is ret
 | 37 | `7b. Speciality Space access - From...` | ❓ Monday | ❓ Grant access | |
 | 38 | `9. Wins Updates` | ❓ Monday | ❓ Update something | |
 
-### 🟢 Cohort lifecycle (probably no Academy Members writes)
+### 🔴 P1 — Cohort lifecycle zaps that READ + WRITE Monday (audited)
 
-These are cohort-rollout automations that DON'T necessarily touch the Academy Members board. Most likely Circle / Slack / email sends triggered by date.
+**Surprise finding:** these "cohort lifecycle" zaps aren't passive — most look up + update the Academy Members board. They're cohort-specific (`[AYCI JUNE-26]`) so they'll need rebuilding for SEP-26 anyway. Migration approach: build **one** dashboard endpoint `POST /api/students-db/lookup-and-update` that mirrors `Get Items by Column Value` + `Update Item`, then re-point each of these zaps at it.
+
+| # | Zap name | Trigger | Key actions | Notes |
+|---|---|---|---|---|
+| 39 | `[AYCI JUNE-26] New Circle member (OD)` | **Circle: New Tagged Member** | 1. Circle Find Member <br> 2. Filter <br> 3. **monday: Get Items by Column Value** (does student exist on board?) <br> 4. Paths — *On Monday Board*: Kit Find Subscriber → Kit Add Tag → **monday Get + Update Item** → Slack. *Not On Monday Board*: Slack alert. | When a student joins Circle with the cohort tag, tags them in Kit and flips a status on Monday. **Migrate:** dashboard endpoint replacing the Monday lookup + update. |
+| 40 | `[AYCI JUNE-26] Cohort - Legacy (OD)` | **Circle: New Tagged Member** | 1. Find Member, Filter ×2 <br> 2. Kit Find Subscriber <br> 3. Paths — *emails match*: Kit Add Tag → **monday Get + Update Item**. *don't match*: Slack alert. | Same as 39 but for legacy-cohort members. Same migration plan. |
+| 41 | `[AYCI JUNE-26] Video Launch Last Day Upgrade Bonus (OD)` | **Kit: New Tag Subscriber** | 1. **monday: Get Items by Column Value** <br> 2. Paths — *A*: **monday Update Item**. *B*: Slack alert. | Kit tag fires → Monday status update. **Migrate:** point Kit webhook at dashboard `POST /api/students-db/update-by-email`. |
+| 42 | `[AYCI JUNE-26] Video Launch Day 1 Upgrade Bonus (OD)` | **Kit: New Tag Subscriber** | Same as 41 — `Get Items by Column Value` → Paths → `Update Item` / Slack. | Same migration as 41. |
+| 43 | `[AYCI JUNE-26] Access to Previous Cohort + Bonus Live Sessions (OD)` | **monday: Specific Column Value Changed** | Filter → Paths (Previous Cohort Only / Bonus Calls Only / Both) → each path: Circle Find Member → Add Member to Space → Send Direct Message → Slack. | 🟡 READ_MONDAY only — doesn't write back. **Migrate:** dashboard emits the same event on column change; rebuild as webhook listener. |
+| 44 | `[AYCI JUNE-26] Live webinar bonus call (OD)` | **Kit: New Tag Subscriber** | 1. Delay <br> 2. **monday: Get Items by Column Value** <br> 3. Paths — *A*: **monday Update Item**. *B*: Slack. | Same Kit→Monday pattern as 41/42. Same migration. |
+| 45 | `[AYCI JUNE-26] Previous Cohort Access` | **monday: Specific Column Value Changed** | Filter ×2 → Paths (Previous Cohort / Bonus Calls / Both) → each: Circle Find Member → Add Member to Space → Send Direct Message. | 🟡 READ_MONDAY only. Sibling of 43. Same migration. |
+| 46 | `[AYCI JUNE-26] Private Chat for Legacy Upgrades (OD) - when they join Circle` (Has Draft) | **monday: Specific Column Value Changed** | Filter ×2 → Circle Find Member → **monday Get Column Values** → **monday Update Item** → Paths (Private Plus / VIP) → each: Circle Tag → Zapier Tables (coach list) → Formatter → Circle Start Group Chat → Filter → Slack → Circle Send DM. | Both READS and WRITES Monday. Spins up a group chat with the assigned coach. Has unsaved draft. |
+| 47 | `[AYCI JUNE-26] Private Chat for the VIP and Private Plus members (OD) - when they join Circle` | **monday: Specific Column Value Changed** | Same as 46 but for VIP/PP (not legacy). Filter ×3 → Circle Find Member → monday Get Column Values → monday Update Item → Paths → Tag, coach lookup, group chat, DM, Slack. | Same pattern as 46. |
+| 47b | (linked variant of 47) | Same | Same — duplicate / linked version with a separate editor URL. | **Check if both are active** — if so, deduplicate. |
+
+### 🟢 Cohort lifecycle (still being audited)
+
+Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read + write Monday, so expect the same here.
 
 | # | Zap name | Notes |
 |---|---|---|
-| 39 | `[AYCI JUNE-26] New Circle member...` | Likely Circle webhook → onboarding |
-| 40 | `[AYCI JUNE-26] Cohort - Legacy (OD)` | |
-| 41 | `[AYCI JUNE-26] Video Launch Last...` | |
-| 42 | `[AYCI JUNE-26] Video Launch Day 1...` | |
-| 43 | `[AYCI JUNE-26] Access to Previous...` | |
-| 44 | `[AYCI JUNE-26] Live webinar bonus...` | |
-| 45 | `[AYCI JUNE-26] Previous Cohort Ac...` | |
-| 46 | `[AYCI JUNE-26] Private Chat for Leg...` | |
-| 47 | `[AYCI JUNE-26] Private Chat for the...` (x2) | |
-| 48 | `[AYCI JUNE-26] Mock interview - B...` | |
+| 48 | `[AYCI JUNE-26] Mock interview - B...` | Likely Calendly → Monday status |
 | 49 | `[AYCI JUNE-26] Mock interview - A...` | |
 | 50 | `[AYCI JUNE-26] Mock interview - C...` | |
 | 51 | `[AYCI JUNE-26] 1:1 Calls - Round Ro...` (x3) | |
@@ -154,6 +162,7 @@ These are cohort-rollout automations that DON'T necessarily touch the Academy Me
 | 74 | `Grid Send Circle group message wit...` | Grid version of above |
 | 75 | `Temp tag for Circle DM auto reply -...` | |
 | 76 | `When Cloudconvert process is finis...` | Video processing |
+
 
 ### 🟤 P3 — Different products (Finchley Now / Paeds ST3)
 
