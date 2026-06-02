@@ -823,6 +823,8 @@ function InlineReplyLink({ item, onSaved }) {
 }
 
 function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onClose, onSaved }) {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const originalReplyLink = item.reply_link?.url || "";
   const [statusLabel, setStatusLabel] = useState(item.status || "");
   // Auto-default Assignee to the current user (resolved by parent) if the
@@ -903,6 +905,31 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async () => {
+    // Hard-deletes the row. Use when a submission was already handled outside
+    // this dashboard (e.g. answered on Monday before migration) — avoids
+    // marking it Done, which would still count it toward the student's
+    // allowance and surface a misleading completion record.
+    const ok = window.confirm(
+      `Delete this submission permanently?\n\n` +
+      `${item.first_name || ""} ${item.last_name || ""} — "${(item.question || "(no question)").slice(0, 80)}"\n\n` +
+      `This cannot be undone. The row will disappear from this dashboard ` +
+      `and will not count toward the student's video allowance.`
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await apiClient.delete(`/private-videos/${item.id}`);
+      toast.success("Deleted");
+      onSaved();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Delete failed");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1066,11 +1093,24 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={onClose} disabled={saving || sending || previewing}>Cancel</Button>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDelete}
+                    disabled={saving || sending || previewing || deleting}
+                    className="mr-auto border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+                    data-testid="pv-edit-delete"
+                    title="Permanently delete this submission (admin only)"
+                  >
+                    {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Delete
+                  </Button>
+                )}
+                <Button variant="outline" onClick={onClose} disabled={saving || sending || previewing || deleting}>Cancel</Button>
                 <Button
                   variant="outline"
                   onClick={save}
-                  disabled={saving || sending || previewing}
+                  disabled={saving || sending || previewing || deleting}
                   data-testid="pv-edit-save"
                 >
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -1079,7 +1119,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                 <Button
                   variant="outline"
                   onClick={openPreview}
-                  disabled={saving || sending || previewing || !replyLink.trim()}
+                  disabled={saving || sending || previewing || deleting || !replyLink.trim()}
                   data-testid="pv-edit-preview"
                   title={!replyLink.trim() ? "Add the voicenote URL first" : "See exactly what will be sent before sending"}
                 >
