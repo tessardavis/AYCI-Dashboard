@@ -213,6 +213,52 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 - **~56** zaps in the actual AYCI migration target.
 - **0** unaudited rows remaining — full audit complete.
 
+## Migration progress (2026-06-02)
+
+**6 zaps re-pointed to the dashboard (Monday writes removed):**
+
+| # | Zap | Pattern | Fields written |
+|---|---|---|---|
+| 27 | Milestone 1 - Monday board status update | simple update | `milestone_1: "Yes"` |
+| 28 | Milestone 2 - Monday board status update | simple update | `milestone_2: "Yes"` |
+| 29 | Milestone 3 - Monday board status update | simple update | `milestone_3: "Yes"` |
+| 30 | Milestone 4 - Monday board status update | simple update | `milestone_4: "Yes"` |
+| 31 | Milestone 5 - Monday board status update | simple update | `milestone_5: "Yes"` |
+| 14 | [AYCI JUNE-26] Mock interview - Becky | **read-modify-write** | `mock_interview_1: "Booked - Becky"` (uses `previous_values` for eligibility filter) |
+
+**Two migration patterns established:**
+
+- **Simple update (Milestones 1-5):** Replace Monday `Get Items + Update Item` with one Webhooks POST to `/api/students-db/update-by-email`. Total zap shrinks by 1-2 steps.
+- **Read-modify-write (Mock Interview Becky):** Replace 3 Monday steps with 1 Webhooks POST. The endpoint's `previous_values` field carries the pre-write state forward to downstream filter steps. Total zap shrinks by 2 steps.
+
+**Dashboard primitives now used in production:**
+
+- `POST /api/students-db/update-by-email` — 6 zaps live
+- `POST /api/students-db/intake` — 0 zaps yet
+- Outbound webhook dispatcher — 0 subscribers yet
+
+**Suggested next batch** (~5-7 zaps, same patterns):
+
+- Mock Interview - Anoop, Charlotte (+ possibly Tessa) — clones of zap 14, just change `Booked - X` value
+- 8g: 15 minute call booked - Charlotte / Tessa — simple update
+- 8c. Substantive success form - Add Boss Tag — simple update on column change
+
+## Schema additions during migration
+
+Fields added to `PROTECTED_FIELDS` so automations can write them via the dashboard:
+
+- `intro_post`
+- `milestone_1` ... `milestone_5`
+- `private_spaces`
+- `testimonial_requested`, `testimonial_fu_1`
+- `mock_interview_status`
+- `mock_interview_1`, `mock_interview_2`, `gold_call`, `platinum_call`
+- `mock_interview_cohort_before_april`
+- `call_1` ... `call_4`
+- `call_1_status` ... `call_4_status`
+
+Add more as new zaps need them — the pattern is documented in `academy_members_mirror.py`.
+
 ## Primitive endpoints needed (covers ~95% of remaining AYCI zaps)
 
 Tracked in `TaskList` as tasks #31, #32, #33:
