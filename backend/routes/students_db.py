@@ -284,6 +284,11 @@ async def update_student_by_email(
         if k in set_fields and set_fields[k] is not None:
             set_fields[k] = str(set_fields[k]).strip().lower() or None
 
+    # Capture the pre-write values for read-modify-write callers (Zapier
+    # filter steps that need the prior value). Empty string for fields not
+    # previously set, since Zapier filters treat null awkwardly.
+    previous_values = {k: (row.get(k) if row.get(k) is not None else "") for k in set_fields.keys()}
+
     now = datetime.now(timezone.utc)
     update_set: dict[str, Any] = dict(set_fields)
     update_set["dashboard_edited_at"] = now
@@ -316,6 +321,7 @@ async def update_student_by_email(
         "id": row["_id"],
         "matched_on": "email" if row.get("email") == email_l else "circle_email",
         "updated_fields": sorted(set_fields.keys()),
+        "previous_values": previous_values,
     }
 
 
