@@ -166,7 +166,7 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 65 | `AYCI Waitlist Registrations - Website` (Has Draft, v25) | **Kajabi: Waitlist Reg - website** → Code (JS) → Kit (Add Tag / Remove Tag / Add to form / website tag / all tag) → **monday: Create Item** → Google Sheets (Modify Cohort For New + Create row) → Kit Add Tag → Paths (utm_source / no utm_source) → Kit add/remove tags. Older website waitlist zap with heavy tag-management logic. v25 — most-iterated zap so far. Same migration as 64. |
 | 66 | `AYCI Academy Boss Option A - manually tagged` (Has Draft, v11, **ACTIVE**) | 🔴 P1. Circle New Tagged Member → Find Member → Filter → **Kit Add Tag** → **monday Get Items by Column Value** → Formatter Text + Utilities → Filter → **monday Update Item**. Same lookup+update pattern as zaps 39/40 — covered by `update-by-email` endpoint (task #31). Has unsaved draft. |
 | 67 | `AYCI testimonial cal...` | Possibly duplicate of row 19b / row 52 — need a screenshot to confirm, OR confirm via Zapier search if there are two zaps with similar names. |
-| 68 | `Student Wins Tracking - First Message` | **Not audited** — likely Circle New Post or Slack trigger → monday Update Item (tracks first "win" post by a student). Need a screenshot to confirm. |
+| 68 | `Student Wins Tracking - First Message (Oksana)` (v5) | **monday: New Item in Board** → Circle Find Member → Delay → monday (3.6.0) Get Column Values → Paths (Path A / Path B) → each path: Circle Send Direct Message → **monday Update Item**. Triggered when a new student is added; sends them a Circle DM after a delay and writes a tracking field back to Monday. READ+WRITE; covered by `update-by-email`. |
 | 69 | `8c. Substantive success form - Add Boss Tag on Monday` (v5) | **monday: Specific Column Value Changed** → Filter → Delay After Queue → **monday: Get Items by Column Value** → Paths (A / B) → each path **monday: Update Item**. READ+WRITE Monday. Same pattern as the cohort lifecycle zaps — covered by `update-by-email` (task #31). |
 | 70 | `8b. Substantive success form - tags Boss on Circle, CK and give bonus content access` (v7) | **monday: Specific Column Value Changed** → Delay → Circle Find Member → Circle Tag Member → Kit Add Tag to Subscriber → Circle Add Member to Space → Circle Send Direct Message. monday→Circle/Kit/Space. 🟡 READ_MONDAY (no monday writeback). |
 | 71 | `Badge Allocation` (v3, "Private channel") | **Slack: New Message Posted to Private channel** → Filter → AI by Zapier: Get Milestone → Formatter: Get Contact Email → monday Get Items by Column Value → Paths (MS 1 / MS 2 / MS 3 / MS 4 / MS 5 / No Circle Email) → each MS path: **monday Update Item** → Slack → Circle Find Member → Circle Tag Member. **No Circle Email** path: Slack alert. **Heavy Slack→AI→Monday→Circle workflow.** Uses LLM to determine which milestone from a Slack message. |
@@ -210,7 +210,7 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 - **~6** Paeds ST3 / Finchley Now zaps permanently out of scope.
 - **~58** zaps in the actual AYCI migration target.
 - **2** more zaps ready to retire (pending Tessa's action): zap 8 (`Tally Form to Monday → Video submission`) and zap 76 (`When Cloudconvert process is finished`).
-- **1** unaudited row remaining: zap 68 (`Student Wins Tracking - First Message`).
+- **0** unaudited rows remaining — full audit complete.
 
 ## Primitive endpoints needed (covers ~95% of remaining AYCI zaps)
 
