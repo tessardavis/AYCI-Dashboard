@@ -18,6 +18,12 @@ This document is the migration plan. For each zap we capture:
 - **Priority** — see legend below
 - **Migration plan** — what we do about it
 
+## Constraint: Grid (AYGI) course runs from Jan 2027
+
+Grid (AYGI) zaps can stay running for now — the next Grid cohort doesn't kick off until **Jan 2027**, so there's a ~7-month window to migrate them. Don't treat any Grid zap as an immediate-action item. Tag them P2 at most.
+
+Grid zaps in this doc: 9 (Video submission), 25 (Request interview dates), 26 (Interview date Tally), 54 (AYGI Private Chat VIP), 55/56 (Shortlisted/Not), 57/62 (On Circle), 58 (Signups), 74 (Send Circle group message).
+
 ## Legend
 
 **Category:**
