@@ -186,7 +186,7 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 | # | Zap name | Trigger | Action | Notes |
 |---|---|---|---|---|
-| 83 | `AYCI Support tickets - Tally to Monday - (Paris)` (v3, **OFF**) | **Tally: New AYCI support ticket** | 1. monday: Support ticket added to Monday <br> 2. Circle: Find Member <br> 3. monday: Student circle profile url added <br> 4. Slack: Notify circle enquiries slack | Already turned off (toggle confirmed off 2026-06-02). Tickets are now flowing into the dashboard's `/api/tickets/tally/webhook` only. Replacement Slack alert (`notify_new_tally_ticket`) was added in `tickets.py` and fires if `SLACK_CIRCLE_ENQUIRIES_WEBHOOK_URL` is set. Folder "Paris" is the team member name (not a brand). |
+| 83 | ~~`AYCI Support tickets - Tally to Monday - (Paris)`~~ ✅ **DELETED 2026-06-02** | **Tally: New AYCI support ticket** | 1. monday: Support ticket added to Monday <br> 2. Circle: Find Member <br> 3. monday: Student circle profile url added <br> 4. Slack: Notify circle enquiries slack | Deleted (was already off). Tickets flow into the dashboard's `/api/tickets/tally/webhook` only. Replacement Slack alert (`notify_new_tally_ticket`) was added in `tickets.py` and fires if `SLACK_CIRCLE_ENQUIRIES_WEBHOOK_URL` is set. **Second zap retired.** |
 
 ---
 
