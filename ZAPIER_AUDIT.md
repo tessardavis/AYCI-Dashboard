@@ -63,7 +63,7 @@ These create or update rows on the Academy Members board when a student fills a 
 | 7 | `Non members Tally to Monday` | ❓ Tally (non-Academy signups?) | ❓ Create Monday row? | What board? |
 | 8 | `Tally Form to Monday → Video sub...` | ❓ Tally video submission | ❓ Update Monday (private videos board?) | Probably Private Videos board, not Academy Members — verify. |
 | 9 | `Grid Tally Form to Monday → Video...` | ❓ Tally (Grid product) | ❓ Update Monday | Likely different board (Grid). |
-| 10 | `3. New Tally from submission → Up...` | ❓ | ❓ | "3." prefix suggests it's step 3 in a sequence. |
+| 10 | `3. New Tally from submission → Update Monday Contact` (Has Draft, v19) | **Tally: New Submission** | 1. AI by Zapier: Analyze and Return Data <br> 2. Paths (Contact ID Exists / No Contact ID) <br> 3. *Contact ID Exists*: monday Update Item → Create Subitem → Filter ×2 → Update Item → Get Column Values → Filter → Delay 1hr → Update Item <br> 4. *No Contact ID*: Look for existing contact → sub-Paths (Existing / New) → either Update Item or **Create Item** then Create Subitem + Update chain | **The big one.** Massive zap — Tally submission triggers a full upsert + subitem creation + delayed status update chain. AI step extracts data from the Tally answer. Looks **disabled** (dark/greyed). Has unsaved draft. If disabled and not in use, can skip entirely. **If active**, this needs the `intake` + `update-by-email` + a way to create subitems (or a flat "notes" approach in the dashboard). |
 
 ### 🔴 P0 — Stripe / Sales → Monday writes
 
@@ -156,7 +156,7 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 63 | `Legacy Members Cohort Upgrade` | |
 | 64 | `AYCI Waitlist Registrations - New W...` | |
 | 65 | `AYCI Waitlist Registrations - Website` | |
-| 66 | `AYCI Academy Boss Option A - man...` | |
+| 66 | `AYCI Academy Boss Option A - manually tagged` (Has Draft, v11, looks **disabled**) | 🔴 P1 if active. Circle New Tagged Member → Find Member → Filter → **Kit Add Tag** → **monday Get Items by Column Value** → Formatter Text + Utilities → Filter → **monday Update Item**. Same lookup+update pattern as zaps 39/40. Has unsaved draft. **Check on/off status.** |
 | 67 | `AYCI testimonial cal...` | |
 | 68 | `Student Wins Tracking - First Mess...` | |
 | 69 | `8c. Substantive success form - Add...` | |
@@ -181,6 +181,12 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 | 80 | `Content alert` | Finchley Now |
 | 81 | `FN Internal Event` | Finchley Now |
 | 82 | `Finchley Now Event - External` | Finchley Now |
+
+### 🟤 Likely-retire candidates (parallel to dashboard features)
+
+| # | Zap name | Trigger | Action | Notes |
+|---|---|---|---|---|
+| 83 | `AYCI Support tickets - Tally to Monday - (Paris)` (v3, looks **disabled**) | **Tally: New AYCI support ticket** | 1. monday: Support ticket added to Monday <br> 2. Circle: Find Member <br> 3. monday: Student circle profile url added <br> 4. Slack: Notify circle enquiries slack | **Already replaced by dashboard's Support Tickets page** (we built that earlier). If this is currently OFF, leave it. If ON, turn it off after confirming new Tally submissions are creating tickets in the dashboard. |
 
 ---
 
