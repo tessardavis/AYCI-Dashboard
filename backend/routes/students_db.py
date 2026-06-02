@@ -17,6 +17,7 @@ Routes:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -28,6 +29,7 @@ from pydantic import BaseModel
 
 from db import db
 from deps import require_board
+import webhooks_outbound
 
 logger = logging.getLogger(__name__)
 
@@ -161,9 +163,7 @@ async def update_student(
     if bad:
         raise HTTPException(400, f"Fields not editable here: {sorted(bad)}")
 
-    existing = await db.academy_members.find_one(
-        {"_id": monday_item_id}, {"_id": 1, "dashboard_edited_fields": 1},
-    )
+    existing = await db.academy_members.find_one({"_id": monday_item_id})
     if not existing:
         raise HTTPException(404, "Student not found in academy_members mirror")
 
@@ -187,6 +187,18 @@ async def update_student(
     )
 
     fresh = await db.academy_members.find_one({"_id": monday_item_id})
+
+    # Outbound webhook fan-out — fire only for columns whose value actually
+    # changed (skip no-op writes). Fire-and-forget so the response isn't
+    # blocked on downstream zaps.
+    diff = webhooks_outbound.changed_fields_diff(existing, set_fields)
+    if diff:
+        asyncio.create_task(
+            webhooks_outbound.notify_column_changes(
+                db, item_id=monday_item_id, fields_changed=diff, student=fresh,
+            )
+        )
+
     return fresh
 
 
@@ -244,7 +256,6 @@ async def update_student_by_email(
 
     row = await db.academy_members.find_one(
         {"$or": [{"email": email_l}, {"circle_email": email_l}]},
-        {"_id": 1, "dashboard_edited_fields": 1, "email": 1, "circle_email": 1},
     )
     if not row:
         # Surface as 404 so the zap's existing not-found branch fires.
@@ -272,6 +283,16 @@ async def update_student_by_email(
         f"[students-db] zapier update email={email_l} "
         f"id={row['_id']} fields={list(set_fields.keys())}"
     )
+
+    # Outbound webhook fan-out — diff vs the pre-write row.
+    diff = webhooks_outbound.changed_fields_diff(row, set_fields)
+    if diff:
+        fresh = await db.academy_members.find_one({"_id": row["_id"]})
+        asyncio.create_task(
+            webhooks_outbound.notify_column_changes(
+                db, item_id=row["_id"], fields_changed=diff, student=fresh or row,
+            )
+        )
 
     return {
         "ok": True,
@@ -411,9 +432,83 @@ async def intake_student(
         f"[students-db] zapier intake created email={email_l} "
         f"id={new_id} fields={list(set_fields.keys())}"
     )
+
+    # Outbound webhook fan-out for the new row's initial columns (treats
+    # the insert as a transition from "didn't exist" to "exists with these
+    # values", so subscribed downstream zaps fire on cohort assignment etc).
+    diff = {k: v for k, v in set_fields.items() if k in PROTECTED_FIELDS}
+    if diff:
+        asyncio.create_task(
+            webhooks_outbound.notify_column_changes(
+                db, item_id=new_id, fields_changed=diff, student=insert_doc,
+            )
+        )
+
     return {
         "ok": True,
         "id": new_id,
         "action": "created",
         "fields": sorted(set_fields.keys()),
     }
+
+
+# ----------------------------------------------- Webhook subscription admin
+# Manage the subscribers that listen for column-change events. Authenticated
+# (dashboard user only) — these are equivalent to changing a Monday zap
+# trigger, so it should be admin-only.
+
+class WebhookSubscriptionCreate(BaseModel):
+    name: str
+    column: str
+    url: str
+    active: bool = True
+
+    class Config:
+        extra = "forbid"
+
+
+@router.get("/students-db/webhook-subscriptions")
+async def list_webhook_subscriptions(
+    user: dict = Depends(require_board("students")),
+):
+    cursor = db.dashboard_webhook_subscriptions.find({}, {"_id": 0})
+    items = [s async for s in cursor]
+    items.sort(key=lambda s: (s.get("column", ""), s.get("name", "")))
+    return {"items": items, "count": len(items)}
+
+
+@router.post("/students-db/webhook-subscriptions")
+async def create_webhook_subscription(
+    payload: WebhookSubscriptionCreate,
+    user: dict = Depends(require_board("students")),
+):
+    if payload.column not in PROTECTED_FIELDS:
+        raise HTTPException(
+            400,
+            f"column must be one of: {sorted(PROTECTED_FIELDS)}",
+        )
+    if not payload.url.startswith("https://"):
+        raise HTTPException(400, "url must be https://")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": payload.name.strip(),
+        "column": payload.column,
+        "url": payload.url.strip(),
+        "active": payload.active,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.get("email") or user.get("id"),
+    }
+    await db.dashboard_webhook_subscriptions.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@router.delete("/students-db/webhook-subscriptions/{sub_id}")
+async def delete_webhook_subscription(
+    sub_id: str,
+    user: dict = Depends(require_board("students")),
+):
+    res = await db.dashboard_webhook_subscriptions.delete_one({"id": sub_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Subscription not found")
+    return {"ok": True}
