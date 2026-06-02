@@ -59,7 +59,7 @@ These create or update rows on the Academy Members board when a student fills a 
 | 3 | `AYCI SEP 25 - Signups to Monday B...` | ❓ likely Kajabi (same family) | ❓ likely same pattern | Older cohort, still On — may be safe to turn off if no new SEP25 enrolments. |
 | 4 | `[AYGI 2025] - Signups to Monday B...` (dupe?) | ❓ | ❓ | Possibly the row Tessa saw twice in the list. Same name as zap 2 — check if it's actually one zap or two. |
 | 5 | `Onboarding Form Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Two-step zap. Likely fires after the Kajabi zap above triggers the onboarding form (zap 1's last step). **Migration:** add this endpoint's payload handling to the same `/api/students-db/intake` endpoint — merge with the Kajabi intake on email. |
-| 6 | `Onboarding Form (Higher Tiers) Tally to Monday` | ❓ Tally (premium tiers) | ❓ Update Monday row | |
+| 6 | `Onboarding Form (Higher Tiers) Tally to Monday` | **Tally: New Submission** | 1. **monday.com: Create Item** on Academy Members | Same 2-step pattern as zap 5. Higher-tier variant of the onboarding form (likely Private Plus / VIP). **Same migration plan**: merge into the dashboard intake endpoint. |
 | 7 | `Non members Tally to Monday` | ❓ Tally (non-Academy signups?) | ❓ Create Monday row? | What board? |
 | 8 | `Tally Form to Monday → Video sub...` | ❓ Tally video submission | ❓ Update Monday (private videos board?) | Probably Private Videos board, not Academy Members — verify. |
 | 9 | `Grid Tally Form to Monday → Video...` | ❓ Tally (Grid product) | ❓ Update Monday | Likely different board (Grid). |
@@ -71,7 +71,7 @@ These create or update rows on the Academy Members board when a student fills a 
 |---|---|---|---|---|
 | 11 | `Boost & Go Sales - Arub` | ❓ Stripe purchase? | ❓ Update tier / create row | "Boost & Go" is a product tier. |
 | 12 | `AYCI - Sales - Arub` | ❓ | ❓ | Implied by location "AYCI - Sales - Arub". |
-| 13 | `New Lead To Monday` | ❓ Lead capture | ❓ Create row | Folder: Finchley Now — may be different product. |
+| 13 | ~~`New Lead To Monday`~~ | **Out of scope** | — | Lives in Finchley Now folder. Trigger is Gmail (New Labeled Email), writes to the Finchley Now Monday board, not Academy Members. **Move to P3 — not part of this migration.** |
 
 ### 🟡 P1 — Interview / Calendly → Monday writes
 
