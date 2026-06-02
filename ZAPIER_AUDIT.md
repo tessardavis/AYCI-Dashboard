@@ -54,7 +54,7 @@ These create or update rows on the Academy Members board when a student fills a 
 
 | # | Zap name | Trigger | Key actions | Notes |
 |---|---|---|---|---|
-| 1 | `[AYCI JUNE-26] - Signups to Monday Board (OD)` | **Kajabi: New Purchase** | 1. Lookup cohort start/end dates (Zapier Tables) <br> 2. Split by tier (Academy / Academy Private Plus / Academy VIP / Legacy Upgrade to Private Plus / Legacy Upgrade to Academy) <br> 3. **For new tiers: Create Item on Academy Members** <br> 4. **For legacy upgrades: Find by email + Update Item** <br> 5. Add email to trigger Tally onboarding form | **Migration:** dashboard endpoint `POST /api/students-db/intake-kajabi` that takes the Kajabi purchase payload, looks up academy_members by email (upsert), sets tier + cohort + dates, fires the Tally onboarding trigger downstream. |
+| 1 | `[AYCI JUNE-26] - Signups to Monday Board (OD)` | **Kajabi: New Purchase** | 1. Zapier Tables: Find Records (cohort lookup table) <br> 2. Filter (continue only for AYCI JUNE-26 offers) <br> 3. Formatter: Cohort Start Date <br> 4. Formatter: Cohort End Date <br> 5. Paths split by tier: Academy / Academy Private Plus / Academy VIP / Legacy Upgrade to Private Plus / Legacy Upgrade to Academy <br> 6. **New tier paths**: Create Item → Delay → Add email to trigger Tally onboarding form <br> 7. **Legacy upgrade paths**: Get Items by Column Value → **Update Item** | **Migration:** dashboard endpoint `POST /api/students-db/intake-kajabi` that takes the Kajabi purchase payload, looks up academy_members by email (upsert), sets tier + cohort + dates, fires the Tally onboarding trigger downstream. |
 | 2 | `[AYGI 2025] - Signups to Monday Board (OD/TRD)` | **Kajabi: New Purchase** | 1. Filter: continue only if offer is AYGI <br> 2. Split by tier (Gold / AYGI Pods / AYGI VIP / Legacy Upgrade to Pods / Legacy Upgrade to VIP) <br> 3. **For new tiers: Create Item on Academy Members** <br> 4. **For legacy upgrades: Find by email + Update Item** <br> 5. Add email to trigger Tally onboarding form | Same Kajabi-driven pattern as zap 1, just for AYGI programme. **Same migration plan**: the dashboard intake endpoint can branch on offer name (AYCI vs AYGI) and set tier accordingly. |
 | 3 | `AYCI SEP 25 - Signups to Monday B...` | ❓ likely Kajabi (same family) | ❓ likely same pattern | Older cohort, still On — may be safe to turn off if no new SEP25 enrolments. |
 | 4 | `[AYGI 2025] - Signups to Monday B...` (dupe?) | ❓ | ❓ | Possibly the row Tessa saw twice in the list. Same name as zap 2 — check if it's actually one zap or two. |
@@ -77,12 +77,17 @@ These create or update rows on the Academy Members board when a student fills a 
 
 | # | Zap name | Trigger | Key actions | Notes |
 |---|---|---|---|---|
-| 14 | `Mock interview - Tessa - update Monday` | ❓ Calendly booking? | ❓ Mark Mock Interview status on Monday | Other coach variants (Becky / Anoop / Charlotte) likely exist too. |
+| 14 | `[AYCI JUNE-26] Mock interview - Becky` | **Calendly: VIP (Mock interview) calls** | 1. monday: Get Items by Column Value <br> 2. monday: read mock interview current status <br> 3. **monday: Update mock interview status** <br> 4. Filter (check if eligible) <br> 5. Formatter Date/Time <br> 6. Circle: Find Member <br> 7. Slack: Alert OD call limit reached | Mock interview booked in Calendly → updates `mock_interview_status` column on Academy Members. Three identical sibling zaps for **Becky / Anoop / Charlotte** — assumed Tessa version too. **Migrate:** same `update-by-email` endpoint (task #31). |
+| 14b | `[AYCI JUNE-26] Mock interview - Anoop` | Same as 14 | Same structure | Sibling of 14. |
+| 14c | `[AYCI JUNE-26] Mock interview - Charlotte` | Same as 14 | Same structure | Sibling of 14. |
 | 15 | `8g: 15 minute call booked - Charlotte` | ❓ Calendly | ❓ Update Monday | |
 | 16 | `8g: 15 minute call booked - Tessa` | ❓ Calendly | ❓ Update Monday | |
 | 17 | `AYCI 1:1 Call booking reminders - D...` | ❓ Calendly / Monday | ❓ Send reminder | Might not write to Monday. |
-| 18 | `Private Plus + VIP 1:1 Calls - Becky...` | ❓ Calendly | ❓ Update Monday status | |
+| 18 | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Anoop)` | **Calendly: Invitee Created** | 1. monday: Get Items by Column Value (look up student) <br> 2. monday: Get Column Values <br> 3. AI by Zapier × 2 (decide call number?) <br> 4. Paths (Call 1 / Call 2 / Call 3 / Call 4 / Fallback) <br> 5. Each call path: **monday: Update Item** (mark which 1:1 call number this is) <br> 6. Fallback: Formatter Date/Time → Circle Find Member → Slack alert | Round-robin 1:1 call booking. Uses AI step to pick which of the 4 call slots gets marked. Three sibling zaps: **Anoop / Charlotte / Becky**. **Migrate:** same update-by-email endpoint — but the AI step is the interesting bit, it works out which call slot to fill. May want to replicate that as backend logic eventually. |
+| 18b | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Charlotte)` | Same as 18 | Same | Sibling of 18. |
+| 18c | `[AYCI JUNE-26] 1:1 Calls - Round Robin (Becky)` | Same as 18 | Same | Sibling of 18. |
 | 19 | `[TVA Test] VIP 1:1 Calls - Tessa - up...` | ❓ | ❓ | "TVA Test" — test zap, may be inactive. |
+| 19b | `[AYCI JUNE-26] AYCI testimonial calls booked to Monday post-cohort metrics (OD)` (Has Draft) | **Calendly: AYCI Interview booked** | 1. monday: Find student in post-cohort... <br> 2. **monday: Update column 'Zap -...'** | 3-step zap. Testimonial call booking → flips a column in the post-cohort metrics view. Has unsaved draft. |
 | 20 | `New Interview Date` | ❓ Calendly | ❓ Set Interview Date on Monday | Critical for Upcoming Interviews. |
 | 21 | `4. Send Interview date form follow...` | ❓ | ❓ | |
 | 22 | `5. When interview date is updated in...` | ❓ Monday | ❓ Trigger followup | 🟡 READ_MONDAY. |
@@ -138,7 +143,7 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 50 | `[AYCI JUNE-26] Mock interview - C...` | |
 | 51 | `[AYCI JUNE-26] 1:1 Calls - Round Ro...` (x3) | |
 | 52 | `[AYCI JUNE-26] AYCI testimonial cal...` | |
-| 53 | `[AYCI] Private Chat for the Boost & Go` | |
+| 53 | `[AYCI] Private Chat for the Boost & Go` | 🔴 P1. Same pattern as zaps 46/47 (Private Chat). Trigger: monday Specific Column Value Changed → Filter → Circle Find Member → monday Get + Update Item → Paths (Boost & Go - No Presentation / B+G Plus - No Presentation / Boost & Go - Presentation / B+G Plus - Presentation) → each: Circle Tag, coach lookup table, Formatter, Start Group Chat, Filter, Slack, Send DM. v17 — heavy iteration. |
 | 54 | `[AYGI 2025] Private Chat for the VIP...` | |
 | 55 | `[AYGI 2025] Shortlisted` | |
 | 56 | `[AYGI 2025] Not Shortlisted` | |
