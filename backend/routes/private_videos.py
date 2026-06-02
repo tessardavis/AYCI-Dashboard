@@ -238,6 +238,16 @@ async def update_submission(
     return res["item"]
 
 
+@router.delete("/{item_id}")
+async def delete_submission(item_id: str, admin: dict = Depends(require_admin)):
+    """Hard-delete a private video submission. Admin only — used for cleaning
+    up diagnostic/test rows."""
+    res = await db.private_video_submissions.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Submission not found")
+    return {"ok": True, "deleted": item_id}
+
+
 # ------------------------------------------------------------- TALLY WEBHOOK
 @router.post("/tally-webhook")
 async def tally_webhook(request: Request):
@@ -248,6 +258,17 @@ async def tally_webhook(request: Request):
         payload = await request.json()
     except Exception:
         raise HTTPException(400, "Invalid JSON payload")
+    # Field-shape debug: log the keys + labels (not values, to avoid PII in
+    # logs) so we can diagnose any future Tally payload changes from logs.
+    try:
+        fields = ((payload.get("data") or {}).get("fields") or [])
+        sub_id = (payload.get("data") or {}).get("submissionId")
+        logger.info(
+            f"[private-videos] tally inbound sub={sub_id} field_keys="
+            f"{[(f.get('key'), f.get('label'), f.get('type')) for f in fields]}"
+        )
+    except Exception:
+        pass
     try:
         return await pv_store.ingest_tally_submission(db, payload)
     except Exception as e:

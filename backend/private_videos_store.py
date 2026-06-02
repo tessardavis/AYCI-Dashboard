@@ -368,20 +368,48 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     fields = data.get("fields") or []
     first = (_extract_tally_field(fields, TALLY_QID_FIRST) or "").strip()
     last = (_extract_tally_field(fields, TALLY_QID_LAST) or "").strip()
-    email = ((_extract_tally_field(fields, TALLY_QID_EMAIL) or "")).strip().lower()
+    email_raw = _extract_tally_field(fields, TALLY_QID_EMAIL)
+    email = (email_raw or "").strip().lower() if isinstance(email_raw, str) else ""
     question = (_extract_tally_field(fields, TALLY_QID_QUESTION) or "").strip()
 
-    # Hidden field may carry the canonical first/last/email if the form was
-    # pre-filled via URL params. Only use it when the visible inputs are blank.
+    # Hidden field fallback. The form pre-fills `name`, `lastname`, `email`
+    # via URL params, but Tally has shipped this two different ways:
+    #   1) Legacy: one field at TALLY_QID_HIDDEN whose value is a dict
+    #   2) Current: three separate fields whose `label` is "name" /
+    #      "lastname" / "email" (each with its own auto-generated key)
+    # Match by label (case-insensitive) so we're robust to either shape.
     if not (first and last and email):
-        hidden = _extract_tally_field(fields, TALLY_QID_HIDDEN)
-        if isinstance(hidden, dict):
-            first = first or (hidden.get("name") or "").strip()
-            last = last or (hidden.get("lastname") or "").strip()
-            email = email or (hidden.get("email") or "").strip().lower()
+        by_label = {
+            ((f.get("label") or "").strip().lower()): f.get("value") for f in fields
+        }
+        def _str(v):
+            return v.strip() if isinstance(v, str) else ""
+        first = first or _str(by_label.get("name"))
+        last = last or _str(by_label.get("lastname"))
+        email = email or _str(by_label.get("email")).lower()
+
+        # Legacy dict-shaped hidden field
+        if not (first and last and email):
+            hidden = _extract_tally_field(fields, TALLY_QID_HIDDEN)
+            if isinstance(hidden, dict):
+                first = first or (hidden.get("name") or "").strip()
+                last = last or (hidden.get("lastname") or "").strip()
+                email = email or (hidden.get("email") or "").strip().lower()
 
     if not email:
         # Without an email we can't match the student — bail.
+        # Log the field keys/labels so we can diagnose any future shape changes.
+        try:
+            field_summary = [
+                {"key": f.get("key"), "label": f.get("label"), "type": f.get("type")}
+                for f in fields
+            ]
+            logger.warning(
+                f"[private-videos] tally submission {sub_id} ignored: no email. "
+                f"Fields received: {field_summary}"
+            )
+        except Exception:
+            pass
         return {"ignored": True, "reason": "no email"}
 
     # Video upload: Tally returns a list of files
