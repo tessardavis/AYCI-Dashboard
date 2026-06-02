@@ -147,10 +147,10 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | # | Zap name | Notes |
 |---|---|---|
 | 48 | `[AYCI JUNE-26] Mock interview - B...` | Likely Calendly → Monday status |
-| 49 | `[AYCI JUNE-26] Mock interview - A...` | |
-| 50 | `[AYCI JUNE-26] Mock interview - C...` | |
-| 51 | `[AYCI JUNE-26] 1:1 Calls - Round Ro...` (x3) | |
-| 52 | `[AYCI JUNE-26] AYCI testimonial cal...` | |
+| 49 | `[AYCI JUNE-26] Mock interview - Anoop` | Already audited as **row 14b** — sibling of zap 14 (Becky) and 14c (Charlotte). |
+| 50 | `[AYCI JUNE-26] Mock interview - Charlotte` | Already audited as **row 14c** — sibling of 14. |
+| 51 | `[AYCI JUNE-26] 1:1 Calls - Round Robin` (×3 coaches) | Already audited as **rows 18 / 18b / 18c** (Anoop / Charlotte / Becky). |
+| 52 | `[AYCI JUNE-26] AYCI testimonial call` | Already audited as **row 19b** — Calendly → monday Find + Update post-cohort metrics. |
 | 53 | `[AYCI] Private Chat for the Boost & Go` | 🔴 P1. Same pattern as zaps 46/47 (Private Chat). Trigger: monday Specific Column Value Changed → Filter → Circle Find Member → monday Get + Update Item → Paths (Boost & Go - No Presentation / B+G Plus - No Presentation / Boost & Go - Presentation / B+G Plus - Presentation) → each: Circle Tag, coach lookup table, Formatter, Start Group Chat, Filter, Slack, Send DM. v17 — heavy iteration. |
 | 54 | `[AYGI 2025] Private Chat for the VIP members (OD/TRD) - when they join Circle` (Has Draft, v7) | **monday: Specific Column Value Changed** → Filter ×2 → Circle Find Member → monday Get Column Values + Update Item → Circle Tag → Zapier Tables (coach list) → Formatter → Circle Start Group Chat → Filter → Slack → Circle Send DM. AYGI variant of zaps 46/47. |
 | 55 | `[AYGI 2025] Shortlisted` (v4) | **Kit: Subscriber Added to Tag** → monday Find Items → **monday Update Item** → Slack. Marks AYGI shortlist status on Monday. |
@@ -165,8 +165,8 @@ Remaining cohort-rollout automations. Audit (zaps 39–47) revealed most DO read
 | 64 | `AYCI Waitlist Registrations - New Website` (v12) | **Kajabi: Waitlist Reg - new website** → Kit (Add to waitlist form) → Kit (waitlist - new website tag) → Kit (waitlist - all tag) → **monday: Create Item** → Google Sheets: Create row → Kit: Add Subscriber to Form. **Migrate:** add `intake` endpoint variant or branch on Kajabi offer to set `stage=waitlist` instead of `enrolled`. |
 | 65 | `AYCI Waitlist Registrations - Website` (Has Draft, v25) | **Kajabi: Waitlist Reg - website** → Code (JS) → Kit (Add Tag / Remove Tag / Add to form / website tag / all tag) → **monday: Create Item** → Google Sheets (Modify Cohort For New + Create row) → Kit Add Tag → Paths (utm_source / no utm_source) → Kit add/remove tags. Older website waitlist zap with heavy tag-management logic. v25 — most-iterated zap so far. Same migration as 64. |
 | 66 | `AYCI Academy Boss Option A - manually tagged` (Has Draft, v11, **ACTIVE**) | 🔴 P1. Circle New Tagged Member → Find Member → Filter → **Kit Add Tag** → **monday Get Items by Column Value** → Formatter Text + Utilities → Filter → **monday Update Item**. Same lookup+update pattern as zaps 39/40 — covered by `update-by-email` endpoint (task #31). Has unsaved draft. |
-| 67 | `AYCI testimonial cal...` | |
-| 68 | `Student Wins Tracking - First Mess...` | |
+| 67 | `AYCI testimonial cal...` | Possibly duplicate of row 19b / row 52 — need a screenshot to confirm, OR confirm via Zapier search if there are two zaps with similar names. |
+| 68 | `Student Wins Tracking - First Message` | **Not audited** — likely Circle New Post or Slack trigger → monday Update Item (tracks first "win" post by a student). Need a screenshot to confirm. |
 | 69 | `8c. Substantive success form - Add Boss Tag on Monday` (v5) | **monday: Specific Column Value Changed** → Filter → Delay After Queue → **monday: Get Items by Column Value** → Paths (A / B) → each path **monday: Update Item**. READ+WRITE Monday. Same pattern as the cohort lifecycle zaps — covered by `update-by-email` (task #31). |
 | 70 | `8b. Substantive success form - tags Boss on Circle, CK and give bonus content access` (v7) | **monday: Specific Column Value Changed** → Delay → Circle Find Member → Circle Tag Member → Kit Add Tag to Subscriber → Circle Add Member to Space → Circle Send Direct Message. monday→Circle/Kit/Space. 🟡 READ_MONDAY (no monday writeback). |
 | 71 | `Badge Allocation` (v3, "Private channel") | **Slack: New Message Posted to Private channel** → Filter → AI by Zapier: Get Milestone → Formatter: Get Contact Email → monday Get Items by Column Value → Paths (MS 1 / MS 2 / MS 3 / MS 4 / MS 5 / No Circle Email) → each MS path: **monday Update Item** → Slack → Circle Find Member → Circle Tag Member. **No Circle Email** path: Slack alert. **Heavy Slack→AI→Monday→Circle workflow.** Uses LLM to determine which milestone from a Slack message. |
@@ -198,10 +198,35 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 ---
 
-## Next steps
+## Audit status (2026-06-02)
 
-Once Tessa has filled in the ❓ rows for at least the P0 section, I'll:
-1. Build the dashboard receiving endpoints for each migrated zap (intake, tier update, etc.).
-2. Walk through re-pointing each zap in Zapier (same pattern as the Private Videos webhook switch).
-3. Run new + old in parallel for a few days so we have a safety net.
-4. Cut over once we've confirmed the dashboard is receiving everything.
+- **80** zaps audited initially.
+- **6** retired during the audit:
+  - ✅ `Send Circle group message with coach response` (zap 73 — off)
+  - ✅ `AYCI Support tickets - Tally to Monday - (Paris)` (zap 83 — deleted)
+  - ✅ 4 × SEP-25 cohort zaps (rows 3, 59, 60, 61 — deleted)
+- **74** zaps currently active.
+- **~10** Grid (AYGI) zaps deferred until Jan 2027.
+- **~6** Paeds ST3 / Finchley Now zaps permanently out of scope.
+- **~58** zaps in the actual AYCI migration target.
+- **2** more zaps ready to retire (pending Tessa's action): zap 8 (`Tally Form to Monday → Video submission`) and zap 76 (`When Cloudconvert process is finished`).
+- **1** unaudited row remaining: zap 68 (`Student Wins Tracking - First Message`).
+
+## Primitive endpoints needed (covers ~95% of remaining AYCI zaps)
+
+Tracked in `TaskList` as tasks #31, #32, #33:
+
+1. **`POST /api/students-db/update-by-email`** (#31) — replaces every `Get Items by Column Value + Update Item` pair. Used by ~40 zaps.
+2. **`POST /api/students-db/intake`** (#32) — replaces every `Create Item` for new students (Kajabi signup, Tally onboarding, waitlist). Used by ~8 zaps. Should branch on offer name (AYCI/AYGI) and stage (enrolled/waitlist).
+3. **`Webhook emit-event on column change`** (#33) — when a dashboard column changes, fire an outbound webhook so downstream zaps (Circle DM, Slack alerts, Google Calendar) can listen via Webhooks by Zapier - Catch Hook. Used by ~12 zaps that have a Monday `Specific Column Value Changed` trigger.
+
+## Migration runbook
+
+For each zap to migrate:
+
+1. Identify which primitive endpoint(s) it needs.
+2. In Zapier: replace the Monday step(s) with a Webhooks by Zapier step pointing at the dashboard endpoint.
+3. Leave the original Monday step in place for a week as a safety net.
+4. Verify the dashboard is receiving correctly (check `db.academy_members.dashboard_edited_fields` audit trail).
+5. Remove the Monday step.
+6. After all zaps for a board are migrated → turn off the Monday→Mongo mirror → archive the Monday board.
