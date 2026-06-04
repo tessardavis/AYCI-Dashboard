@@ -49,10 +49,18 @@ MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _locks: dict[str, asyncio.Lock] = {}
-# Two concurrent transcodes. Each is single-threaded (-threads 1), so total
-# CPU footprint is 2 threads — fits Render Standard with headroom. Halves
-# the worst-case "row N in queue" wait time for coaches.
-_transcode_sema = asyncio.Semaphore(2)
+# Two independent transcode lanes so a coach's on-demand /video request
+# never has to wait for the boot-warm / list-warm queue to drain. Each
+# lane runs one transcode at a time (single-threaded ffmpeg → one CPU
+# core), total parallel = 2.
+#
+# Without this split the worst case was: coach requests video X → joins
+# the back of a 5-row boot-warm queue → waits 5×60s = 5 minutes for
+# their own row to start transcoding. With the split, X starts on the
+# interactive lane immediately (sharing CPU with the bg lane but still
+# making progress) and finishes within one transcode budget.
+_bg_transcode_sema = asyncio.Semaphore(1)
+_interactive_transcode_sema = asyncio.Semaphore(1)
 # Track transcode tasks so the status endpoint can report progress
 _transcode_tasks: dict[str, asyncio.Task] = {}
 
@@ -150,11 +158,15 @@ async def _download(item_id: str, src_url: str) -> Path:
     return path
 
 
-async def _transcode_to_h264(item_id: str) -> None:
+async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> None:
     """Run ffmpeg HEVC → H.264 in a worker thread (subprocess is blocking).
     Uses preset ultrafast so encoding stays close to real-time even on
     modest CPUs. CRF 25 is slightly compressed but visually equivalent for
-    review purposes. Audio is re-encoded to AAC for compatibility."""
+    review purposes. Audio is re-encoded to AAC for compatibility.
+
+    `priority="interactive"` uses the interactive lane (won't queue behind
+    any boot-warm / list-warm transcodes currently running on the bg lane).
+    """
     src = _path_orig(item_id)
     dst = _path_h264(item_id)
     tmp = dst.with_suffix(".mp4.partial")
@@ -189,8 +201,9 @@ async def _transcode_to_h264(item_id: str) -> None:
         str(tmp),
     ]
 
-    async with _transcode_sema:
-        logger.info(f"[pv-cache] transcoding {item_id}…")
+    sema = _interactive_transcode_sema if priority == "interactive" else _bg_transcode_sema
+    async with sema:
+        logger.info(f"[pv-cache] transcoding {item_id} ({priority})…")
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,
@@ -251,9 +264,14 @@ def playable_path(item_id: str) -> Path | None:
     return None
 
 
-async def prepare(item_id: str, src_url: str) -> None:
+async def prepare(item_id: str, src_url: str, *, priority: str = "background") -> None:
     """Idempotent end-to-end: download → detect codec → transcode if HEVC.
-    Concurrent calls share a per-id Lock so we don't double-download."""
+    Concurrent calls share a per-id Lock so we don't double-download.
+
+    `priority="interactive"` routes the transcode to the dedicated
+    interactive lane so a coach's on-demand /video request doesn't queue
+    behind the boot-warm batch.
+    """
     lock = _locks.setdefault(item_id, asyncio.Lock())
     async with lock:
         # Re-check inside the lock
@@ -281,7 +299,9 @@ async def prepare(item_id: str, src_url: str) -> None:
         return
     if item_id in _transcode_tasks and not _transcode_tasks[item_id].done():
         return
-    _transcode_tasks[item_id] = asyncio.create_task(_transcode_to_h264(item_id))
+    _transcode_tasks[item_id] = asyncio.create_task(
+        _transcode_to_h264(item_id, priority=priority)
+    )
 
     try:
         _evict_if_needed()
@@ -289,10 +309,11 @@ async def prepare(item_id: str, src_url: str) -> None:
         logger.warning(f"[pv-cache] eviction error: {e}")
 
 
-async def ensure_ready(item_id: str, src_url: str) -> Path:
+async def ensure_ready(item_id: str, src_url: str, *, priority: str = "background") -> Path:
     """Block until a playable file is available. Used when the user
-    actually requests bytes (vs `prepare` which just kicks things off)."""
-    await prepare(item_id, src_url)
+    actually requests bytes (vs `prepare` which just kicks things off).
+    Pass `priority="interactive"` so the transcode skips the bg queue."""
+    await prepare(item_id, src_url, priority=priority)
     p = playable_path(item_id)
     if p:
         return p

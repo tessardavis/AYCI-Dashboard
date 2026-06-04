@@ -79,14 +79,17 @@ async def stream_video(
     import private_video_cache as pv_cache
     import asyncio as _asyncio
     try:
-        # Bound the wait under Render's 60s gateway timeout. If the
-        # transcode isn't done in 45s, return a clean 503 with a
+        # Bound the wait under Render's ~100s LB timeout. priority=
+        # "interactive" routes this transcode to the dedicated lane so
+        # it doesn't queue behind any background warming. On a cold row
+        # the path is: download (~10-15s) + transcode (~30-60s); 75s
+        # gives a comfortable margin. If we still time out, return 503 +
         # Retry-After so the browser doesn't sit through Render's 502
         # error page. The transcode keeps running in the background; the
         # next request will likely succeed.
         path = await _asyncio.wait_for(
-            pv_cache.ensure_ready(item_id, src),
-            timeout=45.0,
+            pv_cache.ensure_ready(item_id, src, priority="interactive"),
+            timeout=75.0,
         )
     except _asyncio.TimeoutError:
         logger.info(f"[private-videos] proxy wait exceeded for {item_id} — still transcoding")
