@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 import circle_dm_bot
 from db import db
-from deps import require_admin, require_board
+from deps import get_current_user, require_admin, require_board
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,84 @@ async def list_dm_events(user: dict = Depends(require_board("bot")), limit: int 
     ).sort("received_at", -1).limit(min(max(1, limit), 100)).to_list(100)
     return {"events": rows}
 
+
+# --- Spaces directory (settings dropdown source) ----------------------------
+SPACES_CACHE_KEY = "circle_spaces_directory"
+SPACES_CACHE_TTL_HOURS = 6
+
+
+async def _fetch_all_circle_spaces() -> list[dict]:
+    """Paginate Circle's /spaces endpoint and return id + slug + name for
+    every space. Used by the Settings → Coach Spaces picker so admins don't
+    have to hunt for the numeric ID by hand."""
+    import httpx
+    from connectors import CIRCLE_BASE, _circle_headers, TIMEOUT
+
+    out: list[dict] = []
+    page = 1
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        while page <= 20:  # 20 pages × 100 = 2000 spaces, way more than we'd ever have
+            r = await c.get(
+                f"{CIRCLE_BASE}/spaces",
+                headers=_circle_headers(),
+                params={"per_page": 100, "page": page, "sort": "latest_updated"},
+            )
+            r.raise_for_status()
+            body = r.json()
+            records = body.get("records") or body.get("data") or []
+            for s in records:
+                out.append({
+                    "id": s.get("id"),
+                    "slug": s.get("slug"),
+                    "name": s.get("name") or s.get("slug"),
+                })
+            if not body.get("has_next_page") or len(records) < 100:
+                break
+            page += 1
+    return out
+
+
+@router.get("/spaces")
+async def list_circle_spaces(
+    refresh: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    """Flat directory of every Circle space — `{id, slug, name}` — used by
+    the Settings → Coach Spaces dropdown so admins can pick by name instead
+    of looking up numeric IDs by hand. Cached in Mongo for 6h since spaces
+    rarely change; pass `?refresh=true` to force a fresh fetch."""
+    if not refresh:
+        cached = await db.fn_cache.find_one(
+            {"_id": SPACES_CACHE_KEY}, {"_id": 0, "value": 1, "cached_at": 1}
+        )
+        if cached:
+            cached_at = cached.get("cached_at")
+            if isinstance(cached_at, datetime):
+                if cached_at.tzinfo is None:
+                    cached_at = cached_at.replace(tzinfo=timezone.utc)
+                from datetime import timedelta as _td
+                cutoff = datetime.now(timezone.utc) - _td(hours=SPACES_CACHE_TTL_HOURS)
+                if cached_at > cutoff:
+                    return {"spaces": cached.get("value") or [], "source": "cache"}
+
+    try:
+        spaces = await _fetch_all_circle_spaces()
+    except Exception as e:
+        logger.exception("[circle-spaces] fetch failed")
+        # Fall back to whatever stale value we have so the dropdown still works.
+        cached = await db.fn_cache.find_one(
+            {"_id": SPACES_CACHE_KEY}, {"_id": 0, "value": 1}
+        )
+        if cached:
+            return {"spaces": cached.get("value") or [], "source": "stale_fallback", "error": str(e)}
+        raise HTTPException(502, f"Circle spaces fetch failed: {e}")
+
+    await db.fn_cache.update_one(
+        {"_id": SPACES_CACHE_KEY},
+        {"$set": {"_id": SPACES_CACHE_KEY, "value": spaces, "cached_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"spaces": spaces, "source": "fresh"}
 
 # --- DM Bot polling (v2) ----------------------------------------------------
 class BotConfigUpdate(BaseModel):

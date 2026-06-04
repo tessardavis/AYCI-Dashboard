@@ -170,12 +170,19 @@ function CoachSpacesEditor({ isAdmin }) {
   const [spaces, setSpaces] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Directory of every Circle space (id + slug + name) used to populate the
+  // two dropdowns instead of asking admins to look up numeric IDs by hand.
+  const [directory, setDirectory] = useState([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/settings/coach-spaces");
+      const [{ data }, dirRes] = await Promise.all([
+        apiClient.get("/settings/coach-spaces"),
+        apiClient.get("/circle/spaces").catch(() => ({ data: { spaces: [] } })),
+      ]);
       setSpaces(data);
+      setDirectory(dirRes.data?.spaces || []);
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load coach spaces");
     } finally {
@@ -218,23 +225,22 @@ function CoachSpacesEditor({ isAdmin }) {
           </h3>
           <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
             The Coach Activity dashboard tracks coach engagement in these two
-            Circle spaces from the cohort start date. Update when a new cohort
-            spins up new spaces. Find the space ID in the Circle URL after `/c/`
-            (open the space, copy the slug, then look up its numeric ID).
+            Circle spaces from the cohort start date. Pick the new spaces
+            (and update the start / end dates) when a cohort spins up.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-        <FieldRow
-          label="Recorded Answer Review — space ID"
+        <SpacePickerRow
+          label="Recorded Answer Review — space"
           value={spaces.recorded_answer_space_id}
           onChange={(v) =>
             setSpaces((s) => ({ ...s, recorded_answer_space_id: Number(v) || 0 }))
           }
           disabled={!isAdmin || saving}
           testid="coach-recorded-space-id"
-          inputType="number"
+          options={directory}
         />
         <FieldRow
           label="Cohort start (recorded answers)"
@@ -244,15 +250,15 @@ function CoachSpacesEditor({ isAdmin }) {
           testid="coach-recorded-start"
           inputType="date"
         />
-        <FieldRow
-          label="Interview Support — space ID"
+        <SpacePickerRow
+          label="Interview Support — space"
           value={spaces.interview_support_space_id}
           onChange={(v) =>
             setSpaces((s) => ({ ...s, interview_support_space_id: Number(v) || 0 }))
           }
           disabled={!isAdmin || saving}
           testid="coach-interview-space-id"
-          inputType="number"
+          options={directory}
         />
         <FieldRow
           label="Cohort start (interview support)"
@@ -324,6 +330,45 @@ function FieldRow({ label, value, onChange, disabled, testid, inputType = "text"
         disabled={disabled}
         data-testid={testid}
       />
+    </label>
+  );
+}
+
+// Dropdown variant used for the Coach Activity space picker. Renders the full
+// list of Circle spaces from /api/circle/spaces (cached 6h server-side). If
+// the currently-saved id isn't in the directory (e.g. directory still loading,
+// or admin pasted an unknown id), the select shows the raw numeric value so
+// the user can still see / fix what's stored.
+function SpacePickerRow({ label, value, onChange, disabled, testid, options }) {
+  const known = options.some((o) => Number(o.id) === Number(value));
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--ayci-ink-muted)]">
+        {label}
+      </span>
+      <select
+        className="h-9 rounded-md border border-[var(--ayci-border)] bg-white px-2 text-sm"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled || options.length === 0}
+        data-testid={testid}
+      >
+        {options.length === 0 ? (
+          <option value="">Loading spaces…</option>
+        ) : (
+          <>
+            <option value="">— select a space —</option>
+            {!known && value ? (
+              <option value={value}>(current: {value})</option>
+            ) : null}
+            {options.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} — {s.slug} ({s.id})
+              </option>
+            ))}
+          </>
+        )}
+      </select>
     </label>
   );
 }
