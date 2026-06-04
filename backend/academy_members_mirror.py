@@ -157,6 +157,8 @@ PROTECTED_FIELDS = {
     "mock_interview_cohort_before_april",
     "call_1", "call_2", "call_3", "call_4",
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
+    # 15-minute call status (Calendly zaps 15/16). Monday labels: Eligible | Booked.
+    "fifteen_minute_call",
 }
 
 
