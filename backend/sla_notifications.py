@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Optional
 
 import httpx
@@ -26,6 +26,36 @@ logger = logging.getLogger(__name__)
 def _webhook_url() -> Optional[str]:
     url = (os.environ.get("SLACK_WEBHOOK_URL") or "").strip()
     return url or None
+
+
+async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
+    """Decide whether the digest should run today.
+
+    Cohort is "active" if today is on or before the latest configured cohort
+    end date. If neither end date is set, fall back to legacy behaviour
+    (always active) so existing installs keep working until end dates are
+    filled in via the Settings → Coach Spaces UI.
+    """
+    today = today or datetime.now(timezone.utc).date()
+    try:
+        import settings_store
+        cfg = await settings_store.get_coach_spaces(db)
+    except Exception:
+        return True  # fail open — never silently kill the digest on a settings read error
+    ends: list[date] = []
+    for key in ("recorded_answer_end", "interview_support_end"):
+        v = cfg.get(key)
+        if not v:
+            continue
+        try:
+            ends.append(date.fromisoformat(v))
+        except (TypeError, ValueError):
+            continue
+    if not ends:
+        return True  # no end dates set yet — legacy behaviour
+    # If today is after BOTH end dates, the cohort is over. If at least one
+    # space is still inside its window, keep firing.
+    return today <= max(ends)
 
 
 async def build_sla_digest_payload(db) -> dict:
@@ -111,6 +141,14 @@ async def send_sla_digest(db, *, force: bool = False) -> dict:
     if not url:
         logger.warning("[slack] SLACK_WEBHOOK_URL not set — skipping daily digest.")
         return {"sent": False, "reason": "SLACK_WEBHOOK_URL not configured"}
+
+    # Outside the cohort window? Don't fire — was producing daily "All clear"
+    # noise in #coaching-spotlight between cohorts. Admin sets / clears the
+    # end date in Settings → Coach Spaces. `force=True` (admin test) still
+    # sends so we can verify Slack wiring out-of-cohort.
+    if not force and not await _is_cohort_active(db):
+        logger.info("[slack] SLA digest skipped — outside cohort window")
+        return {"sent": False, "reason": "outside_cohort_window"}
 
     today_key = f"sla_digest:{datetime.now(timezone.utc).date().isoformat()}"
     if not force:

@@ -262,7 +262,29 @@ function CoachSpacesEditor({ isAdmin }) {
           testid="coach-interview-start"
           inputType="date"
         />
+        <FieldRow
+          label="Cohort end (recorded answers)"
+          value={spaces.recorded_answer_end || ""}
+          onChange={(v) => setSpaces((s) => ({ ...s, recorded_answer_end: v || null }))}
+          disabled={!isAdmin || saving}
+          testid="coach-recorded-end"
+          inputType="date"
+        />
+        <FieldRow
+          label="Cohort end (interview support)"
+          value={spaces.interview_support_end || ""}
+          onChange={(v) => setSpaces((s) => ({ ...s, interview_support_end: v || null }))}
+          disabled={!isAdmin || saving}
+          testid="coach-interview-end"
+          inputType="date"
+        />
       </div>
+      <p className="mt-2 text-[11px] text-[var(--ayci-ink-muted)] max-w-prose">
+        Set a cohort end date when the cohort wraps — the daily Coach SLA Digest
+        will stop posting in <code>#coaching-spotlight</code> once both end dates
+        are in the past. Clear the end date (delete the value) when the next
+        cohort starts to resume the digest.
+      </p>
 
       {isAdmin && (
         <div className="mt-4">

@@ -38,17 +38,31 @@ async def set_cohort_milestones(db, milestones: list[str]) -> list[str]:
 
 
 # ---- Coach Activity Circle space IDs (per cohort, admin-editable) -------
+# End dates default to None — if unset, the SLA digest fires forever (legacy
+# behaviour). Set an end date when a cohort wraps so the digest goes quiet
+# until the next cohort's spaces + dates are configured.
 DEFAULT_COACH_SPACES = {
     "recorded_answer_space_id": 2529508,    # /c/recorded-answer-review-apr-26/
     "interview_support_space_id": 2529509,  # /c/specific-interview-support-apr-26/
     "recorded_answer_start": "2026-05-04",
     "interview_support_start": "2026-04-23",
+    "recorded_answer_end": None,
+    "interview_support_end": None,
 }
+
+# Keys whose value is a date string (or None to clear). Treated specially by
+# set_coach_spaces so the team can blank them out from the settings UI.
+_DATE_KEYS = (
+    "recorded_answer_start",
+    "interview_support_start",
+    "recorded_answer_end",
+    "interview_support_end",
+)
 
 
 async def get_coach_spaces(db) -> dict:
-    """Return current Coach Activity space IDs + start dates. Falls back to
-    sensible defaults if the setting hasn't been configured yet."""
+    """Return current Coach Activity space IDs + start/end dates. Falls back
+    to sensible defaults if the setting hasn't been configured yet."""
     doc = await db.app_settings.find_one({"_id": "coach_spaces"}, {"_id": 0})
     merged = dict(DEFAULT_COACH_SPACES)
     if doc:
@@ -64,7 +78,21 @@ async def get_coach_spaces(db) -> dict:
 
 async def set_coach_spaces(db, payload: dict) -> dict:
     allowed = set(DEFAULT_COACH_SPACES.keys())
-    update = {k: v for k, v in payload.items() if k in allowed and v is not None}
+    update: dict = {}
+    for k, v in payload.items():
+        if k not in allowed:
+            continue
+        # Date fields: empty string / None means "clear the override" (revert
+        # to default, i.e. None for end dates so the digest fires again).
+        if k in _DATE_KEYS:
+            if v in (None, "", "null"):
+                update[k] = None
+            else:
+                update[k] = v
+            continue
+        if v is None:
+            continue
+        update[k] = v
     if not update:
         raise ValueError("No valid fields supplied")
     for k in ("recorded_answer_space_id", "interview_support_space_id"):
