@@ -307,19 +307,31 @@ def playable_path(item_id: str) -> Path | None:
     return None
 
 
-async def prepare(item_id: str, src_url: str, *, priority: str = "background") -> None:
+async def prepare(item_id: str, src_url: str, *, priority: str = "background", force: bool = False) -> None:
     """Idempotent end-to-end: download → detect codec → transcode if HEVC.
     Concurrent calls share a per-id Lock so we don't double-download.
 
     `priority="interactive"` routes the transcode to the dedicated
     interactive lane so a coach's on-demand /video request doesn't queue
     behind the boot-warm batch.
+
+    `force=True` re-runs the transcode even when a cached file already
+    exists — used by the admin recompress endpoint to apply new
+    transcode settings (resolution/CRF) to previously-cached rows.
     """
     lock = _locks.setdefault(item_id, asyncio.Lock())
     async with lock:
         # Re-check inside the lock
-        if playable_path(item_id):
+        if playable_path(item_id) and not force:
             return
+        # Force path: drop the existing transcode so we re-download +
+        # re-encode. We KEEP the codec marker so the codec-detection step
+        # below can be skipped on a re-run.
+        if force:
+            try:
+                _path_h264(item_id).unlink(missing_ok=True)
+            except OSError:
+                pass
         try:
             await _download(item_id, src_url)
         except Exception:
@@ -338,7 +350,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background") -
 
     # Transcode outside the per-id lock so other items can download
     # concurrently. Fire-and-forget so the caller doesn't block.
-    if _path_h264(item_id).exists():
+    if _path_h264(item_id).exists() and not force:
         return
     if item_id in _transcode_tasks and not _transcode_tasks[item_id].done():
         return

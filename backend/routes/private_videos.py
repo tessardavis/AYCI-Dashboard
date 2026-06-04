@@ -66,6 +66,62 @@ async def cache_info(admin: dict = Depends(require_admin)):
     return pv_cache.cache_diagnostics()
 
 
+@router.post("/cache-recompress")
+async def cache_recompress(
+    min_bytes_mb: int = 60,
+    admin: dict = Depends(require_admin),
+):
+    """One-off admin job: re-transcode every cached row whose current H.264
+    file is larger than `min_bytes_mb` MB so existing oversized transcodes
+    (legacy 1280p/CRF28/ultrafast → 100-200 MB files) get rebuilt at the
+    new compact settings (854px/CRF30/64k audio → ~30-50 MB files).
+
+    Runs in the background on the bg transcode lane so a coach's
+    on-demand /video request still gets priority. Returns immediately
+    with the count of rows scheduled; tail Render logs to track progress.
+    """
+    import asyncio as _asyncio
+    import private_video_cache as pv_cache
+
+    threshold = min_bytes_mb * 1024 * 1024
+    rows = await db.private_video_submissions.find(
+        {"tally_video_url": {"$ne": None}},
+        {"_id": 0, "id": 1, "tally_video_url": 1},
+    ).to_list(2000)
+
+    scheduled = 0
+    skipped = 0
+    for r in rows:
+        rid = r.get("id")
+        tv = r.get("tally_video_url")
+        if not (rid and tv):
+            continue
+        h264 = pv_cache._path_h264(rid)
+        if not h264.exists():
+            skipped += 1
+            continue
+        try:
+            size = h264.stat().st_size
+        except OSError:
+            continue
+        if size < threshold:
+            skipped += 1
+            continue
+        _asyncio.create_task(
+            pv_cache.prepare(rid, tv, priority="background", force=True)
+        )
+        scheduled += 1
+    logger.info(
+        f"[cache-recompress] scheduled {scheduled} re-transcodes "
+        f"(threshold {min_bytes_mb} MB, skipped {skipped})"
+    )
+    return {
+        "scheduled": scheduled,
+        "skipped": skipped,
+        "threshold_mb": min_bytes_mb,
+    }
+
+
 @router.get("")
 async def list_submissions(
     force: bool = False,  # legacy param, kept so existing frontend URLs work
@@ -184,12 +240,14 @@ async def stream_video(
         except (ValueError, IndexError):
             raise HTTPException(416, "Invalid Range header")
 
-    # Cap open-ended Range responses (`bytes=N-`) at 8 MB. Chrome's media
-    # demuxer aborts when it receives a 206 response larger than ~50 MB
-    # in a single shot — chunking the response into multiple Range
-    # requests is what every CDN does. After this chunk, Chrome will
-    # automatically request `bytes=N-` for the next window.
-    DEFAULT_WINDOW = 8 * 1024 * 1024
+    # Cap open-ended Range responses (`bytes=N-`) at 16 MB. Chrome's media
+    # demuxer aborts when it receives a 206 response larger than ~50 MB in
+    # a single shot — chunking the response into multiple Range requests
+    # is what every CDN does. After this chunk, Chrome will automatically
+    # request `bytes=N-` for the next window. 16 MB halves the number of
+    # round-trips vs the old 8 MB cap, which meaningfully tightens
+    # time-to-first-frame on the older large transcodes still in cache.
+    DEFAULT_WINDOW = 16 * 1024 * 1024
     if open_ended and (end - start + 1) > DEFAULT_WINDOW:
         end = start + DEFAULT_WINDOW - 1
 
