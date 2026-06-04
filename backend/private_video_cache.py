@@ -48,6 +48,48 @@ MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Log the resolved cache dir on import so any "every video re-transcodes
+# after deploy" diagnosis can be answered by tailing Render logs once. If
+# this prints `/tmp/...` instead of `/var/data/...` then the
+# PRIVATE_VIDEO_CACHE_DIR env var isn't reaching the process.
+logger.info(
+    f"[pv-cache] CACHE_DIR={CACHE_DIR} MAX_CACHE_BYTES={MAX_CACHE_BYTES} "
+    f"(persistent={'yes' if str(CACHE_DIR).startswith('/var/data') else 'NO — files lost on deploy'})"
+)
+
+
+def cache_diagnostics() -> dict:
+    """Return where the cache actually is + what's currently in it. Surfaces
+    via GET /api/private-videos/cache-info so the team can verify the
+    persistent disk is wired without ssh-ing into Render."""
+    items: list[dict] = []
+    total_bytes = 0
+    try:
+        for p in CACHE_DIR.iterdir():
+            try:
+                st = p.stat()
+                items.append({
+                    "name": p.name,
+                    "bytes": st.st_size,
+                    "modified_at": st.st_mtime,
+                })
+                total_bytes += st.st_size
+            except OSError:
+                continue
+    except FileNotFoundError:
+        pass
+    # Newest first; cap the response so big caches don't dump everything.
+    items.sort(key=lambda x: x["modified_at"], reverse=True)
+    return {
+        "cache_dir": str(CACHE_DIR),
+        "persistent": str(CACHE_DIR).startswith("/var/data"),
+        "max_cache_bytes": MAX_CACHE_BYTES,
+        "current_bytes": total_bytes,
+        "file_count": len(items),
+        "writable": os.access(str(CACHE_DIR), os.W_OK),
+        "recent_files": items[:20],
+    }
+
 _locks: dict[str, asyncio.Lock] = {}
 # Two independent transcode lanes so a coach's on-demand /video request
 # never has to wait for the boot-warm / list-warm queue to drain. Each
@@ -186,16 +228,17 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
         "-i", str(src),
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "28",                # was 25 — indistinguishable for talking-head review
-        # Cap longest dimension at 1280. Fits within a 1280x1280 box,
-        # only downscales (force_original_aspect_ratio=decrease), preserves
-        # aspect ratio. Landscape 1920x1080 → 1280x720; portrait
-        # 1080x1920 → 720x1280. iPhones record 1080p; coaches don't need
-        # full resolution for review.
-        "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease",
+        "-crf", "30",                # was 28 — still fine for talking-head review, ~20% smaller / faster
+        # Cap longest dimension at 854. Was 1280; halved pixel count for
+        # an iPhone 1080p source which roughly halves single-thread
+        # encode time on Render's 1-CPU Standard plan. Landscape
+        # 1920x1080 → 854x480; portrait 1080x1920 → 480x854. EDTV-class
+        # resolution — coaches reviewing talking-head answers don't
+        # need full HD detail and the win on cold-load is significant.
+        "-vf", "scale=854:854:force_original_aspect_ratio=decrease",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
-        "-b:a", "96k",               # was 128k — voice-only content fine at 96
+        "-b:a", "64k",               # was 96k — voice-only, perceptually identical
         "-movflags", "+faststart",
         "-f", "mp4",  # filename ends in .partial so format must be explicit
         str(tmp),

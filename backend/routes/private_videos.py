@@ -55,6 +55,17 @@ def _content_disposition_inline(filename: str) -> str:
 
 
 # ------------------------------------------------------------- READ
+@router.get("/cache-info")
+async def cache_info(admin: dict = Depends(require_admin)):
+    """Admin diagnostic: where the private-video cache actually lives + how
+    much is in it. Use this to confirm the Render persistent disk is wired
+    correctly — `cache_dir` should be /var/data/... and `persistent` true.
+    If it shows /tmp/... the PRIVATE_VIDEO_CACHE_DIR env var isn't taking
+    effect and every deploy wipes the cache."""
+    import private_video_cache as pv_cache
+    return pv_cache.cache_diagnostics()
+
+
 @router.get("")
 async def list_submissions(
     force: bool = False,  # legacy param, kept so existing frontend URLs work
