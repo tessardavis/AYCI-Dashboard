@@ -986,6 +986,19 @@ async def on_startup():
     import asyncio as _asyncio
     _asyncio.create_task(_warm_name_index())
 
+    # Private-tier video cache lives on Render's /tmp, which is wiped on
+    # every deploy + idle restart. Re-schedule pv_cache.prepare for every
+    # non-done submission so the boot recovers cached transcodes before a
+    # coach hits "Watch" and lands on the "still being prepared" 503.
+    # Fire-and-forget; pv_cache.prepare is idempotent + throttled.
+    async def _warm_private_videos():
+        try:
+            import private_videos_store as _pv
+            await _pv.boot_warm_active_videos(db, limit=30)
+        except Exception as e:
+            logger.warning(f"[startup] private-video boot-warm failed: {e}")
+    _asyncio.create_task(_warm_private_videos())
+
     await _seed_admin()
     await _seed_team()
     await _seed_metrics()

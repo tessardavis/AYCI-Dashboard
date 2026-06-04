@@ -264,6 +264,39 @@ async def list_submissions(db, *, force: bool = False) -> dict:
     return {"items": items, "fetched_at": _now_iso(), "source": "db"}
 
 
+async def boot_warm_active_videos(db, *, limit: int = 30) -> dict:
+    """Schedule pv_cache.prepare for every non-done submission.
+
+    Render's /tmp is wiped on each deploy and on idle-restart, so every
+    transcode we'd previously built is gone after the next push. The
+    Tally-ingest pre-warm only covers brand-new submissions; without
+    this boot-warm a coach reviewing on Monday morning hits the
+    "still being prepared" path on every active row.
+
+    Fire-and-forget per row — pv_cache.prepare is idempotent, throttles
+    concurrent transcodes via its own semaphore, and bails fast when
+    the file is already playable. Capped so we don't queue thousands
+    of transcodes after a long quiet period.
+    """
+    import asyncio as _asyncio
+    import private_video_cache as pv_cache
+
+    cursor = db.private_video_submissions.find(
+        {"status": {"$ne": "done"}, "tally_video_url": {"$ne": None}},
+        {"_id": 0, "id": 1, "tally_video_url": 1, "submitted_at": 1},
+    ).sort("submitted_at", 1).limit(limit)
+    scheduled = 0
+    async for row in cursor:
+        tv = row.get("tally_video_url")
+        rid = row.get("id")
+        if not (tv and rid):
+            continue
+        _asyncio.create_task(pv_cache.prepare(rid, tv))
+        scheduled += 1
+    logger.info(f"[private-videos] boot-warm scheduled {scheduled} active rows")
+    return {"scheduled": scheduled}
+
+
 async def get_team_users(db) -> list[dict]:
     """Assignee dropdown — uses our internal team_members (not Monday users)."""
     out = []
