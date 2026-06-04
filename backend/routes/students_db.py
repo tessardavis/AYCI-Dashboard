@@ -325,6 +325,143 @@ async def update_student_by_email(
     }
 
 
+# --------------------------------------------- Zapier-callable 1:1 call booking
+# Replaces the "1:1 Round Robin" zaps' AI-by-Zapier step that worked out which
+# Call slot (1-4) a new booking should fill. The four Call columns on Monday
+# are status columns sharing the label set:
+#   Eligible | Booked | Booked - Becky | Booked - Tessa
+#   Booked - Anoop | Booked - Charlotte
+# Rule (confirmed 2026-06-04): fill the lowest-numbered slot whose current
+# value is NOT already "Booked..." (i.e. Eligible or blank), with
+# "Booked - <Coach>". If all four are booked, write nothing and return
+# slot=null so the zap's existing Fallback (Slack alert) path can fire.
+
+# Coaches with a dedicated "Booked - X" status label. Lowercased key → label.
+_CALL_COACHES = {
+    "becky": "Becky",
+    "tessa": "Tessa",
+    "anoop": "Anoop",
+    "charlotte": "Charlotte",
+}
+
+
+def _current_call_slot(row: dict, n: int) -> str:
+    """Current value of Call slot n for this row.
+
+    Prefers the dashboard-owned scalar `call_n`; falls back to the Monday
+    column dump (`columns["Call n"].text`) so the rule works during the
+    safety-net week before the dashboard owns the field. "" if unset."""
+    scalar = row.get(f"call_{n}")
+    if scalar is not None:
+        return str(scalar)
+    entry = (row.get("columns") or {}).get(f"Call {n}")
+    if isinstance(entry, dict):
+        return entry.get("text") or ""
+    return ""
+
+
+@router.post("/students-db/book-call")
+async def book_call(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Mark a student's next available 1:1 call slot as booked with a coach.
+
+    Body: {"email": "x@y.z", "coach": "Anoop"}
+
+    Returns the slot filled (1-4) and the value written, or slot=null with
+    reason="all_slots_booked" when every slot is already taken. 404 if no
+    student matches the email."""
+    _check_webhook_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    if not isinstance(body, dict):
+        raise HTTPException(400, "payload must be an object")
+    email = body.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise HTTPException(400, "email is required")
+    coach_raw = body.get("coach")
+    if not isinstance(coach_raw, str) or not coach_raw.strip():
+        raise HTTPException(400, "coach is required")
+    coach = _CALL_COACHES.get(coach_raw.strip().lower())
+    if not coach:
+        raise HTTPException(
+            400, f"coach must be one of: {sorted(_CALL_COACHES.values())}"
+        )
+    email_l = email.strip().lower()
+
+    row = await db.academy_members.find_one(
+        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+    )
+    if not row:
+        raise HTTPException(404, f"No student found for email={email_l}")
+
+    matched_on = "email" if row.get("email") == email_l else "circle_email"
+
+    # Lowest-numbered slot not already "Booked..." (Eligible or blank).
+    slot = None
+    for n in (1, 2, 3, 4):
+        if not _current_call_slot(row, n).strip().startswith("Booked"):
+            slot = n
+            break
+
+    if slot is None:
+        logger.info(
+            f"[students-db] book-call all slots full email={email_l} id={row['_id']}"
+        )
+        return {
+            "ok": True,
+            "id": row["_id"],
+            "matched_on": matched_on,
+            "slot": None,
+            "reason": "all_slots_booked",
+        }
+
+    field = f"call_{slot}"
+    value = f"Booked - {coach}"
+    previous_value = _current_call_slot(row, slot)
+
+    now = datetime.now(timezone.utc)
+    new_protected = set(row.get("dashboard_edited_fields") or [])
+    new_protected.add(field)
+    await db.academy_members.update_one(
+        {"_id": row["_id"]},
+        {"$set": {
+            field: value,
+            "dashboard_edited_at": now,
+            "dashboard_edited_by": "zapier",
+            "dashboard_edited_fields": sorted(new_protected),
+        }},
+    )
+    logger.info(
+        f"[students-db] book-call email={email_l} id={row['_id']} "
+        f"{field}={value!r} (was {previous_value!r})"
+    )
+
+    # Outbound webhook fan-out if the slot value actually changed.
+    diff = webhooks_outbound.changed_fields_diff(row, {field: value})
+    if diff:
+        fresh = await db.academy_members.find_one({"_id": row["_id"]})
+        asyncio.create_task(
+            webhooks_outbound.notify_column_changes(
+                db, item_id=row["_id"], fields_changed=diff, student=fresh or row,
+            )
+        )
+
+    return {
+        "ok": True,
+        "id": row["_id"],
+        "matched_on": matched_on,
+        "slot": slot,
+        "field": field,
+        "value": value,
+        "previous_value": previous_value if previous_value else "",
+    }
+
+
 # ------------------------------------------------- Zapier-callable read/lookup
 # The read counterpart to update-by-email. Replaces a Monday "Get Items by
 # Column Value + Get Column Values" pair when a zap needs to READ current

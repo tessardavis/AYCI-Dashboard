@@ -247,10 +247,11 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 - 2 × `8g: 15 minute call booked` (Charlotte, Tessa) — simple update. **Code ready** (`update-by-email`). Pure Zapier re-point.
 - `8c. Substantive success form - Add Boss Tag` — read-modify-write on column change. **Code ready** (`update-by-email` + `previous_values`). Pure Zapier re-point.
-- 3 × `1:1 Round Robin` (Anoop, Charlotte, Becky) — RMW + AI step that picks which Call slot (1–4) to fill. **Read primitive `lookup-by-email` added 2026-06-04.** Two viable migrations — DECISION NEEDED:
-  - **(A) Keep the AI step:** zap calls `lookup-by-email` (reading the Monday call-slot columns by title) → AI picks slot → `update-by-email` writes `call_N`. Two dashboard calls replace the two Monday steps; AI logic stays in Zapier.
-  - **(B) Replicate server-side:** new `book-call` endpoint finds the next empty `call_N` slot itself and writes it, returning which slot was filled. One call, no AI step — but needs the exact value format (`call_N` = `"Booked - <coach>"`? a date? a status label?) and the round-robin rule confirmed first.
-  - Blocker for both: the mirror does **not** promote `call_1..call_4` to scalar fields (they live in the `columns` dump), so the dashboard has no independent call-slot state until these zaps own the fields. Option A reads them from `columns` during the safety-net week, which bootstraps the data.
+- 3 × `1:1 Round Robin` (Anoop, Charlotte, Becky) — RMW + AI step that picks which Call slot (1–4) to fill. **Built server-side 2026-06-04 (option B):** `POST /api/students-db/book-call` replaces the AI-by-Zapier step entirely.
+  - **Endpoint:** body `{email, coach}` (coach ∈ Becky/Tessa/Anoop/Charlotte). Fills the **lowest-numbered Call slot not already "Booked..."** (Eligible or blank) with `"Booked - <Coach>"`. Returns `slot` (1–4) + `value`, or `slot=null, reason="all_slots_booked"` so the zap's Fallback Slack-alert path can branch. 404 on no match.
+  - **Slot format** (read off the Monday board): Call 1–4 are status columns with labels `Eligible | Booked | Booked - Becky | Booked - Tessa | Booked - Anoop | Booked - Charlotte`. Matches the Mock Interview migration's `"Booked - <coach>"` convention.
+  - **Bootstrapping handled:** the mirror doesn't promote `call_1..call_4` to scalars, so `book-call` reads the current slot from the dashboard scalar if present, else falls back to the Monday `columns["Call N"].text`. Works correctly during the safety-net week before the dashboard owns the field.
+  - **Zapier re-point:** replace the Get Column Values + AI ×2 + Update Item steps with one Webhooks POST to `book-call`; keep a Path on `slot is null` → existing Slack fallback. (Your task in the Zapier UI.)
 
 ## Schema additions during migration
 
