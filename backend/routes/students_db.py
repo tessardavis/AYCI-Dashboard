@@ -325,6 +325,86 @@ async def update_student_by_email(
     }
 
 
+# ------------------------------------------------- Zapier-callable read/lookup
+# The read counterpart to update-by-email. Replaces a Monday "Get Items by
+# Column Value + Get Column Values" pair when a zap needs to READ current
+# state before deciding what to write (e.g. the 1:1 Round Robin AI step that
+# picks which call slot to fill). Writes nothing.
+
+# Heavy fields never returned to a webhook caller — the full Monday column
+# dumps are large and not useful to a zap.
+_HEAVY_FIELDS = {"columns", "columns_by_id"}
+
+
+@router.post("/students-db/lookup-by-email")
+async def lookup_student_by_email(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Find a student by email (or circle_email) and return their fields.
+
+    Body:
+      {"email": "x@y.z"}                              scalar fields only
+      {"email": "x@y.z", "columns": ["1:1 Call 1"]}   also pull these Monday
+                                                       column titles by text
+
+    Returns the row's scalar fields (heavy Monday column dumps excluded).
+    For each title in `columns`, the current Monday text value is returned
+    under `columns[title]` — lets a zap read a column the mirror doesn't
+    promote to a scalar yet (e.g. call slots) during the safety-net week.
+
+    404 on no match, mirroring update-by-email so a zap's existing
+    not-found branch fires the same way."""
+    _check_webhook_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    if not isinstance(body, dict):
+        raise HTTPException(400, "payload must be an object")
+    email = body.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise HTTPException(400, "email is required")
+    email_l = email.strip().lower()
+
+    requested_cols = body.get("columns") or []
+    if not isinstance(requested_cols, list):
+        raise HTTPException(400, "columns must be a list of Monday column titles")
+
+    row = await db.academy_members.find_one(
+        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+    )
+    if not row:
+        raise HTTPException(404, f"No student found for email={email_l}")
+
+    fields = {
+        k: v for k, v in row.items()
+        if k not in _HEAVY_FIELDS and not isinstance(v, datetime)
+    }
+
+    # Pull requested Monday columns by title from the stored dump. Each entry
+    # is {"text":..., "type":...}; return the text. "" for a missing title or
+    # empty value so a zap filter sees an empty string, not null.
+    col_titles = row.get("columns") or {}
+
+    def _col_text(title: str) -> str:
+        entry = col_titles.get(title)
+        if not isinstance(entry, dict):
+            return ""
+        return entry.get("text") or ""
+
+    columns_out = {str(title): _col_text(title) for title in requested_cols}
+
+    return {
+        "ok": True,
+        "id": row["_id"],
+        "matched_on": "email" if row.get("email") == email_l else "circle_email",
+        "fields": fields,
+        "columns": columns_out,
+    }
+
+
 # Re-export so the webhook endpoint can use the same allowlist as the sync.
 # Imported lazily to avoid a module-load cycle.
 def _protected_fields_set() -> set[str]:

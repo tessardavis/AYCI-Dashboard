@@ -237,16 +237,20 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 **Dashboard primitives now used in production:**
 
 - `POST /api/students-db/update-by-email` — 8 zaps live
+- `POST /api/students-db/lookup-by-email` — read primitive (returns scalar fields + requested Monday columns by title). 0 zaps yet. Added 2026-06-04 to unblock decision-step zaps (e.g. 1:1 Round Robin) that read state before writing.
 - `POST /api/students-db/intake` — 0 zaps yet
 - Outbound webhook dispatcher — 0 subscribers yet
 
 **Note on team consolidation:** the 3 active Mock Interview zaps could in principle collapse into 1 if subscribing to a Calendly team-wide trigger worked. Tested 2026-06-02 — Calendly's Zapier OAuth scope is per-user even for the team Owner, so each coach's zap still needs its own Calendly account connection. True consolidation would require Calendly's organization-level webhooks (separate setup, deferred).
 
-**Suggested next batch** (~5-7 zaps, same patterns):
+**Next batch — code readiness (assessed 2026-06-04):**
 
-- 3 × `1:1 Round Robin` zaps (Anoop, Charlotte, Becky) — read-modify-write + AI step that picks which Call slot to fill
-- 2 × `8g: 15 minute call booked` zaps (Charlotte, Tessa) — simple update
-- `8c. Substantive success form - Add Boss Tag` — read-modify-write on column change
+- 2 × `8g: 15 minute call booked` (Charlotte, Tessa) — simple update. **Code ready** (`update-by-email`). Pure Zapier re-point.
+- `8c. Substantive success form - Add Boss Tag` — read-modify-write on column change. **Code ready** (`update-by-email` + `previous_values`). Pure Zapier re-point.
+- 3 × `1:1 Round Robin` (Anoop, Charlotte, Becky) — RMW + AI step that picks which Call slot (1–4) to fill. **Read primitive `lookup-by-email` added 2026-06-04.** Two viable migrations — DECISION NEEDED:
+  - **(A) Keep the AI step:** zap calls `lookup-by-email` (reading the Monday call-slot columns by title) → AI picks slot → `update-by-email` writes `call_N`. Two dashboard calls replace the two Monday steps; AI logic stays in Zapier.
+  - **(B) Replicate server-side:** new `book-call` endpoint finds the next empty `call_N` slot itself and writes it, returning which slot was filled. One call, no AI step — but needs the exact value format (`call_N` = `"Booked - <coach>"`? a date? a status label?) and the round-robin rule confirmed first.
+  - Blocker for both: the mirror does **not** promote `call_1..call_4` to scalar fields (they live in the `columns` dump), so the dashboard has no independent call-slot state until these zaps own the fields. Option A reads them from `columns` during the safety-net week, which bootstraps the data.
 
 ## Schema additions during migration
 
