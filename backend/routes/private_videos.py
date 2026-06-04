@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,6 +19,39 @@ import private_videos_store as pv_store
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/private-videos", tags=["private-videos"])
+
+
+def _video_filename_for(row: dict) -> str:
+    """Build a coach-friendly download filename like
+    `Maha Elhassan - What are the trust values.mp4` so the browser's
+    download manager isn't full of `video.mp4` / `video (1).mp4` rows."""
+    first = (row.get("first_name") or "").strip()
+    last = (row.get("last_name") or "").strip()
+    name = " ".join(p for p in (first, last) if p) or (row.get("email") or "video")
+    question = (row.get("question") or "").strip()
+    if question:
+        # Collapse whitespace, then truncate to ~60 chars on a word boundary
+        # so questions like "TMAY take 2 after feedback" stay intact.
+        q = re.sub(r"\s+", " ", question.replace("\n", " ").replace("\r", " "))
+        if len(q) > 60:
+            q = q[:60].rsplit(" ", 1)[0] if " " in q[:60] else q[:60]
+        stem = f"{name} - {q}"
+    else:
+        stem = name
+    # Strip path / control chars so the filename can't break on any OS,
+    # then trim trailing dot/space which Windows treats specially.
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", stem).strip().rstrip(". ")
+    return f"{stem or 'video'}.mp4"
+
+
+def _content_disposition_inline(filename: str) -> str:
+    """RFC 5987 inline disposition with both ASCII fallback and UTF-8 form so
+    non-ASCII names (e.g. accents) survive every browser. `inline` keeps
+    `<video>` playback working; the filename is only used when the user
+    explicitly downloads."""
+    ascii_safe = filename.encode("ascii", "ignore").decode("ascii").replace('"', "") or "video.mp4"
+    encoded = quote(filename, safe="")
+    return f'inline; filename="{ascii_safe}"; filename*=UTF-8\'\'{encoded}'
 
 
 # ------------------------------------------------------------- READ
@@ -68,13 +103,22 @@ async def stream_video(
     user: dict = Depends(require_board("private_videos")),
 ):
     row = await db.private_video_submissions.find_one(
-        {"id": item_id}, {"_id": 0, "tally_video_url": 1},
+        {"id": item_id},
+        {
+            "_id": 0,
+            "tally_video_url": 1,
+            "first_name": 1,
+            "last_name": 1,
+            "email": 1,
+            "question": 1,
+        },
     )
     if not row:
         raise HTTPException(404, "Submission not found")
     src = row.get("tally_video_url")
     if not src:
         raise HTTPException(404, "No video on this submission")
+    download_filename = _video_filename_for(row)
 
     import private_video_cache as pv_cache
     import asyncio as _asyncio
@@ -152,7 +196,7 @@ async def stream_video(
         "Accept-Ranges": "bytes",
         "Content-Length": str(len(body)),
         "Cache-Control": "private, max-age=300",
-        "Content-Disposition": "inline",
+        "Content-Disposition": _content_disposition_inline(download_filename),
     }
     from fastapi.responses import Response
     if is_range:
