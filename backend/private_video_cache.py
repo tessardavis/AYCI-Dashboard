@@ -11,11 +11,17 @@ Why we transcode:
   transcode HEVC → H.264 (universally supported) once per video so coaches
   on any browser get inline playback.
 
-Storage layout (per video):
-  /tmp/private_video_cache/{id}.bin        — original Tally bytes
-  /tmp/private_video_cache/{id}.h264.mp4   — Chrome-playable transcode
-  /tmp/private_video_cache/{id}.codec      — text marker, e.g. "h264"
-                                              ("hevc" → transcode pending)
+Storage layout (per video) — under $PRIVATE_VIDEO_CACHE_DIR which on prod
+is the persistent Render disk (`/var/data/private_video_cache`) and locally
+defaults to `/tmp/private_video_cache`:
+  {id}.bin        — original Tally bytes
+  {id}.h264.mp4   — Chrome-playable transcode
+  {id}.codec      — text marker, e.g. "h264" ("hevc" → transcode pending)
+
+The persistent disk survives deploys + idle restarts, so we don't lose the
+whole cache every time we push. Boot-warm in private_videos_store still
+runs after deploy as a belt-and-braces guard against new submissions
+landing while /var/data wasn't yet mounted.
 
 Cache cap is soft — we LRU-evict by atime when total bytes exceed limit.
 Transcoding runs through a global semaphore so we never hammer CPU with

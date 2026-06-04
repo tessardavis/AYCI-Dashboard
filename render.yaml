@@ -15,6 +15,19 @@ services:
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /docs
     autoDeploy: true           # redeploy on every push to main
+
+    # Persistent disk for the private-tier video cache. Survives deploys +
+    # idle restarts — without it Render's /tmp gets wiped on every push and
+    # we re-transcode every active row from scratch on boot, leaving coaches
+    # staring at "Video is still being prepared". 10 GB ≈ 250 transcoded
+    # videos at ~35 MB each.
+    # Cost: ~$0.25/GB/month → $2.50/mo for 10GB.
+    # Resizing later: edit sizeGB here and re-sync the Blueprint in Render.
+    disk:
+      name: private-video-cache
+      mountPath: /var/data
+      sizeGB: 10
+
     envVars:
       # Pinned values — version locked, not secrets.
       - key: PYTHON_VERSION
@@ -27,6 +40,13 @@ services:
         value: "true"
       - key: GOOGLE_SERVICE_ACCOUNT_FILE
         value: /etc/secrets/google_service_account.json
+      # Private-tier video cache → persistent disk above. 9 GB cap leaves
+      # 1 GB headroom on the 10 GB disk for filesystem overhead + transient
+      # transcode artefacts.
+      - key: PRIVATE_VIDEO_CACHE_DIR
+        value: /var/data/private_video_cache
+      - key: PRIVATE_VIDEO_CACHE_MAX_BYTES
+        value: "9663676416"
 
       # Secrets — left blank here so Render prompts you to fill them in the
       # dashboard. Don't ever put real secret values in this file (it's
