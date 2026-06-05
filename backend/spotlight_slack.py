@@ -114,9 +114,9 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
 
     board_url = (os.environ.get("SPOTLIGHT_BOARD_URL") or "").strip()
     if not board_url:
-        # Default to the same-origin /spotlight path on the deployed preview.
-        # Tessa can override by setting SPOTLIGHT_BOARD_URL in backend/.env.
-        board_url = "https://ayci-dashboard.preview.emergentagent.com/spotlight"
+        # Default to the live dashboard's /spotlight page (Vercel frontend).
+        # Override with SPOTLIGHT_BOARD_URL if the domain changes.
+        board_url = "https://ayci-dashboard-nfiw.vercel.app/spotlight"
 
     actions = [
         {
