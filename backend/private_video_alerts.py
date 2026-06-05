@@ -4,13 +4,14 @@ Slack alerts for private-tier videos → the #private-tiers channel.
 Two checks, both idempotent (never re-spam) via the `private_video_alerts_sent`
 collection:
 
-1. interview_tomorrow — once a day: for any student whose interview is
-   tomorrow (per academy_members.interview_date), if they have ANY private
-   video on file, post one alert listing those videos. One alert per
-   (student, interview_date).
+1. interview_imminent — event-driven (on Tally ingest): when a video is
+   submitted, if that student's interview is within IMMINENT_DAYS (today or
+   tomorrow), post an urgent "review ASAP" alert. One alert per submission.
+   `recheck_imminent` re-scans recent submissions (catches an interview date
+   set AFTER submission) and doubles as the manual test.
 
-2. unanswered_24h — periodic: any private video submitted >24h ago that is
-   NOT marked Done. One alert per video.
+2. unanswered_24h — periodic (every 2h): any private video submitted >24h ago
+   that is NOT marked Done. One alert per video.
 
 "Answered" = status == "done" (per Tessa, 2026-06-05). reply_link alone does
 NOT count as answered.
@@ -132,49 +133,98 @@ async def _videos_for_emails(db, emails: list[str]) -> list[dict]:
     return [v async for v in db.private_video_submissions.find({"email": {"$in": lc}})]
 
 
-# ----------------------------------------------------------------- check 1
-async def check_interview_tomorrow(db, *, dry_run: bool = False) -> dict:
-    """Alert for any private video belonging to a student interviewing tomorrow."""
-    target = _tomorrow_iso()
-    students = [
-        s async for s in db.academy_members.find(
-            {"interview_date": target},
-            {"_id": 1, "email": 1, "circle_email": 1, "name": 1, "tier": 1},
-        )
-    ]
+# ------------------------------------------- check 1: imminent interview (event)
+# How soon counts as "imminent" — interview today (0 days) or tomorrow (1).
+IMMINENT_DAYS = int(os.environ.get("PV_IMMINENT_DAYS") or 1)
+
+
+async def _interview_date_for(db, submission: dict) -> Optional[str]:
+    """Interview date for this submission — prefer the value carried on the
+    submission itself (Tally hidden field), else look the student up in
+    academy_members by email/circle_email."""
+    d = (submission.get("interview_date") or "").strip()
+    if d:
+        return d
+    email = (submission.get("email") or "").strip().lower()
+    if not email:
+        return None
+    row = await db.academy_members.find_one(
+        {"$or": [{"email": email}, {"circle_email": email}]},
+        {"_id": 0, "interview_date": 1},
+    )
+    return ((row or {}).get("interview_date") or "").strip() or None
+
+
+def _imminent_label(date_str: str) -> Optional[str]:
+    """'today' / 'tomorrow' / 'in N days' if the interview is within
+    IMMINENT_DAYS (and not in the past), else None."""
+    try:
+        d = datetime.fromisoformat(str(date_str)[:10]).date()
+    except Exception:
+        return None
+    delta = (d - _today_uk_date()).days
+    if delta < 0 or delta > IMMINENT_DAYS:
+        return None
+    return {0: "today", 1: "tomorrow"}.get(delta, f"in {delta} days")
+
+
+async def notify_if_interview_imminent(db, submission: dict, *, dry_run: bool = False) -> dict:
+    """If this submission's student has an interview within IMMINENT_DAYS, post
+    an urgent 'review ASAP' alert. Fired on Tally ingest (fire-and-forget) and
+    by recheck_imminent. One alert per submission."""
+    if _is_done(submission):
+        return {"alerted": False, "reason": "done"}
+    date_str = await _interview_date_for(db, submission)
+    if not date_str:
+        return {"alerted": False, "reason": "no_interview_date"}
+    when = _imminent_label(date_str)
+    if not when:
+        return {"alerted": False, "reason": "not_imminent", "interview_date": date_str}
+
+    sid = str(submission.get("id") or submission.get("_id"))
+    key = f"interview_imminent:{sid}"
+    if dry_run:
+        return {"alerted": False, "would_alert": True, "when": when,
+                "name": _student_name(submission), "interview_date": date_str}
+    if await _already_sent(db, key):
+        return {"alerted": False, "reason": "already_sent"}
+
+    name = _student_name(submission)
+    tier = submission.get("tier") or "—"
+    url = submission.get("tally_video_url") or ""
+    text = (
+        f"🚨 *Interview {when} — review this video ASAP* ({date_str})\n"
+        f"*{name}* ({tier}) just submitted a private video and interviews {when}."
+        + (f" — <{url}|video>" if url else "") + "\n"
+        f"<{DASHBOARD_VIDEOS_URL}|Open Private-Tier Videos>"
+    )
+    if await _post(db, text):
+        await _mark_sent(db, key, {"type": "interview_imminent",
+                                   "email": (submission.get("email") or "").lower(),
+                                   "interview_date": date_str, "when": when})
+        return {"alerted": True, "when": when, "interview_date": date_str}
+    return {"alerted": False, "reason": "post_failed"}
+
+
+async def recheck_imminent(db, *, days_back: int = 14, dry_run: bool = False) -> dict:
+    """Safety-net / test: re-scan recent (last `days_back`) not-Done submissions
+    and alert any whose interview is now imminent — catches the case where the
+    interview date was set AFTER the video was submitted. Idempotent."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
     posted, candidates = 0, []
-    for s in students:
-        emails = [e for e in (s.get("email"), s.get("circle_email")) if e]
-        vids = await _videos_for_emails(db, emails)
-        if not vids:
+    async for v in db.private_video_submissions.find({}):
+        if _is_done(v):
             continue
-        key = f"interview_tomorrow:{(s.get('email') or emails[0]).lower()}:{target}"
-        candidate = {"name": s.get("name"), "tier": s.get("tier"), "videos": len(vids), "key": key}
-        candidates.append(candidate)
-        if dry_run or await _already_sent(db, key):
+        dt = _parse_dt(v.get("submitted_at") or v.get("created_at"))
+        if dt and dt < cutoff:
             continue
-
-        name = s.get("name") or _student_name(vids[0])
-        tier = s.get("tier") or "—"
-        lines = [
-            f"🎬 *Interview tomorrow ({target})* — private video(s) to review",
-            f"*{name}* ({tier})",
-        ]
-        for v in vids:
-            status = (v.get("status") or "new").title()
-            url = v.get("tally_video_url") or ""
-            num = v.get("submission_number") or "?"
-            lines.append(f"   • #{num} — {status}" + (f" — <{url}|video>" if url else ""))
-        lines.append(f"<{DASHBOARD_VIDEOS_URL}|Open Private-Tier Videos>")
-
-        if await _post(db, "\n".join(lines)):
-            await _mark_sent(db, key, {"type": "interview_tomorrow",
-                                       "email": (s.get("email") or "").lower(),
-                                       "interview_date": target})
+        res = await notify_if_interview_imminent(db, v, dry_run=dry_run)
+        if res.get("alerted"):
             posted += 1
-    return {"target": target, "students_tomorrow": len(students),
-            "with_videos": len(candidates), "alerts_posted": posted,
-            "candidates": candidates if dry_run else None}
+        if dry_run and res.get("would_alert"):
+            candidates.append({"name": res.get("name"), "when": res.get("when"),
+                               "interview_date": res.get("interview_date")})
+    return {"alerts_posted": posted, "candidates": candidates if dry_run else None}
 
 
 # ----------------------------------------------------------------- check 2

@@ -660,6 +660,15 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
         except Exception as e:
             logger.info(f"[private-videos] transcription kickoff skipped: {e}")
 
+    # If this student's interview is imminent (today/tomorrow), ping
+    # #private-tiers so the video gets reviewed in time. Fire-and-forget.
+    try:
+        import asyncio as _asyncio
+        import private_video_alerts as pva
+        _asyncio.create_task(pva.notify_if_interview_imminent(db, row))
+    except Exception as e:
+        logger.info(f"[private-videos] imminent-interview alert skipped: {e}")
+
     return {"ok": True, "id": row["id"]}
 
 

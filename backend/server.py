@@ -300,17 +300,19 @@ async def preview_private_video_alerts(admin: dict = Depends(require_admin)):
     """Dry-run both checks — returns who WOULD be alerted, posts nothing."""
     import private_video_alerts as pva
     return {
-        "interview_tomorrow": await pva.check_interview_tomorrow(db, dry_run=True),
+        "interview_imminent": await pva.recheck_imminent(db, dry_run=True),
         "unanswered_24h": await pva.check_unanswered_24h(db, dry_run=True),
     }
 
 
 @api.post("/private-videos/alerts/test")
 async def run_private_video_alerts(admin: dict = Depends(require_admin)):
-    """Run both checks for real now (idempotent — won't re-post already-sent)."""
+    """Run both checks for real now (idempotent — won't re-post already-sent).
+    interview_imminent here re-scans recent submissions; the live path is the
+    on-ingest hook in private_videos_store.ingest_tally_submission."""
     import private_video_alerts as pva
     return {
-        "interview_tomorrow": await pva.check_interview_tomorrow(db),
+        "interview_imminent": await pva.recheck_imminent(db),
         "unanswered_24h": await pva.check_unanswered_24h(db),
     }
 
@@ -1317,24 +1319,26 @@ async def on_startup():
         max_instances=1, coalesce=True,
     )
 
-    # Private-tier video Slack alerts → #private-tiers. Two jobs:
-    #  • interview-tomorrow: once daily (08:30 UK) so coaches have the day to
-    #    review videos for students interviewing the next day.
+    # Private-tier video Slack alerts → #private-tiers.
+    #  • interview-imminent: fired ON video ingest (not scheduled) — see the
+    #    notify_if_interview_imminent hook in private_videos_store. The job
+    #    below is a safety-net re-scan (catches an interview date set AFTER the
+    #    video was submitted), once daily at 08:30 UK. Idempotent.
     #  • unanswered-24h: every 2h, flags videos sitting >24h without being Done.
     # Both idempotent via `private_video_alerts_sent`.
-    async def _pv_interview_tomorrow():
+    async def _pv_recheck_imminent():
         import private_video_alerts as pva
         try:
-            res = await pva.check_interview_tomorrow(db)
+            res = await pva.recheck_imminent(db)
             if res.get("alerts_posted"):
-                logger.info(f"[scheduler] pv interview-tomorrow: {res}")
+                logger.info(f"[scheduler] pv recheck-imminent: {res}")
         except Exception as e:
-            logger.warning(f"[scheduler] pv interview-tomorrow failed: {e}")
+            logger.warning(f"[scheduler] pv recheck-imminent failed: {e}")
 
     scheduler.add_job(
-        _pv_interview_tomorrow,
+        _pv_recheck_imminent,
         CronTrigger(hour=8, minute=30, timezone=tz),
-        id="pv_interview_tomorrow",
+        id="pv_recheck_imminent",
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
