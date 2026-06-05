@@ -94,7 +94,10 @@ async def list_students(
         db.academy_members
         .find(query, {"columns_by_id": 0, "columns": 0})  # heavy fields excluded
         .sort([("interview_date", 1), ("name", 1)])
-        .limit(min(limit, 2000))
+        # Cap high enough to return the whole board in one page — the slim
+        # projection keeps rows small. The old 2000 cap silently dropped
+        # students past it (board is ~2.1k), so they couldn't be searched.
+        .limit(min(limit, 10000))
     )
     rows = [_slim_row_for_list(r) async for r in cursor]
     return {"items": rows, "count": len(rows)}

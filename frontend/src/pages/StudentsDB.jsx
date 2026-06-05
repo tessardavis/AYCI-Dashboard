@@ -51,7 +51,7 @@ export default function StudentsDB() {
   const load = async () => {
     setRefreshing(true);
     try {
-      const { data } = await apiClient.get("/students-db", { params: { limit: 3000 } });
+      const { data } = await apiClient.get("/students-db", { params: { limit: 10000 } });
       setRows(data.items || []);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load students");
