@@ -288,6 +288,19 @@ async def full_sync(db) -> dict:
             if not cursor:
                 break
 
+    # Reconcile intake-created auto: rows into their Monday-origin counterpart.
+    # An auto: row exists when something wrote to a student by email before
+    # their Monday row had synced (e.g. a new student buying a Kajabi add-on at
+    # checkout → addon_* flag written via intake). Once the Monday row is here,
+    # merge the dashboard-owned fields onto it and drop the auto: row, so the
+    # flag lands on the permanent record and there's no duplicate.
+    reconciled = 0
+    if not errors:
+        try:
+            reconciled = await _reconcile_auto_rows(db)
+        except Exception as e:
+            logger.info(f"[academy-mirror] auto-row reconcile skipped: {e}")
+
     # Remove rows that no longer exist on Monday (member archived / deleted).
     deleted = 0
     if seen_ids and not errors:
@@ -309,6 +322,7 @@ async def full_sync(db) -> dict:
         "upserted": total,
         "pages": page,
         "errors": errors,
+        "reconciled": reconciled,
         "stale_deleted": deleted,
         "elapsed_seconds": elapsed,
         "ran_at": datetime.now(timezone.utc).isoformat(),
@@ -318,6 +332,57 @@ async def full_sync(db) -> dict:
     else:
         logger.info(f"[academy-mirror] sync ok: {summary}")
     return summary
+
+
+# Identity / structural fields the Monday row stays authoritative for — never
+# carried (or pinned) from an auto: row during reconciliation, even if the
+# intake write happened to mark them edited.
+_RECONCILE_SKIP_FIELDS = {
+    "email", "circle_email", "name", "first_name", "surname", "source",
+}
+
+
+async def _reconcile_auto_rows(db) -> int:
+    """Merge dashboard-only `auto:` rows into their Monday-origin counterpart.
+
+    An `auto:` row is created by the intake endpoint when a student is written
+    to by email before their Monday row exists (e.g. a new student buys a
+    Kajabi add-on at checkout). Once the Monday row has synced, this carries
+    the auto: row's dashboard-owned fields (e.g. `addon_*`) onto it — pinned in
+    `dashboard_edited_fields` so the next sync won't clobber them — and deletes
+    the auto: row. Returns the number of rows merged.
+
+    Leaves an auto: row in place if no Monday counterpart exists yet (genuinely
+    dashboard-only student) — it'll reconcile on a later sync."""
+    merged = 0
+    cursor = db.academy_members.find({"_id": {"$regex": "^auto:"}})
+    async for auto_row in cursor:
+        emails = [e for e in (auto_row.get("email"), auto_row.get("circle_email")) if e]
+        if not emails:
+            continue
+        monday_row = await db.academy_members.find_one({
+            "_id": {"$not": {"$regex": "^auto:"}},
+            "$or": [{"email": {"$in": emails}}, {"circle_email": {"$in": emails}}],
+        })
+        if not monday_row:
+            continue  # no Monday row yet — leave it for a later sync
+
+        owned = set(auto_row.get("dashboard_edited_fields") or []) - _RECONCILE_SKIP_FIELDS
+        carry = {f: auto_row.get(f) for f in owned if f in auto_row}
+        if carry:
+            new_protected = set(monday_row.get("dashboard_edited_fields") or []) | owned
+            carry["dashboard_edited_fields"] = sorted(new_protected)
+            carry["dashboard_edited_at"] = datetime.now(timezone.utc)
+            await db.academy_members.update_one(
+                {"_id": monday_row["_id"]}, {"$set": carry}
+            )
+        await db.academy_members.delete_one({"_id": auto_row["_id"]})
+        merged += 1
+        logger.info(
+            f"[academy-mirror] reconciled auto row {auto_row['_id']} → "
+            f"{monday_row['_id']} (carried {sorted(carry.keys() - {'dashboard_edited_fields','dashboard_edited_at'})})"
+        )
+    return merged
 
 
 async def lookup_by_email(db, email: str) -> Optional[dict]:
