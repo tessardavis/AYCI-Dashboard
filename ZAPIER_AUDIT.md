@@ -240,7 +240,7 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 - `POST /api/students-db/update-by-email` — 8 zaps live
 - `POST /api/students-db/lookup-by-email` — read primitive (returns scalar fields + requested Monday columns by title). 0 zaps yet. Added 2026-06-04 to unblock decision-step zaps (e.g. 1:1 Round Robin) that read state before writing.
 - `POST /api/students-db/intake` — 0 zaps yet
-- Outbound webhook dispatcher — 0 subscribers yet
+- Outbound webhook dispatcher — fires `column_changed` events for any dashboard-originated write (coach edit / migrated zap) to subscribers of that column. **Admin UI added 2026-06-05** at `/webhooks` (board: students) to create/list/delete subscriptions; backend endpoints moved to `/api/webhook-subscriptions` (the old `/students-db/webhook-subscriptions` path was shadowed by `/students-db/{id}`). 0 live subscribers yet. **Next: wire 8b** to catch the `boss_badge` event (8c already writes boss_badge via the dashboard → emits on change). **Caveat:** only dashboard-originated changes emit — a change made on Monday does NOT (would need a mirror-emit bridge).
 
 **Note on team consolidation:** the 3 active Mock Interview zaps could in principle collapse into 1 if subscribing to a Calendly team-wide trigger worked. Tested 2026-06-02 — Calendly's Zapier OAuth scope is per-user even for the team Owner, so each coach's zap still needs its own Calendly account connection. True consolidation would require Calendly's organization-level webhooks (separate setup, deferred).
 
