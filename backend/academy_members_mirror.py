@@ -159,6 +159,8 @@ PROTECTED_FIELDS = {
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
     # 15-minute call status (Calendly zaps 15/16). Monday labels: Eligible | Booked.
     "fifteen_minute_call",
+    # Boss Badge status (zap 8c — substantive success form). Monday label: Yes.
+    "boss_badge",
 }
 
 
