@@ -161,6 +161,16 @@ PROTECTED_FIELDS = {
     "fifteen_minute_call",
     # Boss Badge status (zap 8c — substantive success form). Monday label: Yes.
     "boss_badge",
+    # Kajabi add-on purchases (order bump + upsells). Dashboard-owned — NOT on
+    # Monday. Set "Yes" by the Kajabi purchase-capture zap (via update-by-email),
+    # keyed to the offer the student bought. The toolkit site reads these via
+    # GET/POST /api/toolkit/access to gate material access.
+    #   addon_curveball_questions  → "10 Real Curveball Questions" (order bump, Kajabi offer 2151209227)
+    #   addon_question_sets        → "30 Recent Question Sets" (upsell, Kajabi offer 2151209222)
+    #   addon_pre_interview_toolkit→ "The Pre-Interview Visits Toolkit" (upsell, Kajabi offer 2151209231)
+    "addon_curveball_questions",
+    "addon_question_sets",
+    "addon_pre_interview_toolkit",
 }
 
 

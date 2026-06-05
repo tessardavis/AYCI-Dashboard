@@ -542,6 +542,84 @@ async def lookup_student_by_email(
     }
 
 
+# --------------------------------------------------- Toolkit access check
+# Read endpoint for the toolkit site (tools.medicalinterviewprep.com et al.)
+# to gate material access by Kajabi add-on purchase. The dashboard is the
+# source of truth: the Kajabi purchase-capture zap sets the addon_* fields
+# "Yes" via update-by-email; this endpoint reads them back by email.
+#
+# Maps each access key (what the toolkit site asks about) to the dashboard
+# field. Add new add-ons here + in PROTECTED_FIELDS.
+TOOLKIT_ADDONS = {
+    "curveball_questions": "addon_curveball_questions",      # £47 order bump (Kajabi 2151209227, Circle delivery)
+    "question_sets": "addon_question_sets",                  # 30 Recent Question Sets upsell (Kajabi 2151209222)
+    "pre_interview_toolkit": "addon_pre_interview_toolkit",  # £97 upsell (Kajabi 2151209231, tools.medicalinterviewprep.com)
+}
+
+
+def _addon_on(value: Any) -> bool:
+    """An add-on flag counts as purchased when set to an affirmative value."""
+    return str(value or "").strip().lower() in {"yes", "true", "1", "y"}
+
+
+@router.post("/toolkit/access")
+async def toolkit_access(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Return which add-ons a student has purchased, by email.
+
+    Body: {"email": "x@y.z"}
+    Auth: X-Webhook-Secret (set TOOLKIT_ACCESS_SECRET on Render to use a
+    dedicated secret; otherwise falls back to ZAPIER_WEBHOOK_SECRET).
+
+    Always 200 (never 404) so the toolkit site gets a clean allow/deny:
+      { "found": true/false,
+        "access": { "curveball_questions": bool, "question_sets": bool,
+                    "pre_interview_toolkit": bool } }
+    A non-existent student returns found=false with all access false."""
+    _check_toolkit_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    if not isinstance(body, dict):
+        raise HTTPException(400, "payload must be an object")
+    email = body.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise HTTPException(400, "email is required")
+    email_l = email.strip().lower()
+
+    row = await db.academy_members.find_one(
+        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+        {"_id": 1, **{f: 1 for f in TOOLKIT_ADDONS.values()}},
+    )
+    if not row:
+        return {
+            "email": email_l,
+            "found": False,
+            "access": {k: False for k in TOOLKIT_ADDONS},
+        }
+    return {
+        "email": email_l,
+        "found": True,
+        "id": row["_id"],
+        "access": {k: _addon_on(row.get(field)) for k, field in TOOLKIT_ADDONS.items()},
+    }
+
+
+def _check_toolkit_secret(x_webhook_secret: Optional[str]) -> None:
+    """Accept a dedicated TOOLKIT_ACCESS_SECRET if configured, else fall back
+    to the shared ZAPIER_WEBHOOK_SECRET."""
+    toolkit = (os.environ.get("TOOLKIT_ACCESS_SECRET") or "").strip()
+    if toolkit:
+        if (x_webhook_secret or "").strip() == toolkit:
+            return
+        raise HTTPException(401, "Invalid toolkit secret")
+    _check_webhook_secret(x_webhook_secret)
+
+
 # Re-export so the webhook endpoint can use the same allowlist as the sync.
 # Imported lazily to avoid a module-load cycle.
 def _protected_fields_set() -> set[str]:
