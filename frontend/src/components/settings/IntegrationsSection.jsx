@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -20,7 +20,174 @@ export default function IntegrationsSection({ isAdmin }) {
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
+      <PrivateVideoAlertsCard isAdmin={isAdmin} />
       <ZapierCircleReplyCard isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+function PrivateVideoAlertsCard({ isAdmin }) {
+  const [state, setState] = useState({ loading: true, configured: false, masked: "" });
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState("");        // "preview" | "send" | ""
+  const [preview, setPreview] = useState(null); // last preview/send result
+
+  const load = async () => {
+    try {
+      const { data } = await apiClient.get("/private-videos/alerts/webhook");
+      setState({ loading: false, configured: !!data?.configured, masked: data?.masked || "" });
+    } catch (err) {
+      setState({ loading: false, configured: false, masked: "" });
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!isAdmin) return;
+    const v = (value || "").trim();
+    if (v && !v.startsWith("https://hooks.slack.com/")) {
+      toast.error("Expected a Slack webhook URL starting with 'https://hooks.slack.com/'");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await apiClient.post("/private-videos/alerts/webhook", { url: v });
+      if (data?.ok === false) {
+        toast.error(data.error || "Save failed");
+      } else {
+        toast.success(v ? "#private-tiers webhook saved" : "#private-tiers webhook cleared");
+        setValue("");
+        await load();
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runPreview = async () => {
+    setBusy("preview");
+    setPreview(null);
+    try {
+      const { data } = await apiClient.get("/private-videos/alerts/preview");
+      setPreview({ mode: "preview", ...data });
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Preview failed");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const sendNow = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm("Post any pending private-video alerts to #private-tiers now?")) return;
+    setBusy("send");
+    setPreview(null);
+    try {
+      const { data } = await apiClient.post("/private-videos/alerts/test");
+      const sent = (data?.interview_imminent?.alerts_posted || 0) + (data?.unanswered_24h?.alerts_posted || 0);
+      toast.success(sent ? `Posted ${sent} alert${sent === 1 ? "" : "s"} to #private-tiers` : "Nothing pending — no alerts posted");
+      setPreview({ mode: "send", ...data });
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const imm = preview?.interview_imminent;
+  const un = preview?.unanswered_24h;
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="private-video-alerts-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-700 shrink-0">
+          <Video className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Slack #private-tiers video alerts
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            Posts to <code className="text-xs bg-slate-100 px-1 rounded">#private-tiers</code> when a private
+            video is submitted by a student whose interview is <b>today or tomorrow</b> (urgent), and when any
+            video has gone <b>&gt;24h without being marked Done</b>. Create an{" "}
+            <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noreferrer"
+               className="text-[var(--ayci-accent)] underline">Incoming Webhook</a>{" "}
+            for #private-tiers and paste the URL here.
+          </p>
+        </div>
+      </div>
+
+      {state.loading ? (
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 text-sm mb-4" data-testid="private-video-alerts-status">
+            <span className={`inline-block w-2 h-2 rounded-full ${state.configured ? "bg-emerald-500" : "bg-slate-400"}`} />
+            {state.configured ? (
+              <span className="text-emerald-700 font-semibold break-all">Configured — {state.masked}</span>
+            ) : (
+              <span className="text-slate-500">Not configured (falls back to the general Slack webhook if set)</span>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="https://hooks.slack.com/services/T.../B.../..."
+              disabled={!isAdmin || saving}
+              className="flex-1 font-mono text-xs"
+              data-testid="private-video-alerts-input"
+            />
+            <Button onClick={save} disabled={!isAdmin || saving || !value.trim()} data-testid="private-video-alerts-save">
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save
+            </Button>
+          </div>
+
+          {isAdmin && (
+            <div className="mt-5 pt-5 border-t border-[var(--ayci-border)]">
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={runPreview} disabled={!!busy} data-testid="private-video-alerts-preview">
+                  {busy === "preview" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
+                  Preview (no posts)
+                </Button>
+                <Button variant="outline" onClick={sendNow} disabled={!!busy} data-testid="private-video-alerts-send">
+                  {busy === "send" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  Send pending now
+                </Button>
+              </div>
+
+              {preview && (
+                <div className="mt-3 text-xs text-[var(--ayci-ink-muted)] bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3 space-y-1">
+                  <div className="font-semibold text-[var(--ayci-ink)]">
+                    {preview.mode === "preview" ? "Preview — would alert:" : "Sent:"}
+                  </div>
+                  <div>
+                    Interview imminent: {preview.mode === "preview" ? (imm?.candidates?.length || 0) : (imm?.alerts_posted || 0)}
+                    {imm?.candidates?.length ? ` — ${imm.candidates.map((c) => `${c.name} (${c.when})`).join(", ")}` : ""}
+                  </div>
+                  <div>
+                    Unanswered &gt;24h: {preview.mode === "preview" ? (un?.candidates?.length || 0) : (un?.alerts_posted || 0)}
+                    {un?.candidates?.length ? ` — ${un.candidates.map((c) => `${c.name} (${c.hours}h)`).join(", ")}` : ""}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
