@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video, Webhook } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
@@ -46,6 +46,14 @@ const NAV_GROUPS = [
     icon: LifeBuoy,
     testid: "sidebar-nav-tickets",
     board: "tickets",
+  },
+  {
+    type: "item",
+    to: "/webhooks",
+    label: "Webhook Subscriptions",
+    icon: Webhook,
+    testid: "sidebar-nav-webhooks",
+    board: "students",
   },
   {
     type: "item",

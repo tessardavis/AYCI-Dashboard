@@ -684,7 +684,13 @@ async def intake_student(
 # ----------------------------------------------- Webhook subscription admin
 # Manage the subscribers that listen for column-change events. Authenticated
 # (dashboard user only) — these are equivalent to changing a Monday zap
-# trigger, so it should be admin-only.
+# trigger.
+#
+# NOTE: these live under /api/webhook-subscriptions, NOT /api/students-db/...,
+# deliberately. A single-segment path like /students-db/webhook-subscriptions
+# is shadowed by the GET /students-db/{monday_item_id} route declared above
+# (Starlette matches in declaration order), so it would 404 as "student not
+# found". A separate prefix sidesteps that.
 
 class WebhookSubscriptionCreate(BaseModel):
     name: str
@@ -696,17 +702,35 @@ class WebhookSubscriptionCreate(BaseModel):
         extra = "forbid"
 
 
-@router.get("/students-db/webhook-subscriptions")
+def _serialise_subscription(doc: dict) -> dict:
+    """Drop Mongo's _id and render datetimes as ISO strings for the UI."""
+    out = {k: v for k, v in doc.items() if k != "_id"}
+    ca = out.get("created_at")
+    if isinstance(ca, datetime):
+        out["created_at"] = ca.isoformat()
+    return out
+
+
+@router.get("/webhook-subscriptions/columns")
+async def list_webhook_columns(
+    user: dict = Depends(require_board("students")),
+):
+    """The columns a subscription may listen on — the automation-writable
+    field allowlist (PROTECTED_FIELDS). Populates the create-form dropdown."""
+    return {"columns": sorted(PROTECTED_FIELDS)}
+
+
+@router.get("/webhook-subscriptions")
 async def list_webhook_subscriptions(
     user: dict = Depends(require_board("students")),
 ):
-    cursor = db.dashboard_webhook_subscriptions.find({}, {"_id": 0})
-    items = [s async for s in cursor]
+    cursor = db.dashboard_webhook_subscriptions.find({})
+    items = [_serialise_subscription(s) async for s in cursor]
     items.sort(key=lambda s: (s.get("column", ""), s.get("name", "")))
     return {"items": items, "count": len(items)}
 
 
-@router.post("/students-db/webhook-subscriptions")
+@router.post("/webhook-subscriptions")
 async def create_webhook_subscription(
     payload: WebhookSubscriptionCreate,
     user: dict = Depends(require_board("students")),
@@ -728,11 +752,10 @@ async def create_webhook_subscription(
         "created_by": user.get("email") or user.get("id"),
     }
     await db.dashboard_webhook_subscriptions.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    return _serialise_subscription(doc)
 
 
-@router.delete("/students-db/webhook-subscriptions/{sub_id}")
+@router.delete("/webhook-subscriptions/{sub_id}")
 async def delete_webhook_subscription(
     sub_id: str,
     user: dict = Depends(require_board("students")),
