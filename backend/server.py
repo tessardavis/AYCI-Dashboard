@@ -294,6 +294,48 @@ async def set_circle_days_webhook(
     return await cva.set_webhook_url(db, body.url)
 
 
+# -------------------------- Private-tier video Slack alerts ----------------
+@api.get("/private-videos/alerts/preview")
+async def preview_private_video_alerts(admin: dict = Depends(require_admin)):
+    """Dry-run both checks — returns who WOULD be alerted, posts nothing."""
+    import private_video_alerts as pva
+    return {
+        "interview_tomorrow": await pva.check_interview_tomorrow(db, dry_run=True),
+        "unanswered_24h": await pva.check_unanswered_24h(db, dry_run=True),
+    }
+
+
+@api.post("/private-videos/alerts/test")
+async def run_private_video_alerts(admin: dict = Depends(require_admin)):
+    """Run both checks for real now (idempotent — won't re-post already-sent)."""
+    import private_video_alerts as pva
+    return {
+        "interview_tomorrow": await pva.check_interview_tomorrow(db),
+        "unanswered_24h": await pva.check_unanswered_24h(db),
+    }
+
+
+@api.get("/private-videos/alerts/webhook")
+async def get_private_tier_webhook(admin: dict = Depends(require_admin)):
+    import private_video_alerts as pva
+    url = await pva.get_webhook_url(db)
+    return {
+        "configured": bool(url),
+        "masked": (url[:36] + "…" + url[-6:]) if url and len(url) > 50 else (url or ""),
+    }
+
+
+@api.post("/private-videos/alerts/webhook")
+async def set_private_tier_webhook(
+    body: CircleDaysWebhookPayload,
+    admin: dict = Depends(require_admin),
+):
+    """Store the #private-tiers Slack webhook URL in MongoDB (no redeploy
+    needed). Pass empty string to clear."""
+    import private_video_alerts as pva
+    return await pva.set_webhook_url(db, body.url)
+
+
 # -------------------------- Slack bot DM (assignee notifications) ----------
 class SlackBotTokenPayload(BaseModel):
     value: str = ""
@@ -1271,6 +1313,45 @@ async def on_startup():
         _circle_video_alerts,
         CronTrigger(minute="*/5", timezone=tz),
         id="circle_video_alerts",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    # Private-tier video Slack alerts → #private-tiers. Two jobs:
+    #  • interview-tomorrow: once daily (08:30 UK) so coaches have the day to
+    #    review videos for students interviewing the next day.
+    #  • unanswered-24h: every 2h, flags videos sitting >24h without being Done.
+    # Both idempotent via `private_video_alerts_sent`.
+    async def _pv_interview_tomorrow():
+        import private_video_alerts as pva
+        try:
+            res = await pva.check_interview_tomorrow(db)
+            if res.get("alerts_posted"):
+                logger.info(f"[scheduler] pv interview-tomorrow: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] pv interview-tomorrow failed: {e}")
+
+    scheduler.add_job(
+        _pv_interview_tomorrow,
+        CronTrigger(hour=8, minute=30, timezone=tz),
+        id="pv_interview_tomorrow",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    async def _pv_unanswered_24h():
+        import private_video_alerts as pva
+        try:
+            res = await pva.check_unanswered_24h(db)
+            if res.get("alerts_posted"):
+                logger.info(f"[scheduler] pv unanswered-24h: {res}")
+        except Exception as e:
+            logger.warning(f"[scheduler] pv unanswered-24h failed: {e}")
+
+    scheduler.add_job(
+        _pv_unanswered_24h,
+        CronTrigger(minute=0, hour="*/2", timezone=tz),
+        id="pv_unanswered_24h",
         replace_existing=True,
         max_instances=1, coalesce=True,
     )
