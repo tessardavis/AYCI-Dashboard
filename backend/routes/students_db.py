@@ -36,14 +36,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["students-db"])
 
 
+# Base tiers that do NOT get a coach private chat. Anything else is treated as
+# a "private" tier (matches interview_eve_dm._is_private_tier).
+_BASE_TIERS = {"academy", "silver", "gold"}
+
+
+def _is_private_tier(tier: Optional[str]) -> bool:
+    parts = [p.strip() for p in (tier or "").lower().split(",") if p.strip()]
+    return any(p not in _BASE_TIERS for p in parts)
+
+
+def _b_and_g_active(boost: Optional[str]) -> bool:
+    """The 'Boost + Go' column carries both customer states (contain 'B&G':
+    B&G / B&G Plus / B&G - Presentation / B&G Plus - Presentation) and
+    sales-pipeline states (Offer Due/Made/Declined, Upgraded) which aren't
+    paying customers. Only the B&G ones need setting up."""
+    return "b&g" in (boost or "").strip().lower()
+
+
+def _needs_private_chat_setup(row: dict) -> bool:
+    """True for a student who should have a private chat link but doesn't —
+    a private-tier OR active Boost & Go student with an empty private_chat_url.
+    Flags students who still need setting up (links/allowances)."""
+    if (row.get("private_chat_url") or "").strip():
+        return False
+    return _is_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))
+
+
 def _slim_row_for_list(row: dict) -> dict:
     """Drop heavy fields (full column dicts) from list responses."""
     keep = (
         "_id", "name", "first_name", "surname", "email", "circle_email",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-        "interview_type", "url", "synced_at", "dashboard_edited_fields",
+        "interview_type", "private_chat_url", "boost_and_go", "url",
+        "synced_at", "dashboard_edited_fields",
     )
-    return {k: row.get(k) for k in keep if k in row}
+    out = {k: row.get(k) for k in keep if k in row}
+    out["needs_setup"] = _needs_private_chat_setup(row)
+    return out
 
 
 @router.get("/students-db")

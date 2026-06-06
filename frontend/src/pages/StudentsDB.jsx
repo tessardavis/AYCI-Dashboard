@@ -46,6 +46,7 @@ export default function StudentsDB() {
   const [tierFilter, setTierFilter] = useState("");
   const [cohortFilter, setCohortFilter] = useState("");
   const [hasInterviewOnly, setHasInterviewOnly] = useState(false);
+  const [needsSetupOnly, setNeedsSetupOnly] = useState(false);
   const [editing, setEditing] = useState(null);
 
   const load = async () => {
@@ -83,13 +84,16 @@ export default function StudentsDB() {
       if (tierFilter && r.tier !== tierFilter) return false;
       if (cohortFilter && r.cohort_joined !== cohortFilter) return false;
       if (hasInterviewOnly && !r.interview_date) return false;
+      if (needsSetupOnly && !r.needs_setup) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly]);
+
+  const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
 
   const onSaved = (updated) => {
     setRows((prev) => prev.map((r) => (r._id === updated._id ? { ...r, ...updated } : r)));
@@ -148,6 +152,17 @@ export default function StudentsDB() {
           />
           Has interview date
         </label>
+        <label
+          className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${needsSetupOnly ? "bg-amber-50 text-amber-800" : "text-[var(--ayci-ink-muted)]"}`}
+          title="Private-tier or Boost & Go students with no private chat link yet"
+        >
+          <input
+            type="checkbox"
+            checked={needsSetupOnly}
+            onChange={(e) => setNeedsSetupOnly(e.target.checked)}
+          />
+          ⚠ Needs setup{needsSetupCount ? ` (${needsSetupCount})` : ""}
+        </label>
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
@@ -183,9 +198,24 @@ export default function StudentsDB() {
                   className="border-b border-slate-100 hover:bg-slate-50/40 cursor-pointer"
                   onClick={() => setEditing(r)}
                 >
-                  <td className="px-3 py-2 font-semibold text-[var(--ayci-ink)]">{r.name || "—"}</td>
+                  <td className="px-3 py-2 font-semibold text-[var(--ayci-ink)]">
+                    {r.name || "—"}
+                    {r.needs_setup && (
+                      <span
+                        className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 align-middle"
+                        title="No private chat link yet — needs setting up"
+                      >
+                        ⚠ Setup
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-[12px] text-[var(--ayci-ink-muted)]">{r.email || "—"}</td>
-                  <td className="px-3 py-2 text-[12px]">{r.tier || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.tier || "—"}
+                    {r.boost_and_go && /b&g/i.test(r.boost_and_go) && (
+                      <span className="ml-1 text-[10px] text-violet-700">· B&amp;G</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">{formatDate(r.interview_date)}</td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>

@@ -73,6 +73,7 @@ COL_INTERVIEW_TYPE = "color_mkr7wahg"
 COL_PRIVATE_CHAT_URL = "text_mky9xzew"
 COL_VIDEO_ALLOWANCE = "numeric_mkxfvz1k"
 COL_VIDEOS_SUBMITTED = "numeric_mkxfq65c"
+COL_BOOST_AND_GO = "color_mkrksc9t"  # "Boost + Go" status (separate from Tier)
 
 
 def _to_int_or_none(s: Optional[str]) -> Optional[int]:
@@ -124,6 +125,7 @@ def _extract_row(item: dict) -> dict:
         "hospital": col_text(COL_HOSPITAL),
         "interview_type": col_text(COL_INTERVIEW_TYPE),
         "private_chat_url": col_text(COL_PRIVATE_CHAT_URL),
+        "boost_and_go": col_text(COL_BOOST_AND_GO),
         "video_allowance": _to_int_or_none(col_text(COL_VIDEO_ALLOWANCE)),
         "videos_submitted": _to_int_or_none(col_text(COL_VIDEOS_SUBMITTED)),
         "columns": columns_by_title,
@@ -141,7 +143,7 @@ PROTECTED_FIELDS = {
     # Scalar columns the mirror extracts from Monday today
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-    "interview_type", "private_chat_url", "video_allowance",
+    "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
     "videos_submitted",
     # Fields not yet extracted by the mirror but tracked on the row when
     # automations (Zapier) write them. Adding new ones here is the standard
