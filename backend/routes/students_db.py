@@ -47,11 +47,12 @@ def _is_private_tier(tier: Optional[str]) -> bool:
 
 
 def _b_and_g_active(boost: Optional[str]) -> bool:
-    """The 'Boost + Go' column carries both customer states (contain 'B&G':
-    B&G / B&G Plus / B&G - Presentation / B&G Plus - Presentation) and
-    sales-pipeline states (Offer Due/Made/Declined, Upgraded) which aren't
-    paying customers. Only the B&G ones need setting up."""
-    return "b&g" in (boost or "").strip().lower()
+    """The 'Boost + Go' column carries customer states — B&G / B&G Plus /
+    B&G - Presentation / B&G Plus - Presentation, plus 'Upgraded' (they did
+    buy B&G; confirmed by Tessa) — and sales-pipeline states (Offer Due/Made/
+    Declined) which are NOT paying customers."""
+    b = (boost or "").strip().lower()
+    return "b&g" in b or b == "upgraded"
 
 
 def _needs_private_chat_setup(row: dict) -> bool:
