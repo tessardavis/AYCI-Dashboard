@@ -106,12 +106,18 @@ export default function StudentsDB() {
   const allowanceMismatch = useMemo(() => rows.filter((r) => r.allowance_flag === "mismatch").length, [rows]);
   const [applyingAllow, setApplyingAllow] = useState(false);
 
+  const [allowanceModalOpen, setAllowanceModalOpen] = useState(false);
+  const missingRows = useMemo(
+    () => rows.filter((r) => r.allowance_flag === "missing"),
+    [rows],
+  );
+
   const applyAllowances = async () => {
-    if (!window.confirm(`Set the expected video allowance on ${allowanceMissing} student(s) who are missing it? (Mismatches are left for you to review.)`)) return;
     setApplyingAllow(true);
     try {
       const { data } = await apiClient.post("/students-db/apply-expected-allowances");
       toast.success(`Set allowance on ${data.set} student${data.set === 1 ? "" : "s"}`);
+      setAllowanceModalOpen(false);
       await load();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to apply allowances");
@@ -157,12 +163,11 @@ export default function StudentsDB() {
             <Button
               variant="outline"
               size="sm"
-              onClick={applyAllowances}
-              disabled={applyingAllow}
+              onClick={() => setAllowanceModalOpen(true)}
               className="border-amber-300 text-amber-800 hover:bg-amber-50"
-              title="Set the expected video allowance on students who are missing it"
+              title="Review and set the expected video allowance on students who are missing it"
             >
-              {applyingAllow ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>⚡</span>}
+              <span>⚡</span>
               <span className="ml-2">Set {allowanceMissing} missing allowance{allowanceMissing === 1 ? "" : "s"}</span>
             </Button>
           )}
@@ -341,6 +346,43 @@ export default function StudentsDB() {
           onClose={() => setEditing(null)}
           onSaved={onSaved}
         />
+      )}
+
+      {allowanceModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => !applyingAllow && setAllowanceModalOpen(false)}>
+          <div className="bg-white rounded-lg max-w-lg w-full mt-12 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-200">
+              <div className="font-display text-lg font-extrabold text-[var(--ayci-ink)]">Set missing video allowances</div>
+              <div className="text-[12px] text-[var(--ayci-ink-muted)] mt-1">
+                These {missingRows.length} student{missingRows.length === 1 ? "" : "s"} have no video allowance set. Applying sets each to the expected value for their tier. Existing numbers and mismatches are <strong>not</strong> touched.
+              </div>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
+              {missingRows.length === 0 ? (
+                <div className="p-4 text-sm text-[var(--ayci-ink-muted)] italic">Nothing to set — no missing allowances.</div>
+              ) : (
+                missingRows.map((r) => (
+                  <div key={r._id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || r.email}</div>
+                      <div className="text-[11px] text-[var(--ayci-ink-muted)]">
+                        {r.tier || "—"}{r.boost_and_go && /b&g/i.test(r.boost_and_go) ? " · B&G" : ""}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold text-emerald-700 shrink-0">→ {r.video_allowance_expected}</div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-4 flex justify-end gap-2 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setAllowanceModalOpen(false)} disabled={applyingAllow}>Cancel</Button>
+              <Button onClick={applyAllowances} disabled={applyingAllow || missingRows.length === 0}>
+                {applyingAllow && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Apply to {missingRows.length}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
