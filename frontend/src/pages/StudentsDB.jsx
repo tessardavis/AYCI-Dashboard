@@ -115,6 +115,21 @@ export default function StudentsDB() {
     }
   };
 
+  const [revertingAllow, setRevertingAllow] = useState(false);
+  const revertAllowances = async () => {
+    if (!window.confirm("Undo the recent allowance fill? This clears the auto-set allowances back to empty (only the ones you just applied).")) return;
+    setRevertingAllow(true);
+    try {
+      const { data } = await apiClient.post("/students-db/revert-applied-allowances");
+      toast.success(`Reverted ${data.reverted} allowance${data.reverted === 1 ? "" : "s"} back to empty`);
+      await load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to undo");
+    } finally {
+      setRevertingAllow(false);
+    }
+  };
+
   const onSaved = (updated) => {
     setRows((prev) => prev.map((r) => (r._id === updated._id ? { ...r, ...updated } : r)));
     setEditing(null);
@@ -146,6 +161,16 @@ export default function StudentsDB() {
               <span className="ml-2">Set {allowanceMissing} missing allowance{allowanceMissing === 1 ? "" : "s"}</span>
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={revertAllowances}
+            disabled={revertingAllow}
+            title="Undo a recent 'set missing allowances' — clears the just-applied allowances back to empty"
+          >
+            {revertingAllow ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>↩</span>}
+            <span className="ml-2">Undo allowance fill</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
             {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             <span className="ml-2">Refresh</span>

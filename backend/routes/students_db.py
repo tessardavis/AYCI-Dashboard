@@ -21,7 +21,7 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -222,6 +222,45 @@ async def apply_expected_allowances(user: dict = Depends(require_board("students
         )
         applied.append({"id": r["_id"], "name": r.get("name"), "set_to": exp})
     return {"ok": True, "set": len(applied), "applied": applied[:300]}
+
+
+@router.post("/students-db/revert-applied-allowances")
+async def revert_applied_allowances(user: dict = Depends(require_board("students"))):
+    """Undo a recent apply-expected-allowances: for rows this user set in the
+    last 6h where video_allowance still equals the expected value, clear it
+    back to empty and un-pin it (so it shows as 'missing' again, exactly as
+    before). Only touches the auto-applied ones — never manual edits to other
+    values."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    actor = user.get("email") or user.get("id")
+    now = datetime.now(timezone.utc)
+    reverted = []
+    async for r in db.academy_members.find(
+        {"dashboard_edited_fields": "video_allowance"},
+        {"columns": 0, "columns_by_id": 0},
+    ):
+        ea = r.get("dashboard_edited_at")
+        if not isinstance(ea, datetime):
+            continue
+        if ea.tzinfo is None:
+            ea = ea.replace(tzinfo=timezone.utc)
+        if ea < cutoff or (r.get("dashboard_edited_by") != actor):
+            continue
+        exp = expected_video_allowance(r.get("tier"), r.get("boost_and_go"))
+        if exp is None or r.get("video_allowance") != exp:
+            continue  # not an untouched auto-applied value — leave it
+        new_protected = sorted(set(r.get("dashboard_edited_fields") or []) - {"video_allowance"})
+        await db.academy_members.update_one(
+            {"_id": r["_id"]},
+            {"$set": {
+                "video_allowance": None,
+                "dashboard_edited_fields": new_protected,
+                "dashboard_edited_at": now,
+                "dashboard_edited_by": actor,
+            }},
+        )
+        reverted.append({"id": r["_id"], "name": r.get("name"), "was": exp})
+    return {"ok": True, "reverted": len(reverted), "items": reverted[:300]}
 
 
 @router.get("/students-db/{monday_item_id}")
