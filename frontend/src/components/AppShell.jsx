@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video, Webhook } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video, Webhook, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
@@ -75,17 +75,20 @@ export function userCanAccess(user, board) {
 }
 
 // Single nav row — used both for top-level items and inside groups.
-function NavItem({ item, indent = false }) {
+// `collapsed` renders an icon-only row (centred, tooltip via title).
+function NavItem({ item, indent = false, collapsed = false }) {
   const { to, label, icon: Icon, testid, end } = item;
   return (
     <PrefetchNavLink
       to={to}
       end={!!end || to === "/"}
       data-testid={testid}
+      title={collapsed ? label : undefined}
       className={({ isActive }) =>
         [
-          "group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all duration-200",
-          indent ? "pl-6" : "",
+          "group flex items-center rounded-md text-sm transition-all duration-200",
+          collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+          indent && !collapsed ? "pl-6" : "",
           isActive
             ? "bg-white/10 text-white font-medium"
             : "text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5",
@@ -94,12 +97,14 @@ function NavItem({ item, indent = false }) {
     >
       {({ isActive }) => (
         <>
-          <span
-            className="w-0.5 h-5 rounded-full transition-all"
-            style={{ backgroundColor: isActive ? "var(--ayci-accent)" : "transparent" }}
-          />
-          <Icon className="w-4 h-4" />
-          <span>{label}</span>
+          {!collapsed && (
+            <span
+              className="w-0.5 h-5 rounded-full transition-all"
+              style={{ backgroundColor: isActive ? "var(--ayci-accent)" : "transparent" }}
+            />
+          )}
+          <Icon className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>{label}</span>}
         </>
       )}
     </PrefetchNavLink>
@@ -177,6 +182,30 @@ export default function AppShell() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Desktop: collapse the sidebar to an icon-only rail. Persisted so it
+  // stays how the user left it. (Mobile drawer always shows full labels.)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return window.localStorage.getItem("ayci.nav.collapsed") === "1"; }
+    catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed((v) => {
+    const nv = !v;
+    try { window.localStorage.setItem("ayci.nav.collapsed", nv ? "1" : "0"); } catch { /* ignore */ }
+    return nv;
+  });
+
+  // Icon-rail content only when collapsed AND not showing the mobile drawer
+  // (the mobile slide-in always shows full labels).
+  const railMode = collapsed && !mobileOpen;
+
+  // Flat list of every nav item the user can see — used in collapsed mode
+  // (group headers don't make sense as icons).
+  const flatItems = NAV_GROUPS.flatMap((node) =>
+    node.type === "item"
+      ? (userCanAccess(user, node.board) ? [node] : [])
+      : node.items.filter((it) => userCanAccess(user, it.board)),
+  );
+
   // Close drawer whenever the route changes (e.g. user taps a nav link)
   const closeDrawer = () => setMobileOpen(false);
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
@@ -220,8 +249,9 @@ export default function AppShell() {
       <aside
         className={[
           "shrink-0 flex flex-col",
-          // Desktop: sticky 256px column
-          "lg:w-64 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          // Desktop: sticky column — 256px expanded, 64px icon-rail collapsed
+          collapsed ? "lg:w-16" : "lg:w-64",
+          "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:transition-[width] lg:duration-200",
           // Mobile: fixed slide-in drawer. Use dynamic viewport units (dvh)
           // so iOS Safari's URL bar doesn't push the bottom buttons (My
           // profile / Sign out) below the visible area.
@@ -240,10 +270,10 @@ export default function AppShell() {
         >
           <X className="w-5 h-5" />
         </button>
-        <div className="px-6 pt-8 pb-6">
+        <div className={railMode ? "px-2 pt-8 pb-4 flex justify-center" : "px-6 pt-8 pb-6"}>
           <div className="flex items-center gap-3">
             <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 p-1.5"
+              className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/10 p-1.5 shrink-0"
               aria-hidden="true"
             >
               <img
@@ -253,66 +283,90 @@ export default function AppShell() {
                 style={{ filter: "brightness(0) invert(1)" }}
               />
             </div>
-            <div>
-              <div className="text-white font-display font-bold tracking-tight leading-tight">AYCI Academy</div>
-              <div className="text-[11px] uppercase tracking-widest text-[var(--ayci-sidebar-muted)] font-subhead">Team Dashboard</div>
-            </div>
+            {!railMode && (
+              <div>
+                <div className="text-white font-display font-bold tracking-tight leading-tight">AYCI Academy</div>
+                <div className="text-[11px] uppercase tracking-widest text-[var(--ayci-sidebar-muted)] font-subhead">Team Dashboard</div>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Desktop collapse/expand toggle */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          data-testid="sidebar-collapse-toggle"
+          title={collapsed ? "Expand menu" : "Collapse menu"}
+          className={[
+            "hidden lg:flex items-center mx-3 mb-2 px-3 py-1.5 rounded-md text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all",
+            collapsed ? "justify-center" : "justify-end gap-1",
+          ].join(" ")}
+        >
+          {collapsed ? <ChevronsRight className="w-4 h-4" /> : <><ChevronsLeft className="w-4 h-4" /><span className="text-[11px]">Collapse</span></>}
+        </button>
+
         <nav className="flex-1 overflow-y-auto px-3 space-y-1 min-h-0">
-          {NAV_GROUPS.map((node, i) => {
-            if (node.type === "item") {
-              if (!userCanAccess(user, node.board)) return null;
-              return <NavItem key={node.to} item={node} />;
-            }
-            // group
-            const visibleItems = node.items.filter((it) => userCanAccess(user, it.board));
-            if (visibleItems.length === 0) return null;
-            return (
-              <NavGroup
-                key={node.id}
-                id={node.id}
-                label={node.label}
-                defaultOpen={node.defaultOpen}
-                items={visibleItems}
-                currentPath={location.pathname}
-              />
-            );
-          })}
+          {railMode ? (
+            // Icon-only rail: flat list, no group headers.
+            flatItems.map((it) => <NavItem key={it.to} item={it} collapsed />)
+          ) : (
+            NAV_GROUPS.map((node) => {
+              if (node.type === "item") {
+                if (!userCanAccess(user, node.board)) return null;
+                return <NavItem key={node.to} item={node} />;
+              }
+              const visibleItems = node.items.filter((it) => userCanAccess(user, it.board));
+              if (visibleItems.length === 0) return null;
+              return (
+                <NavGroup
+                  key={node.id}
+                  id={node.id}
+                  label={node.label}
+                  defaultOpen={node.defaultOpen}
+                  items={visibleItems}
+                  currentPath={location.pathname}
+                />
+              );
+            })
+          )}
         </nav>
 
-        <div className="px-3 pb-6 pt-4 border-t border-white/5 mx-3">
-          <div className="px-3 py-2 mb-2">
-            <div className="text-white text-sm font-medium truncate" data-testid="sidebar-user-name">
-              {user?.name || "—"}
+        <div className={`pb-6 pt-4 border-t border-white/5 mx-3 ${railMode ? "px-1" : "px-3"}`}>
+          {!railMode && (
+            <div className="px-3 py-2 mb-2">
+              <div className="text-white text-sm font-medium truncate" data-testid="sidebar-user-name">
+                {user?.name || "—"}
+              </div>
+              <div className="text-[var(--ayci-sidebar-muted)] text-xs capitalize">{user?.role || ""}</div>
             </div>
-            <div className="text-[var(--ayci-sidebar-muted)] text-xs capitalize">{user?.role || ""}</div>
-          </div>
+          )}
           <button
             onClick={() => navigate("/coach-activity")}
             data-testid="sidebar-sla-bell"
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
+            title={railMode ? "SLA breaches" : undefined}
+            className={`w-full flex items-center rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all ${railMode ? "justify-center px-2 py-2" : "gap-2 px-3 py-2"}`}
           >
-            <Bell className="w-4 h-4" />
-            <span className="flex-1 text-left">SLA breaches</span>
-            <SLACountBadge user={user} />
+            <Bell className="w-4 h-4 shrink-0" />
+            {!railMode && <><span className="flex-1 text-left">SLA breaches</span><SLACountBadge user={user} /></>}
           </button>
           <button
             onClick={() => navigate("/profile")}
             data-testid="sidebar-profile-btn"
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
+            title={railMode ? "My profile" : undefined}
+            className={`w-full flex items-center rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all ${railMode ? "justify-center px-2 py-2" : "gap-2 px-3 py-2"}`}
           >
-            <UserCircle2 className="w-4 h-4" />
-            My profile
+            <UserCircle2 className="w-4 h-4 shrink-0" />
+            {!railMode && "My profile"}
           </button>
           <button
             onClick={handleLogout}
             data-testid="sidebar-logout-btn"
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all"
+            title={railMode ? "Sign out" : undefined}
+            className={`w-full flex items-center rounded-md text-sm text-[var(--ayci-sidebar-muted)] hover:text-white hover:bg-white/5 transition-all ${railMode ? "justify-center px-2 py-2" : "gap-2 px-3 py-2"}`}
           >
-            <LogOut className="w-4 h-4" />
-            Sign out
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!railMode && "Sign out"}
           </button>
         </div>
       </aside>
