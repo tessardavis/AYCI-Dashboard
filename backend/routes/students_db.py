@@ -36,14 +36,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["students-db"])
 
 
-# Base tiers that do NOT get a coach private chat. Anything else is treated as
-# a "private" tier (matches interview_eve_dm._is_private_tier).
-_BASE_TIERS = {"academy", "silver", "gold"}
+# CURRENT private products that get set up (private chat + allowance). Used for
+# the "needs setup" flag. Deliberately a positive allow-list so deprecated/old
+# tiers (Platinum, Academy/Upgrade 1:1, Gold/Platinum Legacy Upgrade) are NOT
+# flagged — confirmed with Tessa 2026-06-06.
+_CURRENT_PRIVATE_TIERS = {
+    "academy private plus", "upgrade private plus",
+    "vip", "upgrade vip",
+    "boost & go", "boost & go plus",
+}
 
 
-def _is_private_tier(tier: Optional[str]) -> bool:
+def _is_current_private_tier(tier: Optional[str]) -> bool:
     parts = [p.strip() for p in (tier or "").lower().split(",") if p.strip()]
-    return any(p not in _BASE_TIERS for p in parts)
+    return any(p in _CURRENT_PRIVATE_TIERS for p in parts)
 
 
 def _b_and_g_active(boost: Optional[str]) -> bool:
@@ -95,7 +101,7 @@ def _needs_private_chat_setup(row: dict) -> bool:
     setting up — i.e. missing their private chat link OR missing their video
     allowance. (A wrong-but-present allowance is a 'mismatch', surfaced
     separately, not auto-changed.)"""
-    if not (_is_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
+    if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
         return False
     no_chat = not (row.get("private_chat_url") or "").strip()
     return no_chat or _allowance_flag(row) == "missing"
