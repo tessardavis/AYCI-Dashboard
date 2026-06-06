@@ -49,6 +49,7 @@ export default function StudentsDB() {
   const [hasInterviewOnly, setHasInterviewOnly] = useState(false);
   const [needsSetupOnly, setNeedsSetupOnly] = useState(false);
   const [mismatchOnly, setMismatchOnly] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
   const load = async () => {
@@ -95,6 +96,10 @@ export default function StudentsDB() {
       return true;
     });
   }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly]);
+
+  // Reset the visible window whenever the filter/search changes, so a new
+  // query shows from the top (and keeps the DOM light).
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly]);
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
   const allowanceMissing = useMemo(() => rows.filter((r) => r.allowance_flag === "missing").length, [rows]);
@@ -260,7 +265,7 @@ export default function StudentsDB() {
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 1000).map((r) => (
+              {filtered.slice(0, visibleCount).map((r) => (
                 <tr
                   key={r._id}
                   className="border-b border-slate-100 hover:bg-slate-50/40 cursor-pointer"
@@ -313,9 +318,18 @@ export default function StudentsDB() {
               ))}
             </tbody>
           </table>
-          {filtered.length > 1000 && (
-            <div className="px-3 py-2 text-[11px] text-[var(--ayci-ink-muted)] italic border-t border-slate-100">
-              Showing first 1,000 of {filtered.length} matches. Narrow the search to see specific students.
+          {filtered.length > visibleCount && (
+            <div className="px-3 py-2 flex items-center justify-between gap-3 border-t border-slate-100">
+              <span className="text-[11px] text-[var(--ayci-ink-muted)] italic">
+                Showing {visibleCount} of {filtered.length} matches — search/filter to narrow, or load more.
+              </span>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((n) => n + 100)}
+                className="text-xs px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 font-semibold text-slate-700"
+              >
+                Load 100 more
+              </button>
             </div>
           )}
         </div>
