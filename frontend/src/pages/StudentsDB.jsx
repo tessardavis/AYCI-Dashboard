@@ -26,6 +26,7 @@ const EDITABLE_FIELDS = [
   { key: "hospital",       label: "Hospital" },
   { key: "interview_type", label: "Interview type" },
   { key: "private_chat_url", label: "Private chat URL" },
+  { key: "video_allowance", label: "Video allowance", type: "number" },
 ];
 
 function formatDate(iso) {
@@ -47,6 +48,7 @@ export default function StudentsDB() {
   const [cohortFilter, setCohortFilter] = useState("");
   const [hasInterviewOnly, setHasInterviewOnly] = useState(false);
   const [needsSetupOnly, setNeedsSetupOnly] = useState(false);
+  const [mismatchOnly, setMismatchOnly] = useState(false);
   const [editing, setEditing] = useState(null);
 
   const load = async () => {
@@ -85,15 +87,33 @@ export default function StudentsDB() {
       if (cohortFilter && r.cohort_joined !== cohortFilter) return false;
       if (hasInterviewOnly && !r.interview_date) return false;
       if (needsSetupOnly && !r.needs_setup) return false;
+      if (mismatchOnly && r.allowance_flag !== "mismatch") return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly]);
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
+  const allowanceMissing = useMemo(() => rows.filter((r) => r.allowance_flag === "missing").length, [rows]);
+  const allowanceMismatch = useMemo(() => rows.filter((r) => r.allowance_flag === "mismatch").length, [rows]);
+  const [applyingAllow, setApplyingAllow] = useState(false);
+
+  const applyAllowances = async () => {
+    if (!window.confirm(`Set the expected video allowance on ${allowanceMissing} student(s) who are missing it? (Mismatches are left for you to review.)`)) return;
+    setApplyingAllow(true);
+    try {
+      const { data } = await apiClient.post("/students-db/apply-expected-allowances");
+      toast.success(`Set allowance on ${data.set} student${data.set === 1 ? "" : "s"}`);
+      await load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to apply allowances");
+    } finally {
+      setApplyingAllow(false);
+    }
+  };
 
   const onSaved = (updated) => {
     setRows((prev) => prev.map((r) => (r._id === updated._id ? { ...r, ...updated } : r)));
@@ -112,10 +132,25 @@ export default function StudentsDB() {
             Editable copy of the Academy Members board. Edits made here override the 15-min Monday sync.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
-          {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          <span className="ml-2">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {allowanceMissing > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={applyAllowances}
+              disabled={applyingAllow}
+              className="border-amber-300 text-amber-800 hover:bg-amber-50"
+              title="Set the expected video allowance on students who are missing it"
+            >
+              {applyingAllow ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>⚡</span>}
+              <span className="ml-2">Set {allowanceMissing} missing allowance{allowanceMissing === 1 ? "" : "s"}</span>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
+            {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            <span className="ml-2">Refresh</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -163,6 +198,13 @@ export default function StudentsDB() {
           />
           ⚠ Needs setup{needsSetupCount ? ` (${needsSetupCount})` : ""}
         </label>
+        {allowanceMismatch > 0 && (
+          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${mismatchOnly ? "bg-red-50 text-red-700" : "text-[var(--ayci-ink-muted)]"}`}
+                 title="Students whose video allowance differs from the expected value — review each">
+            <input type="checkbox" checked={mismatchOnly} onChange={(e) => setMismatchOnly(e.target.checked)} />
+            Allowance mismatch ({allowanceMismatch})
+          </label>
+        )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
@@ -188,6 +230,7 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Cohort</th>
                 <th className="px-3 py-2 font-semibold">Interview</th>
                 <th className="px-3 py-2 font-semibold">Speciality</th>
+                <th className="px-3 py-2 font-semibold">Videos</th>
                 <th className="px-3 py-2 font-semibold w-16"></th>
               </tr>
             </thead>
@@ -219,6 +262,19 @@ export default function StudentsDB() {
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">{formatDate(r.interview_date)}</td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.video_allowance_expected == null ? (
+                      <span className="text-slate-400">—</span>
+                    ) : r.allowance_flag === "ok" ? (
+                      <span className="text-emerald-700">{r.video_allowance}</span>
+                    ) : r.allowance_flag === "missing" ? (
+                      <span className="text-amber-700" title={`Should be ${r.video_allowance_expected}`}>— / {r.video_allowance_expected}</span>
+                    ) : (
+                      <span className="text-red-600 font-semibold" title={`Expected ${r.video_allowance_expected}`}>
+                        {r.video_allowance} / {r.video_allowance_expected}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
@@ -328,8 +384,8 @@ function EditModal({ row, onClose, onSaved }) {
                 )}
               </label>
               <Input
-                type={f.key === "interview_date" ? "date" : "text"}
-                value={form[f.key] || ""}
+                type={f.type || (f.key === "interview_date" ? "date" : "text")}
+                value={form[f.key] ?? ""}
                 onChange={(e) => setField(f.key, e.target.value)}
                 className="text-sm"
               />

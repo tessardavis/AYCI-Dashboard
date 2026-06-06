@@ -55,13 +55,50 @@ def _b_and_g_active(boost: Optional[str]) -> bool:
     return "b&g" in b or b == "upgraded"
 
 
+# Expected private video allowance per tier / Boost & Go level (Tessa, 2026-06-06).
+_VIDEO_ALLOWANCE_BY_TIER = {
+    "academy private plus": 15, "upgrade private plus": 15,
+    "vip": 30, "upgrade vip": 30,
+    "boost & go": 5, "boost & go plus": 10,
+}
+
+
+def expected_video_allowance(tier: Optional[str], boost: Optional[str]) -> Optional[int]:
+    """Expected private video allowance, or None if the tier/B&G doesn't have a
+    defined allowance (e.g. base Academy, or 1:1/Platinum — not yet specified)."""
+    t = (tier or "").strip().lower()
+    if t in _VIDEO_ALLOWANCE_BY_TIER:
+        return _VIDEO_ALLOWANCE_BY_TIER[t]
+    b = (boost or "").strip().lower()
+    if "b&g" in b or b == "upgraded":
+        return 10 if "plus" in b else 5
+    return None
+
+
+def _allowance_flag(row: dict) -> Optional[str]:
+    """'missing' (expected but unset), 'mismatch' (set but ≠ expected),
+    'ok', or None (no expected allowance defined for this student)."""
+    exp = expected_video_allowance(row.get("tier"), row.get("boost_and_go"))
+    if exp is None:
+        return None
+    cur = row.get("video_allowance")
+    if cur in (None, ""):
+        return "missing"
+    try:
+        return "ok" if int(cur) == exp else "mismatch"
+    except (TypeError, ValueError):
+        return "mismatch"
+
+
 def _needs_private_chat_setup(row: dict) -> bool:
-    """True for a student who should have a private chat link but doesn't —
-    a private-tier OR active Boost & Go student with an empty private_chat_url.
-    Flags students who still need setting up (links/allowances)."""
-    if (row.get("private_chat_url") or "").strip():
+    """True for a private-tier / active Boost & Go student who still needs
+    setting up — i.e. missing their private chat link OR missing their video
+    allowance. (A wrong-but-present allowance is a 'mismatch', surfaced
+    separately, not auto-changed.)"""
+    if not (_is_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
         return False
-    return _is_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))
+    no_chat = not (row.get("private_chat_url") or "").strip()
+    return no_chat or _allowance_flag(row) == "missing"
 
 
 def _slim_row_for_list(row: dict) -> dict:
@@ -69,11 +106,13 @@ def _slim_row_for_list(row: dict) -> dict:
     keep = (
         "_id", "name", "first_name", "surname", "email", "circle_email",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-        "interview_type", "private_chat_url", "boost_and_go", "url",
-        "synced_at", "dashboard_edited_fields",
+        "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
+        "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}
     out["needs_setup"] = _needs_private_chat_setup(row)
+    out["video_allowance_expected"] = expected_video_allowance(row.get("tier"), row.get("boost_and_go"))
+    out["allowance_flag"] = _allowance_flag(row)
     return out
 
 
@@ -134,6 +173,57 @@ async def list_students(
     return {"items": rows, "count": len(rows)}
 
 
+# Declared BEFORE /students-db/{monday_item_id} so the static paths aren't
+# shadowed by the id route (Starlette matches in declaration order).
+@router.get("/students-db/allowance-audit")
+async def allowance_audit(user: dict = Depends(require_board("students"))):
+    """Private/B&G students whose video allowance is MISSING or MISMATCHED vs
+    the expected per-tier value (PP 15, VIP 30, B&G 5, B&G Plus 10)."""
+    missing, mismatch = [], []
+    async for r in db.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        flag = _allowance_flag(r)
+        if flag not in ("missing", "mismatch"):
+            continue
+        entry = {
+            "id": r["_id"], "name": r.get("name"), "email": r.get("email"),
+            "tier": r.get("tier"), "boost_and_go": r.get("boost_and_go"),
+            "current": r.get("video_allowance"),
+            "expected": expected_video_allowance(r.get("tier"), r.get("boost_and_go")),
+        }
+        (missing if flag == "missing" else mismatch).append(entry)
+    missing.sort(key=lambda x: (x.get("name") or ""))
+    mismatch.sort(key=lambda x: (x.get("name") or ""))
+    return {"missing": missing, "mismatch": mismatch,
+            "counts": {"missing": len(missing), "mismatch": len(mismatch)}}
+
+
+@router.post("/students-db/apply-expected-allowances")
+async def apply_expected_allowances(user: dict = Depends(require_board("students"))):
+    """Set video_allowance = expected for every student whose allowance is
+    MISSING (only). Never overwrites a present value — mismatches are left for
+    review. Pins video_allowance as dashboard-owned so the sync won't clobber."""
+    now = datetime.now(timezone.utc)
+    applied = []
+    async for r in db.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        if _allowance_flag(r) != "missing":
+            continue
+        exp = expected_video_allowance(r.get("tier"), r.get("boost_and_go"))
+        if exp is None:
+            continue
+        new_protected = sorted(set(r.get("dashboard_edited_fields") or []) | {"video_allowance"})
+        await db.academy_members.update_one(
+            {"_id": r["_id"]},
+            {"$set": {
+                "video_allowance": exp,
+                "dashboard_edited_fields": new_protected,
+                "dashboard_edited_at": now,
+                "dashboard_edited_by": user.get("email") or "dashboard",
+            }},
+        )
+        applied.append({"id": r["_id"], "name": r.get("name"), "set_to": exp})
+    return {"ok": True, "set": len(applied), "applied": applied[:300]}
+
+
 @router.get("/students-db/{monday_item_id}")
 async def get_student(
     monday_item_id: str,
@@ -154,7 +244,7 @@ async def get_student(
 EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-    "interview_type", "private_chat_url",
+    "interview_type", "private_chat_url", "video_allowance",
 }
 
 
@@ -173,6 +263,7 @@ class StudentPatch(BaseModel):
     hospital: Optional[str] = None
     interview_type: Optional[str] = None
     private_chat_url: Optional[str] = None
+    video_allowance: Optional[int] = None
 
     class Config:
         extra = "forbid"  # reject unknown keys outright
