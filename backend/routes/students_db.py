@@ -188,7 +188,27 @@ async def list_students(
         # students past it (board is ~2.1k), so they couldn't be searched.
         .limit(min(limit, 10000))
     )
-    rows = [_slim_row_for_list(r) async for r in cursor]
+    # How many private videos each student has actually submitted (their
+    # "used" count) — one aggregation over the submissions collection, keyed by
+    # the (lowercased) email it was submitted under.
+    used_counts: dict[str, int] = {}
+    try:
+        async for g in db.private_video_submissions.aggregate(
+            [{"$group": {"_id": "$email", "n": {"$sum": 1}}}]
+        ):
+            em = (g.get("_id") or "")
+            if em:
+                used_counts[str(em).strip().lower()] = g.get("n", 0)
+    except Exception as e:
+        logger.info(f"[students-db] videos-used aggregate skipped: {e}")
+
+    rows = []
+    async for r in cursor:
+        slim = _slim_row_for_list(r)
+        em = (r.get("email") or "").strip().lower()
+        ce = (r.get("circle_email") or "").strip().lower()
+        slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
+        rows.append(slim)
     return {"items": rows, "count": len(rows)}
 
 

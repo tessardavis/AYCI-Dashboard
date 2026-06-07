@@ -308,7 +308,8 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Cohort</th>
                 <th className="px-3 py-2 font-semibold">Interview</th>
                 <th className="px-3 py-2 font-semibold">Speciality</th>
-                <th className="px-3 py-2 font-semibold">Videos</th>
+                <th className="px-3 py-2 font-semibold">Used</th>
+                <th className="px-3 py-2 font-semibold">Allowance</th>
                 <th className="px-3 py-2 font-semibold">Private chat</th>
                 <th className="px-3 py-2 font-semibold w-16"></th>
               </tr>
@@ -349,6 +350,20 @@ export default function StudentsDB() {
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">{formatDate(r.interview_date)}</td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {(() => {
+                      const used = r.videos_used || 0;
+                      const atLimit = r.video_allowance != null && r.video_allowance !== "" && used >= Number(r.video_allowance);
+                      return (
+                        <span
+                          className={atLimit ? "text-amber-700 font-semibold" : "text-slate-600"}
+                          title={r.video_allowance != null && r.video_allowance !== "" ? `${used} used of ${r.video_allowance}` : `${used} submitted`}
+                        >
+                          {used}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.video_allowance_expected == null ? (
                       <span className="text-slate-400">—</span>
