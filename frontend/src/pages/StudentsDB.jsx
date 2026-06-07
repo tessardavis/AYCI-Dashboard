@@ -49,6 +49,7 @@ export default function StudentsDB() {
   const [hasInterviewOnly, setHasInterviewOnly] = useState(false);
   const [needsSetupOnly, setNeedsSetupOnly] = useState(false);
   const [mismatchOnly, setMismatchOnly] = useState(false);
+  const [dismissedOnly, setDismissedOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -89,17 +90,45 @@ export default function StudentsDB() {
       if (hasInterviewOnly && !r.interview_date) return false;
       if (needsSetupOnly && !r.needs_setup) return false;
       if (mismatchOnly && r.allowance_flag !== "mismatch") return false;
+      if (dismissedOnly && !r.setup_not_needed) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly]);
 
   // Reset the visible window whenever the filter/search changes, so a new
   // query shows from the top (and keeps the DOM light).
-  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly]);
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly]);
+
+  const dismissedCount = useMemo(() => rows.filter((r) => r.setup_not_needed).length, [rows]);
+
+  // Mark a student's setup as not-needed (or undo). Optimistically updates the
+  // row so it drops off / returns to the "Needs setup" list immediately.
+  const toggleSetupNotNeeded = async (row, value) => {
+    let reason = row.setup_not_needed_reason || "";
+    if (value) {
+      const r = window.prompt("Why is setup not needed for this student? (optional)", reason);
+      if (r === null) return; // cancelled
+      reason = r.trim();
+    } else {
+      reason = "";
+    }
+    try {
+      await apiClient.patch(`/students-db/${row._id}`, {
+        setup_not_needed: value,
+        setup_not_needed_reason: reason || null,
+      });
+      setRows((prev) => prev.map((r) => (r._id === row._id
+        ? { ...r, setup_not_needed: value, setup_not_needed_reason: reason || null, needs_setup: value ? false : true }
+        : r)));
+      toast.success(value ? "Marked as not needed" : "Back on the setup list");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Update failed");
+    }
+  };
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
   const allowanceMissing = useMemo(() => rows.filter((r) => r.allowance_flag === "missing").length, [rows]);
@@ -240,6 +269,13 @@ export default function StudentsDB() {
             Allowance mismatch ({allowanceMismatch})
           </label>
         )}
+        {dismissedCount > 0 && (
+          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${dismissedOnly ? "bg-slate-200 text-slate-700" : "text-[var(--ayci-ink-muted)]"}`}
+                 title="Students you've marked as 'setup not needed'">
+            <input type="checkbox" checked={dismissedOnly} onChange={(e) => setDismissedOnly(e.target.checked)} />
+            Not needed ({dismissedCount})
+          </label>
+        )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
@@ -287,6 +323,14 @@ export default function StudentsDB() {
                         ⚠ Setup
                       </span>
                     )}
+                    {r.setup_not_needed && (
+                      <span
+                        className="ml-2 inline-block text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 align-middle"
+                        title={r.setup_not_needed_reason ? `Setup not needed — ${r.setup_not_needed_reason}` : "Setup not needed"}
+                      >
+                        setup n/a
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-[12px] text-[var(--ayci-ink-muted)]">{r.email || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">
@@ -323,11 +367,33 @@ export default function StudentsDB() {
                       >
                         Open ↗
                       </a>
+                    ) : r.setup_not_needed ? (
+                      <span className="text-slate-400" title={r.setup_not_needed_reason || "Setup not needed"}>n/a</span>
                     ) : (
                       <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {r.needs_setup && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleSetupNotNeeded(r, true); }}
+                        className="text-xs px-2 py-0.5 mr-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-500"
+                        title="Mark as 'setup not needed' so it stops being flagged"
+                      >
+                        Not needed
+                      </button>
+                    )}
+                    {r.setup_not_needed && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleSetupNotNeeded(r, false); }}
+                        className="text-xs px-2 py-0.5 mr-1 rounded border border-slate-200 hover:bg-slate-100 text-slate-500"
+                        title="Put back on the setup list"
+                      >
+                        Needed
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setEditing(r); }}

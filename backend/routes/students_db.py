@@ -109,6 +109,8 @@ def _needs_private_chat_setup(row: dict) -> bool:
     setting up — i.e. missing their private chat link OR missing their video
     allowance. (A wrong-but-present allowance is a 'mismatch', surfaced
     separately, not auto-changed.)"""
+    if row.get("setup_not_needed"):
+        return False  # manually dismissed — intentionally fine to leave empty
     if _is_boss(row):
         return False  # landed their job — finished with us, no setup needed
     if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
@@ -123,6 +125,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "_id", "name", "first_name", "surname", "email", "circle_email",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
         "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
+        "setup_not_needed", "setup_not_needed_reason",
         "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}
@@ -300,6 +303,7 @@ EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "video_allowance",
+    "setup_not_needed", "setup_not_needed_reason",
 }
 
 
@@ -319,6 +323,8 @@ class StudentPatch(BaseModel):
     interview_type: Optional[str] = None
     private_chat_url: Optional[str] = None
     video_allowance: Optional[int] = None
+    setup_not_needed: Optional[bool] = None
+    setup_not_needed_reason: Optional[str] = None
 
     class Config:
         extra = "forbid"  # reject unknown keys outright
