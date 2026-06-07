@@ -66,6 +66,8 @@ COL_FIRST_NAME = "text_mkrmj089"
 COL_SURNAME = "text_mkrm6m7v"
 COL_TIER = "dropdown_mkqxgqbq"
 COL_COHORT_JOINED = "dropdown_mkqxhw8p"
+COL_COHORT_START = "date_mkrd9c8n"   # "Cohort Start Date"
+COL_COHORT_END = "date_mkrdzaat"     # "Cohort End Date"
 COL_INTERVIEW_DATE = "date_mkr7rdv7"
 COL_SPECIALITY = "dropdown_mkqxk94m"
 COL_HOSPITAL = "text_mkrqzraa"
@@ -120,6 +122,8 @@ def _extract_row(item: dict) -> dict:
         "surname": col_text(COL_SURNAME),
         "tier": col_text(COL_TIER),
         "cohort_joined": col_text(COL_COHORT_JOINED),
+        "cohort_start_date": col_text(COL_COHORT_START),
+        "cohort_end_date": col_text(COL_COHORT_END),
         "interview_date": col_text(COL_INTERVIEW_DATE),
         "speciality": col_text(COL_SPECIALITY),
         "hospital": col_text(COL_HOSPITAL),
@@ -142,7 +146,8 @@ def _extract_row(item: dict) -> dict:
 PROTECTED_FIELDS = {
     # Scalar columns the mirror extracts from Monday today
     "name", "first_name", "surname", "email", "circle_email",
-    "tier", "cohort_joined", "interview_date", "speciality", "hospital",
+    "tier", "cohort_joined", "cohort_start_date", "cohort_end_date",
+    "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
     "videos_submitted",
     # Fields not yet extracted by the mirror but tracked on the row when
