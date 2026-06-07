@@ -266,6 +266,7 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Interview</th>
                 <th className="px-3 py-2 font-semibold">Speciality</th>
                 <th className="px-3 py-2 font-semibold">Videos</th>
+                <th className="px-3 py-2 font-semibold">Private chat</th>
                 <th className="px-3 py-2 font-semibold w-16"></th>
               </tr>
             </thead>
@@ -308,6 +309,22 @@ export default function StudentsDB() {
                       <span className="text-red-600 font-semibold" title={`Expected ${r.video_allowance_expected}`}>
                         {r.video_allowance} / {r.video_allowance_expected}
                       </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.private_chat_url ? (
+                      <a
+                        href={r.private_chat_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sky-700 hover:underline"
+                        title={r.private_chat_url}
+                      >
+                        Open ↗
+                      </a>
+                    ) : (
+                      <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
