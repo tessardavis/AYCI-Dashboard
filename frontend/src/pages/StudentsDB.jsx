@@ -39,6 +39,13 @@ function formatDate(iso) {
   }
 }
 
+// An active Boost & Go customer — matches the backend rule (any "B&G…" status
+// OR "Upgraded"). Used for the tier-row ·B&G tag.
+function isBandG(boost) {
+  const b = (boost || "").trim().toLowerCase();
+  return /b&g/.test(b) || b === "upgraded";
+}
+
 export default function StudentsDB() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -335,8 +342,8 @@ export default function StudentsDB() {
                   <td className="px-3 py-2 text-[12px] text-[var(--ayci-ink-muted)]">{r.email || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.tier || "—"}
-                    {r.boost_and_go && /b&g/i.test(r.boost_and_go) && (
-                      <span className="ml-1 text-[10px] text-violet-700">· B&amp;G</span>
+                    {isBandG(r.boost_and_go) && (
+                      <span className="ml-1 text-[10px] text-violet-700" title={`Boost & Go status: ${r.boost_and_go}`}>· B&amp;G</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
