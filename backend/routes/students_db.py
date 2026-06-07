@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from db import db
-from deps import require_board
+from deps import require_board, require_admin
 import webhooks_outbound
 
 logger = logging.getLogger(__name__)
@@ -977,7 +977,7 @@ def _serialise_subscription(doc: dict) -> dict:
 
 @router.get("/webhook-subscriptions/columns")
 async def list_webhook_columns(
-    user: dict = Depends(require_board("students")),
+    user: dict = Depends(require_admin),
 ):
     """The columns a subscription may listen on — the automation-writable
     field allowlist (PROTECTED_FIELDS). Populates the create-form dropdown."""
@@ -986,7 +986,7 @@ async def list_webhook_columns(
 
 @router.get("/webhook-subscriptions")
 async def list_webhook_subscriptions(
-    user: dict = Depends(require_board("students")),
+    user: dict = Depends(require_admin),
 ):
     cursor = db.dashboard_webhook_subscriptions.find({})
     items = [_serialise_subscription(s) async for s in cursor]
@@ -997,7 +997,7 @@ async def list_webhook_subscriptions(
 @router.post("/webhook-subscriptions")
 async def create_webhook_subscription(
     payload: WebhookSubscriptionCreate,
-    user: dict = Depends(require_board("students")),
+    user: dict = Depends(require_admin),
 ):
     if payload.column not in PROTECTED_FIELDS:
         raise HTTPException(
@@ -1022,7 +1022,7 @@ async def create_webhook_subscription(
 @router.delete("/webhook-subscriptions/{sub_id}")
 async def delete_webhook_subscription(
     sub_id: str,
-    user: dict = Depends(require_board("students")),
+    user: dict = Depends(require_admin),
 ):
     res = await db.dashboard_webhook_subscriptions.delete_one({"id": sub_id})
     if res.deleted_count == 0:

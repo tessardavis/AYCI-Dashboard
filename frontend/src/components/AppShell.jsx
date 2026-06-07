@@ -53,7 +53,7 @@ const NAV_GROUPS = [
     label: "Webhook Subscriptions",
     icon: Webhook,
     testid: "sidebar-nav-webhooks",
-    board: "students",
+    adminOnly: true,
   },
   {
     type: "item",
@@ -200,10 +200,13 @@ export default function AppShell() {
 
   // Flat list of every nav item the user can see — used in collapsed mode
   // (group headers don't make sense as icons).
+  const canSeeItem = (item) =>
+    item.adminOnly ? user?.role === "admin" : userCanAccess(user, item.board);
+
   const flatItems = NAV_GROUPS.flatMap((node) =>
     node.type === "item"
-      ? (userCanAccess(user, node.board) ? [node] : [])
-      : node.items.filter((it) => userCanAccess(user, it.board)),
+      ? (canSeeItem(node) ? [node] : [])
+      : node.items.filter((it) => canSeeItem(it)),
   );
 
   // Close drawer whenever the route changes (e.g. user taps a nav link)
@@ -313,10 +316,10 @@ export default function AppShell() {
           ) : (
             NAV_GROUPS.map((node) => {
               if (node.type === "item") {
-                if (!userCanAccess(user, node.board)) return null;
+                if (!canSeeItem(node)) return null;
                 return <NavItem key={node.to} item={node} />;
               }
-              const visibleItems = node.items.filter((it) => userCanAccess(user, it.board));
+              const visibleItems = node.items.filter((it) => canSeeItem(it));
               if (visibleItems.length === 0) return null;
               return (
                 <NavGroup
