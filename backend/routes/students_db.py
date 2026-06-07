@@ -81,9 +81,17 @@ def expected_video_allowance(tier: Optional[str], boost: Optional[str]) -> Optio
     return None
 
 
+def _is_boss(row: dict) -> bool:
+    """Boss Badge = Yes → they've landed their job and are finished working with
+    us, so they need no further setup (private chat / allowance)."""
+    return (row.get("boss_badge") or "").strip().lower() in {"yes", "true", "1", "y"}
+
+
 def _allowance_flag(row: dict) -> Optional[str]:
     """'missing' (expected but unset), 'mismatch' (set but ≠ expected),
-    'ok', or None (no expected allowance defined for this student)."""
+    'ok', or None (no expected allowance defined, or student is a Boss)."""
+    if _is_boss(row):
+        return None
     exp = expected_video_allowance(row.get("tier"), row.get("boost_and_go"))
     if exp is None:
         return None
@@ -101,6 +109,8 @@ def _needs_private_chat_setup(row: dict) -> bool:
     setting up — i.e. missing their private chat link OR missing their video
     allowance. (A wrong-but-present allowance is a 'mismatch', surfaced
     separately, not auto-changed.)"""
+    if _is_boss(row):
+        return False  # landed their job — finished with us, no setup needed
     if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
         return False
     no_chat = not (row.get("private_chat_url") or "").strip()
