@@ -540,12 +540,20 @@ function PrivateVideoAlertsCard({ isAdmin }) {
  * click. Manual only; nothing runs on a schedule.
  * Backed by /students-db/private-chat/{config,preview} + .../{id}/create-private-chat.
  */
+const PC_AUDIENCES = [
+  ["private_plus", "Private Plus"],
+  ["vip", "VIP"],
+  ["boost_and_go", "Boost & Go"],
+  ["boost_and_go_plus", "Boost & Go Plus"],
+];
+
 function PrivateChatSetupCard({ isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState(null);
   const [coaches, setCoaches] = useState([]);
   const [senderEmail, setSenderEmail] = useState("");
-  const [welcome, setWelcome] = useState("");
+  const [templates, setTemplates] = useState({});
+  const [selectedAud, setSelectedAud] = useState(PC_AUDIENCES[0][0]);
   const [savingCfg, setSavingCfg] = useState(false);
   const [creatingId, setCreatingId] = useState(null);
 
@@ -563,7 +571,7 @@ function PrivateChatSetupCard({ isAdmin }) {
       ]);
       setCoaches(cfg.coaches || []);
       setSenderEmail(cfg.sender_email || "");
-      setWelcome(cfg.welcome_template || "");
+      setTemplates(cfg.welcome_templates || {});
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load private-chat setup");
     } finally {
@@ -581,11 +589,11 @@ function PrivateChatSetupCard({ isAdmin }) {
     setSavingCfg(true);
     try {
       const { data } = await apiClient.post("/students-db/private-chat/config", {
-        coaches, sender_email: senderEmail, welcome_template: welcome,
+        coaches, sender_email: senderEmail, welcome_templates: templates,
       });
       setCoaches(data.coaches || []);
       setSenderEmail(data.sender_email || "");
-      setWelcome(data.welcome_template || "");
+      setTemplates(data.welcome_templates || {});
       toast.success("Coach config saved");
       await loadPreview();
     } catch (err) {
@@ -680,14 +688,32 @@ function PrivateChatSetupCard({ isAdmin }) {
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-4 mb-2">
-              Welcome message <span className="font-normal normal-case">— {"{first_name}"} is substituted</span>
+              Welcome message per tier
+              <span className="font-normal normal-case"> — placeholders: {"{first_name} {last_name} {email} {tier} {video_allowance}"}</span>
             </p>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {PC_AUDIENCES.map(([key, label]) => {
+                const filled = (templates[key] || "").trim();
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedAud(key)}
+                    className={`px-2.5 py-1 rounded text-xs border flex items-center gap-1.5 ${selectedAud === key ? "bg-[var(--ayci-accent)] text-white border-transparent" : "bg-white text-[var(--ayci-ink-muted)] border-[var(--ayci-border)] hover:bg-slate-50"}`}
+                    data-testid={`pc-aud-${key}`}
+                  >
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${filled ? "bg-emerald-500" : "bg-slate-300"}`} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
             <textarea
-              value={welcome}
-              onChange={(e) => setWelcome(e.target.value)}
+              value={templates[selectedAud] || ""}
+              onChange={(e) => setTemplates((t) => ({ ...t, [selectedAud]: e.target.value }))}
               disabled={!isAdmin || savingCfg}
-              rows={3}
-              className="w-full text-sm rounded-lg border border-[var(--ayci-border)] px-3 py-2 disabled:bg-slate-50"
+              rows={9}
+              placeholder={`No message yet for ${PC_AUDIENCES.find(([k]) => k === selectedAud)?.[1]} — paste it here.`}
+              className="w-full text-sm rounded-lg border border-[var(--ayci-border)] px-3 py-2 disabled:bg-slate-50 font-mono"
               data-testid="pc-welcome"
             />
 
@@ -729,12 +755,14 @@ function PrivateChatSetupCard({ isAdmin }) {
                     <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
                       {[r.tier, r.circle_email].filter(Boolean).join(" · ")}
                       {r.matched_via === "name" ? " · matched by name" : r.matched_via === "circle_email" ? " · via circle email" : ""}
+                      {!r.has_template && <span className="text-amber-700"> · no {r.audience || "tier"} template</span>}
                     </div>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => createChat(r)}
-                    disabled={!isAdmin || !configReady || creatingId === r.id}
+                    disabled={!isAdmin || !configReady || !r.has_template || creatingId === r.id}
+                    title={!r.has_template ? `Add a welcome message for ${r.audience || "this tier"} first` : undefined}
                     data-testid={`pc-create-${r.id}`}
                   >
                     {creatingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}

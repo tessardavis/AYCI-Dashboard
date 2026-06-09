@@ -112,6 +112,19 @@ config, templates) · the needs-setup flag predicates in `routes/students_db.py`
 - [ ] Circle group-chat API: verify `kind` value + that the coach token has
       group-create perms (mechanism confirmed; exact contract to test live).
 - [ ] Exact Circle **tag name(s)** + any **space adds** the current zaps apply.
-- [ ] Group-chat **name** format + **welcome-message** wording (copy from the
-      live zaps so it's identical).
+- [ ] Group-chat **name** format (copy from the live zaps).
+- [x] **Welcome message is per-tier** (Tessa screenshot 2026-06-09). It's a rich
+      message with the tier name, a 1:1 Calendly link, the video-allowance count,
+      a Tally upload link with name/lastname/email pre-filled, and a personalised
+      prep-timeline link — and the old zaps had a path per tier, so wording/links
+      vary by audience. Modelled as **per-audience templates** (`private_plus` /
+      `vip` / `boost_and_go` / `boost_and_go_plus`) in the coach config, with
+      placeholders `{first_name} {last_name} {full_name} {email} {tier}
+      {video_allowance}` substituted at send. **Private Plus seeded** from the
+      screenshot; a student whose audience has no template is BLOCKED from create
+      (won't send the wrong tier's message). **Still needed from Tessa:** the
+      message text for VIP / Boost & Go / Boost & Go Plus (and whether the
+      timeline/Calendly links differ per tier).
+- [ ] Confirm whether **Boost & Go** splits further by *presentation /
+      no-presentation* (zap 53 had 4 paths) — if so, add those audience keys.
 - [ ] One coach per chat vs several (config holds a list either way).

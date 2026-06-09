@@ -69,12 +69,65 @@ def _chat_name(row: dict) -> str:
     return f"{fn} - Private Coaching".strip(" -") or "Private Coaching"
 
 
+# Audience = which welcome template applies. Derived from tier / B&G level
+# because the message's tier name, allowance and links differ.
+_AUDIENCE_DISPLAY = {
+    "private_plus": "Private Plus",
+    "vip": "VIP",
+    "boost_and_go": "Boost & Go",
+    "boost_and_go_plus": "Boost & Go Plus",
+}
+
+
+def _audience(row: dict) -> Optional[str]:
+    t = (row.get("tier") or "").strip().lower()
+    if t in ("academy private plus", "upgrade private plus"):
+        return "private_plus"
+    if t in ("vip", "upgrade vip"):
+        return "vip"
+    if t == "boost & go plus":
+        return "boost_and_go_plus"
+    if t == "boost & go":
+        return "boost_and_go"
+    b = (row.get("boost_and_go") or "").strip().lower()
+    if "b&g" in b or b == "upgraded":
+        return "boost_and_go_plus" if "plus" in b else "boost_and_go"
+    return None
+
+
+def _welcome_context(row: dict) -> dict:
+    from routes.students_db import expected_video_allowance
+    name = (row.get("name") or "").strip()
+    fn = (row.get("first_name") or (name.split(" ")[0] if name else "")).strip()
+    ln = (row.get("surname") or (" ".join(name.split(" ")[1:]) if name else "")).strip()
+    aud = _audience(row)
+    va = row.get("video_allowance")
+    if va in (None, ""):
+        va = expected_video_allowance(row.get("tier"), row.get("boost_and_go"))
+    return {
+        "first_name": fn or "there",
+        "last_name": ln,
+        "full_name": name,
+        "email": (row.get("email") or "").strip().lower(),
+        "tier": _AUDIENCE_DISPLAY.get(aud) or (row.get("tier") or ""),
+        "video_allowance": str(va) if va not in (None, "") else "",
+    }
+
+
+def _render(template: str, ctx: dict) -> str:
+    out = template
+    for k, v in ctx.items():
+        out = out.replace("{" + k + "}", v)
+    return out
+
+
 async def preview(db_) -> dict:
     """Dry run — who WOULD get a chat, and whether we can resolve them on
     Circle. Writes nothing."""
     cfg = await settings_store.get_private_chat_config(db_)
     coaches_with_email = [c for c in cfg["coaches"] if c.get("email")]
     config_ready = bool(coaches_with_email) and bool(cfg.get("sender_email"))
+    templates = cfg.get("welcome_templates") or {}
 
     by_email = await _build_email_index()
     ready, not_on_circle = [], []
@@ -93,12 +146,15 @@ async def preview(db_) -> dict:
             "kajabi_email": (r.get("email") or "").strip().lower() or None,
         }
         if member:
+            aud = _audience(r)
             ready.append({
                 **base,
                 "matched_via": via,
                 "circle_member_id": member.get("id"),
                 "circle_email": (member.get("email") or "").strip().lower(),
                 "chat_name": _chat_name(r),
+                "audience": aud,
+                "has_template": bool(aud and (templates.get(aud) or "").strip()),
             })
         else:
             not_on_circle.append(base)
@@ -140,6 +196,13 @@ async def create_for_student(db_, student_id: str) -> dict:
         return {"ok": False, "error": "student is not an eligible private-tier row"}
     if (row.get("private_chat_url") or "").strip():
         return {"ok": False, "skipped": "already_has_chat", "private_chat_url": row["private_chat_url"]}
+
+    # Resolve the welcome template for this student's audience up-front — refuse
+    # to create a chat we can't open with the right (tier-specific) message.
+    audience = _audience(row)
+    template = (cfg.get("welcome_templates") or {}).get(audience or "")
+    if not (template or "").strip():
+        return {"ok": False, "error": f"no welcome template configured for audience '{audience}'"}
 
     by_email = await _build_email_index()
     member, via = await _match_circle_member(row, by_email)
@@ -201,10 +264,9 @@ async def create_for_student(db_, student_id: str) -> dict:
     set_fields["dashboard_edited_fields"] = sorted(pinned)
     await db_.academy_members.update_one({"_id": student_id}, {"$set": set_fields})
 
-    # Welcome message (best-effort — a failed post doesn't undo the chat).
-    welcome = (cfg.get("welcome_template") or "").replace(
-        "{first_name}", (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "there")
-    )
+    # Welcome message — render the tier template (best-effort; a failed post
+    # doesn't undo the chat).
+    welcome = _render(template, _welcome_context(row))
     posted = await circle_api.post_dm_message(db_, sender_email, uuid, welcome)
 
     logger.info(f"[private-chat] created chat for {student_id} uuid={uuid} matched_via={via}")

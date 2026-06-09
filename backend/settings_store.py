@@ -193,14 +193,32 @@ DEFAULT_PRIVATE_CHAT_COACHES: list[dict] = [
     {"name": "Becky", "email": ""},
 ]
 
-# Opening message posted into each new chat (by the sender coach). `{first_name}`
-# is substituted. Placeholder default — replace with the exact wording the
-# current zaps use before going live.
-DEFAULT_PRIVATE_CHAT_WELCOME = (
-    "Hi {first_name}! 👋 Welcome to your private coaching chat. This is where "
-    "you'll get your personalised video feedback and can ask us anything. "
-    "We're excited to work with you!"
-)
+# Opening message posted into each new chat (by the sender coach), keyed by
+# audience (tier / B&G level) because the tier name, video allowance and links
+# differ. Placeholders substituted at send time: {first_name} {last_name}
+# {full_name} {email} {tier} {video_allowance}. Author pastes full URLs with
+# placeholders inline (e.g. a Tally link with ?name={first_name}&…).
+#
+# Audience keys: private_plus | vip | boost_and_go | boost_and_go_plus
+# (+ "legacy" etc. can be added later). A student with no template for their
+# audience is BLOCKED from auto-create (we won't send the wrong tier's message).
+#
+# Seeded from the live Private Plus message (Tessa, 2026-06-09 screenshot).
+DEFAULT_PRIVATE_CHAT_WELCOME_TEMPLATES: dict = {
+    "private_plus": (
+        "Hi {first_name},\n\n"
+        "This is your private chat as a {tier} member, where you can ask any "
+        "questions and receive answers from the faculty.\n\n"
+        "You can book your 1:1 call here: https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min\n\n"
+        "You can also submit up to {video_allowance} video answers for feedback "
+        "from the coaches. Please upload them here:\n"
+        "https://tally.so/r/0Qr5py?name={first_name}&lastname={last_name}&email={email}\n\n"
+        "As a {tier} member, you can access your personalised interview prep "
+        "timeline here:\n"
+        "https://ayci-academy.circle.so/c/your-personal-interview-prep-timeline\n\n"
+        "You can log in using your Circle details"
+    ),
+}
 
 
 def _clean_coach_list(raw) -> list[dict]:
@@ -233,10 +251,12 @@ async def get_private_chat_config(db) -> dict:
     coach_emails = {c["email"] for c in coaches if c["email"]}
     if sender_email not in coach_emails:
         sender_email = ""
-    welcome = (doc or {}).get("welcome_template")
-    if not (welcome or "").strip():
-        welcome = DEFAULT_PRIVATE_CHAT_WELCOME
-    return {"coaches": coaches, "sender_email": sender_email, "welcome_template": welcome}
+    templates = (doc or {}).get("welcome_templates")
+    if not isinstance(templates, dict) or not templates:
+        templates = dict(DEFAULT_PRIVATE_CHAT_WELCOME_TEMPLATES)
+    else:
+        templates = {str(k): (v or "") for k, v in templates.items()}
+    return {"coaches": coaches, "sender_email": sender_email, "welcome_templates": templates}
 
 
 async def set_private_chat_config(db, payload: dict) -> dict:
@@ -250,8 +270,16 @@ async def set_private_chat_config(db, payload: dict) -> dict:
     if sender_email and sender_email not in coach_emails:
         raise ValueError("sender_email must be one of the coaches' emails")
     update = {"coaches": coaches, "sender_email": sender_email}
-    if "welcome_template" in (payload or {}):
-        update["welcome_template"] = (payload.get("welcome_template") or "").strip()
+    if "welcome_templates" in (payload or {}):
+        raw = payload.get("welcome_templates") or {}
+        if not isinstance(raw, dict):
+            raise ValueError("welcome_templates must be an object keyed by audience")
+        # Keep only non-empty templates; normalise keys.
+        update["welcome_templates"] = {
+            str(k).strip(): (v or "").strip()
+            for k, v in raw.items()
+            if str(k).strip() and (v or "").strip()
+        }
     await db.app_settings.update_one(
         {"_id": "private_chat"},
         {"$set": update},
