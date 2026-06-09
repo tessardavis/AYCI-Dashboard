@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2 } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -20,6 +20,7 @@ export default function IntegrationsSection({ isAdmin }) {
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
       <IntakeStatusCard isAdmin={isAdmin} />
       <CircleEmailGapsCard isAdmin={isAdmin} />
+      <PrivateChatSetupCard isAdmin={isAdmin} />
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
@@ -523,6 +524,224 @@ function PrivateVideoAlertsCard({ isAdmin }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 0 of the dashboard-native private-chat migration (Route 2). Edit the
+ * coach config (who's in every chat + the welcome sender + opener text), then
+ * preview which private-tier students would get a chat — matched on either
+ * email so dual-email students are caught — and create each chat with one
+ * click. Manual only; nothing runs on a schedule.
+ * Backed by /students-db/private-chat/{config,preview} + .../{id}/create-private-chat.
+ */
+function PrivateChatSetupCard({ isAdmin }) {
+  const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState(null);
+  const [coaches, setCoaches] = useState([]);
+  const [senderEmail, setSenderEmail] = useState("");
+  const [welcome, setWelcome] = useState("");
+  const [savingCfg, setSavingCfg] = useState(false);
+  const [creatingId, setCreatingId] = useState(null);
+
+  const loadPreview = async () => {
+    const { data } = await apiClient.get("/students-db/private-chat/preview");
+    setPreview(data);
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [{ data: cfg }] = await Promise.all([
+        apiClient.get("/students-db/private-chat/config"),
+        loadPreview(),
+      ]);
+      setCoaches(cfg.coaches || []);
+      setSenderEmail(cfg.sender_email || "");
+      setWelcome(cfg.welcome_template || "");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load private-chat setup");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const setCoachEmail = (i, email) =>
+    setCoaches((cs) => cs.map((c, idx) => (idx === i ? { ...c, email } : c)));
+
+  const saveConfig = async () => {
+    if (!isAdmin) return;
+    setSavingCfg(true);
+    try {
+      const { data } = await apiClient.post("/students-db/private-chat/config", {
+        coaches, sender_email: senderEmail, welcome_template: welcome,
+      });
+      setCoaches(data.coaches || []);
+      setSenderEmail(data.sender_email || "");
+      setWelcome(data.welcome_template || "");
+      toast.success("Coach config saved");
+      await loadPreview();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    } finally {
+      setSavingCfg(false);
+    }
+  };
+
+  const createChat = async (row) => {
+    if (!isAdmin) return;
+    setCreatingId(row.id);
+    try {
+      const { data } = await apiClient.post(`/students-db/${encodeURIComponent(row.id)}/create-private-chat`);
+      if (data.ok) {
+        toast.success(`Created chat for ${row.name || row.id}${data.circle_email_linked ? ` · linked ${data.circle_email_linked}` : ""}`);
+        setPreview((p) => p ? { ...p, ready: (p.ready || []).filter((x) => x.id !== row.id), counts: { ...p.counts, ready: Math.max(0, (p.counts?.ready || 1) - 1) } } : p);
+      } else if (data.skipped) {
+        toast(`Skipped ${row.name || row.id}: ${data.skipped.replace(/_/g, " ")}`);
+        setPreview((p) => p ? { ...p, ready: (p.ready || []).filter((x) => x.id !== row.id) } : p);
+      } else {
+        toast.error(data.error || "Create failed");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Create failed");
+    } finally {
+      setCreatingId(null);
+    }
+  };
+
+  const emailedCoaches = coaches.filter((c) => (c.email || "").trim());
+  const configReady = preview?.config_ready;
+  const ready = preview?.ready || [];
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="private-chat-setup-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 shrink-0">
+          <MessagesSquare className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Private chat setup <span className="text-xs font-normal text-[var(--ayci-ink-muted)]">(Phase 0 · manual)</span>
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            Creates the coach group chat for private-tier students from the dashboard, matching them to Circle on
+            <b> either email</b> (so students who joined under a different email aren't missed). Set the coaches once,
+            then create each chat with one click. Nothing runs automatically.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <>
+          {/* Coach config */}
+          <div className="border border-[var(--ayci-border)] rounded-lg p-4 mb-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-3">
+              Coaches in every chat — enter each one's Circle email
+            </p>
+            <div className="space-y-2">
+              {coaches.map((c, i) => (
+                <div key={c.name + i} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-sm font-medium text-[var(--ayci-ink)]">{c.name}</span>
+                  <Input
+                    type="email"
+                    value={c.email || ""}
+                    onChange={(e) => setCoachEmail(i, e.target.value)}
+                    placeholder="their-circle-email@…"
+                    disabled={!isAdmin || savingCfg}
+                    className="flex-1 font-mono text-xs"
+                    data-testid={`pc-coach-${c.name}`}
+                  />
+                  <label className="flex items-center gap-1 text-xs text-[var(--ayci-ink-muted)] shrink-0 w-24" title="Posts the welcome message">
+                    <input
+                      type="radio"
+                      name="pc-sender"
+                      checked={!!c.email && senderEmail === c.email.trim().toLowerCase()}
+                      onChange={() => setSenderEmail((c.email || "").trim().toLowerCase())}
+                      disabled={!isAdmin || !(c.email || "").trim() || savingCfg}
+                    />
+                    sends opener
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-4 mb-2">
+              Welcome message <span className="font-normal normal-case">— {"{first_name}"} is substituted</span>
+            </p>
+            <textarea
+              value={welcome}
+              onChange={(e) => setWelcome(e.target.value)}
+              disabled={!isAdmin || savingCfg}
+              rows={3}
+              className="w-full text-sm rounded-lg border border-[var(--ayci-border)] px-3 py-2 disabled:bg-slate-50"
+              data-testid="pc-welcome"
+            />
+
+            <div className="flex justify-end mt-3">
+              <Button onClick={saveConfig} disabled={!isAdmin || savingCfg} data-testid="pc-save-config">
+                {savingCfg ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                Save config
+              </Button>
+            </div>
+          </div>
+
+          {/* Preview + create */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">
+              Ready to create ({preview?.counts?.ready ?? 0}) · not on Circle ({preview?.counts?.not_on_circle ?? 0})
+            </p>
+            <Button variant="outline" size="sm" onClick={loadPreview} data-testid="pc-refresh-preview">
+              <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+            </Button>
+          </div>
+
+          {!configReady && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              Add every coach's Circle email and pick who sends the opener, then Save — creating is disabled until the config is complete{emailedCoaches.length ? "" : ""}.
+            </p>
+          )}
+
+          {ready.length === 0 ? (
+            <p className="text-sm text-[var(--ayci-ink-muted)]">
+              No private-tier students are currently on Circle without a chat.
+              {(preview?.counts?.not_on_circle ?? 0) > 0 && ` (${preview.counts.not_on_circle} aren't on Circle yet.)`}
+            </p>
+          ) : (
+            <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)] max-h-80 overflow-y-auto" data-testid="pc-ready-list">
+              {ready.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                    <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                      {[r.tier, r.circle_email].filter(Boolean).join(" · ")}
+                      {r.matched_via === "name" ? " · matched by name" : r.matched_via === "circle_email" ? " · via circle email" : ""}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => createChat(r)}
+                    disabled={!isAdmin || !configReady || creatingId === r.id}
+                    data-testid={`pc-create-${r.id}`}
+                  >
+                    {creatingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                    Create chat
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </>
