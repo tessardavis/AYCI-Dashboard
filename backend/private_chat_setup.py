@@ -1,0 +1,221 @@
+"""
+Dashboard-native private-chat creation — Route 2, Phase 0.
+
+See PRIVATE_CHAT_MIGRATION.md. Replaces the Monday-triggered "Private Chat …
+when they join Circle" zaps (46/47/53/54). Phase 0 is MANUAL: a dry-run
+`preview()` (no writes) and a per-student `create_for_student()` behind an
+explicit admin click — nothing runs on a schedule yet.
+
+Key win over the zaps: we match the student to their Circle identity on EITHER
+email (or a strong name match), so students who joined Circle under a different
+email than they signed up with on Kajabi no longer silently fall through.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+from db import db
+import settings_store
+import circle_api
+import student_lookup
+
+logger = logging.getLogger(__name__)
+
+
+def _eligible(row: dict) -> bool:
+    """Same population the 'needs setup' flag cares about — current private
+    tier / active B&G, not a Boss, not setup-dismissed. (Predicates live in
+    routes.students_db; imported lazily to avoid an import cycle.)"""
+    from routes.students_db import (
+        _is_current_private_tier, _b_and_g_active, _is_boss,
+    )
+    if row.get("setup_not_needed") or _is_boss(row):
+        return False
+    return _is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))
+
+
+async def _match_circle_member(row: dict, by_email: dict) -> tuple[Optional[dict], Optional[str]]:
+    """Find the student's Circle member via email/circle_email (exact) or a
+    strong fuzzy name match. Returns (member, matched_via) or (None, None)."""
+    for key in ("email", "circle_email"):
+        e = (row.get(key) or "").strip().lower()
+        if e and e in by_email:
+            return by_email[e], key
+    name = (row.get("name") or "").strip()
+    if name:
+        hits = await student_lookup.name_search(db, name, limit=1)
+        top = hits[0] if hits else None
+        if top and (top.get("match_score") or 0) >= 80 and (top.get("email") or "").strip():
+            # name_search returns slim hits without id — re-resolve from the cache
+            te = (top["email"] or "").strip().lower()
+            if te in by_email:
+                return by_email[te], "name"
+    return None, None
+
+
+async def _build_email_index() -> dict:
+    members = await student_lookup._get_name_index(db)
+    return {
+        (m.get("email") or "").strip().lower(): m
+        for m in members
+        if (m.get("email") or "").strip()
+    }
+
+
+def _chat_name(row: dict) -> str:
+    fn = (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "").strip()
+    return f"{fn} - Private Coaching".strip(" -") or "Private Coaching"
+
+
+async def preview(db_) -> dict:
+    """Dry run — who WOULD get a chat, and whether we can resolve them on
+    Circle. Writes nothing."""
+    cfg = await settings_store.get_private_chat_config(db_)
+    coaches_with_email = [c for c in cfg["coaches"] if c.get("email")]
+    config_ready = bool(coaches_with_email) and bool(cfg.get("sender_email"))
+
+    by_email = await _build_email_index()
+    ready, not_on_circle = [], []
+
+    async for r in db_.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        if not _eligible(r):
+            continue
+        if (r.get("private_chat_url") or "").strip():
+            continue  # already has a chat — never touch
+        member, via = await _match_circle_member(r, by_email)
+        base = {
+            "id": r["_id"],
+            "name": r.get("name"),
+            "tier": r.get("tier"),
+            "boost_and_go": r.get("boost_and_go"),
+            "kajabi_email": (r.get("email") or "").strip().lower() or None,
+        }
+        if member:
+            ready.append({
+                **base,
+                "matched_via": via,
+                "circle_member_id": member.get("id"),
+                "circle_email": (member.get("email") or "").strip().lower(),
+                "chat_name": _chat_name(r),
+            })
+        else:
+            not_on_circle.append(base)
+
+    ready.sort(key=lambda x: x.get("name") or "")
+    not_on_circle.sort(key=lambda x: x.get("name") or "")
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "config_ready": config_ready,
+        "coaches": cfg["coaches"],
+        "sender_email": cfg.get("sender_email"),
+        "counts": {"ready": len(ready), "not_on_circle": len(not_on_circle)},
+        "ready": ready,
+        "not_on_circle": not_on_circle,
+    }
+
+
+async def create_for_student(db_, student_id: str) -> dict:
+    """Create ONE student's coach group chat. Heavily guarded against
+    duplicates (Circle can't mutate a room's roster, so a wrong call makes a
+    confusing second chat). Returns a diagnostic dict — `raw` carries Circle's
+    response so we can confirm the contract on the first live run.
+
+    Phase 0 scope: match → no-dup guards → create group chat → write back →
+    post welcome. TODO before Phase 1: apply the onboarding Circle tag and the
+    Slack alert the zaps do (tag name + channel still to confirm), and verify
+    the private_chat_url format against an existing row.
+    """
+    cfg = await settings_store.get_private_chat_config(db_)
+    sender_email = (cfg.get("sender_email") or "").strip().lower()
+    coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
+    if not sender_email or not coach_emails:
+        return {"ok": False, "error": "coach config incomplete (need coach emails + a sender)"}
+
+    row = await db_.academy_members.find_one({"_id": student_id})
+    if not row:
+        return {"ok": False, "error": "student not found"}
+    if not _eligible(row):
+        return {"ok": False, "error": "student is not an eligible private-tier row"}
+    if (row.get("private_chat_url") or "").strip():
+        return {"ok": False, "skipped": "already_has_chat", "private_chat_url": row["private_chat_url"]}
+
+    by_email = await _build_email_index()
+    member, via = await _match_circle_member(row, by_email)
+    if not member or not member.get("id"):
+        return {"ok": False, "skipped": "not_on_circle"}
+    student_mid = int(member["id"])
+    student_circle_email = (member.get("email") or "").strip().lower()
+
+    # Circle-side duplicate guard: does the sender already share a group chat
+    # with this student? (Best-effort — list the sender's recent group rooms.)
+    try:
+        for t in await circle_api.list_dm_threads(db_, sender_email, per_page=100):
+            if (t.get("chat_room") or {}).get("kind") != "group":
+                continue
+            parts = t.get("other_participants_preview") or []
+            if any(int(p.get("id") or 0) == student_mid for p in parts if isinstance(p, dict)):
+                uuid = t.get("chat_room_uuid")
+                return {"ok": False, "skipped": "existing_circle_chat_found",
+                        "chat_room_uuid": uuid}
+    except Exception as e:
+        logger.info(f"[private-chat] existence check skipped: {e}")
+
+    # Resolve coach member ids (the sender is implicit from their token).
+    coach_ids: list[int] = []
+    for ce in coach_emails:
+        if ce == sender_email:
+            continue
+        m = by_email.get(ce)
+        if m and m.get("id"):
+            coach_ids.append(int(m["id"]))
+        else:
+            logger.warning(f"[private-chat] coach {ce} not found in Circle member cache")
+    member_ids = coach_ids + [student_mid]
+
+    chat_name = _chat_name(row)
+    created = await circle_api.create_group_chat(db_, sender_email, member_ids, chat_name)
+    if not created or not created.get("chat_room_uuid"):
+        return {"ok": False, "error": "circle group-chat create failed", "raw": (created or {}).get("raw")}
+
+    uuid = created["chat_room_uuid"]
+    # TODO verify this URL format against an existing private_chat_url.
+    chat_url = f"https://app.circle.so/c/messages/{uuid}"
+
+    now = datetime.now(timezone.utc)
+    set_fields: dict = {
+        "private_chat_url": chat_url,
+        "private_chat_circle_uuid": uuid,
+        "private_chat_created_at": now,
+        "private_chat_coaches": coach_emails,
+        "dashboard_edited_at": now,
+        "dashboard_edited_by": "private-chat-setup",
+    }
+    if student_circle_email and not (row.get("circle_email") or "").strip():
+        set_fields["circle_email"] = student_circle_email  # the dual-email fix
+    pinned = set(row.get("dashboard_edited_fields") or [])
+    pinned.update({"private_chat_url"})
+    if "circle_email" in set_fields:
+        pinned.add("circle_email")
+    set_fields["dashboard_edited_fields"] = sorted(pinned)
+    await db_.academy_members.update_one({"_id": student_id}, {"$set": set_fields})
+
+    # Welcome message (best-effort — a failed post doesn't undo the chat).
+    welcome = (cfg.get("welcome_template") or "").replace(
+        "{first_name}", (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "there")
+    )
+    posted = await circle_api.post_dm_message(db_, sender_email, uuid, welcome)
+
+    logger.info(f"[private-chat] created chat for {student_id} uuid={uuid} matched_via={via}")
+    return {
+        "ok": True,
+        "id": student_id,
+        "chat_room_uuid": uuid,
+        "private_chat_url": chat_url,
+        "matched_via": via,
+        "circle_email_linked": set_fields.get("circle_email"),
+        "coaches_added": coach_ids,
+        "welcome_posted": bool(posted),
+        "raw": created.get("raw"),
+    }

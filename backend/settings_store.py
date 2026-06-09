@@ -177,3 +177,84 @@ async def set_inbox_routing(db, rules: list[dict]) -> list[dict]:
         upsert=True,
     )
     return cleaned
+
+
+# ---- Private-chat coach config (Route 2, see PRIVATE_CHAT_MIGRATION.md) ----
+# The coaches added to every new private-tier group chat. Ported from the
+# Zapier "coach list" table — same people for every student, occasionally
+# edited. One coach is the `sender`: their Circle token creates the room and
+# posts the welcome message. Emails are each coach's CIRCLE login email
+# (resolved to a community_member_id at create time); seeded blank for the
+# admin to fill in the Settings card. Oksana intentionally excluded (offboarded).
+DEFAULT_PRIVATE_CHAT_COACHES: list[dict] = [
+    {"name": "Tessa", "email": ""},
+    {"name": "Arub", "email": ""},
+    {"name": "Coralie", "email": ""},
+    {"name": "Becky", "email": ""},
+]
+
+# Opening message posted into each new chat (by the sender coach). `{first_name}`
+# is substituted. Placeholder default — replace with the exact wording the
+# current zaps use before going live.
+DEFAULT_PRIVATE_CHAT_WELCOME = (
+    "Hi {first_name}! 👋 Welcome to your private coaching chat. This is where "
+    "you'll get your personalised video feedback and can ask us anything. "
+    "We're excited to work with you!"
+)
+
+
+def _clean_coach_list(raw) -> list[dict]:
+    out: list[dict] = []
+    seen: set[str] = set()
+    for c in raw or []:
+        if not isinstance(c, dict):
+            continue
+        name = (c.get("name") or "").strip()
+        email = (c.get("email") or "").strip().lower()
+        if not name:
+            continue
+        key = email or name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"name": name, "email": email})
+    return out
+
+
+async def get_private_chat_config(db) -> dict:
+    """Return {coaches: [{name, email}], sender_email}. Defaults to the seeded
+    coach list (emails blank) until configured."""
+    doc = await db.app_settings.find_one({"_id": "private_chat"}, {"_id": 0})
+    coaches = _clean_coach_list((doc or {}).get("coaches")) or [
+        dict(c) for c in DEFAULT_PRIVATE_CHAT_COACHES
+    ]
+    sender_email = ((doc or {}).get("sender_email") or "").strip().lower()
+    # Sender must be one of the configured coaches (with an email); else blank.
+    coach_emails = {c["email"] for c in coaches if c["email"]}
+    if sender_email not in coach_emails:
+        sender_email = ""
+    welcome = (doc or {}).get("welcome_template")
+    if not (welcome or "").strip():
+        welcome = DEFAULT_PRIVATE_CHAT_WELCOME
+    return {"coaches": coaches, "sender_email": sender_email, "welcome_template": welcome}
+
+
+async def set_private_chat_config(db, payload: dict) -> dict:
+    """Replace the coach list and/or sender. `sender_email` must match one of
+    the supplied coaches' emails."""
+    coaches = _clean_coach_list((payload or {}).get("coaches"))
+    if not coaches:
+        raise ValueError("At least one coach is required")
+    sender_email = ((payload or {}).get("sender_email") or "").strip().lower()
+    coach_emails = {c["email"] for c in coaches if c["email"]}
+    if sender_email and sender_email not in coach_emails:
+        raise ValueError("sender_email must be one of the coaches' emails")
+    update = {"coaches": coaches, "sender_email": sender_email}
+    if "welcome_template" in (payload or {}):
+        update["welcome_template"] = (payload.get("welcome_template") or "").strip()
+    await db.app_settings.update_one(
+        {"_id": "private_chat"},
+        {"$set": update},
+        upsert=True,
+    )
+    return await get_private_chat_config(db)

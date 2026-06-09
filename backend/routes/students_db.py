@@ -479,6 +479,44 @@ async def circle_email_gaps(
     }
 
 
+# --- Private-chat setup (Route 2, Phase 0). See PRIVATE_CHAT_MIGRATION.md ---
+# Declared BEFORE /students-db/{monday_item_id} so the static paths aren't
+# shadowed by the id route.
+@router.get("/students-db/private-chat/config")
+async def get_private_chat_config(user: dict = Depends(require_board("students"))):
+    import settings_store
+    return await settings_store.get_private_chat_config(db)
+
+
+@router.post("/students-db/private-chat/config")
+async def set_private_chat_config(request: Request, admin: dict = Depends(require_admin)):
+    import settings_store
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+    try:
+        return await settings_store.set_private_chat_config(db, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/students-db/private-chat/preview")
+async def private_chat_preview(user: dict = Depends(require_board("students"))):
+    """Dry run — private-tier students who'd get a chat, matched on either
+    email. Writes nothing."""
+    import private_chat_setup
+    return await private_chat_setup.preview(db)
+
+
+@router.post("/students-db/{monday_item_id}/create-private-chat")
+async def create_private_chat(monday_item_id: str, admin: dict = Depends(require_admin)):
+    """Phase 0 manual trigger: create ONE student's coach group chat (guarded
+    against duplicates)."""
+    import private_chat_setup
+    return await private_chat_setup.create_for_student(db, monday_item_id)
+
+
 @router.get("/students-db/{monday_item_id}")
 async def get_student(
     monday_item_id: str,

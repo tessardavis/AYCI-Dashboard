@@ -354,6 +354,54 @@ async def post_dm_message(
         return None
 
 
+async def create_group_chat(
+    db, sender_email: str, member_ids: list[int], name: Optional[str] = None,
+) -> Optional[dict]:
+    """Find-or-create a GROUP chat room owned by `sender_email` that contains
+    `member_ids` (the sender is implicit from their token). Returns
+    {chat_room_uuid, name, raw} or None.
+
+    Same Headless `POST /messages` find-or-create endpoint as the 1:1 helper in
+    interview_eve_dm, with kind="group" + a name + multiple member ids.
+
+    NB: Circle keys a group room on its exact member set — calling this with a
+    different roster makes a NEW room, it does NOT mutate an existing one. The
+    caller MUST guard against duplicates (we only ever call this for a student
+    with no recorded private_chat_url and no existing coach chat). The exact
+    `kind` token + group-create permission is the one contract detail to verify
+    on the first live run."""
+    ids = sorted({int(m) for m in member_ids if m})
+    if not ids:
+        return None
+    access_token = await _get_access_token(db, sender_email)
+    if not access_token:
+        logger.warning(f"[circle-api] create_group_chat: no token for {sender_email}")
+        return None
+    chat_room: dict = {"kind": "group", "community_member_ids": ids}
+    if name:
+        chat_room["name"] = name
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.post(
+                f"{HEADLESS_BASE}/messages",
+                headers={"Authorization": f"Bearer {access_token}",
+                         "Content-Type": "application/json"},
+                json={"chat_room": chat_room},
+            )
+            if r.status_code in (200, 201):
+                body = r.json()
+                uuid = (
+                    body.get("chat_room_uuid")
+                    or (body.get("chat_room") or {}).get("uuid")
+                    or body.get("uuid")
+                )
+                return {"chat_room_uuid": uuid, "name": name, "raw": body}
+            logger.warning(f"[circle-api] create_group_chat failed {r.status_code} {r.text[:240]}")
+        except Exception as e:
+            logger.warning(f"[circle-api] create_group_chat errored: {e}")
+    return None
+
+
 def _build_tiptap_body(text: str) -> dict:
     """Build Circle's tiptap rich_text_body shape from plain text. Splits on
     newlines so multi-line replies render with proper line breaks."""
