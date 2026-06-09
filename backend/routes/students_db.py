@@ -380,6 +380,105 @@ async def intake_recent(
     }
 
 
+# Declared BEFORE /students-db/{monday_item_id} so it isn't shadowed.
+@router.get("/students-db/circle-email-gaps")
+async def circle_email_gaps(
+    user: dict = Depends(require_board("students")),
+):
+    """Find private-tier students we likely FAILED to link to their Circle
+    identity because they joined Circle under a different email than they
+    signed up with on Kajabi.
+
+    This is the root cause of "private chats never got created": the upstream
+    automation matches the new Circle member back to the student by email, so
+    if the Circle email ≠ the Kajabi email, the match fails, `circle_email`
+    never gets written, and nothing downstream (group chat, DMs) ever fires.
+
+    Scans current private-tier / active B&G students (not Boss, not
+    setup-dismissed) whose `circle_email` is blank, then tries to find them in
+    the cached Circle member list. Buckets each:
+
+      - `likely_mismatch`  — a strong NAME match exists in Circle under a
+        DIFFERENT email (and their Kajabi email isn't in Circle). The dual-email
+        case: almost certainly the same person — copy the Circle email onto
+        `circle_email` to link them. Surfaced with both emails + match score.
+      - `email_in_circle`  — their Kajabi email IS a Circle member, we just
+        never copied it to `circle_email`. Benign (lookups already match on
+        either email) but trivially fixable.
+      - `not_on_circle`    — no name or email hit. Genuinely not on Circle yet,
+        so a chat legitimately can't be created.
+
+    Read-only diagnostic — writes nothing."""
+    import student_lookup as lookup
+
+    # All Circle member emails, for the cheap "is their Kajabi email on Circle"
+    # check (the slim cache is the same list name_search fuzzy-matches over).
+    members = await lookup._get_name_index(db)
+    circle_emails = {
+        (m.get("email") or "").strip().lower()
+        for m in members
+        if (m.get("email") or "").strip()
+    }
+
+    likely_mismatch, email_in_circle, not_on_circle = [], [], []
+    scanned = 0
+
+    async for r in db.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        # Same population the "needs setup" flag cares about, minus the chat/
+        # allowance test — here the gate is specifically a blank circle_email.
+        if r.get("setup_not_needed") or _is_boss(r):
+            continue
+        if not (_is_current_private_tier(r.get("tier")) or _b_and_g_active(r.get("boost_and_go"))):
+            continue
+        if (r.get("circle_email") or "").strip():
+            continue  # already linked
+
+        scanned += 1
+        kajabi_email = (r.get("email") or "").strip().lower()
+        base = {
+            "id": r["_id"],
+            "name": r.get("name"),
+            "tier": r.get("tier"),
+            "boost_and_go": r.get("boost_and_go"),
+            "kajabi_email": kajabi_email or None,
+            "has_chat": bool((r.get("private_chat_url") or "").strip()),
+        }
+
+        if kajabi_email and kajabi_email in circle_emails:
+            email_in_circle.append(base)
+            continue
+
+        # No email hit — try a fuzzy name match against the Circle cache.
+        hits = await lookup.name_search(db, r.get("name") or "", limit=1) if r.get("name") else []
+        top = hits[0] if hits else None
+        if top and (top.get("match_score") or 0) >= 80 and (top.get("email") or "").strip():
+            likely_mismatch.append({
+                **base,
+                "circle_name": top.get("name"),
+                "circle_email": (top.get("email") or "").strip().lower(),
+                "match_score": top.get("match_score"),
+            })
+        else:
+            not_on_circle.append(base)
+
+    likely_mismatch.sort(key=lambda x: (-(x.get("match_score") or 0), x.get("name") or ""))
+    email_in_circle.sort(key=lambda x: x.get("name") or "")
+    not_on_circle.sort(key=lambda x: x.get("name") or "")
+
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "counts": {
+            "scanned_private_no_circle_email": scanned,
+            "likely_mismatch": len(likely_mismatch),
+            "email_in_circle": len(email_in_circle),
+            "not_on_circle": len(not_on_circle),
+        },
+        "likely_mismatch": likely_mismatch,
+        "email_in_circle": email_in_circle,
+        "not_on_circle": not_on_circle,
+    }
+
+
 @router.get("/students-db/{monday_item_id}")
 async def get_student(
     monday_item_id: str,
