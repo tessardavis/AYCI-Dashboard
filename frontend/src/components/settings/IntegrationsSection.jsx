@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -19,6 +19,7 @@ export default function IntegrationsSection({ isAdmin }) {
   return (
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
       <IntakeStatusCard isAdmin={isAdmin} />
+      <CircleEmailGapsCard isAdmin={isAdmin} />
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
@@ -169,6 +170,197 @@ function Stat({ label, value, tone = "ink" }) {
     <div className="bg-slate-50 border border-[var(--ayci-border)] rounded-lg px-3 py-2.5 text-center">
       <div className={`font-display font-bold text-2xl tabular-nums ${valueClass}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+/**
+ * Finds private-tier students we likely failed to link to their Circle
+ * identity because they joined Circle under a different email than they signed
+ * up with — the root cause of coach group chats never getting created. Each
+ * suggested match gets a one-click "Link" that PATCHes circle_email onto the
+ * row (pinned dashboard-owned), which unblocks everything downstream.
+ * Backed by GET /api/students-db/circle-email-gaps + PATCH /students-db/{id}.
+ */
+function CircleEmailGapsCard({ isAdmin }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [linkingId, setLinkingId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/students-db/circle-email-gaps");
+      setData(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load Circle email gaps");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // Link a row by writing the chosen email to circle_email, then drop it from
+  // its bucket optimistically (it's no longer a gap).
+  const link = async (row, email, bucket) => {
+    if (!isAdmin || !email) return;
+    setLinkingId(row.id);
+    try {
+      await apiClient.patch(`/students-db/${encodeURIComponent(row.id)}`, { circle_email: email });
+      toast.success(`Linked ${row.name || row.kajabi_email || "student"} → ${email}`);
+      setData((d) => {
+        if (!d) return d;
+        return {
+          ...d,
+          [bucket]: (d[bucket] || []).filter((x) => x.id !== row.id),
+          counts: { ...d.counts, [bucket]: Math.max(0, (d.counts?.[bucket] || 1) - 1) },
+        };
+      });
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Link failed");
+    } finally {
+      setLinkingId(null);
+    }
+  };
+
+  const counts = data?.counts || {};
+  const mismatch = data?.likely_mismatch || [];
+  const inCircle = data?.email_in_circle || [];
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="circle-email-gaps-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
+          <Link2 className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Circle email gaps (unlinked private chats)
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            Private-tier students with no <code className="text-xs bg-slate-100 px-1 rounded">circle_email</code> —
+            usually because they joined Circle under a different email than they signed up with, so the upstream
+            match failed and their coach chat never got created. <b>Link</b> writes the matched Circle email onto
+            the row (pinned, so the sync won't undo it), which unblocks the downstream automation.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="circle-gaps-refresh">
+          {loading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+          Refresh
+        </Button>
+      </div>
+
+      {loading && !data ? (
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Scanning…
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-5" data-testid="circle-gaps-counts">
+            <Stat label="Likely mismatch" value={counts.likely_mismatch ?? 0} tone={(counts.likely_mismatch ?? 0) > 0 ? "amber" : "emerald"} />
+            <Stat label="Email on Circle" value={counts.email_in_circle ?? 0} />
+            <Stat label="Not on Circle" value={counts.not_on_circle ?? 0} />
+          </div>
+
+          {!isAdmin && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+              View-only — linking requires admin.
+            </p>
+          )}
+
+          {mismatch.length > 0 && (
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2">
+                Likely mismatches — different email on Circle
+              </p>
+              <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)]" data-testid="circle-gaps-mismatch-list">
+                {mismatch.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-[var(--ayci-ink)] truncate flex items-center gap-2">
+                        {r.name || "—"}
+                        {!r.has_chat && (
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                            no chat
+                          </span>
+                        )}
+                        {typeof r.match_score === "number" && (
+                          <span className="text-[11px] text-[var(--ayci-ink-muted)]">{r.match_score}% match</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                        <span className="line-through opacity-70">{r.kajabi_email || "—"}</span>
+                        {" → "}
+                        <span className="font-medium text-[var(--ayci-ink)]">{r.circle_email}</span>
+                        {r.circle_name && r.circle_name !== r.name ? ` (Circle: ${r.circle_name})` : ""}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => link(r, r.circle_email, "likely_mismatch")}
+                      disabled={!isAdmin || linkingId === r.id}
+                      data-testid={`circle-gaps-link-${r.id}`}
+                    >
+                      {linkingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Link2 className="w-4 h-4 mr-1.5" />}
+                      Link
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {inCircle.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2">
+                Their signup email is already on Circle — quick link
+              </p>
+              <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)]" data-testid="circle-gaps-incircle-list">
+                {inCircle.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-[var(--ayci-ink)] truncate flex items-center gap-2">
+                        {r.name || "—"}
+                        {!r.has_chat && (
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                            no chat
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{r.kajabi_email || "—"}</div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => link(r, r.kajabi_email, "email_in_circle")}
+                      disabled={!isAdmin || linkingId === r.id}
+                      data-testid={`circle-gaps-link-${r.id}`}
+                    >
+                      {linkingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Link2 className="w-4 h-4 mr-1.5" />}
+                      Link
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mismatch.length === 0 && inCircle.length === 0 && (
+            <p className="text-sm text-[var(--ayci-ink-muted)]">
+              Nothing to link — no private-tier students with a resolvable Circle email gap.
+              {(counts.not_on_circle ?? 0) > 0 && ` (${counts.not_on_circle} aren't on Circle yet — nothing to link there.)`}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }
