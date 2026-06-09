@@ -141,6 +141,7 @@ async def list_students(
     tier: Optional[str] = None,
     cohort: Optional[str] = None,
     has_interview: Optional[bool] = None,
+    refunded: Optional[bool] = None,
     limit: int = 500,
     user: dict = Depends(require_board("students")),
 ):
@@ -202,12 +203,38 @@ async def list_students(
     except Exception as e:
         logger.info(f"[students-db] videos-used aggregate skipped: {e}")
 
+    # Refunds, keyed by the (lowercased) email the refund was recorded under.
+    # One aggregation → a per-email {count, total} map so we can badge rows
+    # without a query each. Drives the "Refunded" badge + filter; full detail
+    # lives on the Refunds board.
+    refund_by_email: dict[str, dict] = {}
+    try:
+        async for g in db.refunds.aggregate([
+            {"$group": {"_id": "$student_email",
+                        "count": {"$sum": 1},
+                        "total": {"$sum": {"$ifNull": ["$amount", 0]}}}}
+        ]):
+            em = (g.get("_id") or "")
+            if em:
+                refund_by_email[str(em).strip().lower()] = {
+                    "count": g.get("count", 0),
+                    "total": round(g.get("total", 0) or 0, 2),
+                }
+    except Exception as e:
+        logger.info(f"[students-db] refunds aggregate skipped: {e}")
+
     rows = []
     async for r in cursor:
         slim = _slim_row_for_list(r)
         em = (r.get("email") or "").strip().lower()
         ce = (r.get("circle_email") or "").strip().lower()
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
+        rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
+        slim["has_refund"] = bool(rinfo)
+        slim["refund_count"] = (rinfo or {}).get("count", 0)
+        slim["refund_total"] = (rinfo or {}).get("total", 0)
+        if refunded is True and not slim["has_refund"]:
+            continue
         rows.append(slim)
     return {"items": rows, "count": len(rows)}
 

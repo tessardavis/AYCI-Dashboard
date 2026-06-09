@@ -1832,6 +1832,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     interview_eve as routes_interview_eve,
     scheduler as routes_scheduler,
     students_db as routes_students_db,
+    refunds as routes_refunds,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -1841,7 +1842,7 @@ for _r in (
     routes_leaderboard.router, routes_tickets.router, routes_oauth_gmail.router,
     routes_wati.router, routes_private_videos.router, routes_today_calls.router,
     routes_circle.router, routes_interview_eve.router, routes_scheduler.router,
-    routes_students_db.router,
+    routes_students_db.router, routes_refunds.router,
 ):
     app.include_router(_r)
 

@@ -31,6 +31,7 @@ ALL_BOARDS = [
     "leaderboard",
     "tickets",
     "private_videos",
+    "refunds",
     "bot",
 ]
 ADMIN_ONLY_BOARDS = ["settings"]

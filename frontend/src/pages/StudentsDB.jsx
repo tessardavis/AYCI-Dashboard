@@ -57,6 +57,7 @@ export default function StudentsDB() {
   const [needsSetupOnly, setNeedsSetupOnly] = useState(false);
   const [mismatchOnly, setMismatchOnly] = useState(false);
   const [dismissedOnly, setDismissedOnly] = useState(false);
+  const [refundedOnly, setRefundedOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -98,17 +99,20 @@ export default function StudentsDB() {
       if (needsSetupOnly && !r.needs_setup) return false;
       if (mismatchOnly && r.allowance_flag !== "mismatch") return false;
       if (dismissedOnly && !r.setup_not_needed) return false;
+      if (refundedOnly && !r.has_refund) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly]);
 
   // Reset the visible window whenever the filter/search changes, so a new
   // query shows from the top (and keeps the DOM light).
-  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly]);
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly]);
+
+  const refundedCount = useMemo(() => rows.filter((r) => r.has_refund).length, [rows]);
 
   const dismissedCount = useMemo(() => rows.filter((r) => r.setup_not_needed).length, [rows]);
 
@@ -283,6 +287,13 @@ export default function StudentsDB() {
             Not needed ({dismissedCount})
           </label>
         )}
+        {refundedCount > 0 && (
+          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${refundedOnly ? "bg-rose-50 text-rose-700" : "text-[var(--ayci-ink-muted)]"}`}
+                 title="Students with one or more refunds — full detail on the Refunds board">
+            <input type="checkbox" checked={refundedOnly} onChange={(e) => setRefundedOnly(e.target.checked)} />
+            Refunded ({refundedCount})
+          </label>
+        )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
@@ -337,6 +348,14 @@ export default function StudentsDB() {
                         title={r.setup_not_needed_reason ? `Setup not needed — ${r.setup_not_needed_reason}` : "Setup not needed"}
                       >
                         setup n/a
+                      </span>
+                    )}
+                    {r.has_refund && (
+                      <span
+                        className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 align-middle"
+                        title={`${r.refund_count} refund${r.refund_count === 1 ? "" : "s"}${r.refund_total ? ` · £${Number(r.refund_total).toFixed(2)}` : ""} — see the Refunds board`}
+                      >
+                        ↩ Refunded{r.refund_count > 1 ? ` ×${r.refund_count}` : ""}
                       </span>
                     )}
                   </td>
