@@ -41,6 +41,16 @@ SLACK_PRIVATE_TIER_WEBHOOK = os.environ.get("SLACK_PRIVATE_TIER_WEBHOOK_URL", ""
 SLACK_COACH_CHAT_WEBHOOK = os.environ.get("SLACK_COACH_CHAT_WEBHOOK_URL", "")
 SLACK_FALLBACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
 
+# Students who must never receive the night-before support-score DM.
+# Match on lowercased full name or email. The env var (comma-separated
+# emails) lets the team add/remove people without a code change.
+EVE_DM_EXCLUDE_NAMES = {"kathryn wilson"}
+EVE_DM_EXCLUDE_EMAILS = {"kath_wilson@icloud.com"} | {
+    e.strip().lower()
+    for e in (os.environ.get("INTERVIEW_EVE_EXCLUDE_EMAILS") or "").split(",")
+    if e.strip()
+}
+
 
 def _today_uk() -> datetime.date:
     """Today's date in Europe/London. APScheduler already fires us at 19:00
@@ -150,6 +160,13 @@ async def send_interview_eve_dms(db) -> dict:
         if not email:
             summary["skipped"] += 1
             summary["details"].append({"name": student.get("name"), "skip": "no_email"})
+            continue
+
+        # Opt-out: never DM excluded students (by name or email).
+        name_l = (student.get("name") or "").strip().lower()
+        if email in EVE_DM_EXCLUDE_EMAILS or name_l in EVE_DM_EXCLUDE_NAMES:
+            summary["skipped"] += 1
+            summary["details"].append({"name": student.get("name"), "skip": "excluded"})
             continue
 
         # Atomic claim: try to insert a placeholder row for this
