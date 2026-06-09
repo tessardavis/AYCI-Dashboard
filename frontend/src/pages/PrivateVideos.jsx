@@ -65,6 +65,8 @@ export default function PrivateVideos() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [syncingMonday, setSyncingMonday] = useState(false);
+  const [recompressing, setRecompressing] = useState(false);
+  const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
@@ -140,6 +142,32 @@ export default function PrivateVideos() {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Sync from Monday failed");
     } finally {
       setSyncingMonday(false);
+    }
+  };
+
+  const recompressCache = async () => {
+    // Re-transcode legacy oversized cached files at the new compact
+    // settings. Backend runs them in the background on the bg lane so
+    // coach reviews still get priority. We just kick it off and report
+    // how many got scheduled.
+    if (!window.confirm(
+      "Re-transcode every cached video larger than 60 MB at the new compact settings?\n\n" +
+      "Runs in the background — coach reviews stay snappy. " +
+      "Each large file takes ~30-60s; the full batch usually finishes in 10-15 min."
+    )) return;
+    setRecompressing(true);
+    try {
+      const { data } = await apiClient.post("/private-videos/cache-recompress?min_bytes_mb=60", {});
+      const n = data?.scheduled ?? 0;
+      toast.success(
+        n === 0
+          ? "Nothing to recompress — all cached files are already compact."
+          : `Recompressing ${n} oversized cached file${n === 1 ? "" : "s"} in the background.`
+      );
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Recompress failed");
+    } finally {
+      setRecompressing(false);
     }
   };
 
@@ -237,6 +265,19 @@ export default function PrivateVideos() {
             {syncingMonday ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
             Sync from Monday
           </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={recompressCache}
+              disabled={recompressing}
+              data-testid="pv-recompress"
+              title="Re-transcode legacy oversized cached videos at the new compact settings (admin only). Runs in the background; coach reviews stay responsive."
+            >
+              {recompressing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Video className="w-4 h-4 mr-1.5" />}
+              Recompress cache
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => load(true)} disabled={refreshing} data-testid="pv-refresh">
             {refreshing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
             Refresh
