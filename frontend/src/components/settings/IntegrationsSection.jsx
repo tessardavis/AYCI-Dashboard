@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -18,10 +18,157 @@ import { Input } from "@/components/ui/input";
 export default function IntegrationsSection({ isAdmin }) {
   return (
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
+      <IntakeStatusCard isAdmin={isAdmin} />
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
       <ZapierCircleReplyCard isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+/**
+ * Read-only diagnostic for the Monday "Create Item" retirement: shows which
+ * students arrived via the Zapier `intake` endpoint in the last N days, so we
+ * can confirm signups are landing in the dashboard directly before pulling the
+ * Monday create path. Backed by GET /api/students-db/intake-recent.
+ */
+function IntakeStatusCard() {
+  const [days, setDays] = useState(7);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+
+  const load = async (d = days) => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get(`/students-db/intake-recent?days=${d}`);
+      setData(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load intake status");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(days); /* eslint-disable-next-line */ }, [days]);
+
+  const counts = data?.counts || {};
+  const recent = data?.recent || [];
+  const pending = counts.pending_reconcile_total ?? 0;
+
+  const fmtWhen = (iso) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+    } catch { return iso; }
+  };
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="intake-status-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 shrink-0">
+          <UserPlus className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Signup intake (Monday retirement)
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            New signups now land in the dashboard directly via the Zapier{" "}
+            <code className="text-xs bg-slate-100 px-1 rounded">intake</code> endpoint. Use this to
+            confirm real signups are arriving with the right tier &amp; cohort{" "}
+            <b>before removing the Monday "Create Item" steps</b>. Brand-new students show as{" "}
+            <b>pending</b> until the 15-min mirror reconciles them onto their Monday row — that should
+            clear within ~15&nbsp;min.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex rounded-lg border border-[var(--ayci-border)] overflow-hidden text-sm">
+          {[7, 14, 30].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              disabled={loading}
+              className={`px-3 py-1.5 ${days === d ? "bg-[var(--ayci-accent)] text-white font-semibold" : "bg-white text-[var(--ayci-ink-muted)] hover:bg-slate-50"}`}
+              data-testid={`intake-days-${d}`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => load(days)} disabled={loading} data-testid="intake-refresh">
+          {loading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+          Refresh
+        </Button>
+      </div>
+
+      {loading && !data ? (
+        <div className="text-sm text-[var(--ayci-ink-muted)] flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-4" data-testid="intake-counts">
+            <Stat label={`Touched · ${days}d`} value={counts.intake_touched_in_window ?? 0} />
+            <Stat label={`New · ${days}d`} value={counts.created_in_window ?? 0} />
+            <Stat
+              label="Pending reconcile"
+              value={pending}
+              tone={pending > 0 ? "amber" : "emerald"}
+            />
+          </div>
+
+          {recent.length === 0 ? (
+            <p className="text-sm text-[var(--ayci-ink-muted)]">
+              No intake activity in the last {days} days.
+            </p>
+          ) : (
+            <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)] max-h-72 overflow-y-auto" data-testid="intake-recent-list">
+              {recent.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-[var(--ayci-ink)] truncate">
+                      {r.name || r.email || "—"}
+                    </div>
+                    <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                      {[r.tier, r.cohort_joined, r.source].filter(Boolean).join(" · ") || r.email}
+                    </div>
+                  </div>
+                  {r.pending_reconcile && (
+                    <span className="shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                      pending
+                    </span>
+                  )}
+                  <span className="shrink-0 text-xs text-[var(--ayci-ink-muted)] tabular-nums">
+                    {fmtWhen(r.dashboard_edited_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone = "ink" }) {
+  const valueClass =
+    tone === "amber" ? "text-amber-700"
+    : tone === "emerald" ? "text-emerald-700"
+    : "text-[var(--ayci-ink)]";
+  return (
+    <div className="bg-slate-50 border border-[var(--ayci-border)] rounded-lg px-3 py-2.5 text-center">
+      <div className={`font-display font-bold text-2xl tabular-nums ${valueClass}`}>{value}</div>
+      <div className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-0.5">{label}</div>
     </div>
   );
 }
