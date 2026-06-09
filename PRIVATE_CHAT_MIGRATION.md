@@ -38,9 +38,19 @@ student who is **not** Boss, **not** `setup_not_needed`, and has **no
    `private_chat_url`, `private_chat_coach`, `private_chat_created_at`.
 6. **Post the welcome message** into the chat (templated).
 7. **Slack alert** to the team channel.
-8. **Idempotency:** `private_chat_url` present ⇒ never re-create; plus an
-   in-progress guard. This is what makes it safe to run in **parallel** with the
-   live zaps during rollout.
+8. **Idempotency / no-duplicate guard:** in Circle, a group DM's identity *is*
+   its member set — you can't add/remove people, and "find-or-create" with a
+   different roster makes a **new** room. So creating a chat for a student who
+   already has one spawns a confusing duplicate. Guards, in order:
+   - `private_chat_url` present on the row ⇒ skip outright.
+   - Before creating, **check Circle** for an existing coach group chat with this
+     student (list a resident coach's — e.g. Coralie's — group threads, look for
+     one whose participants include the student). Found ⇒ record that URL, don't
+     create.
+   - Residual case (chat exists but neither the row nor the Circle check finds
+     it) is caught by **Phase 0 being manual + preview** — a human confirms each
+     creation before it happens.
+   This is also what makes it safe to run in **parallel** with the live zaps.
 
 ## Coach assignment (resolved 2026-06-09)
 
@@ -57,14 +67,17 @@ offboarded). One coach is the designated **owner / welcome-DM sender** (their
 Circle token creates the room + posts the welcome message) — proposed **Coralie**
 (the OD/onboarding role the zaps ran under); TBC.
 
-**Existing chats are left untouched** — Oksana stays in the old ones, which is
-harmless: **video routing is decoupled from chat membership.** The "Send to
-Circle" flow sends each voicenote to `destination = that student's own
-`private_chat_url`` (`routes/private_videos.py`), keyed by *which student*, never
-by *who's in the chat*. So a mixed state (old chats with Oksana, new without)
-needs no special handling. _Optional, separate, later:_ a one-time sweep to remove
-Oksana from existing private-chat rooms (one Circle API call per room) — not
-required for correctness.
+**Existing chats are left untouched** — Oksana stays in the old ones. This is
+harmless on two counts:
+- **Video routing is decoupled from chat membership.** "Send to Circle" sends
+  each voicenote to `destination = that student's own `private_chat_url``
+  (`routes/private_videos.py`), keyed by *which student*, never by *who's in the
+  chat*. A mixed state (old chats with Oksana, new without) needs no special
+  handling.
+- **You can't remove someone from a Circle group DM anyway** — membership defines
+  the room's identity, so any roster change spawns a *new* chat and confuses
+  students. So there is **no** "remove Oksana" sweep; old chats are permanent
+  as-is.
 
 ## New pieces
 
