@@ -302,6 +302,84 @@ async def revert_applied_allowances(user: dict = Depends(require_board("students
     return {"ok": True, "reverted": len(reverted), "items": reverted[:300]}
 
 
+# Declared BEFORE /students-db/{monday_item_id} so it isn't shadowed by the
+# id route (Starlette matches in declaration order).
+@router.get("/students-db/intake-recent")
+async def intake_recent(
+    days: int = 7,
+    limit: int = 200,
+    user: dict = Depends(require_board("students")),
+):
+    """Diagnostic: which students arrived via the Zapier `intake` endpoint.
+
+    Confidence check before retiring the Monday "Create Item" steps — open
+    this in the browser and confirm recent real signups are landing in the
+    dashboard directly.
+
+    Intake stamps `dashboard_edited_by="zapier-intake"` on every row it
+    touches and gives brand-new students an `_id` of `auto:<uuid>` until the
+    Monday row syncs and `_reconcile_auto_rows` merges them. So:
+
+      - `pending_reconcile` rows (`_id` starts with `auto:`) = created by
+        intake, no Monday counterpart synced yet. During the transition these
+        should clear within ~15 min; a pile-up of old ones means reconcile or
+        the Monday-create path is wedged.
+      - non-auto intake rows = intake updated an existing row, OR an auto row
+        already reconciled onto its Monday twin.
+
+    `window` counts cover the last `days`; `pending_total` counts ALL
+    unreconciled auto rows regardless of age (stragglers surface even if old)."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=max(days, 0))
+
+    # Everything intake has touched in the window, newest first.
+    cursor = (
+        db.academy_members
+        .find(
+            {"dashboard_edited_by": "zapier-intake",
+             "dashboard_edited_at": {"$gte": cutoff}},
+            {"columns": 0, "columns_by_id": 0},
+        )
+        .sort([("dashboard_edited_at", -1)])
+        .limit(min(limit, 1000))
+    )
+    recent, created_in_window = [], 0
+    async for r in cursor:
+        is_auto = str(r.get("_id", "")).startswith("auto:")
+        if is_auto:
+            created_in_window += 1
+        ea = r.get("dashboard_edited_at")
+        ca = r.get("created_at")
+        recent.append({
+            "id": r["_id"],
+            "pending_reconcile": is_auto,
+            "name": r.get("name"),
+            "email": r.get("email"),
+            "tier": r.get("tier"),
+            "cohort_joined": r.get("cohort_joined"),
+            "source": r.get("source"),
+            "dashboard_edited_at": ea.isoformat() if isinstance(ea, datetime) else ea,
+            "created_at": ca.isoformat() if isinstance(ca, datetime) else ca,
+        })
+
+    # All-time unreconciled auto rows (not just the window) — a straggler that
+    # never found a Monday row would otherwise hide once it ages out.
+    pending_total = await db.academy_members.count_documents(
+        {"_id": {"$regex": "^auto:"}}
+    )
+
+    return {
+        "as_of": now.isoformat(),
+        "window_days": days,
+        "counts": {
+            "intake_touched_in_window": len(recent),
+            "created_in_window": created_in_window,
+            "pending_reconcile_total": pending_total,
+        },
+        "recent": recent,
+    }
+
+
 @router.get("/students-db/{monday_item_id}")
 async def get_student(
     monday_item_id: str,
