@@ -31,7 +31,8 @@ The dashboard is a **mirror of the Monday "Academy Members" board** (15-min sync
 
 ### Later (the rest of retiring Monday)
 - [ ] **Remaining write-side zaps → `update-by-email`** — cohort-lifecycle / Kit- / Circle-triggered ones, **plus the 2 legacy-upgrade signup paths** (need Tier End Date / In Active Cohort / Legacy added to the dashboard first; mirror covers them meanwhile).
-- [ ] **Outbound dispatcher rollout** to the ~12 Monday-*triggered* zaps (after 8b proves it). Caveat: only fires on dashboard-originated changes — needs the triggering edits to happen in the dashboard (or a mirror-emit bridge).
+- [ ] **Private-chat creation → dashboard-native (Route 2)** — zaps 46/47/53/54 create coach group chats when a student joins Circle; today they silently drop anyone who joined Circle under a different email than they signed up with. Plan to have the dashboard detect + match (on either email, fixing the dual-email gap) + create the chat itself. **Full plan in `PRIVATE_CHAT_MIGRATION.md`.** Coach assignment resolved (same shared coach[s], port the Zapier table to a dashboard config). Manual stopgap shipped: the `circle-email-gaps` Link panel in Settings → Integrations.
+- [ ] **Outbound dispatcher rollout** to the remaining Monday-*triggered* zaps (after 8b proves it). Caveat: only fires on dashboard-originated changes — needs the triggering edits to happen in the dashboard (or a mirror-emit bridge).
 - [ ] **AYGI / waitlist signups → `intake`** (AYGI deferred to the 2027 cohort).
 - [ ] **Final cutover:** turn off the Monday→Mongo mirror → archive the board.
 
