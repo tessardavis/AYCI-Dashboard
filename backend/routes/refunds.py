@@ -110,22 +110,9 @@ async def _student_snapshot(email_l: str) -> dict:
     }
 
 
-@router.post("/refunds/ingest")
-async def ingest_refund(
-    request: Request,
-    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
-):
-    """Upsert a refund from Stripe (via Zapier). Dedups on the Stripe refund
-    id so a re-sent zap doesn't create duplicates. Accepts flat Zapier-style
-    keys or a nested object."""
-    _check_webhook_secret(x_webhook_secret)
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(400, "Invalid JSON payload")
-    if not isinstance(body, dict):
-        raise HTTPException(400, "payload must be an object")
-
+async def _upsert_from_payload(body: dict) -> dict:
+    """Core ingest: normalise a refund payload, match the student, and upsert
+    by Stripe refund id. Shared by the Zapier webhook and the Stripe backfill."""
     email_l = str(
         body.get("email") or body.get("customer_email")
         or body.get("receipt_email") or ""
@@ -192,6 +179,110 @@ async def ingest_refund(
     await db.refunds.insert_one(doc)
     logger.info(f"[refunds] created refund id={refund_id} email={email_l} matched={bool(snap)}")
     return {"ok": True, "id": refund_id, "created": True, "matched_student": bool(snap)}
+
+
+@router.post("/refunds/ingest")
+async def ingest_refund(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Upsert a refund from Stripe (via Zapier). Dedups on the Stripe refund
+    id so a re-sent zap doesn't create duplicates. Accepts flat Zapier-style
+    keys or a nested object."""
+    _check_webhook_secret(x_webhook_secret)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "payload must be an object")
+    return await _upsert_from_payload(body)
+
+
+def _email_from_charge(charge: Any) -> Optional[str]:
+    """Pull the best available email off an expanded Stripe charge object."""
+    if not isinstance(charge, dict):
+        return None
+    cust = charge.get("customer")
+    cust_email = cust.get("email") if isinstance(cust, dict) else None
+    return (
+        charge.get("receipt_email")
+        or (charge.get("billing_details") or {}).get("email")
+        or cust_email
+    )
+
+
+@router.post("/refunds/backfill-from-stripe")
+async def backfill_from_stripe(
+    days: Optional[int] = None,
+    admin: dict = Depends(require_admin),
+):
+    """Pull historical refunds straight from Stripe and upsert them. Expands
+    the charge (and its customer) so we get the email for student matching.
+    Idempotent — dedups on stripe_refund_id, so safe to re-run. `days`
+    optionally limits to the last N days; omitted = all time."""
+    import httpx
+    from connectors import _stripe_list_all, TIMEOUT
+
+    if not (os.environ.get("STRIPE_API_KEY") or "").strip():
+        raise HTTPException(503, "STRIPE_API_KEY not configured")
+
+    params: dict[str, Any] = {"expand[]": ["data.charge", "data.charge.customer"]}
+    if days and days > 0:
+        from datetime import timedelta
+        params["created[gte]"] = int(
+            (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+            refunds = await _stripe_list_all(c, "/refunds", params)
+    except Exception as e:
+        logger.exception("[refunds] backfill stripe list failed")
+        raise HTTPException(502, f"Stripe list refunds failed: {str(e)[:200]}")
+
+    created = updated = skipped = matched = 0
+    for r in refunds:
+        # Only real (succeeded) refunds — skip pending/failed/canceled.
+        if r.get("status") and r.get("status") != "succeeded":
+            skipped += 1
+            continue
+        charge = r.get("charge")
+        charge_id = charge.get("id") if isinstance(charge, dict) else charge
+        payload = {
+            "id": r.get("id"),
+            "amount_refunded": r.get("amount"),  # pence → backend /100
+            "currency": r.get("currency"),
+            "created": r.get("created"),
+            "charge": charge_id,
+            "reason": r.get("reason"),
+            "email": _email_from_charge(charge),
+        }
+        try:
+            res = await _upsert_from_payload(payload)
+        except Exception as e:
+            logger.warning(f"[refunds] backfill upsert failed for {r.get('id')}: {e}")
+            skipped += 1
+            continue
+        if res.get("created"):
+            created += 1
+        else:
+            updated += 1
+        if res.get("matched_student"):
+            matched += 1
+
+    logger.info(
+        f"[refunds] backfill done: {created} created, {updated} updated, "
+        f"{skipped} skipped, {matched} matched ({len(refunds)} from stripe)"
+    )
+    return {
+        "ok": True,
+        "fetched": len(refunds),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "matched_student": matched,
+    }
 
 
 @router.get("/refunds/summary")

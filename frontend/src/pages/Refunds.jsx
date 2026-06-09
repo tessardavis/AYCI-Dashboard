@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Search, Trash2, DownloadCloud } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
@@ -58,6 +58,7 @@ export default function Refunds() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [needsReasonOnly, setNeedsReasonOnly] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   const load = async (isRefresh) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
@@ -106,6 +107,20 @@ export default function Refunds() {
     }
   };
 
+  const backfill = async () => {
+    if (!window.confirm("Pull all historical refunds from Stripe into the board? This is safe to run repeatedly — it won't create duplicates.")) return;
+    setBackfilling(true);
+    try {
+      const { data } = await apiClient.post("/refunds/backfill-from-stripe");
+      toast.success(`Backfill done — ${data.created} new, ${data.updated} updated, ${data.matched_student} matched to a student (${data.fetched} from Stripe).`);
+      await load(true);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Backfill failed");
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   const editNotes = (r) => {
     const next = window.prompt("Refund notes", r.reason_notes || "");
     if (next === null) return;
@@ -132,13 +147,27 @@ export default function Refunds() {
             Sourced from Stripe. Add the reason &amp; status for each.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => load(true)}
-          className="text-sm flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--ayci-border)] hover:bg-slate-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={backfill}
+              disabled={backfilling}
+              className="text-sm flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--ayci-border)] hover:bg-slate-50 disabled:opacity-60"
+              title="Pull all historical refunds from Stripe (idempotent)"
+            >
+              {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
+              Backfill from Stripe
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => load(true)}
+            className="text-sm flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--ayci-border)] hover:bg-slate-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary chips */}
