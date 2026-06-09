@@ -327,45 +327,64 @@ async def _process_thread(
     sent_ids = set(state.get("sent_message_ids") or [])
     sent_bodies = set(state.get("sent_bodies") or [])
 
-    # ---- Interview-eve score capture (runs BEFORE the lookback guard) ----
-    # Eve-DM threads are special: the bot is *expecting* a numeric score
-    # reply from the student. If the coach has also sent a personal note
-    # in the thread between the student's reply and this poll, the
-    # lookback guard below would fire on the coach's message and flip the
-    # thread to `human_takeover` — losing the score forever. Running the
-    # score capture FIRST guarantees we record the score even when the
-    # coach is actively chatting in the thread. The coach's manual reply
-    # will still flip the thread to human_takeover on the next poll (via
-    # the lookback guard), which is the correct end state.
+    # ---- Interview-eve threads: SCORE-CAPTURE ONLY (never auto-reply) ----
+    # When we DM a student the night before their interview asking for a
+    # confidence score, this thread is special: the ONLY thing the bot may
+    # do here is record a numeric score. It must NEVER fall through to the
+    # generic playbook auto-responder — otherwise a non-numeric reply
+    # ("thanks!", "so nervous!") or an old backlog message (the eve-DM
+    # seeds last_seen=0, so prior history counts as "new") triggers a
+    # second bot DM seconds after the support-score prompt. That
+    # double-message is the bug one student hit. So this block ALWAYS
+    # returns — score recorded or not.
+    #
+    # It also runs BEFORE the lookback guard so a coach's personal note in
+    # the thread can't flip it to human_takeover and lose the score. The
+    # coach's manual follow-up still flips the thread to human_takeover on
+    # a later (non-eve) poll once we've retired the eve link below.
     if state.get("interview_eve_record_id"):
+        import interview_eve_dm
         latest_student_msg_for_score = None
         for _m in reversed(messages):
             if _msg_sender_id(_m) == student_id:
                 latest_student_msg_for_score = _m
                 break
+        scored_early = None
         if latest_student_msg_for_score:
             student_text_for_score = _msg_body(latest_student_msg_for_score)
             if student_text_for_score:
                 try:
-                    import interview_eve_dm
                     scored_early = await interview_eve_dm.maybe_record_score(
                         db, chat_room_uuid, student_text_for_score,
                     )
-                    if scored_early is not None:
-                        # Score captured. Don't auto-reply — Coralie (the
-                        # real coach) follows up manually so students get a
-                        # human response rather than another bot message.
-                        # Still bump last_seen_message_id so the AI reply
-                        # path below doesn't fire on this same message.
-                        await _save_thread_state(db, chat_room_uuid, {
-                            "state": "active",
-                            "last_seen_message_id": latest_id or 0,
-                            "last_activity_at": datetime.now(timezone.utc).isoformat(),
-                        })
-                        return {"interview_eve_score_recorded": chat_room_uuid,
-                                "score": scored_early["score"]}
                 except Exception as e:
                     logger.warning(f"[interview-eve] early score capture errored: {e}")
+
+        # Advance last_seen so we don't reprocess, and stay silent.
+        patch = {
+            "state": "active",
+            "last_seen_message_id": latest_id or 0,
+            "last_activity_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Retire the eve link once the interview day has passed, so the
+        # generic bot can help this student again for future questions.
+        # (Score capture scans the full message window, so a score that
+        # lands on a later poll is still recorded until then.)
+        try:
+            rec = await db.interview_eve_dms.find_one(
+                {"id": state["interview_eve_record_id"]},
+                {"_id": 0, "interview_date": 1},
+            )
+            if rec and (rec.get("interview_date") or "") < interview_eve_dm._today_uk().isoformat():
+                patch["interview_eve_record_id"] = None
+        except Exception as e:
+            logger.warning(f"[interview-eve] eve-link retirement check failed: {e}")
+        await _save_thread_state(db, chat_room_uuid, patch)
+
+        if scored_early is not None:
+            return {"interview_eve_score_recorded": chat_room_uuid,
+                    "score": scored_early["score"]}
+        return {"interview_eve_no_reply": chat_room_uuid}
 
     # Detect human takeover — scan the FULL fetched window, not just `new_messages`.
     # Why full window? Two reasons:
