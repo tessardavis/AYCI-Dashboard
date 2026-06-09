@@ -20,7 +20,7 @@ The dashboard is a **mirror of the Monday "Academy Members" board** (15-min sync
 
 ### Immediate (this week)
 - [ ] **Verify new signups** land in Students (DB), then **remove the 3 Monday `Create Item` steps** from "[AYCI JUNE-26] Signups to Monday Board (OD)" (first real "Monday does less" step).
-- [ ] After ~1wk verify: **remove the Monday safety-net steps** from the 15-min-call zaps; do **Round Robin Phase 2** (delete Monday/AI/Paths machinery → single `slot`-empty Filter → Fallback).
+- [ ] After ~1wk verify: **remove the Monday safety-net steps** from the 15-min-call zaps; do **Round Robin Phase 2** (delete Monday/AI/Paths machinery → single Filter → Fallback). **Step-by-step teardown below.**
 
 ### Coralie batch (when she's back — week of 2026-06-08)
 - [ ] **Circle:** Coralie connects her Circle account in Zapier (admin/mod rights needed) → **publish 8b** (first dispatcher consumer, catches `boss_badge`) → switch the other `(Oksana)` zaps' connections to Coralie **before Oksana's accounts are deactivated**.
@@ -34,6 +34,47 @@ The dashboard is a **mirror of the Monday "Academy Members" board** (15-min sync
 - [ ] **Outbound dispatcher rollout** to the ~12 Monday-*triggered* zaps (after 8b proves it). Caveat: only fires on dashboard-originated changes — needs the triggering edits to happen in the dashboard (or a mirror-emit bridge).
 - [ ] **AYGI / waitlist signups → `intake`** (AYGI deferred to the 2027 cohort).
 - [ ] **Final cutover:** turn off the Monday→Mongo mirror → archive the board.
+
+## Round Robin Phase 2 — teardown checklist (Zapier UI)
+
+**Scope:** the 3 live siblings only — **18 Anoop · 18b Charlotte · 18c Becky**
+(`[AYCI JUNE-26] 1:1 Calls - Round Robin`). Each already has the Phase-1
+Webhooks POST → `/api/students-db/book-call` `{email, coach:"<Name>"}` right
+after the Calendly trigger; that POST is now the source of truth (fills the
+lowest un-booked Call slot server-side, writes `call_N = "Booked - <Coach>"`,
+pins it dashboard-owned). **Out of scope:** 19 `[TVA Test] … Tessa` (draft) and
+19c `… Becky (Oksana)` (has an extra VIP/PP filter; parked on the Coralie/Oksana
+connection swap) — migrate those separately once 18/18b/18c are proven.
+
+**End-state flow (per zap):**
+1. Trigger — Calendly: Invitee Created _(unchanged)_
+2. Webhooks: POST → `book-call` `{email, coach}` _(unchanged — keep exactly as is)_
+3. **Filter** — _only continue if_ `reason` (from step 2) **exactly matches** `all_slots_booked`
+4. Formatter: Date/Time → Circle: Find Member → Slack alert _(the existing Fallback, unchanged)_
+
+That's it. On a normal booking `book-call` returns a `slot` number and the
+Filter stops the zap (booking already written). Only the all-4-booked case
+(`reason: all_slots_booked`) flows through to the Slack "call limit reached"
+alert.
+
+**Delete (per zap), in order:**
+- [ ] monday: **Get Items by Column Value** (student lookup)
+- [ ] monday: **Get Column Values** (reads current Call 1–4 state)
+- [ ] **AI by Zapier ×2** (picked which slot — now done in `book-call`)
+- [ ] **Paths** block: Call 1 / Call 2 / Call 3 / Call 4 (each ending in monday **Update Item**) — delete all 4 call paths
+- [ ] Reconnect the surviving **Fallback** steps (Formatter → Circle → Slack) under the new step-3 Filter instead of the old Paths "Fallback" branch
+
+**Notes / gotchas:**
+- Filter on **`reason` = `all_slots_booked`**, not on "`slot` is empty" — `reason`
+  is present only in the all-booked branch, so it's the unambiguous signal (a
+  null `slot` can render inconsistently in Zapier).
+- **404 edge:** if no student matches the email, the `book-call` step errors and
+  the zap halts (rare — means they aren't in the system yet). Acceptable for now;
+  if it bites, add an error-path Slack ping. The old Monday "Get Items" branch
+  silently found nothing here, so this is stricter, not worse.
+- Do **18/18b/18c together** — identical except the `coach` literal already set in step 2.
+- After teardown, the dashboard owns `call_1..call_4`; the mirror leaves them
+  alone (pinned in `dashboard_edited_fields`), so Monday no longer needs the writes.
 
 ## Key reference
 
