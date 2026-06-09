@@ -44,13 +44,27 @@ student who is **not** Boss, **not** `setup_not_needed`, and has **no
 
 ## Coach assignment (resolved 2026-06-09)
 
-It's the **same coach(es) for every student** — the Zapier "coach list" table was
+It's the **same coaches for every student** — the Zapier "coach list" table was
 just an easy place to edit who they are, occasionally. So we port it as an
 **admin-editable dashboard config** (in `settings_store`, surfaced as a Settings →
-Integrations card like the others): a list of coach Circle identities used for
-all private chats, with the data shape allowing optional per-tier overrides later
-(defaults to the one shared list). One designated coach is the "owner" / DM
-sender; the rest (if any) are added to the group.
+Integrations card like the others): the list of coach Circle identities added to
+every private chat, with the data shape allowing optional per-tier overrides later
+(defaults to the one shared list).
+
+**Each chat = one student + several coaches.** Coach list for **new** chats
+(2026-06-09): **Tessa, Arub, Coralie, Becky** — **Oksana dropped** (she's being
+offboarded). One coach is the designated **owner / welcome-DM sender** (their
+Circle token creates the room + posts the welcome message) — proposed **Coralie**
+(the OD/onboarding role the zaps ran under); TBC.
+
+**Existing chats are left untouched** — Oksana stays in the old ones, which is
+harmless: **video routing is decoupled from chat membership.** The "Send to
+Circle" flow sends each voicenote to `destination = that student's own
+`private_chat_url`` (`routes/private_videos.py`), keyed by *which student*, never
+by *who's in the chat*. So a mixed state (old chats with Oksana, new without)
+needs no special handling. _Optional, separate, later:_ a one-time sweep to remove
+Oksana from existing private-chat rooms (one Circle API call per room) — not
+required for correctness.
 
 ## New pieces
 
