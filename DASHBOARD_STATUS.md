@@ -1,6 +1,19 @@
 # Dashboard — migration status & to-dos
 
-_Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-09._
+_Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-10._
+
+## Recent changes — 2026-06-10 session
+
+Work done this session (all committed + pushed to `main`; Render/Vercel auto-deploy):
+
+- **Zapier error triage (all 3 cleared):** WATI webinar 400 → the phone formatter was outputting a leading `+`; added a Formatter Replace so WATI gets `447…` (no `+`). 1:1-reminders "Not authenticated" → the Monday API token in the Webhooks step was dead (Oksana's); swapped for a stable token. 7b Speciality filter → Tessa published.
+- **Circle DM bot — Ben's double-message fixed:** interview-eve threads are now **score-capture only** (`circle_dm_poll.py`) — they never fall through to the generic auto-responder, so no second DM after the support-score prompt. Eve link retires once the interview day passes.
+- **Interview-eve DM — Kathryn Wilson excluded** (`interview_eve_dm.py`): `EVE_DM_EXCLUDE_NAMES`/`EVE_DM_EXCLUDE_EMAILS` (+ `INTERVIEW_EVE_EXCLUDE_EMAILS` env), seeded with `kath_wilson@icloud.com`.
+- **Refunds board (NEW, Monday never did this):** `backend/routes/refunds.py`, board permission `refunds`, page `/refunds`. Stripe-sourced via `POST /api/refunds/ingest` (Zapier "New Refund" → secret `ZAPIER_WEBHOOK_SECRET`), matched to a student by email (tier/cohort snapshot). Editable reason category / notes / status; admins + any refunds-board user (incl. Coralie) can delete. **One-click `POST /api/refunds/backfill-from-stripe`** (admin) already pulled **111 historical refunds (£30,658.52)** using the restricted `STRIPE_API_KEY`. Students(DB) rows show a **Refunded badge + filter**.
+  - **Open:** publish the "Refund tracking from Stripe" zap (go-forward); give Coralie the `refunds` board (Settings → Users); delete the £0.01 test row.
+- **Circle DM auto-responder HARD-DISABLED** (`server.py`): per Tessa it must not send AI replies from her inbox **or any coach's**. Polling job is forced off regardless of the DB toggle; re-enable only by setting `CIRCLE_BOT_ENABLED=true` on Render. **Team roles clarified:** coaches = Anoop/Becky/Kat/Zinnirah/Anne/Charlotte; **Coralie = customer support, NOT a coach**. Undecided: whether to keep silent triage (DMs → Coralie tickets, no replies sent) or kill it entirely; and whether the night-before score DM should still send as Coralie.
+
+> ⚠️ The per-machine **Claude memory** (`~/.claude/projects/.../memory/`) does **not** travel with the repo. This doc is the portable record — read it first on a new device. `git pull` brings all code + this file.
 
 ## Where we are
 
