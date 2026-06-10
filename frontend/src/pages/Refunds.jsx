@@ -248,7 +248,7 @@ export default function Refunds() {
                 <th className="px-3 py-2 font-semibold">Reason</th>
                 <th className="px-3 py-2 font-semibold">Notes</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
-                {isAdmin && <th className="px-3 py-2 font-semibold w-10"></th>}
+                <th className="px-3 py-2 font-semibold w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -304,18 +304,16 @@ export default function Refunds() {
                       {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
-                  {isAdmin && (
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeRefund(r)}
-                        className="text-slate-400 hover:text-rose-600"
-                        title="Delete refund record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  )}
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeRefund(r)}
+                      className="text-slate-400 hover:text-rose-600"
+                      title="Delete refund record"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

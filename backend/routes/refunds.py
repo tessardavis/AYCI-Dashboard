@@ -380,7 +380,7 @@ async def update_refund(
 
 
 @router.delete("/refunds/{refund_id}")
-async def delete_refund(refund_id: str, admin: dict = Depends(require_admin)):
+async def delete_refund(refund_id: str, user: dict = Depends(require_board("refunds"))):
     res = await db.refunds.delete_one({"id": refund_id})
     if res.deleted_count == 0:
         raise HTTPException(404, "Refund not found")
