@@ -1416,7 +1416,16 @@ async def on_startup():
     # `localhost` is treated as production.
     _mongo_url = os.environ.get("MONGO_URL") or ""
     _is_preview = "localhost" in _mongo_url or "127.0.0.1" in _mongo_url
-    circle_bot_enabled = not _is_preview
+    # HARD-DISABLED 2026-06-10 at Tessa's request: the Circle DM auto-responder
+    # must NOT send AI replies from her inbox or any coach's. We force the
+    # polling job off here — independent of the DB `enabled` toggle — so no
+    # reply can be posted as anyone. Re-enabling is now a deliberate act:
+    # set CIRCLE_BOT_ENABLED=true on Render (and only after it's pointed at the
+    # right coach inboxes with an automated-reply disclosure).
+    circle_bot_enabled = (
+        os.environ.get("CIRCLE_BOT_ENABLED", "").strip().lower() == "true"
+        and not _is_preview
+    )
     async def _circle_dm_poll():
         import circle_dm_poll
         import asyncio as _asyncio
