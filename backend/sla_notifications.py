@@ -31,10 +31,16 @@ def _webhook_url() -> Optional[str]:
 async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
     """Decide whether the digest should run today.
 
-    Cohort is "active" if today is on or before the latest configured cohort
-    end date. If neither end date is set, fall back to legacy behaviour
-    (always active) so existing installs keep working until end dates are
-    filled in via the Settings → Coach Spaces UI.
+    The digest fires only while a cohort is actually running — i.e. today is
+    inside at least one coach space's [start, end] window. A space counts as
+    "in window" when today is on/after its start AND on/before its end:
+      - missing start → treat as already started (legacy / open-ended start)
+      - missing end   → treat as not yet ended (open-ended end)
+    so a space with neither date set is always active (legacy behaviour), and a
+    space with only a start fires from that start onward (the old behaviour for
+    the current cohort). The key fix vs. before: a start date in the FUTURE now
+    keeps the digest quiet until the cohort begins, instead of firing daily
+    between cohorts. If NOTHING is configured at all, fail open (always active).
     """
     today = today or datetime.now(timezone.utc).date()
     try:
@@ -42,20 +48,31 @@ async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
         cfg = await settings_store.get_coach_spaces(db)
     except Exception:
         return True  # fail open — never silently kill the digest on a settings read error
-    ends: list[date] = []
-    for key in ("recorded_answer_end", "interview_support_end"):
-        v = cfg.get(key)
-        if not v:
-            continue
+
+    def _parse(v):
         try:
-            ends.append(date.fromisoformat(v))
+            return date.fromisoformat(v) if v else None
         except (TypeError, ValueError):
-            continue
-    if not ends:
-        return True  # no end dates set yet — legacy behaviour
-    # If today is after BOTH end dates, the cohort is over. If at least one
-    # space is still inside its window, keep firing.
-    return today <= max(ends)
+            return None
+
+    spaces = (
+        ("recorded_answer_start", "recorded_answer_end"),
+        ("interview_support_start", "interview_support_end"),
+    )
+    any_configured = False
+    for start_key, end_key in spaces:
+        start = _parse(cfg.get(start_key))
+        end = _parse(cfg.get(end_key))
+        if start is None and end is None:
+            continue  # this space has no window configured
+        any_configured = True
+        started = start is None or today >= start
+        not_ended = end is None or today <= end
+        if started and not_ended:
+            return True  # at least one space is currently in its cohort window
+    if not any_configured:
+        return True  # nothing configured anywhere — legacy fail-open
+    return False  # dates configured, but today is outside every window
 
 
 async def build_sla_digest_payload(db) -> dict:
