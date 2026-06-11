@@ -104,11 +104,20 @@ def _allowance_flag(row: dict) -> Optional[str]:
         return "mismatch"
 
 
+def _private_chat_blocked(row: dict) -> bool:
+    """A non-empty `private_chat_status` is a pending note (e.g. "Awaiting DMs",
+    written by the chat zap when the student has DMs switched off). Its presence
+    means setup is blocked/pending — surface the student in "Needs setup" even if
+    a (dead) chat URL exists. Cleared once the chat is actually working."""
+    return bool((row.get("private_chat_status") or "").strip())
+
+
 def _needs_private_chat_setup(row: dict) -> bool:
     """True for a private-tier / active Boost & Go student who still needs
-    setting up — i.e. missing their private chat link OR missing their video
-    allowance. (A wrong-but-present allowance is a 'mismatch', surfaced
-    separately, not auto-changed.)"""
+    setting up — i.e. missing their private chat link, blocked on a pending
+    status (e.g. awaiting DMs), OR missing their video allowance. (A
+    wrong-but-present allowance is a 'mismatch', surfaced separately, not
+    auto-changed.)"""
     if row.get("setup_not_needed"):
         return False  # manually dismissed — intentionally fine to leave empty
     if _is_boss(row):
@@ -116,7 +125,7 @@ def _needs_private_chat_setup(row: dict) -> bool:
     if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
         return False
     no_chat = not (row.get("private_chat_url") or "").strip()
-    return no_chat or _allowance_flag(row) == "missing"
+    return no_chat or _private_chat_blocked(row) or _allowance_flag(row) == "missing"
 
 
 def _slim_row_for_list(row: dict) -> dict:
@@ -124,7 +133,8 @@ def _slim_row_for_list(row: dict) -> dict:
     keep = (
         "_id", "name", "first_name", "surname", "email", "circle_email",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-        "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
+        "interview_type", "private_chat_url", "private_chat_status",
+        "boost_and_go", "video_allowance",
         "setup_not_needed", "setup_not_needed_reason",
         "url", "synced_at", "dashboard_edited_fields",
     )
@@ -564,7 +574,7 @@ async def get_student(
 EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
-    "interview_type", "private_chat_url", "video_allowance",
+    "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
     "setup_not_needed", "setup_not_needed_reason",
 }
 
@@ -584,6 +594,7 @@ class StudentPatch(BaseModel):
     hospital: Optional[str] = None
     interview_type: Optional[str] = None
     private_chat_url: Optional[str] = None
+    private_chat_status: Optional[str] = None
     video_allowance: Optional[int] = None
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None

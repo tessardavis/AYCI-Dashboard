@@ -26,6 +26,7 @@ const EDITABLE_FIELDS = [
   { key: "hospital",       label: "Hospital" },
   { key: "interview_type", label: "Interview type" },
   { key: "private_chat_url", label: "Private chat URL" },
+  { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
 ];
 
@@ -356,6 +357,14 @@ export default function StudentsDB() {
                         title={`${r.refund_count} refund${r.refund_count === 1 ? "" : "s"}${r.refund_total ? ` · £${Number(r.refund_total).toFixed(2)}` : ""} — see the Refunds board`}
                       >
                         ↩ Refunded{r.refund_count > 1 ? ` ×${r.refund_count}` : ""}
+                      </span>
+                    )}
+                    {(r.private_chat_status || "").trim() && (
+                      <span
+                        className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 align-middle"
+                        title={`Private chat blocked — ${r.private_chat_status}. Clear it (via Edit) once sorted.`}
+                      >
+                        {r.private_chat_status}
                       </span>
                     )}
                   </td>

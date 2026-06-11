@@ -157,6 +157,10 @@ PROTECTED_FIELDS = {
     "intro_post",
     "milestone_1", "milestone_2", "milestone_3", "milestone_4", "milestone_5",
     "private_spaces",
+    # Private-chat setup status note (e.g. "Awaiting DMs"). Written by the
+    # private-chat zap's DMs-closed branch (via update-by-email) or the
+    # dashboard's own chat-creation flow; surfaces the student in "Needs setup".
+    "private_chat_status",
     "testimonial_requested", "testimonial_fu_1",
     # Mock interview + 1:1 status fields (used by Calendly zaps 14, 18)
     "mock_interview_status",

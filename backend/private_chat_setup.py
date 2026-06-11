@@ -252,6 +252,7 @@ async def create_for_student(db_, student_id: str) -> dict:
         "private_chat_circle_uuid": uuid,
         "private_chat_created_at": now,
         "private_chat_coaches": coach_emails,
+        "private_chat_status": "",  # clear any pending note (e.g. "Awaiting DMs")
         "dashboard_edited_at": now,
         "dashboard_edited_by": "private-chat-setup",
     }
