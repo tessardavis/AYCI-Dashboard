@@ -37,8 +37,18 @@ student who is **not** Boss, **not** `setup_not_needed`, and has **no
 5. **Write back** (pinned in `dashboard_edited_fields`): `circle_email`,
    `private_chat_url`, `private_chat_coach`, `private_chat_created_at`.
 6. **Post the welcome message** into the chat (templated).
-7. **Slack alert** to the team channel.
-8. **Idempotency / no-duplicate guard:** in Circle, a group DM's identity *is*
+7. **Slack alert** to the team channel — **best-effort / non-blocking** (a Slack
+   error must never stall or duplicate chat creation; in the live zap a failing
+   Slack step throws the whole run into a reschedule loop that re-runs "Start a
+   Group Chat" → duplicate chats).
+8. **"DMs off" is a first-class outcome.** A student who has switched OFF direct
+   messages in Circle CANNOT have a chat created — Circle's create call returns
+   success but the chat doesn't function for them. Detect this and surface it as
+   its own dashboard status ("waiting on student to enable DMs"), don't trust the
+   create-call's 200 alone, and never let it look like a silent failure (the live
+   zap's DM-off Slack alert was itself broken, so these were invisible — see the
+   Rakhee case, 2026-06-11). [memory: private-chat-dms-off-failure]
+9. **Idempotency / no-duplicate guard:** in Circle, a group DM's identity *is*
    its member set — you can't add/remove people, and "find-or-create" with a
    different roster makes a **new** room. So creating a chat for a student who
    already has one spawns a confusing duplicate. Guards, in order:
