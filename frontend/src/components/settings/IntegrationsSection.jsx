@@ -556,6 +556,8 @@ function PrivateChatSetupCard({ isAdmin }) {
   const [selectedAud, setSelectedAud] = useState(PC_AUDIENCES[0][0]);
   const [savingCfg, setSavingCfg] = useState(false);
   const [creatingId, setCreatingId] = useState(null);
+  const [audit, setAudit] = useState(null);
+  const [auditing, setAuditing] = useState(false);
 
   const loadPreview = async () => {
     const { data } = await apiClient.get("/students-db/private-chat/preview");
@@ -624,9 +626,23 @@ function PrivateChatSetupCard({ isAdmin }) {
     }
   };
 
+  const runAudit = async () => {
+    setAuditing(true);
+    try {
+      const { data } = await apiClient.get("/students-db/private-chat/no-chat-audit");
+      if (data.ok === false) { toast.error(data.error || "Audit failed"); setAudit(null); }
+      else setAudit(data);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Audit failed");
+    } finally {
+      setAuditing(false);
+    }
+  };
+
   const emailedCoaches = coaches.filter((c) => (c.email || "").trim());
   const configReady = preview?.config_ready;
   const ready = preview?.ready || [];
+  const auditNoChat = audit?.no_chat || [];
 
   return (
     <div
@@ -772,6 +788,59 @@ function PrivateChatSetupCard({ isAdmin }) {
               ))}
             </div>
           )}
+
+          {/* Backlog audit — students with no actual coach group chat in Circle */}
+          <div className="mt-6 pt-5 border-t border-[var(--ayci-border)]">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">
+                Backlog audit — no group chat in Circle
+              </p>
+              <Button variant="outline" size="sm" onClick={runAudit} disabled={auditing} data-testid="pc-run-audit">
+                {auditing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
+                Run audit
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--ayci-ink-muted)] mb-3 max-w-prose">
+              Checks Circle directly for every private-tier student — lists those <b>not in any coach group chat</b>,
+              even if a (dead) chat URL exists on their row. The likely DMs-off / dual-email / never-created backlog;
+              the cause is confirmed when you try to create the chat.
+            </p>
+            {audit && (
+              <>
+                <p className="text-xs text-[var(--ayci-ink-muted)] mb-2">
+                  Checked {audit.coach_checked} · {audit.group_chats_scanned} group chats scanned ·{" "}
+                  <b className={auditNoChat.length ? "text-orange-700" : "text-emerald-700"}>{auditNoChat.length}</b> with no chat ·{" "}
+                  {audit.counts?.not_on_circle ?? 0} not on Circle
+                </p>
+                {auditNoChat.length > 0 && (
+                  <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)] max-h-80 overflow-y-auto" data-testid="pc-audit-list">
+                    {auditNoChat.map((r) => (
+                      <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                          <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                            {[r.tier, r.email].filter(Boolean).join(" · ")}
+                            {r.has_dead_url && <span className="text-orange-700"> · has dead chat URL</span>}
+                            {r.private_chat_status && <span className="text-orange-700"> · {r.private_chat_status}</span>}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => createChat(r)}
+                          disabled={!isAdmin || !configReady || creatingId === r.id}
+                          title={!configReady ? "Complete the coach config first" : undefined}
+                          data-testid={`pc-audit-create-${r.id}`}
+                        >
+                          {creatingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                          Create chat
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

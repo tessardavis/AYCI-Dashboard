@@ -172,6 +172,83 @@ async def preview(db_) -> dict:
     }
 
 
+def _norm_name(s: str) -> str:
+    import re
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", (s or "").lower())).strip()
+
+
+async def no_chat_audit(db_) -> dict:
+    """Reconciliation audit: current private-tier students who have NO coach
+    group chat in Circle. More accurate than the `private_chat_url` field
+    because it checks Circle directly — catches students with a *dead* URL too
+    (e.g. a chat that "succeeded" in the zap but the student has DMs off).
+
+    Lists a resident coach's group chats (every private chat includes the
+    coaches), then flags eligible students not present in any of them. The
+    cause isn't necessarily DMs-off (could be dual-email or never-created) —
+    DMs-off is confirmed when chat creation is attempted and fails.
+
+    Read-only. Best-effort matching: by Circle member id (authoritative) with a
+    fall-back to chat-room name, since participant previews can be truncated.
+    """
+    cfg = await settings_store.get_private_chat_config(db_)
+    coach_email = (cfg.get("sender_email") or "").strip().lower()
+    if not coach_email:
+        coach_email = next((c["email"] for c in cfg["coaches"] if c.get("email")), "")
+    if not coach_email:
+        return {"ok": False, "error": "Set at least one coach's Circle email in Private chat setup first."}
+
+    chats = await circle_api.list_group_chats(db_, coach_email)
+    if not chats:
+        return {"ok": False, "error": f"Could not read {coach_email}'s Circle group chats (no token, or none found)."}
+
+    chat_member_ids: set = set()
+    chat_names: list = []
+    for ch in chats:
+        chat_member_ids.update(ch.get("participant_ids") or [])
+        chat_names.append(_norm_name(ch.get("name") or ""))
+
+    by_email = await _build_email_index()
+    no_chat, not_on_circle = [], []
+
+    async for r in db_.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        if not _eligible(r):
+            continue
+        member, via = await _match_circle_member(r, by_email)
+        base = {
+            "id": r["_id"],
+            "name": r.get("name"),
+            "tier": r.get("tier"),
+            "boost_and_go": r.get("boost_and_go"),
+            "email": (r.get("email") or "").strip().lower() or None,
+            "has_dead_url": bool((r.get("private_chat_url") or "").strip()),
+            "private_chat_status": r.get("private_chat_status") or None,
+        }
+        if not member or not member.get("id"):
+            not_on_circle.append(base)
+            continue
+        mid = int(member["id"])
+        if mid in chat_member_ids:
+            continue  # confirmed in a coach group chat
+        # Fallback: a chat named after the student (preview may have truncated ids)
+        nm = _norm_name(r.get("name") or "")
+        if nm and any(nm and nm in cn for cn in chat_names):
+            continue
+        no_chat.append({**base, "circle_member_id": mid, "matched_via": via})
+
+    no_chat.sort(key=lambda x: x.get("name") or "")
+    not_on_circle.sort(key=lambda x: x.get("name") or "")
+    return {
+        "ok": True,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "coach_checked": coach_email,
+        "group_chats_scanned": len(chats),
+        "counts": {"no_chat": len(no_chat), "not_on_circle": len(not_on_circle)},
+        "no_chat": no_chat,
+        "not_on_circle": not_on_circle,
+    }
+
+
 async def create_for_student(db_, student_id: str) -> dict:
     """Create ONE student's coach group chat. Heavily guarded against
     duplicates (Circle can't mutate a room's roster, so a wrong call makes a

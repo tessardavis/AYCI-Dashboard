@@ -297,6 +297,58 @@ async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict
     return out
 
 
+async def list_group_chats(db, admin_email: str, max_pages: int = 30) -> list[dict]:
+    """All GROUP chat rooms `admin_email` is in, paged fully (up to max_pages ×
+    100). Returns `[{uuid, name, participant_ids: [int]}]`. Used by the
+    "no group chat" audit to find which private-tier students already have a
+    coach chat — since every private chat includes the coaches, one coach's
+    group-chat list covers them all.
+
+    NB: `other_participants_preview` may be truncated for large rooms, so the
+    audit also falls back to matching by chat-room name. Participant ids that
+    do appear are authoritative.
+    """
+    access_token = await _get_access_token(db, admin_email)
+    if not access_token:
+        return []
+    out: list[dict] = []
+    async with httpx.AsyncClient(timeout=25) as c:
+        for page in range(1, max_pages + 1):
+            try:
+                r = await c.get(
+                    f"{HEADLESS_BASE}/messages",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"per_page": 100, "page": page},
+                )
+                if r.status_code != 200:
+                    logger.warning(f"[circle-api] list_group_chats p{page} failed: {r.status_code} {r.text[:120]}")
+                    break
+                body = r.json()
+                for rec in body.get("records") or []:
+                    if rec.get("chat_room_kind") != "group":
+                        continue
+                    pids = []
+                    for p in rec.get("other_participants_preview") or []:
+                        if isinstance(p, dict):
+                            pid = p.get("id") or p.get("community_member_id")
+                            if pid:
+                                try:
+                                    pids.append(int(pid))
+                                except (TypeError, ValueError):
+                                    pass
+                    out.append({
+                        "uuid": rec.get("uuid"),
+                        "name": rec.get("chat_room_name") or "",
+                        "participant_ids": pids,
+                    })
+                if not body.get("has_next_page"):
+                    break
+            except Exception as e:
+                logger.warning(f"[circle-api] list_group_chats errored: {e}")
+                break
+    return out
+
+
 async def list_thread_messages_for_admin(
     db, admin_email: str, chat_room_uuid: str, per_page: int = 20,
 ) -> list[dict]:

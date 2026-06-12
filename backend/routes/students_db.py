@@ -546,6 +546,14 @@ async def private_chat_preview(user: dict = Depends(require_board("students"))):
     return await private_chat_setup.preview(db)
 
 
+@router.get("/students-db/private-chat/no-chat-audit")
+async def private_chat_no_chat_audit(user: dict = Depends(require_board("students"))):
+    """Reconciliation audit: current private-tier students with no coach group
+    chat in Circle (checks Circle directly, catches dead-URL cases). Read-only."""
+    import private_chat_setup
+    return await private_chat_setup.no_chat_audit(db)
+
+
 @router.post("/students-db/{monday_item_id}/create-private-chat")
 async def create_private_chat(monday_item_id: str, admin: dict = Depends(require_admin)):
     """Phase 0 manual trigger: create ONE student's coach group chat (guarded
