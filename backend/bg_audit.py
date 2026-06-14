@@ -21,8 +21,14 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+# Match the Boost & Go family ("Boost & Go", "Boost&GO", "Boost and Go",
+# "Boost & Go Plus") but NOT "Booster" products (Turbo Booster / Prep Booster) —
+# "boost" alone false-matches "boostER", so we require the "go".
+_BG_RE = re.compile(r"boost\s*&?\s*(?:and\s*)?go", re.I)
 
 import httpx
 
@@ -119,8 +125,8 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
     for ch in charges:
         if ch.get("status") != "succeeded" or not ch.get("paid"):
             continue
-        if keyword not in _charge_haystack(ch):
-            continue
+        if not _BG_RE.search(_charge_haystack(ch)):
+            continue  # require "boost & go" — excludes Turbo/Prep "Booster"
         desc = (ch.get("description") or "").strip()
         matched_descriptions[desc] = matched_descriptions.get(desc, 0) + 1
         email = (_email_from_charge(ch) or "").strip().lower()
@@ -156,7 +162,7 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
     result = {
         "ok": True,
         "as_of": datetime.now(timezone.utc).isoformat(),
-        "keyword": keyword,
+        "match_rule": "regex 'boost & go' (excludes Turbo/Prep Booster)",
         "charges_scanned": len(charges),
         # Transparency: confirm the keyword is hitting real B&G charges.
         "stripe_boost_products": products,
