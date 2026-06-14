@@ -36,7 +36,26 @@ default; sets B&G / B&G Plus from what they bought, pinned). **2026-06-14: 85 B&
 found, 60 already flagged, 21 unflagged → backfilled; 4 buyers have no dashboard row
 (dual-email / never synced — TODO chase).** Upstream gap remains: the **Kajabi→Monday
 purchase zap doesn't flip the column on purchase** — fix that so new buyers don't get stuck
-(re-run the audit anytime to catch stragglers).
+(re-run the audit anytime to catch stragglers). Zap 11 ("Boost & Go Sales - Arub") rewired to
+POST `boost_and_go` to `update-by-email` per tier path (pinned, matches either email) so new
+purchases flag the dashboard directly. Audit is refund-aware (skips refunded charges) and
+captures buyer name for not-in-dashboard cases (for dual-email chase).
+
+**Private videos — full-cache deadlock fixed.** The Render disk (~10.5 GB) filled (cache held
+both originals + transcodes); eviction only ran AFTER download, so a full disk failed every
+download first → "Video preparation failed". Now eviction runs BEFORE each download (2 GB
+headroom); `cache-info` reports disk free/total + partial count; new
+`GET /api/private-videos/cache-purge` clears orphans + evicts. **Open option:** transcode
+oversized H.264 too (compress, not a bigger disk) — large H.264 sources are stored full-size.
+
+**Circle DM → ticket TRIAGE restored (send-free).** Tickets-from-DMs stopped when the
+auto-responder poller was hard-disabled (2026-06-10); ticket creation lived inside it, and the
+webhook path is inactive (`/api/circle/dm-events` empty). New `circle_dm_triage.py` reads DMs
+and creates Coralie tickets with ZERO send code (can't reply). Flag `CIRCLE_TRIAGE_ENABLED=true`
+(cron every 2 min) + `GET /api/admin/circle-triage/run` to test. Night-before score DM stays ON
+(Tessa, 2026-06-14); interview-eve threads skipped. **Backlog:** DMs from ~10–14 Jun (poller
+off) — known threads get caught on the first triage run, brand-new threads seed-only, so have
+Coralie eyeball Circle DMs for those few days.
 
 **Interview-date reschedules → dashboard (Tally-authoritative) — Part 1 shipped & verified.**
 See `~/.claude/plans/fluffy-discovering-cake.md`.
