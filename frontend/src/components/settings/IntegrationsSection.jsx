@@ -808,7 +808,8 @@ function PrivateChatSetupCard({ isAdmin }) {
             {audit && (
               <>
                 <p className="text-xs text-[var(--ayci-ink-muted)] mb-2">
-                  Checked {audit.coach_checked} · {audit.group_chats_scanned} group chats scanned ·{" "}
+                  Checked {(audit.coaches_checked || []).map((c) => c.email).join(", ") || "—"} ·{" "}
+                  {audit.group_chats_scanned} group chats scanned ·{" "}
                   <b className={auditNoChat.length ? "text-orange-700" : "text-emerald-700"}>{auditNoChat.length}</b> with no chat ·{" "}
                   {audit.counts?.not_on_circle ?? 0} not on Circle
                 </p>

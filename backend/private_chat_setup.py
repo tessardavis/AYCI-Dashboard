@@ -192,21 +192,31 @@ async def no_chat_audit(db_) -> dict:
     fall-back to chat-room name, since participant previews can be truncated.
     """
     cfg = await settings_store.get_private_chat_config(db_)
-    coach_email = (cfg.get("sender_email") or "").strip().lower()
-    if not coach_email:
-        coach_email = next((c["email"] for c in cfg["coaches"] if c.get("email")), "")
-    if not coach_email:
+    coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
+    if not coach_emails:
         return {"ok": False, "error": "Set at least one coach's Circle email in Private chat setup first."}
 
-    chats = await circle_api.list_group_chats(db_, coach_email)
-    if not chats:
-        return {"ok": False, "error": f"Could not read {coach_email}'s Circle group chats (no token, or none found)."}
-
+    # Union every coach's group chats. A coach's token only mints if they're a
+    # Circle admin/moderator, and historically the chats included different
+    # coaches (Oksana vs Coralie) — so reading ALL of them maximises coverage
+    # and survives a coach whose session can't be minted.
     chat_member_ids: set = set()
     chat_names: list = []
-    for ch in chats:
-        chat_member_ids.update(ch.get("participant_ids") or [])
-        chat_names.append(_norm_name(ch.get("name") or ""))
+    coaches_read: list = []
+    for ce in coach_emails:
+        chats = await circle_api.list_group_chats(db_, ce)
+        if not chats:
+            continue
+        coaches_read.append({"email": ce, "chats": len(chats)})
+        for ch in chats:
+            chat_member_ids.update(ch.get("participant_ids") or [])
+            chat_names.append(_norm_name(ch.get("name") or ""))
+    if not coaches_read:
+        return {"ok": False, "error": (
+            "Couldn't read any coach's Circle group chats. The Circle parent "
+            "token can only mint a session for coaches who are admins/moderators "
+            "— check that at least one configured coach has those rights."
+        )}
 
     by_email = await _build_email_index()
     no_chat, not_on_circle = [], []
@@ -241,8 +251,8 @@ async def no_chat_audit(db_) -> dict:
     return {
         "ok": True,
         "as_of": datetime.now(timezone.utc).isoformat(),
-        "coach_checked": coach_email,
-        "group_chats_scanned": len(chats),
+        "coaches_checked": coaches_read,
+        "group_chats_scanned": sum(c["chats"] for c in coaches_read),
         "counts": {"no_chat": len(no_chat), "not_on_circle": len(not_on_circle)},
         "no_chat": no_chat,
         "not_on_circle": not_on_circle,
