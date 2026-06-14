@@ -1737,6 +1737,32 @@ async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
     return await academy_members_mirror.full_sync(db)
 
 
+@api.get("/admin/boost-and-go/audit")
+async def admin_boost_and_go_audit(
+    refresh: bool = False,
+    keyword: str = "boost",
+    admin: dict = Depends(require_admin),
+):
+    """Boost & Go reconciliation: students who bought B&G (per Stripe) but
+    aren't flagged B&G in the dashboard. The Stripe scan runs in the BACKGROUND
+    (it can be slow) and the result is cached — so:
+      - first call (or ?refresh=true): kicks off a scan, returns status.
+      - subsequent calls: return the cached result instantly.
+    Read-only. Check `matched_charge_descriptions` to confirm the keyword is
+    hitting real B&G charges before trusting `unflagged`."""
+    import asyncio as _asyncio
+    import bg_audit
+    if refresh:
+        _asyncio.create_task(bg_audit.run_audit(keyword))
+        return {"status": "refresh started — re-open this URL (no ?refresh) in ~30-60s",
+                "previous": await bg_audit.get_cached()}
+    cached = await bg_audit.get_cached()
+    if cached is None:
+        _asyncio.create_task(bg_audit.run_audit(keyword))
+        return {"status": "first run started — re-open this URL in ~30-60s"}
+    return cached
+
+
 @api.get("/admin/google-calendar/config")
 async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     """Surface what's needed to wire the AYCI Interviews calendar: the
