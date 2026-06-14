@@ -64,37 +64,51 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if state.get("interview_eve_record_id"):
         return None
 
-    # Use the inline last_message from the thread LISTING — no per-thread fetch.
-    # (Fetching messages for every thread each run would hammer Circle's rate
-    # limit; the listing already carries the newest message's id/sender/body.)
-    last = thread.get("last_message") or {}
-    latest_id = _msg_id(last) or 0
-    if not latest_id:
-        return None
-
-    # Baseline: triage's own marker, else the (disabled) bot's last_seen so DMs
-    # since the poller went off get caught. For a thread neither has ever seen
-    # (a brand-new DMer), baseline is 0 — so their first unanswered message
-    # tickets, rather than being silently seeded.
-    baseline = state.get("triage_last_seen_id")
-    if baseline is None:
-        baseline = state.get("last_seen_message_id") or 0
-
     student_info = {
         "coach_admin_email": admin_email,
         "student_member_id": student_id,
         "student_name": student_name,
     }
 
+    # CHEAP pre-filter from the thread listing (no fetch): the inline
+    # last_message has a reliable `sender` but NOT a reliable `id`. If the newest
+    # message is the coach's (or sender unknown), there's nothing unanswered —
+    # skip without an API call. Only threads whose newest message is the
+    # student's fall through to a full fetch (a small minority), so the cron
+    # stays light on Circle's rate limit.
+    last = thread.get("last_message") or {}
+    last_sender = _msg_sender_id(last)
+    if last_sender is None or last_sender == int(admin_member_id):
+        return {"coach_answered": True}
+
+    # Newest message is the student's → fetch full messages for a dependable id
+    # (for the baseline/dedup) and body.
+    messages = await circle_api.list_thread_messages_for_admin(db, admin_email, uuid_, per_page=20)
+    if not messages:
+        return None
+    messages.sort(key=lambda m: m.get("created_at") or "")
+    latest = messages[-1]
+    latest_id = _msg_id(latest) or 0
+
+    # Re-check on the authoritative fetch (the coach may have replied since the
+    # listing snapshot).
+    if _msg_sender_id(latest) != student_id:
+        if latest_id:
+            await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
+        return {"coach_answered": True}
+
+    # Baseline: triage's own marker, else the (disabled) bot's last_seen so DMs
+    # since the poller went off get caught. For a thread neither has ever seen
+    # (a brand-new DMer), baseline is 0 — so their first unanswered message
+    # tickets.
+    baseline = state.get("triage_last_seen_id")
+    if baseline is None:
+        baseline = state.get("last_seen_message_id") or 0
+
     if latest_id <= baseline:
         return {"nothing_new": True}
 
-    # Only ticket an UNANSWERED student message (the newest message is theirs).
-    if _msg_sender_id(last) != student_id:
-        await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
-        return {"coach_answered": True}
-
-    message_text = _msg_body(last) or "(no text)"
+    message_text = _msg_body(latest) or "(no text)"
     student_email = None
     try:
         m = await circle_api.fetch_member(student_id)
