@@ -57,6 +57,17 @@ and creates Coralie tickets with ZERO send code (can't reply). Flag `CIRCLE_TRIA
 off) — known threads get caught on the first triage run, brand-new threads seed-only, so have
 Coralie eyeball Circle DMs for those few days.
 
+**WATI — mute boilerplate wordings.** Launch-period WhatsApp auto-replies ("Send it!",
+"I've already joined!", etc.) were each becoming a ticket. A team member can now open such
+a ticket and hit **🔕 "Ignore future messages with this wording"** — `handle_webhook` skips
+(no ticket, no reopen) any inbound whose normalised text (lowercased, punctuation/emoji
+stripped, whitespace collapsed) matches a muted wording, and muting also closes existing
+open matching tickets. `wati.py` (_norm_wording / is_wording_muted / mute_wording / list /
+unmute, db.wati_muted_wordings), `POST /api/tickets/{id}/mute-wording`, `GET|DELETE
+/api/wati/muted-wordings`. **The "WhatsApp · errors" badge** on Support Tickets = last WATI
+reconcile had errors — hover it or hit `/api/wati/health` (`errors[]`) to see them (usually a
+token/connection hiccup; doesn't stop tickets).
+
 **Interview-date reschedules → dashboard (Tally-authoritative) — Part 1 shipped & verified.**
 See `~/.claude/plans/fluffy-discovering-cake.md`.
 - `interview_date_reconcile.py`: adopts each student's **most-recently-submitted** Tally
