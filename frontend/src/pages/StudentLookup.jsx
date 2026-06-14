@@ -185,11 +185,19 @@ export default function StudentLookup() {
     // Pull interview details with sensible fallbacks across platforms.
     const mondayCols = result.monday?.data?.columns || {};
     const tally = result.tally || {};
-    const tallyHist = (tally.history && tally.history[0]) || {};
+    // The most-recently-SUBMITTED Tally entry is authoritative on reschedules
+    // (Tessa's rule). history is sorted by date upstream, so re-sort by
+    // submitted_at here to honour "latest submission wins".
+    const tallyHist =
+      (tally.history || [])
+        .slice()
+        .sort((a, b) => (b.submitted_at || "").localeCompare(a.submitted_at || ""))[0] || {};
 
+    // Prefer the latest Tally date over the (stale, sync-overwritten) Monday
+    // column; fall back to Monday only when there's no Tally submission.
     const interviewDate =
-      (mondayCols["Interview Date"]?.text || "").trim() ||
       tallyHist.date ||
+      (mondayCols["Interview Date"]?.text || "").trim() ||
       null;
     const kajabiDate = (mondayCols["Kajabi Interview Date"]?.text || "").trim();
     const interviewType =

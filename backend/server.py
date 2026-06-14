@@ -1154,6 +1154,36 @@ async def on_startup():
         replace_existing=True,
     )
 
+    # Interview-date reconcile — adopt each student's most-recent Tally date
+    # into the mirror's interview_date (pinned), so reschedules flow through to
+    # the dashboard, Upcoming Interviews and the night-before DM. Runs 05:30
+    # (after the 05:20 Tally refresh) and 18:45 weekdays (refresh Tally first,
+    # then reconcile, just before the 19:00 night-before job).
+    async def _interview_date_reconcile():
+        try:
+            import interview_date_reconcile
+            res = await interview_date_reconcile.reconcile_interview_dates(db)
+            logger.info(f"[scheduler] interview_date_reconcile: {res.get('changed_count')} changed")
+        except Exception as e:
+            logger.warning(f"[scheduler] interview_date_reconcile failed: {e}")
+
+    async def _interview_date_reconcile_evening():
+        await _daily_tally_refresh()  # catch a same-day reschedule before 19:00
+        await _interview_date_reconcile()
+
+    scheduler.add_job(
+        _interview_date_reconcile,
+        CronTrigger(hour=5, minute=30, timezone=tz),
+        id="interview_date_reconcile_am",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _interview_date_reconcile_evening,
+        CronTrigger(hour=18, minute=45, day_of_week="mon-fri", timezone=tz),
+        id="interview_date_reconcile_pm",
+        replace_existing=True,
+    )
+
     # Academy Members Mongo mirror — refresh every 15 minutes so the
     # Student Lookup + Upcoming Interviews pages don't have to hit Monday
     # on each request. Idempotent; ~5-10s per run for a ~3.5k row board.
@@ -1705,6 +1735,16 @@ async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
     want the dashboard to see them immediately."""
     import academy_members_mirror
     return await academy_members_mirror.full_sync(db)
+
+
+@api.post("/admin/interview-date/reconcile")
+async def admin_interview_date_reconcile(admin: dict = Depends(require_admin)):
+    """Reconcile every student's interview_date from their most-recent Tally
+    submission (and self-heal the AYCI Interviews calendar for changed students,
+    once that's configured). Returns the summary incl. the `changed` list.
+    Normally runs 05:30 + 18:45; use this to run on demand."""
+    import interview_date_reconcile
+    return await interview_date_reconcile.reconcile_interview_dates(db)
 
 
 @api.get("/admin/academy-mirror/status")
