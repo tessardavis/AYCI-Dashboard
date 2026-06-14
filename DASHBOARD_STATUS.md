@@ -26,6 +26,18 @@ All committed + pushed to `main` (Render/Vercel auto-deploy). Two workstreams:
 **SLA digest** now fires only inside the cohort `[start, end]` window (was ignoring the
 start date). June '26 dates set (22 Jun–26 Jul) → quiet until 22 Jun. ✅
 
+**Boost & Go reconciliation (NEW).** `boost_and_go` is only a mirror of Monday's
+"Boost + Go" column, so B&G buyers whose Monday column never flipped off "Offer Due/Made"
+were invisible as B&G. `bg_audit.py` cross-references **Stripe** purchases against the flag:
+`GET /api/admin/boost-and-go/audit` (background-cached; matches charges via regex
+`boost & go`, excludes Turbo/Prep "Booster" false-positives; echoes matched descriptions +
+products for confidence) and `GET /api/admin/boost-and-go/backfill[?apply=true]` (dry-run by
+default; sets B&G / B&G Plus from what they bought, pinned). **2026-06-14: 85 B&G buyers
+found, 60 already flagged, 21 unflagged → backfilled; 4 buyers have no dashboard row
+(dual-email / never synced — TODO chase).** Upstream gap remains: the **Kajabi→Monday
+purchase zap doesn't flip the column on purchase** — fix that so new buyers don't get stuck
+(re-run the audit anytime to catch stragglers).
+
 **Interview-date reschedules → dashboard (Tally-authoritative) — Part 1 shipped & verified.**
 See `~/.claude/plans/fluffy-discovering-cake.md`.
 - `interview_date_reconcile.py`: adopts each student's **most-recently-submitted** Tally
