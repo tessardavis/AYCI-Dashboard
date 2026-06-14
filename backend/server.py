@@ -1737,6 +1737,33 @@ async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
     return await academy_members_mirror.full_sync(db)
 
 
+@api.get("/admin/google-calendar/config")
+async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
+    """Surface what's needed to wire the AYCI Interviews calendar: the
+    service-account email to share the calendar WITH (not secret — only the
+    private key in the file is), and whether the calendar id env + share are in
+    place. `configured` is true once both the calendar id and credentials exist."""
+    import json as _json
+    import google_calendar
+    sa_value = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
+    client_email = None
+    if sa_value:
+        try:
+            if not sa_value.lstrip().startswith("{") and os.path.exists(sa_value):
+                with open(sa_value) as _f:
+                    info = _json.load(_f)
+            else:
+                info = _json.loads(sa_value)
+            client_email = info.get("client_email")
+        except Exception as e:
+            logger.warning(f"[admin] could not read service-account email: {e}")
+    return {
+        "service_account_email": client_email,
+        "calendar_id_set": bool((os.environ.get("GOOGLE_INTERVIEWS_CALENDAR_ID") or "").strip()),
+        "configured": google_calendar.is_configured(),
+    }
+
+
 @api.post("/admin/interview-date/reconcile")
 async def admin_interview_date_reconcile(admin: dict = Depends(require_admin)):
     """Reconcile every student's interview_date from their most-recent Tally
