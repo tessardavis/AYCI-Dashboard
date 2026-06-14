@@ -59,9 +59,9 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if not student_id:
         return None
 
-    state = await _get_thread_state(db, uuid_)
+    state = await _get_thread_state(db, uuid_) or {}
     # Leave interview-eve threads to the night-before score flow.
-    if state and state.get("interview_eve_record_id"):
+    if state.get("interview_eve_record_id"):
         return None
 
     messages = await circle_api.list_thread_messages_for_admin(db, admin_email, uuid_, per_page=20)
@@ -71,30 +71,26 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     latest = messages[-1]
     latest_id = _msg_id(latest) or 0
 
-    # First time we've ever seen this thread: seed a marker WITHOUT ticketing
-    # (so an old/dormant thread's history doesn't spam tickets on first run).
-    if not state:
-        await _save_thread_state(db, uuid_, {
-            "coach_admin_email": admin_email,
-            "student_member_id": student_id,
-            "student_name": student_name,
-            "triage_last_seen_id": latest_id,
-            "first_seen_at": datetime.now(timezone.utc).isoformat(),
-        })
-        return {"seeded": True}
-
-    # Baseline: triage's own marker, else fall back to the (disabled) bot's
-    # last_seen so DMs since the poller went off get caught on the first run.
+    # Baseline: triage's own marker, else the (disabled) bot's last_seen so DMs
+    # since the poller went off get caught. For a thread neither has ever seen
+    # (a brand-new DMer), baseline is 0 — so their first unanswered message
+    # tickets, rather than being silently seeded.
     baseline = state.get("triage_last_seen_id")
     if baseline is None:
         baseline = state.get("last_seen_message_id") or 0
+
+    student_info = {
+        "coach_admin_email": admin_email,
+        "student_member_id": student_id,
+        "student_name": student_name,
+    }
 
     if latest_id <= baseline:
         return {"nothing_new": True}
 
     # Only ticket an UNANSWERED student message (the newest message is theirs).
     if _msg_sender_id(latest) != student_id:
-        await _save_thread_state(db, uuid_, {"triage_last_seen_id": latest_id})
+        await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
         return {"coach_answered": True}
 
     message_text = _msg_body(latest) or "(no text)"
@@ -118,6 +114,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         escalation_reason=None,
     )
     await _save_thread_state(db, uuid_, {
+        **student_info,
         "triage_last_seen_id": latest_id,
         "triage_last_ticket_id": ticket_id,
         "triage_last_ticketed_at": datetime.now(timezone.utc).isoformat(),
