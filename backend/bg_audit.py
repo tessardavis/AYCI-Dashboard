@@ -53,6 +53,14 @@ def _email_from_charge(charge: Any) -> Optional[str]:
     )
 
 
+def _name_from_charge(charge: Any) -> Optional[str]:
+    if not isinstance(charge, dict):
+        return None
+    cust = charge.get("customer")
+    cust_name = cust.get("name") if isinstance(cust, dict) else None
+    return ((charge.get("billing_details") or {}).get("name") or cust_name) or None
+
+
 def _charge_haystack(ch: dict) -> str:
     parts = [
         ch.get("description") or "",
@@ -188,10 +196,12 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
         email = (_email_from_charge(ch) or "").strip().lower()
         if not email:
             continue
-        b = buyers.setdefault(email, {"examples": set(), "charges": 0})
+        b = buyers.setdefault(email, {"examples": set(), "charges": 0, "name": None})
         b["charges"] += 1
         if desc:
             b["examples"].add(desc)
+        if not b.get("name"):
+            b["name"] = _name_from_charge(ch)
 
     unflagged, already_flagged, not_in_db = [], 0, []
     for email, info in buyers.items():
@@ -201,7 +211,7 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
             {"_id": 1, "name": 1, "email": 1, "tier": 1, "boost_and_go": 1},
         )
         if not row:
-            not_in_db.append({"email": email, "bought": examples})
+            not_in_db.append({"email": email, "name": info.get("name"), "bought": examples})
         elif _already_marked_bg(row):
             already_flagged += 1
         else:
