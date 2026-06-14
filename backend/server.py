@@ -1519,6 +1519,33 @@ async def on_startup():
     else:
         logger.info("[scheduler] circle_dm_poll: DISABLED (set CIRCLE_BOT_DISABLED=false to enable)")
 
+    # Circle DM → ticket TRIAGE (send-free; independent of the auto-responder).
+    # Creates Coralie tickets from new student DMs, never replies. Enabled via
+    # CIRCLE_TRIAGE_ENABLED=true. See circle_dm_triage.py.
+    import circle_dm_triage
+    if circle_dm_triage.triage_enabled() and not _is_preview:
+        async def _circle_dm_triage():
+            import asyncio as _a
+            try:
+                res = await _a.wait_for(circle_dm_triage.triage_once(db), timeout=120)
+                if res.get("tickets_created") or res.get("errors"):
+                    logger.info(f"[scheduler] circle_dm_triage: tickets={res.get('tickets_created')} errors={len(res.get('errors') or [])}")
+            except _a.TimeoutError:
+                logger.warning("[scheduler] circle_dm_triage TIMED OUT after 120s")
+            except Exception as e:
+                logger.warning(f"[scheduler] circle_dm_triage failed: {e}")
+
+        scheduler.add_job(
+            _circle_dm_triage,
+            CronTrigger(minute="*/2", timezone=tz),
+            id="circle_dm_triage",
+            replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
+        logger.info("[scheduler] circle_dm_triage: ENABLED (send-free ticket triage)")
+    else:
+        logger.info("[scheduler] circle_dm_triage: disabled (set CIRCLE_TRIAGE_ENABLED=true)")
+
     # Independent asyncio loop — runs OUTSIDE APScheduler so if APScheduler
     # ever dies (event-loop crash, broken job store, etc.) the bot keeps
     # polling regardless. Yesterday's outage was APScheduler silently
@@ -1735,6 +1762,15 @@ async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
     want the dashboard to see them immediately."""
     import academy_members_mirror
     return await academy_members_mirror.full_sync(db)
+
+
+@api.get("/admin/circle-triage/run")
+async def admin_circle_triage_run(admin: dict = Depends(require_admin)):
+    """Run one send-free Circle DM → ticket triage pass now (creates tickets
+    for new unanswered student DMs; never messages anyone). Use this to test
+    before turning on the CIRCLE_TRIAGE_ENABLED cron."""
+    import circle_dm_triage
+    return await circle_dm_triage.triage_once(db)
 
 
 @api.get("/admin/boost-and-go/audit")
