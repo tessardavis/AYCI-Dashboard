@@ -186,5 +186,11 @@ async def triage_once(db) -> dict:
             summary["tickets"].append({**tk, "coach_email": e})
         for err in r.get("errors") or []:
             summary["errors"].append(f"{e}: {err}")
+    # 0 threads across ALL coaches (with tokens minting fine) almost always
+    # means Circle is rate-limiting the listing call — the call swallows the
+    # 429 and returns []. Surface it so it doesn't look like "nothing to do".
+    if coach_emails and summary["threads_scanned"] == 0 and not summary["errors"]:
+        summary["warning"] = ("0 threads for all coaches — likely Circle rate-limiting the "
+                              "listing call (it returns [] on a 429). Retry in a few minutes.")
     logger.info(f"[circle-triage] done: {summary['tickets_created']} tickets, {len(summary['errors'])} errors")
     return summary
