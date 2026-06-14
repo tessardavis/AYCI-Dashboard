@@ -18,6 +18,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from pymongo import UpdateOne
+
 from db import db
 import tally_lookup
 
@@ -80,6 +82,7 @@ async def reconcile_interview_dates(db_=db) -> dict:
 
     now = datetime.now(timezone.utc)
     changed = []
+    ops = []  # collected into a single bulk_write — one round trip, not one per row
     for r in rows:
         merged: list = []
         for k in ("email", "circle_email"):
@@ -93,7 +96,7 @@ async def reconcile_interview_dates(db_=db) -> dict:
         if new_date == old_date:
             continue  # idempotent no-op
         pinned = sorted(set(r.get("dashboard_edited_fields") or []) | {"interview_date"})
-        await db_.academy_members.update_one(
+        ops.append(UpdateOne(
             {"_id": r["_id"]},
             {"$set": {
                 "interview_date": new_date,
@@ -104,7 +107,7 @@ async def reconcile_interview_dates(db_=db) -> dict:
                 "dashboard_edited_at": now,
                 "dashboard_edited_by": "interview-date-reconcile",
             }},
-        )
+        ))
         changed.append({
             "email": (r.get("email") or r.get("circle_email") or "").strip().lower(),
             "name": r.get("name"),
@@ -112,6 +115,9 @@ async def reconcile_interview_dates(db_=db) -> dict:
             "new": new_date,
             "monday_id": r["_id"],
         })
+
+    if ops:
+        await db_.academy_members.bulk_write(ops, ordered=False)
 
     # Part 2: self-heal the "AYCI Interviews" calendar for changed students.
     # Best-effort and inert until GOOGLE_INTERVIEWS_CALENDAR_ID is set + the
