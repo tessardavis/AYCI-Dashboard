@@ -64,12 +64,13 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if state.get("interview_eve_record_id"):
         return None
 
-    messages = await circle_api.list_thread_messages_for_admin(db, admin_email, uuid_, per_page=20)
-    if not messages:
+    # Use the inline last_message from the thread LISTING — no per-thread fetch.
+    # (Fetching messages for every thread each run would hammer Circle's rate
+    # limit; the listing already carries the newest message's id/sender/body.)
+    last = thread.get("last_message") or {}
+    latest_id = _msg_id(last) or 0
+    if not latest_id:
         return None
-    messages.sort(key=lambda m: m.get("created_at") or "")
-    latest = messages[-1]
-    latest_id = _msg_id(latest) or 0
 
     # Baseline: triage's own marker, else the (disabled) bot's last_seen so DMs
     # since the poller went off get caught. For a thread neither has ever seen
@@ -89,11 +90,11 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         return {"nothing_new": True}
 
     # Only ticket an UNANSWERED student message (the newest message is theirs).
-    if _msg_sender_id(latest) != student_id:
+    if _msg_sender_id(last) != student_id:
         await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
         return {"coach_answered": True}
 
-    message_text = _msg_body(latest) or "(no text)"
+    message_text = _msg_body(last) or "(no text)"
     student_email = None
     try:
         m = await circle_api.fetch_member(student_id)
