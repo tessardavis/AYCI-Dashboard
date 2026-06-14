@@ -198,6 +198,27 @@ export default function UpcomingInterviews() {
   const [privateDays, setPrivateDays] = useState(14);
   const [utilisation, setUtilisation] = useState(null);
   const [utilLoading, setUtilLoading] = useState(true);
+  const [reconciling, setReconciling] = useState(false);
+
+  // Adopt each student's most-recent Tally date into the dashboard (also runs
+  // automatically 05:30 + 18:45). Admin only.
+  const runReconcile = async () => {
+    setReconciling(true);
+    try {
+      const { data } = await apiClient.post("/admin/interview-date/reconcile", {}, { timeout: 120000 });
+      const n = data?.changed_count ?? 0;
+      toast.success(
+        n === 0
+          ? "Reconcile done — every date already matches the latest Tally entry"
+          : `Updated ${n} interview date${n === 1 ? "" : "s"} from Tally`
+      );
+      await load();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Reconcile failed");
+    } finally {
+      setReconciling(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -247,6 +268,18 @@ export default function UpcomingInterviews() {
           <h1 className="text-4xl font-display font-bold text-[var(--ayci-ink)] mt-1">
             Upcoming Interviews
           </h1>
+          {user?.role === "admin" && (
+            <button
+              onClick={runReconcile}
+              disabled={reconciling}
+              data-testid="reconcile-interview-dates"
+              title="Pull every student's most-recent Tally interview date into the dashboard (also runs automatically 05:30 & 18:45)"
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-60"
+            >
+              {reconciling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+              Reconcile dates from Tally
+            </button>
+          )}
           <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
             Pulled live from the Monday Academy Members board.
             {showAcademy ? (
