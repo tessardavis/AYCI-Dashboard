@@ -177,6 +177,26 @@ def _norm_name(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", (s or "").lower())).strip()
 
 
+async def _gather_coach_chats(db_, coach_emails: list) -> tuple:
+    """Union of every coach's Circle group chats → (member_ids set, names list,
+    coaches_read list). Reading ALL coaches (not just the sender) is essential:
+    historical chats were created by Oksana and the go-forward sender (Coralie)
+    isn't in them, but the other coaches (Becky/Tessa) are — so this is how we
+    detect an existing chat and never spawn a duplicate."""
+    member_ids: set = set()
+    names: list = []
+    coaches_read: list = []
+    for ce in coach_emails:
+        chats = await circle_api.list_group_chats(db_, ce)
+        if not chats:
+            continue
+        coaches_read.append({"email": ce, "chats": len(chats)})
+        for ch in chats:
+            member_ids.update(ch.get("participant_ids") or [])
+            names.append(_norm_name(ch.get("name") or ""))
+    return member_ids, names, coaches_read
+
+
 async def no_chat_audit(db_) -> dict:
     """Reconciliation audit: current private-tier students who have NO coach
     group chat in Circle. More accurate than the `private_chat_url` field
@@ -196,21 +216,9 @@ async def no_chat_audit(db_) -> dict:
     if not coach_emails:
         return {"ok": False, "error": "Set at least one coach's Circle email in Private chat setup first."}
 
-    # Union every coach's group chats. A coach's token only mints if they're a
-    # Circle admin/moderator, and historically the chats included different
-    # coaches (Oksana vs Coralie) — so reading ALL of them maximises coverage
-    # and survives a coach whose session can't be minted.
-    chat_member_ids: set = set()
-    chat_names: list = []
-    coaches_read: list = []
-    for ce in coach_emails:
-        chats = await circle_api.list_group_chats(db_, ce)
-        if not chats:
-            continue
-        coaches_read.append({"email": ce, "chats": len(chats)})
-        for ch in chats:
-            chat_member_ids.update(ch.get("participant_ids") or [])
-            chat_names.append(_norm_name(ch.get("name") or ""))
+    # Union every coach's group chats (see _gather_coach_chats) — survives a
+    # coach whose session can't be minted and covers historical Oksana chats.
+    chat_member_ids, chat_names, coaches_read = await _gather_coach_chats(db_, coach_emails)
     if not coaches_read:
         return {"ok": False, "error": (
             "Couldn't read any coach's Circle group chats. The Circle parent "
@@ -298,17 +306,18 @@ async def create_for_student(db_, student_id: str) -> dict:
     student_mid = int(member["id"])
     student_circle_email = (member.get("email") or "").strip().lower()
 
-    # Circle-side duplicate guard: does the sender already share a group chat
-    # with this student? (Best-effort — list the sender's recent group rooms.)
+    # Circle-side duplicate guard: does ANY coach already share a group chat
+    # with this student? Critically checks all coaches, not just the sender —
+    # historical chats were made by Oksana and Coralie (the sender) isn't in
+    # them, so a sender-only check would miss them and spawn a duplicate chat
+    # (→ a new thread, splitting the student's video replies). Matches by member
+    # id, with a chat-name fallback for truncated participant previews.
     try:
-        for t in await circle_api.list_dm_threads(db_, sender_email, per_page=100):
-            if (t.get("chat_room") or {}).get("kind") != "group":
-                continue
-            parts = t.get("other_participants_preview") or []
-            if any(int(p.get("id") or 0) == student_mid for p in parts if isinstance(p, dict)):
-                uuid = t.get("chat_room_uuid")
-                return {"ok": False, "skipped": "existing_circle_chat_found",
-                        "chat_room_uuid": uuid}
+        all_coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
+        existing_ids, existing_names, _ = await _gather_coach_chats(db_, all_coach_emails)
+        nm = _norm_name(row.get("name") or "")
+        if student_mid in existing_ids or (nm and any(nm in cn for cn in existing_names)):
+            return {"ok": False, "skipped": "existing_circle_chat_found"}
     except Exception as e:
         logger.info(f"[private-chat] existence check skipped: {e}")
 
