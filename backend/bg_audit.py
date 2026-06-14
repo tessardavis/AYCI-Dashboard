@@ -101,6 +101,58 @@ async def _stripe_boost_products(c: httpx.AsyncClient, keyword: str) -> list:
     ]
 
 
+def _bg_level_from_bought(bought: list) -> str:
+    """'B&G Plus' if any purchase mentions Plus, else 'B&G' — matching the label
+    convention the dashboard's B&G logic recognises ('b&g' substring + 'plus')."""
+    return "B&G Plus" if "plus" in " ".join(bought or []).lower() else "B&G"
+
+
+async def apply_backfill(dry_run: bool = True) -> dict:
+    """Set `boost_and_go` on the audit's `unflagged` buyers (B&G / B&G Plus from
+    what they bought), pinned in dashboard_edited_fields so the Monday sync won't
+    revert it to "Offer Due". Acts on the most recent cached audit. dry_run=True
+    just previews. Fixes the dashboard only — the upstream Monday column / Kajabi
+    zap still needs sorting separately, but the pin keeps the dashboard correct."""
+    cached = await get_cached()
+    if not cached or not cached.get("ok"):
+        return {"ok": False, "error": "Run the audit first (no cached result)."}
+    unflagged = cached.get("unflagged") or []
+    now = datetime.now(timezone.utc)
+    planned, applied = [], 0
+    for u in unflagged:
+        level = _bg_level_from_bought(u.get("bought"))
+        entry = {"id": u["id"], "name": u.get("name"), "email": u.get("email"),
+                 "from": u.get("current_boost_and_go"), "to": level, "bought": u.get("bought")}
+        if not dry_run:
+            row = await db.academy_members.find_one(
+                {"_id": u["id"]}, {"dashboard_edited_fields": 1})
+            if not row:
+                entry["skipped"] = "row not found"
+                planned.append(entry)
+                continue
+            pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"boost_and_go"})
+            await db.academy_members.update_one(
+                {"_id": u["id"]},
+                {"$set": {
+                    "boost_and_go": level,
+                    "dashboard_edited_fields": pinned,
+                    "dashboard_edited_at": now,
+                    "dashboard_edited_by": "bg-audit-backfill",
+                }},
+            )
+            applied += 1
+        planned.append(entry)
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "based_on_audit_as_of": cached.get("as_of"),
+        "count": len(planned),
+        "applied": applied,
+        "students": planned,
+        "note": "buyer_not_in_dashboard cases can't be backfilled (no row) — investigate separately.",
+    }
+
+
 async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
     """Scan Stripe charges for B&G purchases and flag buyers not marked B&G in
     the dashboard. Stores the result for the admin GET to read."""

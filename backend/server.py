@@ -1763,6 +1763,18 @@ async def admin_boost_and_go_audit(
     return cached
 
 
+@api.get("/admin/boost-and-go/backfill")
+async def admin_boost_and_go_backfill(
+    apply: bool = False,
+    admin: dict = Depends(require_admin),
+):
+    """Set boost_and_go (B&G / B&G Plus) on the unflagged buyers from the latest
+    audit, pinned so the Monday sync won't revert it. DRY-RUN by default —
+    shows exactly what it would change; pass ?apply=true to commit."""
+    import bg_audit
+    return await bg_audit.apply_backfill(dry_run=not apply)
+
+
 @api.get("/admin/google-calendar/config")
 async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     """Surface what's needed to wire the AYCI Interviews calendar: the
