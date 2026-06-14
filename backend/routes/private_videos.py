@@ -66,7 +66,7 @@ async def cache_info(admin: dict = Depends(require_admin)):
     return pv_cache.cache_diagnostics()
 
 
-@router.post("/cache-purge")
+@router.get("/cache-purge")
 async def cache_purge(free_gb: float = 2.0, admin: dict = Depends(require_admin)):
     """Recover a full / over-cap cache: delete orphaned *.partial downloads and
     LRU-evict until at least `free_gb` of headroom is under the cap. Safe —
