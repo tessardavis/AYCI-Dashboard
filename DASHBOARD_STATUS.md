@@ -34,12 +34,16 @@ See `~/.claude/plans/fluffy-discovering-cake.md`.
   Interviews + `POST /api/admin/interview-date/reconcile`. Single `bulk_write` (avoids the
   Vercel proxy timeout). **Verified 2026-06-14: 31 changed on first run, 0 on re-run.**
 - Student Lookup now prefers the latest Tally date over the stale Monday column.
-- **Open (Part 2/3 — calendar):** share **AYCI Interviews** calendar
+- **Calendar auto-heal (Part 2/3) — DONE & verified 2026-06-14.** `google_calendar.py`
+  keeps one event per student at the authoritative date, matched by event
+  `location == "ID: <monday_id>"`. AYCI Interviews
   (`30f44afccaaec2ee9395b97820982164b701a5ff5a508c2ab808090c2873f609@group.calendar.google.com`)
-  with the dashboard service account ("Make changes to events") **and**
-  `tessa@medicalinterviewprep.com`; set `GOOGLE_INTERVIEWS_CALENDAR_ID` on Render.
-  `google_calendar.py` is written but inert until then. Then delete Nalaayeni's stale
-  `2026-06-11` event (`fljt1m491b1mat3toe5fh78j70`).
+  is shared with the service account `ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com`
+  ("Make changes to events"); `GOOGLE_INTERVIEWS_CALENDAR_ID` set on Render. **Gotcha that
+  blocked it:** the **Calendar API had to be enabled** in the `ayci-dashboard` GCP project
+  (#346018364416) — Drive was on, Calendar wasn't. Self-test (create+delete) passes;
+  Nalaayeni's stale `2026-06-11` event deleted, only `2026-07-09` remains. Admin helpers:
+  `GET /admin/google-calendar/config` (service-account email + status) and `/selftest`.
 
 ## Recent changes — 2026-06-10 session
 
