@@ -1764,6 +1764,15 @@ async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     }
 
 
+@api.get("/admin/google-calendar/selftest")
+async def admin_google_calendar_selftest(admin: dict = Depends(require_admin)):
+    """Verify the service account can create/delete events on the AYCI
+    Interviews calendar (creates + deletes a throwaway far-future event).
+    can_write=false means the calendar isn't shared with the service account."""
+    import google_calendar
+    return await google_calendar.selftest()
+
+
 @api.post("/admin/interview-date/reconcile")
 async def admin_interview_date_reconcile(admin: dict = Depends(require_admin)):
     """Reconcile every student's interview_date from their most-recent Tally

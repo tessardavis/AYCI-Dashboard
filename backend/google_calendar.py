@@ -58,6 +58,34 @@ def _calendar_service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
+async def selftest() -> dict:
+    """Confirm the service account can WRITE to the calendar: create a throwaway
+    far-future all-day event, then delete it. Returns {ok, can_write, detail}.
+    A failure here means the calendar isn't shared with the service account with
+    'Make changes to events'."""
+    if not is_configured():
+        return {"ok": False, "can_write": False,
+                "detail": "not configured — GOOGLE_INTERVIEWS_CALENDAR_ID or credentials missing"}
+    cal_id = _calendar_id()
+
+    def _sync() -> str:
+        svc = _calendar_service()
+        ev = svc.events().insert(calendarId=cal_id, body={
+            "summary": "[dashboard calendar self-test — safe to ignore]",
+            "start": {"date": "2099-01-01"},
+            "end": {"date": "2099-01-02"},
+        }).execute()
+        eid = ev.get("id")
+        svc.events().delete(calendarId=cal_id, eventId=eid).execute()
+        return eid
+
+    try:
+        eid = await asyncio.to_thread(_sync)
+        return {"ok": True, "can_write": True, "detail": f"created + deleted test event {eid}"}
+    except Exception as e:
+        return {"ok": False, "can_write": False, "detail": str(e)[:300]}
+
+
 def _event_title(row: dict) -> str:
     name = (row.get("name") or "").strip() or "Student"
     itype = (row.get("interview_type") or "").strip()
