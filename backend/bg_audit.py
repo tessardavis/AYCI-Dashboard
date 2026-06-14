@@ -174,11 +174,15 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
 
     buyers: dict[str, dict] = {}          # email -> {examples:set, charges:int}
     matched_descriptions: dict[str, int] = {}
+    refunded_excluded = 0
     for ch in charges:
         if ch.get("status") != "succeeded" or not ch.get("paid"):
             continue
         if not _BG_RE.search(_charge_haystack(ch)):
             continue  # require "boost & go" — excludes Turbo/Prep "Booster"
+        if ch.get("refunded"):
+            refunded_excluded += 1
+            continue  # fully-refunded B&G purchase — don't flag them as B&G
         desc = (ch.get("description") or "").strip()
         matched_descriptions[desc] = matched_descriptions.get(desc, 0) + 1
         email = (_email_from_charge(ch) or "").strip().lower()
@@ -226,6 +230,7 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
             "already_flagged": already_flagged,
             "unflagged": len(unflagged),
             "buyer_not_in_dashboard": len(not_in_db),
+            "refunded_excluded": refunded_excluded,
         },
         "unflagged": unflagged,
         "buyer_not_in_dashboard": not_in_db[:100],
