@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -31,6 +32,66 @@ from typing import Any, Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------- Muted wordings
+# Team members can mute boilerplate launch-period WhatsApp replies ("Send it!",
+# "I've already joined!", etc.) so identical future messages don't become
+# tickets. Matched on a normalised form (lowercased, punctuation/emoji stripped,
+# whitespace collapsed) so "Send it!", "send it" and "Send it 😎" all collapse to
+# the same key. Stored in db.wati_muted_wordings, keyed by `wording`.
+def _norm_wording(text: str) -> str:
+    t = (text or "").lower()
+    t = re.sub(r"[^\w\s]", " ", t, flags=re.UNICODE)  # drop punctuation + emoji
+    return re.sub(r"\s+", " ", t).strip()
+
+
+async def is_wording_muted(db, text: str) -> bool:
+    norm = _norm_wording(text)
+    if not norm:
+        return False
+    return await db.wati_muted_wordings.find_one({"wording": norm}, {"_id": 1}) is not None
+
+
+async def mute_wording(db, text: str, *, added_by: Optional[str] = None) -> dict:
+    """Add a wording to the mute list AND close any existing OPEN WhatsApp
+    tickets that match it (clears the current noise). Returns the normalised
+    wording + how many existing tickets were closed."""
+    norm = _norm_wording(text)
+    if not norm:
+        return {"ok": False, "error": "empty wording"}
+    now = _now_iso()
+    await db.wati_muted_wordings.update_one(
+        {"wording": norm},
+        {"$set": {"wording": norm, "sample": (text or "").strip()[:200], "updated_at": now},
+         "$setOnInsert": {"created_at": now, "added_by": added_by, "muted_count": 0}},
+        upsert=True,
+    )
+    closed = 0
+    cursor = db.tickets.find(
+        {"source": "whatsapp", "status": {"$in": list(REOPENABLE_STATUSES)}},
+        {"_id": 0, "id": 1, "subject": 1, "description": 1},
+    )
+    async for t in cursor:
+        if _norm_wording(t.get("description") or t.get("subject") or "") == norm:
+            await db.tickets.update_one(
+                {"id": t["id"]},
+                {"$set": {"status": "closed", "updated_at": now, "closed_reason": "muted_wording"}},
+            )
+            closed += 1
+    logger.info(f"[wati] muted wording '{norm}' by {added_by} — closed {closed} existing")
+    return {"ok": True, "wording": norm, "closed_existing": closed}
+
+
+async def list_muted_wordings(db) -> list[dict]:
+    docs = await db.wati_muted_wordings.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return docs
+
+
+async def unmute_wording(db, wording: str) -> dict:
+    norm = _norm_wording(wording)
+    res = await db.wati_muted_wordings.delete_one({"wording": norm})
+    return {"ok": True, "removed": res.deleted_count, "wording": norm}
 
 # Statuses that allow a NEW inbound reply to keep streaming into the same
 # ticket without creating a fresh one. Resolved tickets are included so a
@@ -287,6 +348,16 @@ async def handle_webhook(db, payload: dict) -> dict:
         return {"action": "ignored", "reason": "STOP opt-out keyword"}
 
     body_text = text or media_caption or f"[{msg_type} message — no text body]"
+
+    # Muted wording? (boilerplate launch-period replies a team member marked as
+    # ignore-able.) Skip entirely — no ticket, no reopen. Track a count.
+    if await is_wording_muted(db, body_text):
+        await db.wati_muted_wordings.update_one(
+            {"wording": _norm_wording(body_text)},
+            {"$inc": {"muted_count": 1}, "$set": {"last_muted_at": iso}},
+        )
+        logger.info(f"[wati] muted message from {wa_id} (wording matched): {body_text[:60]!r}")
+        return {"action": "muted", "wa_id": wa_id}
 
     # Download media to GridFS if present
     stored_attachments: list[dict] = []

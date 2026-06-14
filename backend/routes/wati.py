@@ -36,6 +36,20 @@ async def reconcile(user: dict = Depends(require_board("tickets"))):
     return await wati.reconcile_open_tickets(db)
 
 
+@router.get("/muted-wordings")
+async def muted_wordings(user: dict = Depends(require_board("tickets"))):
+    """List the muted WhatsApp wordings (boilerplate replies that won't create
+    tickets), with how many messages each has suppressed."""
+    return {"wordings": await wati.list_muted_wordings(db)}
+
+
+@router.delete("/muted-wordings")
+async def remove_muted_wording(wording: str, user: dict = Depends(require_board("tickets"))):
+    """Un-mute a wording so its messages create tickets again. Pass the exact
+    `wording` (normalised form) as a query param."""
+    return await wati.unmute_wording(db, wording)
+
+
 @router.get("/health")
 async def health(user: dict = Depends(require_board("tickets"))):
     """Live health snapshot for the Wati pipeline. Used by the Support Tickets

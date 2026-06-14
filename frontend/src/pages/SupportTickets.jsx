@@ -1464,6 +1464,29 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
           <WhatsAppReplyPanel ticket={t} onSent={onRefresh} />
         )}
 
+        {t.source === "whatsapp" && (
+          <button
+            data-testid="mute-wording"
+            onClick={async () => {
+              if (!window.confirm(
+                "Ignore future WhatsApp messages with this exact wording (and close any open tickets that match)?\n\nUse for boilerplate launch-period replies like \"Send it!\"."
+              )) return;
+              try {
+                const { data } = await apiClient.post(`/tickets/${t.id}/mute-wording`);
+                toast.success(`Muted "${data.wording}" · closed ${data.closed_existing} matching ticket${data.closed_existing === 1 ? "" : "s"}`);
+                onRefresh();
+                onClose();
+              } catch (err) {
+                toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Mute failed");
+              }
+            }}
+            className="text-[12px] font-semibold text-rose-700 hover:underline self-start"
+            title="Future messages with this wording won't create tickets; existing matching ones are closed"
+          >
+            🔕 Ignore future messages with this wording
+          </button>
+        )}
+
         {t.source === "circle_dm" && (
           <CircleReplyPanel ticket={t} onSent={onRefresh} />
         )}

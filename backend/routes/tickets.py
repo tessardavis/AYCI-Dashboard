@@ -186,6 +186,21 @@ async def match_student_now(ticket_id: str, user: dict = Depends(require_board("
     return match
 
 
+@router.post("/{ticket_id}/mute-wording")
+async def mute_ticket_wording(ticket_id: str, user: dict = Depends(require_board("tickets"))):
+    """Ignore future WhatsApp messages with the same wording as this ticket
+    (boilerplate launch-period replies), and close existing open WhatsApp
+    tickets that match. Team-member action from the ticket."""
+    import wati
+    t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0, "description": 1, "subject": 1})
+    if not t:
+        raise HTTPException(404, "Ticket not found")
+    text = (t.get("description") or t.get("subject") or "").strip()
+    if not text:
+        raise HTTPException(400, "Ticket has no message text to mute")
+    return await wati.mute_wording(db, text, added_by=user.get("email") or user.get("id"))
+
+
 @router.post("/bulk-close")
 async def bulk_close_tickets(
     payload: BulkCloseRequest,
