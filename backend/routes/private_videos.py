@@ -66,6 +66,17 @@ async def cache_info(admin: dict = Depends(require_admin)):
     return pv_cache.cache_diagnostics()
 
 
+@router.post("/cache-purge")
+async def cache_purge(free_gb: float = 2.0, admin: dict = Depends(require_admin)):
+    """Recover a full / over-cap cache: delete orphaned *.partial downloads and
+    LRU-evict until at least `free_gb` of headroom is under the cap. Safe —
+    evicted transcodes just re-download on next open. Use this when videos fail
+    with "Video preparation failed" and cache-info shows current_bytes near the
+    cap / low disk_free_bytes."""
+    import private_video_cache as pv_cache
+    return pv_cache.purge(int(free_gb * 1024 ** 3))
+
+
 @router.post("/cache-recompress")
 async def cache_recompress(
     min_bytes_mb: int = 60,

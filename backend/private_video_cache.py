@@ -45,6 +45,9 @@ CACHE_DIR = Path(os.environ.get("PRIVATE_VIDEO_CACHE_DIR", "/tmp/private_video_c
 # (whole cache vanishes + every video re-transcodes from scratch). Keep
 # headroom for the OS / other libs by capping at 1.2 GB.
 MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.2 * 1024 ** 3))))
+# Headroom trimmed before each download so a near-full cache always has room to
+# pull the next source video (prevents the full-disk download deadlock).
+_EVICT_HEADROOM_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_HEADROOM_BYTES", str(2 * 1024 ** 3)))
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +83,13 @@ def cache_diagnostics() -> dict:
         pass
     # Newest first; cap the response so big caches don't dump everything.
     items.sort(key=lambda x: x["modified_at"], reverse=True)
+    disk_total = disk_free = None
+    try:
+        import shutil
+        usage = shutil.disk_usage(str(CACHE_DIR))
+        disk_total, disk_free = usage.total, usage.free
+    except Exception:
+        pass
     return {
         "cache_dir": str(CACHE_DIR),
         "persistent": str(CACHE_DIR).startswith("/var/data"),
@@ -87,8 +97,32 @@ def cache_diagnostics() -> dict:
         "current_bytes": total_bytes,
         "file_count": len(items),
         "writable": os.access(str(CACHE_DIR), os.W_OK),
+        "disk_total_bytes": disk_total,
+        "disk_free_bytes": disk_free,
+        "partial_files": sum(1 for i in items if i["name"].endswith(".partial")),
         "recent_files": items[:20],
     }
+
+
+def purge(target_free_bytes: int = 2 * 1024 ** 3) -> dict:
+    """Recover from a full/over-cap cache: delete orphaned *.partial downloads,
+    then LRU-evict until total is under (cap - target_free_bytes) so there's
+    headroom to download again. Safe — evicted transcodes just re-download on
+    next open. Returns what it freed + fresh diagnostics."""
+    deleted_partials = freed = 0
+    try:
+        for p in CACHE_DIR.glob("*.partial"):
+            try:
+                sz = p.stat().st_size
+                p.unlink()
+                freed += sz
+                deleted_partials += 1
+            except OSError:
+                pass
+    except Exception as e:
+        logger.warning(f"[pv-cache] purge partials error: {e}")
+    freed += _evict_if_needed(max(0, MAX_CACHE_BYTES - target_free_bytes))
+    return {"deleted_partials": deleted_partials, "freed_bytes": freed, **cache_diagnostics()}
 
 _locks: dict[str, asyncio.Lock] = {}
 # Two independent transcode lanes so a coach's on-demand /video request
@@ -151,8 +185,11 @@ def _detect_codec(path: Path) -> str:
     return ""
 
 
-def _evict_if_needed() -> None:
-    """LRU eviction — delete oldest atime files until back under cap."""
+def _evict_if_needed(target_bytes: int | None = None) -> int:
+    """LRU eviction — delete oldest-atime files until total <= target_bytes
+    (default the cap). Returns bytes freed."""
+    if target_bytes is None:
+        target_bytes = MAX_CACHE_BYTES
     files = []
     total = 0
     for p in CACHE_DIR.iterdir():
@@ -164,18 +201,21 @@ def _evict_if_needed() -> None:
             continue
         files.append((st.st_atime, st.st_size, p))
         total += st.st_size
-    if total <= MAX_CACHE_BYTES:
-        return
+    if total <= target_bytes:
+        return 0
     files.sort()
+    freed = 0
     for _, sz, p in files:
-        if total <= MAX_CACHE_BYTES:
+        if total <= target_bytes:
             break
         try:
             p.unlink()
             total -= sz
+            freed += sz
             logger.info(f"[pv-cache] evicted {p.name} ({sz} bytes)")
         except OSError as e:
             logger.warning(f"[pv-cache] evict {p}: {e}")
+    return freed
 
 
 async def _download(item_id: str, src_url: str) -> Path:
@@ -332,6 +372,13 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
                 _path_h264(item_id).unlink(missing_ok=True)
             except OSError:
                 pass
+        # Make room BEFORE downloading. Eviction used to run only AFTER the
+        # download, so once the disk filled, every download failed first and
+        # eviction never ran — a deadlock. Trim to leave headroom up front.
+        try:
+            _evict_if_needed(max(0, MAX_CACHE_BYTES - _EVICT_HEADROOM_BYTES))
+        except Exception as e:
+            logger.warning(f"[pv-cache] pre-download eviction error: {e}")
         try:
             await _download(item_id, src_url)
         except Exception:
