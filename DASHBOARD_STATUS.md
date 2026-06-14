@@ -1,6 +1,45 @@
 # Dashboard — migration status & to-dos
 
-_Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-10._
+_Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-14._
+
+## Recent changes — 2026-06-14 session
+
+All committed + pushed to `main` (Render/Vercel auto-deploy). Two workstreams:
+
+**Private-chat migration (Route 2) — Phase 0 shipped.** See `PRIVATE_CHAT_MIGRATION.md`.
+- Settings → Integrations **"Private chat setup"** card: editable coach config
+  (Tessa/Arub/Coralie/Becky — all 4 Circle emails verified; **Coralie = sender**,
+  she's a Circle admin so her session mints), **per-tier welcome templates**
+  (PP ✅ · VIP ✅ · B&G Plus ✅ · **plain B&G ⏳ still to paste**), dry-run preview,
+  per-student **Create chat**, and a **"no group chat" backlog audit** (unions all
+  coaches' chats so historical Oksana-created chats are detected → never duplicates).
+- **"Awaiting DMs" status** (`private_chat_status`): the private-chat zap's DMs-off
+  branch POSTs it via `update-by-email`; surfaces the student in Needs setup with an
+  orange badge. Circle exposes no DM-off flag, so this push-from-zap is how we catch it.
+- **Reply routing is safe across the Oksana→Coralie sender switch:** existing chats
+  are never recreated (dedup guard checks ALL coaches), and video replies route to the
+  student's stored `private_chat_url` (the original Oksana chat) — no new threads.
+- **Open:** paste the plain **Boost & Go** template; **test the "Awaiting DMs" zap step**
+  (POST `update-by-email`, expect 200 `"updated"`); Coralie connect Circle in **Zapier**
+  (separate from the dashboard, which already works via the parent token).
+
+**SLA digest** now fires only inside the cohort `[start, end]` window (was ignoring the
+start date). June '26 dates set (22 Jun–26 Jul) → quiet until 22 Jun. ✅
+
+**Interview-date reschedules → dashboard (Tally-authoritative) — Part 1 shipped & verified.**
+See `~/.claude/plans/fluffy-discovering-cake.md`.
+- `interview_date_reconcile.py`: adopts each student's **most-recently-submitted** Tally
+  date into the mirror's `interview_date` (pinned in `dashboard_edited_fields`). Scheduled
+  05:30 + 18:45 weekdays; admin **"Reconcile dates from Tally"** button on Upcoming
+  Interviews + `POST /api/admin/interview-date/reconcile`. Single `bulk_write` (avoids the
+  Vercel proxy timeout). **Verified 2026-06-14: 31 changed on first run, 0 on re-run.**
+- Student Lookup now prefers the latest Tally date over the stale Monday column.
+- **Open (Part 2/3 — calendar):** share **AYCI Interviews** calendar
+  (`30f44afccaaec2ee9395b97820982164b701a5ff5a508c2ab808090c2873f609@group.calendar.google.com`)
+  with the dashboard service account ("Make changes to events") **and**
+  `tessa@medicalinterviewprep.com`; set `GOOGLE_INTERVIEWS_CALENDAR_ID` on Render.
+  `google_calendar.py` is written but inert until then. Then delete Nalaayeni's stale
+  `2026-06-11` event (`fljt1m491b1mat3toe5fh78j70`).
 
 ## Recent changes — 2026-06-10 session
 
