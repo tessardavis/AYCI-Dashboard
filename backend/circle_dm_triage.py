@@ -81,7 +81,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
             "triage_last_seen_id": latest_id,
             "first_seen_at": datetime.now(timezone.utc).isoformat(),
         })
-        return None
+        return {"seeded": True}
 
     # Baseline: triage's own marker, else fall back to the (disabled) bot's
     # last_seen so DMs since the poller went off get caught on the first run.
@@ -90,12 +90,12 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         baseline = state.get("last_seen_message_id") or 0
 
     if latest_id <= baseline:
-        return None
+        return {"nothing_new": True}
 
     # Only ticket an UNANSWERED student message (the newest message is theirs).
     if _msg_sender_id(latest) != student_id:
         await _save_thread_state(db, uuid_, {"triage_last_seen_id": latest_id})
-        return None
+        return {"coach_answered": True}
 
     message_text = _msg_body(latest) or "(no text)"
     student_email = None
@@ -127,7 +127,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
 
 
 async def _triage_one_coach(db, admin_email: str) -> dict:
-    out = {"admin_email": admin_email, "tickets": [], "errors": [], "threads": 0}
+    out = {"admin_email": admin_email, "tickets": [], "errors": [], "threads": 0, "seeded": 0}
     try:
         admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
         if not admin_member_id:
@@ -146,8 +146,10 @@ async def _triage_one_coach(db, admin_email: str) -> dict:
         for t in dm_threads:
             try:
                 r = await _triage_thread(db, admin_email, admin_member_id, coach_name, t)
-                if r:
+                if r and r.get("ticket_id"):
                     out["tickets"].append(r)
+                elif r and r.get("seeded"):
+                    out["seeded"] += 1
             except Exception as e:
                 out["errors"].append(str(e)[:120])
     except Exception as e:
@@ -166,14 +168,22 @@ async def triage_once(db) -> dict:
     summary = {
         "started_at": datetime.now(timezone.utc).isoformat(),
         "coaches": len(coach_emails),
+        "threads_scanned": 0,
+        "seeded": 0,
         "tickets_created": 0,
         "tickets": [],
+        "per_coach": [],
         "errors": [],
     }
     for e, r in zip(coach_emails, results):
         if isinstance(r, Exception):
             summary["errors"].append(f"{e}: {r}")
             continue
+        summary["threads_scanned"] += r.get("threads") or 0
+        summary["seeded"] += r.get("seeded") or 0
+        summary["per_coach"].append({"coach": e, "threads": r.get("threads") or 0,
+                                     "seeded": r.get("seeded") or 0,
+                                     "tickets": len(r.get("tickets") or [])})
         for tk in r.get("tickets") or []:
             summary["tickets_created"] += 1
             summary["tickets"].append({**tk, "coach_email": e})
