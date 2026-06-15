@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import circle_api
 from circle_dm_poll import (
@@ -38,76 +38,72 @@ def triage_enabled() -> bool:
     return os.environ.get("CIRCLE_TRIAGE_ENABLED", "").strip().lower() == "true"
 
 
-def _student_from_thread(thread: dict, admin_member_id: int):
-    """(student_member_id, name) from a direct-DM thread — the participant who
-    isn't the coach. Falls back to the last_message sender."""
-    for p in thread.get("other_participants_preview") or []:
-        if isinstance(p, dict) and p.get("id") and int(p["id"]) != int(admin_member_id):
-            return int(p["id"]), (p.get("name") or "")
-    lm = thread.get("last_message") or {}
-    sid = _msg_sender_id(lm)
-    if sid and int(sid) != int(admin_member_id):
-        return int(sid), ((lm.get("sender") or {}).get("name") or "")
-    return None, ""
+def _older_than_days(iso_ts: str, days: int) -> bool:
+    """True if an ISO timestamp is older than `days`. Unparseable → False
+    (treat as recent so we never silently swallow a fresh message)."""
+    try:
+        dt = datetime.fromisoformat((iso_ts or "").replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt < datetime.now(timezone.utc) - timedelta(days=days)
+    except Exception:
+        return False
 
 
-async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -> dict | None:
+async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -> dict:
+    """Decide whether a DM thread needs a ticket — entirely from the listing's
+    last_message, no per-thread fetch.
+
+    The message sender id is a community_member_id (SAME space as the coach's
+    admin_member_id), so we compare those directly. NOTE: the ids in
+    other_participants_preview are a DIFFERENT id space and must NEVER be used
+    for sender comparison (that was the 0-tickets bug)."""
     uuid_ = thread.get("chat_room_uuid")
     if not uuid_:
         return {"reason": "no_uuid"}
-    student_id, student_name = _student_from_thread(thread, admin_member_id)
-    if not student_id:
-        return {"reason": "no_student"}
 
     state = await _get_thread_state(db, uuid_) or {}
     # Leave interview-eve threads to the night-before score flow.
     if state.get("interview_eve_record_id"):
         return {"reason": "interview_eve"}
 
-    student_info = {
-        "coach_admin_email": admin_email,
-        "student_member_id": student_id,
-        "student_name": student_name,
-    }
-
-    # CHEAP pre-filter from the thread listing (no fetch): if the newest
-    # message's sender is the coach (or unknown), there's nothing unanswered.
     last = thread.get("last_message") or {}
     last_sender = _msg_sender_id(last)
-    if last_sender is None or last_sender == int(admin_member_id):
-        return {"reason": "coach_or_empty_last"}
+    if last_sender is None:
+        return {"reason": "no_sender"}
+    if last_sender == int(admin_member_id):
+        return {"reason": "coach_last"}  # coach sent the newest message → answered
 
-    # Newest message is the student's → fetch full messages for a dependable id.
-    messages = await circle_api.list_thread_messages_for_admin(db, admin_email, uuid_, per_page=20)
-    if not messages:
-        return {"reason": "no_messages_fetched"}
-    messages.sort(key=lambda m: m.get("created_at") or "")
-    latest = messages[-1]
-    latest_id = _msg_id(latest) or 0
-    latest_sender = _msg_sender_id(latest)
+    # Unanswered: newest message is from someone other than the coach — i.e. the
+    # student (their community_member_id == last_sender).
+    last_at = (last.get("created_at") or "").strip()
+    if not last_at:
+        return {"reason": "no_timestamp"}
 
-    # Re-check on the authoritative fetch (coach may have replied since listing).
-    if latest_sender != student_id:
-        if latest_id:
-            await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
-        return {"reason": "mismatch_after_fetch", "latest_sender": latest_sender,
-                "student_id": student_id, "last_sender": last_sender}
+    baseline_at = state.get("triage_last_seen_at")
+    if baseline_at and last_at <= baseline_at:
+        return {"reason": "nothing_new", "last_at": last_at, "baseline_at": baseline_at}
 
-    baseline = state.get("triage_last_seen_id")
-    if baseline is None:
-        baseline = state.get("last_seen_message_id") or 0
+    student_name = ((last.get("sender") or {}).get("name") or "").strip()
+    base_save = {
+        "coach_admin_email": admin_email,
+        "student_member_id": last_sender,
+        "student_name": student_name,
+        "triage_last_seen_at": last_at,
+    }
 
-    if latest_id <= baseline:
-        return {"reason": "nothing_new", "latest_id": latest_id, "baseline": baseline,
-                "had_bot_state": bool(state.get("last_seen_message_id"))}
+    # First time triage sees this thread (no triage baseline yet): only ticket if
+    # the message is recent — don't surface ancient dormant DMs as a burst.
+    if not baseline_at and _older_than_days(last_at, 14):
+        await _save_thread_state(db, uuid_, base_save)
+        return {"reason": "old_seeded", "last_at": last_at}
 
-    message_text = _msg_body(latest) or "(no text)"
+    message_text = _msg_body(last) or "(no text)"
     student_email = None
     try:
-        m = await circle_api.fetch_member(student_id)
+        m = await circle_api.fetch_member(last_sender)
         student_email = (m or {}).get("email")
-        if not student_name:
-            student_name = (m or {}).get("name") or ""
+        student_name = student_name or (m or {}).get("name") or ""
     except Exception:
         pass
 
@@ -122,12 +118,11 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         escalation_reason=None,
     )
     await _save_thread_state(db, uuid_, {
-        **student_info,
-        "triage_last_seen_id": latest_id,
+        **base_save,
         "triage_last_ticket_id": ticket_id,
         "triage_last_ticketed_at": datetime.now(timezone.utc).isoformat(),
     })
-    logger.info(f"[circle-triage] ticket {ticket_id[:8]} for {student_name or student_id} (coach {coach_name})")
+    logger.info(f"[circle-triage] ticket {ticket_id[:8]} for {student_name or last_sender} (coach {coach_name})")
     return {"reason": "ticketed", "thread": uuid_, "ticket_id": ticket_id, "student": student_name}
 
 
@@ -157,10 +152,9 @@ async def _triage_one_coach(db, admin_email: str) -> dict:
                 if r.get("ticket_id"):
                     out["tickets"].append(r)
                 # Capture a few samples of the "almost ticketed" buckets to debug.
-                if reason in ("mismatch_after_fetch", "nothing_new") and len(out["samples"]) < 5:
+                if reason in ("nothing_new", "old_seeded", "no_sender", "no_timestamp") and len(out["samples"]) < 5:
                     out["samples"].append({k: r.get(k) for k in
-                        ("reason", "latest_id", "baseline", "had_bot_state",
-                         "latest_sender", "student_id", "last_sender")})
+                        ("reason", "last_at", "baseline_at")})
             except Exception as e:
                 out["errors"].append(str(e)[:120])
     except Exception as e:
