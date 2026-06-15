@@ -437,16 +437,20 @@ export default function StudentsDB() {
                   </td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.email ? (
-                      <a
-                        href={tallyPrefillUrl({ first: r.first_name, last: r.surname, email: r.email })}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url = tallyPrefillUrl({ first: r.first_name, last: r.surname, email: r.email });
+                          (navigator.clipboard?.writeText(url) || Promise.reject())
+                            .then(() => toast.success("Tally link copied — ready to send"))
+                            .catch(() => toast.error("Couldn't copy — open the student and copy from there"));
+                        }}
                         className="text-orange-700 hover:underline"
-                        title="Open this student's pre-filled Tally form (name + email filled in)"
+                        title="Copy this student's pre-filled Tally link to send to them"
                       >
-                        Form ↗
-                      </a>
+                        Copy link
+                      </button>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}

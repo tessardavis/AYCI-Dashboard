@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, Loader2, RefreshCw, ExternalLink, Pencil, Check, X } from "lucide-react";
+import { Search, Loader2, RefreshCw, ExternalLink, Pencil, Check, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -501,17 +501,32 @@ function StudentNotesCard({ email, fallbackName }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <div className="font-display text-sm font-extrabold text-[var(--ayci-ink)]">Notes & Tally form</div>
-        <a
-          href={tallyUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-orange-700 hover:underline"
-          title="Open the student's pre-filled Tally form (name + email filled in)"
-        >
-          Open pre-filled Tally form <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+      <div className="font-display text-sm font-extrabold text-[var(--ayci-ink)] mb-2">Notes & Tally form</div>
+
+      {/* Pre-filled Tally link to copy + send to the student */}
+      <div className="mb-3">
+        <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">
+          Pre-filled Tally link (copy &amp; send)
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            readOnly
+            value={tallyUrl}
+            onFocus={(e) => e.target.select()}
+            className="flex-1 min-w-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              (navigator.clipboard?.writeText(tallyUrl) || Promise.reject())
+                .then(() => toast.success("Tally link copied — ready to send"))
+                .catch(() => toast.error("Couldn't copy — select the text and copy manually"));
+            }}
+          >
+            <Copy className="w-4 h-4 mr-1" /> Copy
+          </Button>
+        </div>
       </div>
 
       {loading ? (
