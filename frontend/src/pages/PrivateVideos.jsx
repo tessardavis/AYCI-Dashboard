@@ -1252,7 +1252,7 @@ function InlineVideo({ itemId }) {
         if (cancelled) return;
         setStatus(data.status);
         if (data.status === "ready") return;
-        if (data.status === "error" || data.status === "no_video") return;
+        if (data.status === "error" || data.status === "no_video" || data.status === "failed") return;
         // Poll fast — the transcode could finish at any time; 1.5s feels
         // responsive without hammering the server.
         pollTimer = setTimeout(poll, 1500);
@@ -1301,6 +1301,22 @@ function InlineVideo({ itemId }) {
       >
         <Video className="w-4 h-4" /> Open video in new tab
       </a>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div
+        className="w-full aspect-video rounded-md bg-rose-50 border border-rose-200 flex flex-col items-center justify-center gap-2 text-rose-800 px-4 text-center"
+        data-testid="pv-video-failed"
+      >
+        <Video className="w-6 h-6" />
+        <div className="text-xs font-semibold">This video can't be prepared</div>
+        <div className="text-[10px] leading-snug">
+          The upload looks corrupt — ask the student to re-record &amp; resubmit.
+          <br />(Admin: use the per-video re-fetch link to retry.)
+        </div>
+      </div>
     );
   }
 

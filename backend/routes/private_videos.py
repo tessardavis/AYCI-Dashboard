@@ -150,6 +150,11 @@ async def refetch_video(item_id: str, admin: dict = Depends(require_admin)):
         raise HTTPException(404, "No video on this submission")
     import private_video_cache as pv_cache
     import asyncio as _asyncio
+    # Clear the persisted "corrupt" flag so this manual retry actually re-attempts.
+    await db.private_video_submissions.update_one(
+        {"id": item_id},
+        {"$set": {"prep_failed": False}, "$unset": {"prep_last_error": "", "prep_last_failed_at": ""}},
+    )
     _asyncio.create_task(pv_cache.prepare(item_id, src, priority="interactive", force=True))
     return {"ok": True, "item_id": item_id, "action": "clean re-fetch scheduled — reload the video in ~30-60s"}
 
@@ -171,7 +176,7 @@ async def video_status(
     user: dict = Depends(require_board("private_videos")),
 ):
     row = await db.private_video_submissions.find_one(
-        {"id": item_id}, {"_id": 0, "tally_video_url": 1},
+        {"id": item_id}, {"_id": 0, "tally_video_url": 1, "prep_failed": 1, "prep_last_error": 1},
     )
     if not row:
         raise HTTPException(404, "Submission not found")
@@ -179,12 +184,24 @@ async def video_status(
     if not src:
         return {"status": "no_video"}
     import private_video_cache as pv_cache
+    # Already known-corrupt → don't re-attempt; tell the UI to show re-record.
+    if row.get("prep_failed"):
+        return {"status": "failed", "reason": row.get("prep_last_error") or "The video upload appears corrupt."}
     # Always kick off prepare — it's idempotent and ensures both download
     # AND transcode get scheduled even for files that downloaded earlier
     # but were never transcoded.
     import asyncio
     asyncio.create_task(pv_cache.prepare(item_id, src))
     status = pv_cache.get_status(item_id)
+    if status == "failed":
+        # Crossed the failure threshold this run — persist so it survives a
+        # restart and shows in admin views, and stop the re-download loop.
+        reason = pv_cache.prep_failure_reason(item_id) or "The video upload appears corrupt."
+        await db.private_video_submissions.update_one(
+            {"id": item_id},
+            {"$set": {"prep_failed": True, "prep_last_error": reason}},
+        )
+        return {"status": "failed", "reason": reason}
     return {"status": status}
 
 

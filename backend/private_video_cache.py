@@ -58,6 +58,10 @@ _MIN_FREE_DISK_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MIN_FREE_BYTES", 
 # iPhone upload doesn't sit on the disk forever — the slow leak that refilled
 # the disk after every cleanup.
 _H264_KEEP_MAX_BYTES = int(os.environ.get("PRIVATE_VIDEO_H264_KEEP_MAX_BYTES", str(40 * 1024 ** 2)))
+# After this many failed prepare attempts on the same source we stop retrying
+# and mark the video as a corrupt upload needing a re-record — instead of the
+# status poll re-downloading + re-failing forever. Reset by a forced re-fetch.
+_PREP_FAIL_THRESHOLD = int(os.environ.get("PRIVATE_VIDEO_PREP_FAIL_THRESHOLD", "3"))
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -151,7 +155,36 @@ _interactive_transcode_sema = asyncio.Semaphore(1)
 # Track transcode tasks so the status endpoint can report progress
 _transcode_tasks: dict[str, asyncio.Task] = {}
 
-Status = Literal["missing", "downloading", "downloaded", "transcoding", "ready", "error"]
+Status = Literal["missing", "downloading", "downloaded", "transcoding", "ready", "error", "failed"]
+
+# In-memory prepare-failure tracking. A video crosses into _prep_failed_reason
+# once it has failed _PREP_FAIL_THRESHOLD times, after which we stop re-attempting
+# and report status "failed" (the UI shows a re-record message). Cleared on a
+# successful prepare or a forced re-fetch.
+_prep_fail_counts: dict[str, int] = {}
+_prep_failed_reason: dict[str, str] = {}
+
+
+def _note_prep_failure(item_id: str, reason: str) -> int:
+    n = _prep_fail_counts.get(item_id, 0) + 1
+    _prep_fail_counts[item_id] = n
+    if n >= _PREP_FAIL_THRESHOLD:
+        _prep_failed_reason[item_id] = (reason or "")[:300]
+        logger.warning(f"[pv-cache] {item_id} marked FAILED after {n} attempts: {(reason or '')[:200]}")
+    return n
+
+
+def _clear_prep_failure(item_id: str) -> None:
+    _prep_fail_counts.pop(item_id, None)
+    _prep_failed_reason.pop(item_id, None)
+
+
+def prep_permanently_failed(item_id: str) -> bool:
+    return item_id in _prep_failed_reason
+
+
+def prep_failure_reason(item_id: str) -> str | None:
+    return _prep_failed_reason.get(item_id)
 
 
 def _ffmpeg_exe() -> str:
@@ -369,8 +402,10 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
                     f"[pv-cache] dropped unplayable source {item_id} after transcode "
                     f"failure — next view will re-download"
                 )
+            _note_prep_failure(item_id, f"ffmpeg: {stderr.decode(errors='replace')[:200]}")
             raise RuntimeError(f"ffmpeg failed: {stderr.decode(errors='replace')[:500]}")
     tmp.replace(dst)
+    _clear_prep_failure(item_id)  # success — reset any prior failure count
     logger.info(f"[pv-cache] transcoded {dst.name} ({dst.stat().st_size} bytes)")
     # Free disk: the H.264 copy is what we serve from now on. Keeping the
     # original .bin doubles the per-video footprint and contributed to
@@ -388,6 +423,8 @@ def get_status(item_id: str) -> Status:
     codec_marker = _path_codec(item_id)
     task = _transcode_tasks.get(item_id)
 
+    if item_id in _prep_failed_reason:
+        return "failed"  # corrupt upload — stopped retrying; needs re-record
     if h264.exists() and h264.stat().st_size > 0:
         return "ready"
     if codec_marker.exists() and codec_marker.read_text().strip() == "h264":
@@ -432,8 +469,14 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
     """
     lock = _locks.setdefault(item_id, asyncio.Lock())
     async with lock:
+        # Stop re-attempting a known-corrupt upload (the status poll would
+        # otherwise re-download + re-fail every 1.5s). A forced re-fetch clears
+        # this and tries again.
+        if prep_permanently_failed(item_id) and not force:
+            return
         # Re-check inside the lock
         if playable_path(item_id) and not force:
+            _clear_prep_failure(item_id)
             return
         # Force path: clean re-fetch — drop the transcode, the source, AND the
         # codec marker so we re-download from Tally and re-detect from scratch.
@@ -441,6 +484,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
         # that's stuck failing — the recompress flow already re-downloads since
         # the source is deleted after a successful transcode anyway.)
         if force:
+            _clear_prep_failure(item_id)  # manual retry — start fresh
             for p in (_path_h264(item_id), _path_orig(item_id), _path_codec(item_id)):
                 try:
                     p.unlink(missing_ok=True)
@@ -456,8 +500,9 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
             logger.warning(f"[pv-cache] pre-download eviction error: {e}")
         try:
             await _download(item_id, src_url)
-        except Exception:
+        except Exception as e:
             logger.exception(f"[pv-cache] download failed {item_id}")
+            _note_prep_failure(item_id, f"download: {e}")
             raise
         # Detect codec & decide whether to transcode
         codec = _detect_codec(_path_orig(item_id))
@@ -474,6 +519,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
             # 502 even while the background compress runs (or if it fails).
             try:
                 if _path_orig(item_id).stat().st_size <= _H264_KEEP_MAX_BYTES:
+                    _clear_prep_failure(item_id)  # playable as-is — success
                     return
             except OSError:
                 return
