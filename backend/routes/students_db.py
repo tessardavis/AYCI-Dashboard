@@ -585,7 +585,7 @@ EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
-    "setup_not_needed", "setup_not_needed_reason", "coach_notes",
+    "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
 }
 
 
@@ -609,6 +609,7 @@ class StudentPatch(BaseModel):
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None
     coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)
+    boost_and_go: Optional[str] = None  # e.g. "B&G" / "B&G Plus" — for dual-email fixes
 
     class Config:
         extra = "forbid"  # reject unknown keys outright

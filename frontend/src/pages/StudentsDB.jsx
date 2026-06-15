@@ -29,6 +29,7 @@ const EDITABLE_FIELDS = [
   { key: "private_chat_url", label: "Private chat URL" },
   { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
+  { key: "boost_and_go", label: "Boost & Go", type: "select", options: ["", "B&G", "B&G Plus"] },
   { key: "coach_notes", label: "Notes", type: "textarea" },
 ];
 
@@ -632,6 +633,21 @@ function EditModal({ row, onClose, onSaved }) {
                   placeholder="Team notes about this student — visible to anyone with student access."
                   className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                 />
+              ) : f.type === "select" ? (
+                <select
+                  value={form[f.key] ?? ""}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-200"
+                >
+                  {/* Include the current value if it isn't one of the presets
+                      (e.g. "Upgraded") so it shows correctly and isn't dropped. */}
+                  {(f.options || []).includes(form[f.key] ?? "")
+                    ? null
+                    : <option value={form[f.key]}>{form[f.key]}</option>}
+                  {(f.options || []).map((opt) => (
+                    <option key={opt} value={opt}>{opt === "" ? "— none —" : opt}</option>
+                  ))}
+                </select>
               ) : (
                 <Input
                   type={f.type || (f.key === "interview_date" ? "date" : "text")}
