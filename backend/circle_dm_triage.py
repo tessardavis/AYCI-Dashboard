@@ -38,6 +38,11 @@ def triage_enabled() -> bool:
     return os.environ.get("CIRCLE_TRIAGE_ENABLED", "").strip().lower() == "true"
 
 
+# Automated/system Circle accounts whose DMs are notifications, not student
+# questions — never make tickets from these (matched case-insensitively).
+_IGNORED_SENDERS = {"do not reply bot"}
+
+
 def _older_than_days(iso_ts: str, days: int) -> bool:
     """True if an ISO timestamp is older than `days`. Unparseable → False
     (treat as recent so we never silently swallow a fresh message)."""
@@ -74,6 +79,10 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if last_sender == int(admin_member_id):
         return {"reason": "coach_last"}  # coach sent the newest message → answered
 
+    student_name = ((last.get("sender") or {}).get("name") or "").strip()
+    if student_name.lower() in _IGNORED_SENDERS:
+        return {"reason": "ignored_sender", "sender": student_name}
+
     # Unanswered: newest message is from someone other than the coach — i.e. the
     # student (their community_member_id == last_sender).
     last_at = (last.get("created_at") or "").strip()
@@ -84,7 +93,6 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if baseline_at and last_at <= baseline_at:
         return {"reason": "nothing_new", "last_at": last_at, "baseline_at": baseline_at}
 
-    student_name = ((last.get("sender") or {}).get("name") or "").strip()
     base_save = {
         "coach_admin_email": admin_email,
         "student_member_id": last_sender,
