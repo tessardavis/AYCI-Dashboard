@@ -31,6 +31,35 @@ row before deleting the auto: row; the diagnostic queries `intake_seen_at`.
 14 Jun: his pinned `tier`+cohort fields are intake's fingerprint). Note: rows
 reconciled *before* this fix won't backfill the stamp — only new signups show.
 
+**Student notes + pre-filled Tally link.** `coach_notes` is now an editable,
+list-visible field. Students DB: notes in the edit modal (textarea), a 📝 row
+indicator, and a per-row pre-filled Tally link. Student Lookup: a "Notes & Tally"
+card (self-contained — reads/saves via `students-db`, not the 30-min lookup
+cache). Tally prefill helper `frontend/src/lib/tally.js` (slug `0Qr5py`,
+`?name=&lastname=&email=`).
+
+**Private videos — corrupt-source self-heal (not a disk issue this time).** A
+video stuck on "Video preparation failed" had a 4 MB undecodable `.bin` (codec
+`unknown`, no `.h264.mp4`) cached and re-failing forever; disk had 3.5 GB free.
+Fixes: a failed transcode now drops the bad (non-H.264) source + codec marker so
+the next view re-downloads; `prepare(force=True)` is a true clean re-fetch (drops
+`.bin`+codec too); new `GET /api/private-videos/{id}/refetch` (admin) clears one
+stuck video. Also (prior commit, durable disk hygiene) `_evict_for_free_disk`
+evicts to keep ≥2 GB physically free regardless of `MAX_CACHE_BYTES`, and large
+H.264 (>40 MB) is now compressed instead of stored full-size (the slow leak).
+
+**Boost & Go is now editable in Students DB** (dropdown: B&G / B&G Plus; pinned).
+This is the fix for **dual-email B&G buyers** — someone who bought under one email
+but lives in the system under another. The Stripe backfill matches on email so it
+can NEVER link a purchase email to a different real-email row; these must be
+flagged by hand on the real-email row. Worked example (2026-06-15): Louise Murray
+(bought `louise.murray@doctors.org.uk`, real `louise.murray30@nhs.net`, confirmed
+on Circle w/ B&G tag), Abdelhady Ali (`abdelhady.ali1@nhs.net` → `dr.abdelhadyali@gmail.com`),
+Alice Lawford (`aemlawford@hotmail.co.uk` → `alice.lawford@nhs.net`). **Limitation:**
+the B&G audit will keep listing them as "not in dashboard" (it matches the purchase
+email, which still has no row). Real cure = store an alternate/purchase email per
+student so matching can use it (deferred).
+
 ### ⚠️ New-student Monday dependency map (before pulling zap 1's "Create Item" steps)
 
 Audited all 80 zaps for "what still looks a brand-new (dashboard-only `auto:`)
