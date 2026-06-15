@@ -54,11 +54,19 @@ BONUS_COLS = [
 
 COL_VIDEO_ALLOWANCE = "numeric_mkxfvz1k"
 COL_VIDEOS_SUBMITTED = "numeric_mkxfq65c"
+COL_BOOST_AND_GO = "color_mkrksc9t"  # "Boost + Go" status (separate from Tier)
 
 ALL_COLUMN_IDS = [
     COL_INTERVIEW_DATE, COL_TIER, COL_EMAIL, COL_SPECIALITY, COL_HOSPITAL,
-    COL_PRIVATE_CHAT_LINK, COL_VIDEO_ALLOWANCE, COL_VIDEOS_SUBMITTED,
+    COL_PRIVATE_CHAT_LINK, COL_VIDEO_ALLOWANCE, COL_VIDEOS_SUBMITTED, COL_BOOST_AND_GO,
 ] + [c for c, _ in CALL_COLS + MOCK_COLS + BONUS_COLS]
+
+
+def _is_active_bg(val: str) -> bool:
+    """Active Boost & Go (matches the dashboard rule). Covers "B&G", "B&G Plus",
+    "Boost & Go …" and "Upgraded"."""
+    v = (val or "").strip().lower()
+    return ("b&g" in v) or ("boost" in v and "go" in v) or v == "upgraded"
 
 
 def _allowance(cols_by_id: dict[str, dict], specs: list[tuple[str, str]]) -> dict:
@@ -99,7 +107,7 @@ async def _fetch_items_from_mirror(db, start_str: str, end_str: str) -> list[dic
     without changes."""
     cursor = db.academy_members.find(
         {"interview_date": {"$gte": start_str, "$lte": end_str}},
-        {"_id": 1, "name": 1, "url": 1, "columns_by_id": 1},
+        {"_id": 1, "name": 1, "url": 1, "columns_by_id": 1, "boost_and_go": 1},
     )
     items: list[dict] = []
     async for row in cursor:
@@ -119,6 +127,9 @@ async def _fetch_items_from_mirror(db, start_str: str, end_str: str) -> list[dic
             "name": row.get("name"),
             "url": row.get("url"),
             "column_values": column_values,
+            # Authoritative dashboard scalar (reflects manual / dual-email B&G
+            # flags that the Monday column may not carry).
+            "boost_and_go": row.get("boost_and_go"),
         })
     return items
 
@@ -232,6 +243,12 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # in another. PRIVATE_PLUS_LABELS / VIP_LABELS are the source of truth
         # in `private_tier_utilisation.py`; we mirror them here. Silver/Gold
         # are legacy product names and now behave as plain Academy.
+        # Boost & Go status is a SEPARATE column from Tier — a student can read
+        # "Silver" in Tier but be an active Boost & Go member. Prefer the
+        # authoritative dashboard scalar; fall back to the Monday column.
+        boost = (it.get("boost_and_go") or _txt(COL_BOOST_AND_GO) or "").strip()
+        is_bg = _is_active_bg(boost)
+
         _PP_LABELS = {"academy private plus", "upgrade private plus"}
         _VIP_LABELS = {"vip", "platinum"}
         _t_low = tier.strip().lower()
@@ -239,8 +256,10 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
             tier_group = "Private Plus"
         elif _t_low in _VIP_LABELS:
             tier_group = "VIP"
+        elif is_bg:
+            tier_group = "Boost & Go"  # so a "Silver"-tier B&G reads sensibly
         else:
-            tier_group = tier  # Academy 1:1, Boost & Go, etc. — keep as-is
+            tier_group = tier  # Academy 1:1, etc. — keep as-is
 
         base = {
             "id": it.get("id"),
@@ -263,7 +282,11 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # are effectively Academy and should stay in the Academy pane.
         _ACADEMY_EQUIV = {"academy", "silver", "gold"}
         tier_parts = [t.strip().lower() for t in tier.split(",") if t.strip()]
-        is_pure_academy = (not tier_parts) or all(tp in _ACADEMY_EQUIV for tp in tier_parts)
+        # An active Boost & Go student is never "pure academy" — they belong in
+        # the private/B&G pane even if their Tier column says Silver/Gold/Academy.
+        is_pure_academy = (not is_bg) and (
+            (not tier_parts) or all(tp in _ACADEMY_EQUIV for tp in tier_parts)
+        )
 
         if is_pure_academy:
             academy.append(base)
