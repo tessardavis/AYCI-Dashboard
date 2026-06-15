@@ -54,15 +54,15 @@ def _student_from_thread(thread: dict, admin_member_id: int):
 async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -> dict | None:
     uuid_ = thread.get("chat_room_uuid")
     if not uuid_:
-        return None
+        return {"reason": "no_uuid"}
     student_id, student_name = _student_from_thread(thread, admin_member_id)
     if not student_id:
-        return None
+        return {"reason": "no_student"}
 
     state = await _get_thread_state(db, uuid_) or {}
     # Leave interview-eve threads to the night-before score flow.
     if state.get("interview_eve_record_id"):
-        return None
+        return {"reason": "interview_eve"}
 
     student_info = {
         "coach_admin_email": admin_email,
@@ -70,43 +70,36 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         "student_name": student_name,
     }
 
-    # CHEAP pre-filter from the thread listing (no fetch): the inline
-    # last_message has a reliable `sender` but NOT a reliable `id`. If the newest
-    # message is the coach's (or sender unknown), there's nothing unanswered —
-    # skip without an API call. Only threads whose newest message is the
-    # student's fall through to a full fetch (a small minority), so the cron
-    # stays light on Circle's rate limit.
+    # CHEAP pre-filter from the thread listing (no fetch): if the newest
+    # message's sender is the coach (or unknown), there's nothing unanswered.
     last = thread.get("last_message") or {}
     last_sender = _msg_sender_id(last)
     if last_sender is None or last_sender == int(admin_member_id):
-        return {"coach_answered": True}
+        return {"reason": "coach_or_empty_last"}
 
-    # Newest message is the student's → fetch full messages for a dependable id
-    # (for the baseline/dedup) and body.
+    # Newest message is the student's → fetch full messages for a dependable id.
     messages = await circle_api.list_thread_messages_for_admin(db, admin_email, uuid_, per_page=20)
     if not messages:
-        return None
+        return {"reason": "no_messages_fetched"}
     messages.sort(key=lambda m: m.get("created_at") or "")
     latest = messages[-1]
     latest_id = _msg_id(latest) or 0
+    latest_sender = _msg_sender_id(latest)
 
-    # Re-check on the authoritative fetch (the coach may have replied since the
-    # listing snapshot).
-    if _msg_sender_id(latest) != student_id:
+    # Re-check on the authoritative fetch (coach may have replied since listing).
+    if latest_sender != student_id:
         if latest_id:
             await _save_thread_state(db, uuid_, {**student_info, "triage_last_seen_id": latest_id})
-        return {"coach_answered": True}
+        return {"reason": "mismatch_after_fetch", "latest_sender": latest_sender,
+                "student_id": student_id, "last_sender": last_sender}
 
-    # Baseline: triage's own marker, else the (disabled) bot's last_seen so DMs
-    # since the poller went off get caught. For a thread neither has ever seen
-    # (a brand-new DMer), baseline is 0 — so their first unanswered message
-    # tickets.
     baseline = state.get("triage_last_seen_id")
     if baseline is None:
         baseline = state.get("last_seen_message_id") or 0
 
     if latest_id <= baseline:
-        return {"nothing_new": True}
+        return {"reason": "nothing_new", "latest_id": latest_id, "baseline": baseline,
+                "had_bot_state": bool(state.get("last_seen_message_id"))}
 
     message_text = _msg_body(latest) or "(no text)"
     student_email = None
@@ -135,11 +128,12 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
         "triage_last_ticketed_at": datetime.now(timezone.utc).isoformat(),
     })
     logger.info(f"[circle-triage] ticket {ticket_id[:8]} for {student_name or student_id} (coach {coach_name})")
-    return {"thread": uuid_, "ticket_id": ticket_id, "student": student_name}
+    return {"reason": "ticketed", "thread": uuid_, "ticket_id": ticket_id, "student": student_name}
 
 
 async def _triage_one_coach(db, admin_email: str) -> dict:
-    out = {"admin_email": admin_email, "tickets": [], "errors": [], "threads": 0, "seeded": 0}
+    out = {"admin_email": admin_email, "tickets": [], "errors": [], "threads": 0,
+           "reasons": {}, "samples": []}
     try:
         admin_member_id = await circle_api.get_cached_admin_member_id(db, admin_email)
         if not admin_member_id:
@@ -157,11 +151,16 @@ async def _triage_one_coach(db, admin_email: str) -> dict:
         out["threads"] = len(dm_threads)
         for t in dm_threads:
             try:
-                r = await _triage_thread(db, admin_email, admin_member_id, coach_name, t)
-                if r and r.get("ticket_id"):
+                r = await _triage_thread(db, admin_email, admin_member_id, coach_name, t) or {}
+                reason = r.get("reason", "none")
+                out["reasons"][reason] = out["reasons"].get(reason, 0) + 1
+                if r.get("ticket_id"):
                     out["tickets"].append(r)
-                elif r and r.get("seeded"):
-                    out["seeded"] += 1
+                # Capture a few samples of the "almost ticketed" buckets to debug.
+                if reason in ("mismatch_after_fetch", "nothing_new") and len(out["samples"]) < 5:
+                    out["samples"].append({k: r.get(k) for k in
+                        ("reason", "latest_id", "baseline", "had_bot_state",
+                         "latest_sender", "student_id", "last_sender")})
             except Exception as e:
                 out["errors"].append(str(e)[:120])
     except Exception as e:
@@ -181,7 +180,6 @@ async def triage_once(db) -> dict:
         "started_at": datetime.now(timezone.utc).isoformat(),
         "coaches": len(coach_emails),
         "threads_scanned": 0,
-        "seeded": 0,
         "tickets_created": 0,
         "tickets": [],
         "per_coach": [],
@@ -192,9 +190,9 @@ async def triage_once(db) -> dict:
             summary["errors"].append(f"{e}: {r}")
             continue
         summary["threads_scanned"] += r.get("threads") or 0
-        summary["seeded"] += r.get("seeded") or 0
         summary["per_coach"].append({"coach": e, "threads": r.get("threads") or 0,
-                                     "seeded": r.get("seeded") or 0,
+                                     "reasons": r.get("reasons") or {},
+                                     "samples": r.get("samples") or [],
                                      "tickets": len(r.get("tickets") or [])})
         for tk in r.get("tickets") or []:
             summary["tickets_created"] += 1
