@@ -1164,6 +1164,11 @@ async def on_startup():
             import interview_date_reconcile
             res = await interview_date_reconcile.reconcile_interview_dates(db)
             logger.info(f"[scheduler] interview_date_reconcile: {res.get('changed_count')} changed")
+            # Sweep the calendar for ALL upcoming students — a date can arrive
+            # via the Monday sync too, and the reconcile only calendar-synced
+            # rows it changed. This keeps the calendar in step regardless.
+            cal = await interview_date_reconcile.sync_upcoming_calendar(db)
+            logger.info(f"[scheduler] calendar sweep: {cal.get('synced')}/{cal.get('scanned')} synced")
         except Exception as e:
             logger.warning(f"[scheduler] interview_date_reconcile failed: {e}")
 
@@ -1845,6 +1850,22 @@ async def admin_google_calendar_selftest(admin: dict = Depends(require_admin)):
     can_write=false means the calendar isn't shared with the service account."""
     import google_calendar
     return await google_calendar.selftest()
+
+
+@api.get("/admin/google-calendar/sync-upcoming")
+async def admin_google_calendar_sync_upcoming(days: int = 180, admin: dict = Depends(require_admin)):
+    """Ensure a calendar event for EVERY student with an upcoming interview_date —
+    not just those a Tally reconcile changed. Fixes calendar drift when a date
+    reached the dashboard via the Monday sync. Runs in the background (idempotent,
+    matches events by location ID); re-check the calendar in ~1-2 min. Pass
+    ?days=N to scope the horizon (e.g. days=7 for just the next week)."""
+    import interview_date_reconcile
+    import asyncio as _asyncio
+    import google_calendar
+    if not google_calendar.is_configured():
+        return {"ok": False, "configured": False, "detail": "Google Calendar not configured"}
+    _asyncio.create_task(interview_date_reconcile.sync_upcoming_calendar(db, days_ahead=days))
+    return {"ok": True, "action": f"syncing upcoming interviews (next {days} days) to the calendar in the background — re-check in ~1-2 min"}
 
 
 @api.post("/admin/interview-date/reconcile")

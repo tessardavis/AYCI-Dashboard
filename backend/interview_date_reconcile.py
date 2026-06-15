@@ -16,7 +16,7 @@ dashboard editing; off-form reschedules are out of scope.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from pymongo import UpdateOne
 
@@ -52,6 +52,46 @@ def _latest_tally_date(history: list) -> str | None:
         if d:
             return d
     return None
+
+
+async def sync_upcoming_calendar(db_=db, days_ahead: int = 180) -> dict:
+    """Ensure the AYCI Interviews calendar has an event for EVERY student with an
+    upcoming interview_date — not just those the Tally reconcile changed this run.
+
+    A date can reach the dashboard via the Monday sync (or any path), not only
+    via the Tally reconcile, and the reconcile's calendar step only fired for
+    rows it *changed*. So a Monday-sourced reschedule landed on the dashboard but
+    never on the calendar. This sweeps all upcoming-dated rows and ensures each
+    one's event — idempotent, since ensure_interview_event matches by location ID.
+    """
+    try:
+        import google_calendar
+    except Exception as e:
+        return {"configured": False, "detail": str(e)[:200]}
+    if not google_calendar.is_configured():
+        return {"configured": False, "scanned": 0, "synced": 0}
+
+    today = datetime.now(timezone.utc).date()
+    today_s = today.isoformat()
+    horizon_s = (today + timedelta(days=days_ahead)).isoformat()
+
+    rows = []
+    async for r in db_.academy_members.find(
+        {"interview_date": {"$gte": today_s, "$lte": horizon_s}},
+        {"columns": 0, "columns_by_id": 0},
+    ):
+        rows.append(r)
+
+    synced = errors = 0
+    for r in rows:
+        try:
+            if await google_calendar.ensure_interview_event(db_, r):
+                synced += 1
+        except Exception as e:
+            errors += 1
+            logger.warning(f"[calendar-sync] {r.get('email') or r.get('_id')}: {e}")
+    logger.info(f"[calendar-sync] ensured {synced}/{len(rows)} upcoming events ({errors} errors)")
+    return {"configured": True, "scanned": len(rows), "synced": synced, "errors": errors}
 
 
 async def reconcile_interview_dates(db_=db) -> dict:
