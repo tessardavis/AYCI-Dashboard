@@ -133,6 +133,27 @@ async def cache_recompress(
     }
 
 
+@router.get("/{item_id}/refetch")
+async def refetch_video(item_id: str, admin: dict = Depends(require_admin)):
+    """Force a clean re-download + re-transcode of ONE video. Use this when a
+    single video is stuck on "Video preparation failed" because its cached
+    source is truncated/corrupt (cache-info shows a tiny .bin + codec
+    "unknown" + no .h264.mp4). Re-fetches from Tally from scratch. If it still
+    fails after this, the source upload itself is broken (ask for a re-record)."""
+    row = await db.private_video_submissions.find_one(
+        {"id": item_id}, {"_id": 0, "tally_video_url": 1},
+    )
+    if not row:
+        raise HTTPException(404, "Submission not found")
+    src = row.get("tally_video_url")
+    if not src:
+        raise HTTPException(404, "No video on this submission")
+    import private_video_cache as pv_cache
+    import asyncio as _asyncio
+    _asyncio.create_task(pv_cache.prepare(item_id, src, priority="interactive", force=True))
+    return {"ok": True, "item_id": item_id, "action": "clean re-fetch scheduled — reload the video in ~30-60s"}
+
+
 @router.get("")
 async def list_submissions(
     force: bool = False,  # legacy param, kept so existing frontend URLs work

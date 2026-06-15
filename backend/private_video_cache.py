@@ -349,6 +349,26 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
                 tmp.unlink(missing_ok=True)
             except OSError:
                 pass
+            # Self-heal: if the source isn't independently browser-playable
+            # (i.e. not already H.264), keeping a source that won't transcode
+            # means a permanent 502 on every future view. Drop the bad source +
+            # codec marker so the next request re-downloads a fresh copy — fixes
+            # one-off truncated/corrupt downloads (a 4 MB undecodable .bin).
+            try:
+                marker = _path_codec(item_id)
+                is_h264 = marker.exists() and marker.read_text().strip() == "h264"
+            except OSError:
+                is_h264 = False
+            if not is_h264:
+                for p in (_path_orig(item_id), _path_codec(item_id)):
+                    try:
+                        p.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                logger.warning(
+                    f"[pv-cache] dropped unplayable source {item_id} after transcode "
+                    f"failure — next view will re-download"
+                )
             raise RuntimeError(f"ffmpeg failed: {stderr.decode(errors='replace')[:500]}")
     tmp.replace(dst)
     logger.info(f"[pv-cache] transcoded {dst.name} ({dst.stat().st_size} bytes)")
@@ -415,14 +435,17 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
         # Re-check inside the lock
         if playable_path(item_id) and not force:
             return
-        # Force path: drop the existing transcode so we re-download +
-        # re-encode. We KEEP the codec marker so the codec-detection step
-        # below can be skipped on a re-run.
+        # Force path: clean re-fetch — drop the transcode, the source, AND the
+        # codec marker so we re-download from Tally and re-detect from scratch.
+        # (Dropping the source is what fixes a cached truncated/corrupt .bin
+        # that's stuck failing — the recompress flow already re-downloads since
+        # the source is deleted after a successful transcode anyway.)
         if force:
-            try:
-                _path_h264(item_id).unlink(missing_ok=True)
-            except OSError:
-                pass
+            for p in (_path_h264(item_id), _path_orig(item_id), _path_codec(item_id)):
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
         # Make room BEFORE downloading. Eviction used to run only AFTER the
         # download, so once the disk filled, every download failed first and
         # eviction never ran — a deadlock. Trim to leave headroom up front.
