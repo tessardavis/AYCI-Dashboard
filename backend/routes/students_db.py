@@ -369,15 +369,17 @@ async def intake_recent(
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=max(days, 0))
 
-    # Everything intake has touched in the window, newest first.
+    # Everything intake has touched in the window, newest first. Keyed off the
+    # durable `intake_seen_at` stamp (carried onto the Monday row at reconcile),
+    # NOT dashboard_edited_by — that marker dies with the auto: row, so it would
+    # miss every already-reconciled signup.
     cursor = (
         db.academy_members
         .find(
-            {"dashboard_edited_by": "zapier-intake",
-             "dashboard_edited_at": {"$gte": cutoff}},
+            {"intake_seen_at": {"$gte": cutoff}},
             {"columns": 0, "columns_by_id": 0},
         )
-        .sort([("dashboard_edited_at", -1)])
+        .sort([("intake_seen_at", -1)])
         .limit(min(limit, 1000))
     )
     recent, created_in_window = [], 0
@@ -385,7 +387,7 @@ async def intake_recent(
         is_auto = str(r.get("_id", "")).startswith("auto:")
         if is_auto:
             created_in_window += 1
-        ea = r.get("dashboard_edited_at")
+        sa = r.get("intake_seen_at")
         ca = r.get("created_at")
         recent.append({
             "id": r["_id"],
@@ -395,7 +397,7 @@ async def intake_recent(
             "tier": r.get("tier"),
             "cohort_joined": r.get("cohort_joined"),
             "source": r.get("source"),
-            "dashboard_edited_at": ea.isoformat() if isinstance(ea, datetime) else ea,
+            "intake_seen_at": sa.isoformat() if isinstance(sa, datetime) else sa,
             "created_at": ca.isoformat() if isinstance(ca, datetime) else ca,
         })
 
@@ -1169,6 +1171,11 @@ async def intake_student(
     update_set["dashboard_edited_at"] = now
     update_set["dashboard_edited_by"] = "zapier-intake"
 
+    # Durable provenance stamp so the intake-recent diagnostic can still see
+    # this signup AFTER its auto: row reconciles away (dashboard_edited_by is
+    # carried on the auto: row, which reconcile deletes; this survives).
+    update_set["intake_seen_at"] = now
+
     if existing:
         # Update — preserve dashboard_edited_fields audit
         new_protected = set(existing.get("dashboard_edited_fields") or [])
@@ -1198,6 +1205,7 @@ async def intake_student(
     insert_doc["created_at"] = now
     insert_doc["dashboard_edited_at"] = now
     insert_doc["dashboard_edited_by"] = "zapier-intake"
+    insert_doc["intake_seen_at"] = now
     insert_doc["dashboard_edited_fields"] = sorted(
         set(set_fields.keys()) & PROTECTED_FIELDS
     )

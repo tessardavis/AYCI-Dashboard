@@ -380,10 +380,16 @@ async def _reconcile_auto_rows(db) -> int:
 
         owned = set(auto_row.get("dashboard_edited_fields") or []) - _RECONCILE_SKIP_FIELDS
         carry = {f: auto_row.get(f) for f in owned if f in auto_row}
-        if carry:
+        if owned:
             new_protected = set(monday_row.get("dashboard_edited_fields") or []) | owned
             carry["dashboard_edited_fields"] = sorted(new_protected)
             carry["dashboard_edited_at"] = datetime.now(timezone.utc)
+        # Carry the intake provenance stamp onto the permanent Monday row so the
+        # intake-recent diagnostic can still see this signup once the auto: row
+        # (which holds dashboard_edited_by="zapier-intake") is deleted below.
+        if auto_row.get("intake_seen_at"):
+            carry["intake_seen_at"] = auto_row["intake_seen_at"]
+        if carry:
             await db.academy_members.update_one(
                 {"_id": monday_row["_id"]}, {"$set": carry}
             )
