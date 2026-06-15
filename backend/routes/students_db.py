@@ -978,10 +978,18 @@ async def lookup_student_by_email(
     if not isinstance(requested_cols, list):
         raise HTTPException(400, "columns must be a list of Monday column titles")
 
+    soft = bool(body.get("soft"))
+
     row = await db.academy_members.find_one(
         {"$or": [{"email": email_l}, {"circle_email": email_l}]},
     )
     if not row:
+        if soft:
+            # Soft mode: 200 with found=false instead of 404, so a Zapier
+            # Webhooks step can branch on `found` (via Paths) without the step
+            # erroring and halting the zap — needed by zaps with a designed
+            # "not on board → Slack alert" branch (e.g. New Circle member).
+            return {"ok": True, "found": False, "email": email_l}
         raise HTTPException(404, f"No student found for email={email_l}")
 
     fields = {
@@ -1004,6 +1012,7 @@ async def lookup_student_by_email(
 
     return {
         "ok": True,
+        "found": True,
         "id": row["_id"],
         "matched_on": "email" if row.get("email") == email_l else "circle_email",
         "fields": fields,

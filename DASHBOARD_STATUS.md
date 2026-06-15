@@ -2,6 +2,65 @@
 
 _Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-14._
 
+## Recent changes — 2026-06-15 session
+
+**Circle DM → ticket triage FIXED & LIVE.** The triage was creating 0 tickets: it
+compared a message sender's `community_member_id` against the
+`other_participants_preview` id, which is a **different id space** — so every
+unanswered student DM was misclassified. Now decides purely on "is the newest
+message from the coach?" (`last_sender == admin_member_id`, same space), dedups on
+the message `created_at` timestamp (the `_msg_id`/full-fetch path returned null),
+and has a 14-day first-sight recency guard so the first run doesn't dump ancient
+dormant DMs. First real run created **45 tickets** (recent backlog + a test); cron
+is on (`CIRCLE_TRIAGE_ENABLED=true`). System Circle accounts (e.g. "Do Not Reply
+Bot") are ignored via `_IGNORED_SENDERS`. Still send-free.
+
+**Team SOP shipped.** `TEAM_SOP.md` — non-technical team guide (private chats,
+video allowances, interview-date reschedules, support tickets, Boost & Go,
+glossary). `ONBOARDING.md` backs a Claude Code share link
+(`https://claude.ai/claude-code/onboard/s2E-SyV0SROr`); the doc is also meant to be
+uploaded to a claude.ai Project for the coaches to chat with.
+
+**`intake-recent` diagnostic was giving false negatives — FIXED.** It keyed off
+`dashboard_edited_by="zapier-intake"`, which lives only on the temporary `auto:`
+row that `_reconcile_auto_rows` **deletes** once the Monday twin syncs — so every
+already-reconciled signup read as zero. Intake now stamps a durable
+`intake_seen_at` (insert + update); reconcile carries it onto the permanent Monday
+row before deleting the auto: row; the diagnostic queries `intake_seen_at`.
+**Confirmed intake IS working** (Naveen Hosangadi, nnnblues@yahoo.com, signed up
+14 Jun: his pinned `tier`+cohort fields are intake's fingerprint). Note: rows
+reconciled *before* this fix won't backfill the stamp — only new signups show.
+
+### ⚠️ New-student Monday dependency map (before pulling zap 1's "Create Item" steps)
+
+Audited all 80 zaps for "what still looks a brand-new (dashboard-only `auto:`)
+student up on Monday." **Removing zap 1's 3 Create Items is NOT a clean isolated
+step:**
+
+- **Zaps 5 & 6** (`Onboarding Form Tally to Monday` + higher-tier twin) still
+  **Create Item** on Monday when the student completes onboarding — so they
+  recreate the Monday row anyway (just later). Monday isn't out of the new-student
+  path until 5 & 6 are migrated too. **Verify in Zapier:** are 5 & 6 active, and do
+  they Create or Update?
+- **Downstream zaps that assume the new student already has a Monday row** (the real
+  gates):
+  | Zap | Trigger / lookup | Breaks for a Monday-less student | Impact |
+  |---|---|---|---|
+  | **39** New Circle member | Circle tagged → Monday Get Items | "Not on board" branch → Slack only; skips Kit tag + cohort status | 🔴 High |
+  | **68** Wins Tracking – First Message | Monday New Item | never fires → no first welcome DM | 🟠 Med |
+  | **41/42/44** launch upgrade bonuses | Kit tag → Monday Get Items | bonus status not recorded | 🟠 Med (launch) |
+  | **33** split First/Surname | Monday New Item | redundant — intake stores first/surname | 🟢 None |
+  | **72** cohort dates on Circle join | Circle tagged → Monday Get Items | redundant — intake sets cohort dates | 🟢 None |
+- **Already mitigated:** private-chat zaps **46/47/53** trigger on a Monday column
+  change (wouldn't fire for a Monday-less student) — but dashboard-native private-chat
+  creation already covers this.
+
+**Safe sequence:** (1) re-point **zap 39**'s lookup to `lookup-by-email` (highest
+impact); (2) migrate **zaps 5 & 6** to `intake`; (3) only then pull all the Create
+Items at once. **`lookup-by-email` now supports `{"soft": true}`** → returns 200
+`{found:false}` instead of 404, so a Zapier Webhooks step can branch on `found` via
+Paths without erroring (needed for zap 39's not-found Slack branch).
+
 ## Recent changes — 2026-06-14 session
 
 All committed + pushed to `main` (Render/Vercel auto-deploy). Two workstreams:
