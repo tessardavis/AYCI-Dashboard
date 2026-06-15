@@ -135,7 +135,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
         "interview_type", "private_chat_url", "private_chat_status",
         "boost_and_go", "video_allowance",
-        "setup_not_needed", "setup_not_needed_reason",
+        "setup_not_needed", "setup_not_needed_reason", "coach_notes",
         "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}
@@ -585,7 +585,7 @@ EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
-    "setup_not_needed", "setup_not_needed_reason",
+    "setup_not_needed", "setup_not_needed_reason", "coach_notes",
 }
 
 
@@ -608,6 +608,7 @@ class StudentPatch(BaseModel):
     video_allowance: Optional[int] = None
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None
+    coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)
 
     class Config:
         extra = "forbid"  # reject unknown keys outright

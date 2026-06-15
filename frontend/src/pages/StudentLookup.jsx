@@ -4,6 +4,7 @@ import { Search, Loader2, RefreshCw, ExternalLink, Pencil, Check, X } from "luci
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { tallyPrefillUrl } from "@/lib/tally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import StudentPlatformCard from "@/components/StudentPlatformCard";
@@ -375,6 +376,10 @@ export default function StudentLookup() {
           {/* Quick links — private chat + Google Doc */}
           <QuickLinks result={result} />
 
+          {/* Team notes + pre-filled Tally form link */}
+          <StudentNotesCard email={result.email} fallbackName={header?.name || result.monday?.data?.name || query} />
+
+
           {/* Private-tier Google Doc summary (only for non-pure-Academy students) */}
           {isPrivateTier(result.monday?.data) && (
             <PrivateDocCard
@@ -433,6 +438,104 @@ export default function StudentLookup() {
             >
               <CircleCard data={result.circle?.data} />
             </StudentPlatformCard>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StudentNotesCard({ email, fallbackName }) {
+  const [row, setRow] = useState(null);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!email) return;
+    let alive = true;
+    setLoading(true);
+    apiClient
+      .get("/students-db", { params: { q: email, limit: 10 } })
+      .then(({ data }) => {
+        if (!alive) return;
+        const items = data.items || [];
+        const lc = email.toLowerCase();
+        const match =
+          items.find((r) => (r.email || "").toLowerCase() === lc || (r.circle_email || "").toLowerCase() === lc) ||
+          items[0] ||
+          null;
+        setRow(match);
+        setNote((match && match.coach_notes) || "");
+      })
+      .catch(() => alive && setRow(null))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [email]);
+
+  const save = async () => {
+    if (!row?._id) return;
+    setSaving(true);
+    try {
+      const { data } = await apiClient.patch(`/students-db/${row._id}`, { coach_notes: note || null });
+      setRow(data);
+      setNote(data.coach_notes || "");
+      toast.success("Notes saved");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't save notes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Name parts for the pre-filled Tally link: prefer the DB row, fall back to
+  // splitting the display name.
+  const parts = String(fallbackName || "").trim().split(/\s+/);
+  const first = (row && row.first_name) || parts[0] || "";
+  const last = (row && row.surname) || (parts.length > 1 ? parts.slice(1).join(" ") : "");
+  const tallyUrl = tallyPrefillUrl({ first, last, email });
+
+  const dirty = (note || "") !== ((row && row.coach_notes) || "");
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="font-display text-sm font-extrabold text-[var(--ayci-ink)]">Notes & Tally form</div>
+        <a
+          href={tallyUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[12px] font-semibold text-orange-700 hover:underline"
+          title="Open the student's pre-filled Tally form (name + email filled in)"
+        >
+          Open pre-filled Tally form <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-[12px] text-[var(--ayci-ink-muted)]">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading notes…
+        </div>
+      ) : !row?._id ? (
+        <div className="text-[12px] text-[var(--ayci-ink-muted)]">
+          This student isn't in the Students DB yet, so notes can't be saved. The Tally link above still works.
+        </div>
+      ) : (
+        <>
+          <textarea
+            rows={4}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Add notes about this student — visible to anyone with student access."
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+          <div className="flex items-center justify-end mt-2">
+            <Button size="sm" onClick={save} disabled={saving || !dirty}>
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+              {dirty ? "Save notes" : "Saved"}
+            </Button>
           </div>
         </>
       )}

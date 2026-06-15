@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Search, X, Save, RefreshCw } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { tallyPrefillUrl } from "@/lib/tally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -28,6 +29,7 @@ const EDITABLE_FIELDS = [
   { key: "private_chat_url", label: "Private chat URL" },
   { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
+  { key: "coach_notes", label: "Notes", type: "textarea" },
 ];
 
 function formatDate(iso) {
@@ -323,6 +325,7 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Used</th>
                 <th className="px-3 py-2 font-semibold">Allowance</th>
                 <th className="px-3 py-2 font-semibold">Private chat</th>
+                <th className="px-3 py-2 font-semibold">Tally</th>
                 <th className="px-3 py-2 font-semibold w-16"></th>
               </tr>
             </thead>
@@ -365,6 +368,14 @@ export default function StudentsDB() {
                         title={`Private chat blocked — ${r.private_chat_status}. Clear it (via Edit) once sorted.`}
                       >
                         {r.private_chat_status}
+                      </span>
+                    )}
+                    {(r.coach_notes || "").trim() && (
+                      <span
+                        className="ml-2 align-middle"
+                        title={r.coach_notes}
+                      >
+                        📝
                       </span>
                     )}
                   </td>
@@ -421,6 +432,22 @@ export default function StudentsDB() {
                       <span className="text-slate-400" title={r.setup_not_needed_reason || "Setup not needed"}>n/a</span>
                     ) : (
                       <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.email ? (
+                      <a
+                        href={tallyPrefillUrl({ first: r.first_name, last: r.surname, email: r.email })}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-orange-700 hover:underline"
+                        title="Open this student's pre-filled Tally form (name + email filled in)"
+                      >
+                        Form ↗
+                      </a>
+                    ) : (
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -588,7 +615,7 @@ function EditModal({ row, onClose, onSaved }) {
 
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           {EDITABLE_FIELDS.map((f) => (
-            <div key={f.key}>
+            <div key={f.key} className={f.type === "textarea" ? "md:col-span-2" : ""}>
               <label className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1 flex items-center gap-1">
                 {f.label}
                 {protectedFields.has(f.key) && (
@@ -597,12 +624,22 @@ function EditModal({ row, onClose, onSaved }) {
                   </span>
                 )}
               </label>
-              <Input
-                type={f.type || (f.key === "interview_date" ? "date" : "text")}
-                value={form[f.key] ?? ""}
-                onChange={(e) => setField(f.key, e.target.value)}
-                className="text-sm"
-              />
+              {f.type === "textarea" ? (
+                <textarea
+                  rows={4}
+                  value={form[f.key] ?? ""}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  placeholder="Team notes about this student — visible to anyone with student access."
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+                />
+              ) : (
+                <Input
+                  type={f.type || (f.key === "interview_date" ? "date" : "text")}
+                  value={form[f.key] ?? ""}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  className="text-sm"
+                />
+              )}
             </div>
           ))}
         </div>
