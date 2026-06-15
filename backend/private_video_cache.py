@@ -48,6 +48,16 @@ MAX_CACHE_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MAX_BYTES", str(int(1.
 # Headroom trimmed before each download so a near-full cache always has room to
 # pull the next source video (prevents the full-disk download deadlock).
 _EVICT_HEADROOM_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_HEADROOM_BYTES", str(2 * 1024 ** 3)))
+# Durable guard: always keep at least this many bytes free on the PHYSICAL disk,
+# evicting LRU regardless of MAX_CACHE_BYTES. Eviction keyed only to the cap is
+# brittle (it assumes the cap matches the disk); this keys to real free space so
+# the disk can't fill and deadlock downloads ("Video preparation failed").
+_MIN_FREE_DISK_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MIN_FREE_BYTES", str(2 * 1024 ** 3)))
+# H.264 sources at or below this size are served as-is (instant playback, no
+# transcode). LARGER H.264 is downscaled/compressed like HEVC so a full-size
+# iPhone upload doesn't sit on the disk forever — the slow leak that refilled
+# the disk after every cleanup.
+_H264_KEEP_MAX_BYTES = int(os.environ.get("PRIVATE_VIDEO_H264_KEEP_MAX_BYTES", str(40 * 1024 ** 2)))
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +132,7 @@ def purge(target_free_bytes: int = 2 * 1024 ** 3) -> dict:
     except Exception as e:
         logger.warning(f"[pv-cache] purge partials error: {e}")
     freed += _evict_if_needed(max(0, MAX_CACHE_BYTES - target_free_bytes))
+    freed += _evict_for_free_disk(target_free_bytes)  # guarantee real free disk space
     return {"deleted_partials": deleted_partials, "freed_bytes": freed, **cache_diagnostics()}
 
 _locks: dict[str, asyncio.Lock] = {}
@@ -215,6 +226,46 @@ def _evict_if_needed(target_bytes: int | None = None) -> int:
             logger.info(f"[pv-cache] evicted {p.name} ({sz} bytes)")
         except OSError as e:
             logger.warning(f"[pv-cache] evict {p}: {e}")
+    return freed
+
+
+def _evict_for_free_disk(min_free_bytes: int = _MIN_FREE_DISK_BYTES) -> int:
+    """LRU-evict until the PHYSICAL disk has at least `min_free_bytes` free.
+
+    The durable fix for the recurring full-disk "Video preparation failed":
+    `_evict_if_needed` trims to MAX_CACHE_BYTES, which only helps if that cap is
+    set below the disk size. This evicts against real free space reported by the
+    filesystem, so the disk can't fill no matter how the cap is configured."""
+    import shutil
+    try:
+        free = shutil.disk_usage(str(CACHE_DIR)).free
+    except Exception:
+        return 0
+    if free >= min_free_bytes:
+        return 0
+    files = []
+    for p in CACHE_DIR.iterdir():
+        if not p.is_file():
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        files.append((st.st_atime, st.st_size, p))
+    files.sort()  # oldest atime first
+    freed = 0
+    for _, sz, p in files:
+        try:
+            if shutil.disk_usage(str(CACHE_DIR)).free >= min_free_bytes:
+                break
+        except Exception:
+            break
+        try:
+            p.unlink()
+            freed += sz
+            logger.info(f"[pv-cache] evicted {p.name} for free-disk headroom ({sz} bytes)")
+        except OSError as e:
+            logger.warning(f"[pv-cache] free-disk evict {p}: {e}")
     return freed
 
 
@@ -377,6 +428,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
         # eviction never ran — a deadlock. Trim to leave headroom up front.
         try:
             _evict_if_needed(max(0, MAX_CACHE_BYTES - _EVICT_HEADROOM_BYTES))
+            _evict_for_free_disk()  # also guarantee real free space on the disk
         except Exception as e:
             logger.warning(f"[pv-cache] pre-download eviction error: {e}")
         try:
@@ -393,7 +445,16 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
         except OSError:
             pass
         if codec == "h264":
-            return  # playable as-is
+            # Small H.264 → serve as-is (instant, no transcode). Large H.264 →
+            # fall through and compress, so a full-size upload doesn't linger on
+            # disk. playable_path serves the original meanwhile, so there's no
+            # 502 even while the background compress runs (or if it fails).
+            try:
+                if _path_orig(item_id).stat().st_size <= _H264_KEEP_MAX_BYTES:
+                    return
+            except OSError:
+                return
+            logger.info(f"[pv-cache] {item_id} is large H.264 — compressing to cap disk footprint")
 
     # Transcode outside the per-id lock so other items can download
     # concurrently. Fire-and-forget so the caller doesn't block.
