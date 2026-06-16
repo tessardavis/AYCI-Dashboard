@@ -148,14 +148,13 @@ async def preview(db_) -> dict:
     templates = cfg.get("welcome_templates") or {}
 
     by_email = await _build_email_index()
-    ready, not_on_circle = [], []
+    ready, not_on_circle, awaiting_dms = [], [], []
 
     async for r in db_.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
         if not _eligible(r):
             continue
         if (r.get("private_chat_url") or "").strip():
             continue  # already has a chat — never touch
-        member, via = await _match_circle_member(r, by_email)
         base = {
             "id": r["_id"],
             "name": r.get("name"),
@@ -163,6 +162,14 @@ async def preview(db_) -> dict:
             "boost_and_go": r.get("boost_and_go"),
             "kajabi_email": (r.get("email") or "").strip().lower() or None,
         }
+        # A pending status (e.g. "Awaiting DMs") means a create was attempted and
+        # the student needs to enable Circle DMs — surface separately, not as
+        # "ready", so the team knows to chase rather than re-click.
+        status = (r.get("private_chat_status") or "").strip()
+        if status:
+            awaiting_dms.append({**base, "status": status})
+            continue
+        member, via = await _match_circle_member(r, by_email)
         if member:
             aud = _audience(r)
             ready.append({
@@ -179,14 +186,17 @@ async def preview(db_) -> dict:
 
     ready.sort(key=lambda x: x.get("name") or "")
     not_on_circle.sort(key=lambda x: x.get("name") or "")
+    awaiting_dms.sort(key=lambda x: x.get("name") or "")
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "config_ready": config_ready,
         "coaches": cfg["coaches"],
         "sender_email": cfg.get("sender_email"),
-        "counts": {"ready": len(ready), "not_on_circle": len(not_on_circle)},
+        "counts": {"ready": len(ready), "not_on_circle": len(not_on_circle),
+                   "awaiting_dms": len(awaiting_dms)},
         "ready": ready,
         "not_on_circle": not_on_circle,
+        "awaiting_dms": awaiting_dms,
     }
 
 
@@ -195,24 +205,66 @@ def _norm_name(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", (s or "").lower())).strip()
 
 
-async def _gather_coach_chats(db_, coach_emails: list) -> tuple:
-    """Union of every coach's Circle group chats → (member_ids set, names list,
-    coaches_read list). Reading ALL coaches (not just the sender) is essential:
-    historical chats were created by Oksana and the go-forward sender (Coralie)
-    isn't in them, but the other coaches (Becky/Tessa) are — so this is how we
-    detect an existing chat and never spawn a duplicate."""
+_GATHER_CACHE_KEY = "private_chat_coach_chats"
+_GATHER_TTL_SECONDS = 600  # 10 min — listing all coaches' chats is slow + rate-limited
+
+
+async def _bust_gather_cache(db_) -> None:
+    try:
+        await db_.cache.delete_many({"_id": {"$regex": f"^{_GATHER_CACHE_KEY}"}})
+    except Exception:
+        pass
+
+
+async def _gather_coach_chats(db_, coach_emails: list, use_cache: bool = True) -> tuple:
+    """Union of every coach's Circle group chats →
+    (member_ids set, names list, coaches_read list, chats list). Reading ALL
+    coaches (not just the sender) is essential: historical chats were made by
+    Oksana and the go-forward sender (Coralie) isn't in them, so this is how we
+    detect an existing chat and never spawn a duplicate.
+
+    CACHED for 10 min (Mongo) because listing 4 coaches' chats is the slow,
+    rate-limited step that was timing out the create button. `chats` carries each
+    room's {uuid, name, participant_ids} so a caller can record the URL of an
+    existing chat onto the student's row."""
+    key = f"{_GATHER_CACHE_KEY}:{','.join(sorted(coach_emails))}"
+    if use_cache:
+        doc = await db_.cache.find_one({"_id": key})
+        ca = (doc or {}).get("cached_at")
+        if ca:
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - ca).total_seconds() < _GATHER_TTL_SECONDS:
+                p = doc.get("payload") or {}
+                return (set(p.get("member_ids") or []), p.get("names") or [],
+                        p.get("coaches_read") or [], p.get("chats") or [])
+
     member_ids: set = set()
     names: list = []
     coaches_read: list = []
+    chats: list = []
     for ce in coach_emails:
-        chats = await circle_api.list_group_chats(db_, ce)
-        if not chats:
+        cc = await circle_api.list_group_chats(db_, ce)
+        if not cc:
             continue
-        coaches_read.append({"email": ce, "chats": len(chats)})
-        for ch in chats:
-            member_ids.update(ch.get("participant_ids") or [])
+        coaches_read.append({"email": ce, "chats": len(cc)})
+        for ch in cc:
+            pids = ch.get("participant_ids") or []
+            member_ids.update(pids)
             names.append(_norm_name(ch.get("name") or ""))
-    return member_ids, names, coaches_read
+            chats.append({"uuid": ch.get("uuid"), "name": ch.get("name") or "", "participant_ids": pids})
+    try:
+        await db_.cache.update_one(
+            {"_id": key},
+            {"$set": {"cached_at": datetime.now(timezone.utc), "payload": {
+                "member_ids": sorted(member_ids), "names": names,
+                "coaches_read": coaches_read, "chats": chats,
+            }}},
+            upsert=True,
+        )
+    except Exception:
+        pass
+    return member_ids, names, coaches_read, chats
 
 
 async def no_chat_audit(db_) -> dict:
@@ -236,7 +288,7 @@ async def no_chat_audit(db_) -> dict:
 
     # Union every coach's group chats (see _gather_coach_chats) — survives a
     # coach whose session can't be minted and covers historical Oksana chats.
-    chat_member_ids, chat_names, coaches_read = await _gather_coach_chats(db_, coach_emails)
+    chat_member_ids, chat_names, coaches_read, _chats = await _gather_coach_chats(db_, coach_emails)
     if not coaches_read:
         return {"ok": False, "error": (
             "Couldn't read any coach's Circle group chats. The Circle parent "
@@ -332,9 +384,35 @@ async def create_for_student(db_, student_id: str) -> dict:
     # id, with a chat-name fallback for truncated participant previews.
     try:
         all_coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
-        existing_ids, existing_names, _ = await _gather_coach_chats(db_, all_coach_emails)
+        existing_ids, existing_names, _, existing_chats = await _gather_coach_chats(db_, all_coach_emails)
         nm = _norm_name(row.get("name") or "")
-        if student_mid in existing_ids or (nm and any(nm in cn for cn in existing_names)):
+        # Find the actual existing room (by member id, then name) so we can
+        # record its URL — not just refuse. (Fixes "set up but no link on the
+        # dashboard": e.g. Cate Luce already had a chat, we skipped without
+        # recording it, so she kept showing as missing.)
+        match_uuid = None
+        for ch in existing_chats:
+            if student_mid in (ch.get("participant_ids") or []):
+                match_uuid = ch.get("uuid"); break
+        if not match_uuid and nm:
+            for ch in existing_chats:
+                if nm and nm in _norm_name(ch.get("name") or ""):
+                    match_uuid = ch.get("uuid"); break
+        if student_mid in existing_ids or (nm and any(nm in cn for cn in existing_names)) or match_uuid:
+            if match_uuid:
+                chat_url = f"https://app.circle.so/c/messages/{match_uuid}"
+                now = datetime.now(timezone.utc)
+                pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_chat_url"})
+                await db_.academy_members.update_one({"_id": student_id}, {"$set": {
+                    "private_chat_url": chat_url,
+                    "private_chat_circle_uuid": match_uuid,
+                    "private_chat_status": "",
+                    "dashboard_edited_fields": pinned,
+                    "dashboard_edited_at": now,
+                    "dashboard_edited_by": "private-chat-setup",
+                }})
+                logger.info(f"[private-chat] linked existing chat {match_uuid} for {student_id}")
+                return {"ok": True, "id": student_id, "recorded_existing": True, "private_chat_url": chat_url}
             return {"ok": False, "skipped": "existing_circle_chat_found"}
     except Exception as e:
         logger.info(f"[private-chat] existence check skipped: {e}")
@@ -394,6 +472,7 @@ async def create_for_student(db_, student_id: str) -> dict:
         pinned.add("circle_email")
     set_fields["dashboard_edited_fields"] = sorted(pinned)
     await db_.academy_members.update_one({"_id": student_id}, {"$set": set_fields})
+    await _bust_gather_cache(db_)  # new chat → invalidate the dedup cache
 
     # Welcome message — render the tier template (best-effort; a failed post
     # doesn't undo the chat).

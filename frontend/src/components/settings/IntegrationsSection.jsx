@@ -609,21 +609,21 @@ function PrivateChatSetupCard({ isAdmin }) {
     if (!isAdmin) return;
     setCreatingId(row.id);
     try {
-      const { data } = await apiClient.post(`/students-db/${encodeURIComponent(row.id)}/create-private-chat`);
-      if (data.ok) {
-        toast.success(`Created chat for ${row.name || row.id}${data.circle_email_linked ? ` · linked ${data.circle_email_linked}` : ""}`);
-        setPreview((p) => p ? { ...p, ready: (p.ready || []).filter((x) => x.id !== row.id), counts: { ...p.counts, ready: Math.max(0, (p.counts?.ready || 1) - 1) } } : p);
-      } else if (data.skipped) {
-        toast(`Skipped ${row.name || row.id}: ${data.skipped.replace(/_/g, " ")}`);
-        setPreview((p) => p ? { ...p, ready: (p.ready || []).filter((x) => x.id !== row.id) } : p);
-      } else {
-        toast.error(data.error || "Create failed");
-      }
+      // Creation runs in the background server-side (it can take up to ~1 min).
+      await apiClient.post(`/students-db/${encodeURIComponent(row.id)}/create-private-chat`);
+      toast(`Creating chat for ${row.name || row.id}… the list updates as it completes (up to ~1 min).`);
     } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Create failed");
-    } finally {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't start creating — try again.");
       setCreatingId(null);
+      return;
     }
+    // Poll the preview — the row drops off "Ready" once the chat is created (or
+    // its existing chat is linked); if their DMs are off it moves to "Awaiting DMs".
+    for (const ms of [7000, 9000, 14000]) {
+      await new Promise((r) => setTimeout(r, ms));
+      try { await loadPreview(); } catch { /* keep polling */ }
+    }
+    setCreatingId(null);
   };
 
   const runAudit = async () => {
@@ -754,6 +754,7 @@ function PrivateChatSetupCard({ isAdmin }) {
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">
               Ready to create ({preview?.counts?.ready ?? 0}) · not on Circle ({preview?.counts?.not_on_circle ?? 0})
+              {(preview?.counts?.awaiting_dms ?? 0) > 0 && ` · awaiting DMs (${preview.counts.awaiting_dms})`}
             </p>
             <Button variant="outline" size="sm" onClick={loadPreview} data-testid="pc-refresh-preview">
               <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
@@ -795,6 +796,36 @@ function PrivateChatSetupCard({ isAdmin }) {
                   </Button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {(preview?.awaiting_dms?.length ?? 0) > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-orange-700 mb-2">
+                Awaiting DMs ({preview.awaiting_dms.length}) — chat couldn't be created; ask them to turn Circle DMs on, then click Create
+              </p>
+              <div className="border border-orange-200 bg-orange-50/40 rounded-lg divide-y divide-orange-100 max-h-56 overflow-y-auto">
+                {preview.awaiting_dms.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                      <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                        {[r.tier, r.kajabi_email].filter(Boolean).join(" · ")} · {r.status}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => createChat(r)}
+                      disabled={!isAdmin || creatingId === r.id}
+                      title="Once they've enabled Circle DMs, retry the create"
+                    >
+                      {creatingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
+                      Retry
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
