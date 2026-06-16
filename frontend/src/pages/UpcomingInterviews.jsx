@@ -1429,14 +1429,28 @@ function FlaggedRow({ student, okay = false }) {
       data-testid={`flagged-row-${student.monday_id}`}
     >
       <td className="px-4 py-2.5">
-        <a
-          href={student.monday_url}
-          target="_blank"
-          rel="noreferrer"
-          className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
-        >
-          {student.name}
-        </a>
+        {student.email ? (
+          <Link
+            to={`/students?email=${encodeURIComponent(student.email)}`}
+            className="font-semibold text-[var(--ayci-ink)] hover:text-[var(--ayci-teal)]"
+            title="Open student card"
+          >
+            {student.name}
+          </Link>
+        ) : (
+          <span className="font-semibold text-[var(--ayci-ink)]">{student.name}</span>
+        )}
+        {student.monday_url && (
+          <a
+            href={student.monday_url}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-1.5 inline-flex align-middle opacity-40 hover:opacity-100 text-[var(--ayci-teal)]"
+            title="Open in Monday"
+          >
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
         <div className="text-[11px] text-[var(--ayci-ink-muted)] flex items-center gap-1.5 flex-wrap">
           {student.interview_type && (
             <span
