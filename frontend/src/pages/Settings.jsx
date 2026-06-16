@@ -43,6 +43,9 @@ export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const hasBot = isAdmin || (user?.board_access || []).includes("bot");
+  // Students-board users (e.g. Coralie/Megan) get the Integrations tab too, but
+  // IntegrationsSection shows them only the Private chat setup tooling.
+  const hasStudents = isAdmin || (user?.board_access || []).includes("students");
 
   return (
     <div className="p-4 sm:p-6 lg:p-12 ayci-fade-up">
@@ -54,11 +57,11 @@ export default function Settings() {
 
       {!isAdmin && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-4 py-3 mb-6">
-          You have access to the Bot tab only. Ask an admin if you need access to other settings.
+          You have access to the tabs granted to you. Ask an admin if you need more.
         </div>
       )}
 
-      <Tabs defaultValue={isAdmin ? "team" : "bot"} className="w-full">
+      <Tabs defaultValue={isAdmin ? "team" : (hasStudents ? "integrations" : "bot")} className="w-full">
         <div className="overflow-x-auto -mx-1 px-1 mb-6">
           <TabsList className="w-max">
             {isAdmin && <TabsTrigger value="team" data-testid="settings-tab-team">Team</TabsTrigger>}
@@ -68,7 +71,7 @@ export default function Settings() {
             {isAdmin && <TabsTrigger value="launches" data-testid="settings-tab-launches">Launches</TabsTrigger>}
             {isAdmin && <TabsTrigger value="cohort" data-testid="settings-tab-cohort">Cohort</TabsTrigger>}
             {isAdmin && <TabsTrigger value="inboxes" data-testid="settings-tab-inboxes">Inboxes</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="integrations" data-testid="settings-tab-integrations">Integrations</TabsTrigger>}
+            {(isAdmin || hasStudents) && <TabsTrigger value="integrations" data-testid="settings-tab-integrations">{isAdmin ? "Integrations" : "Private chats"}</TabsTrigger>}
             {hasBot && <TabsTrigger value="bot" data-testid="settings-tab-bot">Bot</TabsTrigger>}
           </TabsList>
         </div>
@@ -79,7 +82,7 @@ export default function Settings() {
         {isAdmin && <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>}
-        {isAdmin && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>}
+        {(isAdmin || hasStudents) && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>}
         {hasBot && <TabsContent value="bot"><CoachPlaybookSection isAdmin={hasBot} /></TabsContent>}
       </Tabs>
     </div>

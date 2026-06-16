@@ -16,6 +16,15 @@ import { Input } from "@/components/ui/input";
  *     week" alert from Coach Activity
  */
 export default function IntegrationsSection({ isAdmin }) {
+  // Non-admins reach this tab only via the "students" board — show them just the
+  // private-chat tooling (find/create), not the rest of the admin integrations.
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
+        <PrivateChatSetupCard isAdmin={isAdmin} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6 max-w-2xl" data-testid="integrations-section">
       <IntakeStatusCard isAdmin={isAdmin} />
@@ -606,7 +615,6 @@ function PrivateChatSetupCard({ isAdmin }) {
   };
 
   const createChat = async (row) => {
-    if (!isAdmin) return;
     setCreatingId(row.id);
     try {
       // Creation runs in the background server-side (it can take up to ~1 min).
@@ -680,7 +688,14 @@ function PrivateChatSetupCard({ isAdmin }) {
         </div>
       ) : (
         <>
-          {/* Coach config */}
+          {/* Coach config — admin setup only. Coralie/Megan (students board) see
+              the find/create tooling below, not this. */}
+          {!isAdmin && (
+            <p className="text-xs text-[var(--ayci-ink-muted)] bg-slate-50 border border-[var(--ayci-border)] rounded-lg px-3 py-2 mb-4">
+              Coaches &amp; welcome messages are set up by an admin. Use the list below to create any missing chats.
+            </p>
+          )}
+          {isAdmin && (
           <div className="border border-[var(--ayci-border)] rounded-lg p-4 mb-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-3">
               Coaches in every chat — enter each one's Circle email
@@ -749,6 +764,7 @@ function PrivateChatSetupCard({ isAdmin }) {
               </Button>
             </div>
           </div>
+          )}
 
           {/* Preview + create */}
           <div className="flex items-center justify-between mb-3">
@@ -787,7 +803,7 @@ function PrivateChatSetupCard({ isAdmin }) {
                   <Button
                     size="sm"
                     onClick={() => createChat(r)}
-                    disabled={!isAdmin || !configReady || !r.has_template || creatingId === r.id}
+                    disabled={!configReady || !r.has_template || creatingId === r.id}
                     title={!r.has_template ? `Add a welcome message for ${r.audience || "this tier"} first` : undefined}
                     data-testid={`pc-create-${r.id}`}
                   >
@@ -817,7 +833,7 @@ function PrivateChatSetupCard({ isAdmin }) {
                       size="sm"
                       variant="outline"
                       onClick={() => createChat(r)}
-                      disabled={!isAdmin || creatingId === r.id}
+                      disabled={creatingId === r.id}
                       title="Once they've enabled Circle DMs, retry the create"
                     >
                       {creatingId === r.id ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}

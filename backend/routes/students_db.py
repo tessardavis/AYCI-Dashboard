@@ -557,7 +557,7 @@ async def private_chat_no_chat_audit(user: dict = Depends(require_board("student
 
 
 @router.post("/students-db/{monday_item_id}/create-private-chat")
-async def create_private_chat(monday_item_id: str, admin: dict = Depends(require_admin)):
+async def create_private_chat(monday_item_id: str, user: dict = Depends(require_board("students"))):
     """Manual trigger: create ONE student's coach group chat (guarded against
     duplicates). Runs in the BACKGROUND and returns immediately — the create does
     several Circle calls (incl. the all-coaches dedup scan) and was exceeding the
