@@ -662,6 +662,15 @@ function PrivateChatSetupCard({ isAdmin }) {
             <b> either email</b> (so students who joined under a different email aren't missed). Set the coaches once,
             then create each chat with one click. Nothing runs automatically.
           </p>
+          <a
+            href="https://docs.google.com/document/d/1BF12Qx9CcJKzXlnlIgXm4exuFfrXtL9bByzp7QqPfYI/edit"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 mt-2 text-sm font-semibold text-teal-700 hover:underline"
+            title="How to find who's been missed, handle DMs-off / dual-email, and create chats"
+          >
+            📄 Troubleshooting guide
+          </a>
         </div>
       </div>
 
