@@ -1211,6 +1211,26 @@ async def on_startup():
         replace_existing=True,
     )
 
+    # Link existing Circle chats back onto the dashboard (the backlog of
+    # zap-created chats whose URL was never written to the row). Runs itself
+    # every 20 min so it self-heals once Circle isn't rate-limited — no manual
+    # triggering. Single-flight + cached, so it can't pile up. apply=True writes
+    # the URLs (idempotent: only records chats that already exist).
+    async def _private_chat_link_existing():
+        try:
+            import private_chat_setup
+            res = await private_chat_setup.link_existing_chats(db, apply=True)
+            logger.info(f"[scheduler] link_existing_chats: {res.get('counts') or res.get('error')}")
+        except Exception as e:
+            logger.warning(f"[scheduler] link_existing_chats failed: {e}")
+
+    scheduler.add_job(
+        _private_chat_link_existing,
+        CronTrigger(minute="*/20", timezone=tz),
+        id="private_chat_link_existing",
+        replace_existing=True,
+    )
+
     # Academy Members Mongo mirror — refresh every 15 minutes so the
     # Student Lookup + Upcoming Interviews pages don't have to hit Monday
     # on each request. Idempotent; ~5-10s per run for a ~3.5k row board.

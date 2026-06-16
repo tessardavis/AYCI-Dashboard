@@ -12,6 +12,7 @@ email than they signed up with on Kajabi no longer silently fall through.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -513,7 +514,27 @@ async def create_for_student(db_, student_id: str) -> dict:
     }
 
 
+_link_scan_running = False
+
+
+def link_scan_running() -> bool:
+    return _link_scan_running
+
+
 async def link_existing_chats(db_, apply: bool = False) -> dict:
+    """Single-flight guard: run at most ONE scan at a time so repeated triggers
+    can't pile up and rate-limit Circle (the cause of the blank-loop)."""
+    global _link_scan_running
+    if _link_scan_running:
+        return {"ok": False, "error": "a scan is already running — wait ~90s then reload with no params"}
+    _link_scan_running = True
+    try:
+        return await _link_existing_impl(db_, apply=apply)
+    finally:
+        _link_scan_running = False
+
+
+async def _link_existing_impl(db_, apply: bool = False) -> dict:
     """Find every eligible student who ALREADY has a coach group chat in Circle
     but whose dashboard row has no private_chat_url, and (apply=True) record that
     chat's URL on their row.
@@ -540,7 +561,11 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
         return await _cache({"ok": False, "error": "no coach emails configured"})
     # use_cache=True: reuse the recent coach-chats scan instead of hammering
     # Circle on every run (which was getting rate-limited → empty → loop).
-    _ids, _names, coaches_read, chats = await _gather_coach_chats(db_, coach_emails, use_cache=True)
+    try:
+        _ids, _names, coaches_read, chats = await asyncio.wait_for(
+            _gather_coach_chats(db_, coach_emails, use_cache=True), timeout=75)
+    except asyncio.TimeoutError:
+        return await _cache({"ok": False, "error": "Circle read timed out — likely rate-limited; the scheduled run will retry shortly"})
     if not coaches_read:
         return await _cache({"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit) — try again in a few minutes"})
 
