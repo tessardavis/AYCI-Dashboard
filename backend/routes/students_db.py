@@ -136,6 +136,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "interview_type", "private_chat_url", "private_chat_status",
         "boost_and_go", "video_allowance",
         "setup_not_needed", "setup_not_needed_reason", "coach_notes",
+        "private_chat_last_error",
         "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}

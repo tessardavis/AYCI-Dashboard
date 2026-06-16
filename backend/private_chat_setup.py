@@ -448,6 +448,16 @@ async def create_for_student(db_, student_id: str) -> dict:
                 "dashboard_edited_by": "private-chat-setup",
             }})
             return {"ok": False, "skipped": "awaiting_dms", "detail": err[:200]}
+        # Persist the raw failure on the row so it's visible in the dashboard
+        # (students-db lookup) instead of buried in Render logs — lets us see
+        # Circle's exact rejection and tighten DMs-off detection.
+        try:
+            await db_.academy_members.update_one({"_id": student_id}, {"$set": {
+                "private_chat_last_error": f"{status}: {err}"[:300],
+                "private_chat_last_error_at": datetime.now(timezone.utc),
+            }})
+        except Exception:
+            pass
         return {"ok": False, "error": "circle group-chat create failed", "status": status, "raw": err}
 
     uuid = created["chat_room_uuid"]
@@ -461,6 +471,7 @@ async def create_for_student(db_, student_id: str) -> dict:
         "private_chat_created_at": now,
         "private_chat_coaches": coach_emails,
         "private_chat_status": "",  # clear any pending note (e.g. "Awaiting DMs")
+        "private_chat_last_error": "",  # clear any prior failure note
         "dashboard_edited_at": now,
         "dashboard_edited_by": "private-chat-setup",
     }
