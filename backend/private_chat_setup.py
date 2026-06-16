@@ -514,24 +514,28 @@ async def create_for_student(db_, student_id: str) -> dict:
     }
 
 
-_link_scan_running = False
+_link_scan_started_at = None  # datetime while a scan is in flight, else None
 
 
 def link_scan_running() -> bool:
-    return _link_scan_running
+    # Time-bounded so a crash/restart mid-scan can't leave it "running" forever.
+    if _link_scan_started_at is None:
+        return False
+    return (datetime.now(timezone.utc) - _link_scan_started_at).total_seconds() < 180
 
 
 async def link_existing_chats(db_, apply: bool = False) -> dict:
     """Single-flight guard: run at most ONE scan at a time so repeated triggers
-    can't pile up and rate-limit Circle (the cause of the blank-loop)."""
-    global _link_scan_running
-    if _link_scan_running:
-        return {"ok": False, "error": "a scan is already running — wait ~90s then reload with no params"}
-    _link_scan_running = True
+    can't pile up and rate-limit Circle. Auto-clears after 180s if something
+    leaves the flag set."""
+    global _link_scan_started_at
+    if link_scan_running():
+        return {"ok": False, "error": "a scan is already running — wait ~2 min"}
+    _link_scan_started_at = datetime.now(timezone.utc)
     try:
         return await _link_existing_impl(db_, apply=apply)
     finally:
-        _link_scan_running = False
+        _link_scan_started_at = None
 
 
 async def _link_existing_impl(db_, apply: bool = False) -> dict:

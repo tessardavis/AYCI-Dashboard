@@ -1584,7 +1584,7 @@ async def on_startup():
 
         scheduler.add_job(
             _circle_dm_triage,
-            CronTrigger(minute="*/2", timezone=tz),
+            CronTrigger(minute="*/10", timezone=tz),  # was */2 — eased Circle load to clear rate-limiting
             id="circle_dm_triage",
             replace_existing=True,
             max_instances=1, coalesce=True,
