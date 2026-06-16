@@ -495,18 +495,18 @@ function StudentNotesCard({ email, fallbackName }) {
   const parts = String(fallbackName || "").trim().split(/\s+/);
   const first = (row && row.first_name) || parts[0] || "";
   const last = (row && row.surname) || (parts.length > 1 ? parts.slice(1).join(" ") : "");
-  const tallyUrl = tallyPrefillUrl({ first, last, email });
+  const tallyUrl = tallyPrefillUrl({ contactId: row && row._id, first, last, email, speciality: row && row.speciality });
 
   const dirty = (note || "") !== ((row && row.coach_notes) || "");
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="font-display text-sm font-extrabold text-[var(--ayci-ink)] mb-2">Notes & Tally form</div>
+      <div className="font-display text-sm font-extrabold text-[var(--ayci-ink)] mb-2">Notes & interview-date form</div>
 
-      {/* Pre-filled Tally link to copy + send to the student */}
+      {/* Pre-filled "report interview date" Tally link to copy + send to the student */}
       <div className="mb-3">
         <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">
-          Pre-filled Tally link (copy &amp; send)
+          Pre-filled interview-date form link (copy &amp; send)
         </div>
         <div className="flex items-center gap-2">
           <input

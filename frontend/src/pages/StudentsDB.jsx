@@ -451,13 +451,13 @@ export default function StudentsDB() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const url = tallyPrefillUrl({ first: r.first_name, last: r.surname, email: r.email });
+                          const url = tallyPrefillUrl({ contactId: r._id, first: r.first_name, last: r.surname, email: r.email, speciality: r.speciality });
                           (navigator.clipboard?.writeText(url) || Promise.reject())
-                            .then(() => toast.success("Tally link copied — ready to send"))
+                            .then(() => toast.success("Interview-date form link copied — ready to send"))
                             .catch(() => toast.error("Couldn't copy — open the student and copy from there"));
                         }}
                         className="text-orange-700 hover:underline"
-                        title="Copy this student's pre-filled Tally link to send to them"
+                        title="Copy this student's pre-filled 'report interview date' Tally link to send to them"
                       >
                         Copy link
                       </button>
