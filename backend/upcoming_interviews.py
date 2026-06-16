@@ -249,7 +249,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         boost = (it.get("boost_and_go") or _txt(COL_BOOST_AND_GO) or "").strip()
         is_bg = _is_active_bg(boost)
 
-        _PP_LABELS = {"academy private plus", "upgrade private plus"}
+        _PP_LABELS = {"academy private plus", "upgrade private plus", "private plus"}
         _VIP_LABELS = {"vip", "platinum"}
         _t_low = tier.strip().lower()
         if _t_low in _PP_LABELS:

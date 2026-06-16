@@ -41,7 +41,7 @@ router = APIRouter(prefix="/api", tags=["students-db"])
 # tiers (Platinum, Academy/Upgrade 1:1, Gold/Platinum Legacy Upgrade) are NOT
 # flagged — confirmed with Tessa 2026-06-06.
 _CURRENT_PRIVATE_TIERS = {
-    "academy private plus", "upgrade private plus",
+    "academy private plus", "upgrade private plus", "private plus",
     "vip", "upgrade vip",
     "boost & go", "boost & go plus",
 }
@@ -63,7 +63,7 @@ def _b_and_g_active(boost: Optional[str]) -> bool:
 
 # Expected private video allowance per tier / Boost & Go level (Tessa, 2026-06-06).
 _VIDEO_ALLOWANCE_BY_TIER = {
-    "academy private plus": 15, "upgrade private plus": 15,
+    "academy private plus": 15, "upgrade private plus": 15, "private plus": 15,
     "vip": 30, "upgrade vip": 30,
     "boost & go": 5, "boost & go plus": 10,
 }

@@ -81,7 +81,7 @@ _AUDIENCE_DISPLAY = {
 
 def _audience(row: dict) -> Optional[str]:
     t = (row.get("tier") or "").strip().lower()
-    if t in ("academy private plus", "upgrade private plus"):
+    if t in ("academy private plus", "upgrade private plus", "private plus"):
         return "private_plus"
     if t in ("vip", "upgrade vip"):
         return "vip"
