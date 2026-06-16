@@ -594,6 +594,16 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
     return {"ok": True, "queued": True, "id": monday_item_id}
 
 
+@router.get("/students-db/private-chat/link-existing")
+async def private_chat_link_existing(apply: bool = False, admin: dict = Depends(require_admin)):
+    """Backlog fix: find eligible students who ALREADY have a coach group chat in
+    Circle but no private_chat_url on their row (e.g. zap-created chats never
+    written back), and record the URL. Dry-run by default; pass ?apply=true to
+    write. Returns linked[] + not_found[] so the residual is clear."""
+    import private_chat_setup
+    return await private_chat_setup.link_existing_chats(db, apply=apply)
+
+
 @router.get("/students-db/private-chat/auto-create")
 async def private_chat_auto_create(limit: int = 25, admin: dict = Depends(require_admin)):
     """HYBRID auto-create (Phase 1): create chats for all clear-cut ready students

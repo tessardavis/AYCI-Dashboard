@@ -513,6 +513,81 @@ async def create_for_student(db_, student_id: str) -> dict:
     }
 
 
+async def link_existing_chats(db_, apply: bool = False) -> dict:
+    """Find every eligible student who ALREADY has a coach group chat in Circle
+    but whose dashboard row has no private_chat_url, and (apply=True) record that
+    chat's URL on their row.
+
+    Fixes the backlog of zap-created chats that were never written back to the
+    dashboard (the zaps make the Circle chat but don't update the row). Reports
+    who got linked and who couldn't be matched, so the residual is the genuine
+    'needs a fresh chat / not on Circle' set — not a mystery.
+    """
+    cfg = await settings_store.get_private_chat_config(db_)
+    coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
+    if not coach_emails:
+        return {"ok": False, "error": "no coach emails configured"}
+    _ids, _names, coaches_read, chats = await _gather_coach_chats(db_, coach_emails, use_cache=False)
+    if not coaches_read:
+        return {"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit)"}
+
+    by_email = await _build_email_index()
+    linked, not_found = [], []
+    already = 0
+    now = datetime.now(timezone.utc)
+
+    async for r in db_.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        if not _eligible(r):
+            continue
+        if (r.get("private_chat_url") or "").strip():
+            already += 1
+            continue
+        member, _via = await _match_circle_member(r, by_email)
+        if not member or not member.get("id"):
+            not_found.append({"id": r["_id"], "name": r.get("name"), "reason": "not_on_circle"})
+            continue
+        mid = int(member["id"])
+        nm = _norm_name(r.get("name") or "")
+        fn = _norm_name(r.get("first_name") or "")
+        sn = _norm_name(r.get("surname") or "")
+        match = None
+        for ch in chats:  # primary: their member id is in the room
+            if mid in (ch.get("participant_ids") or []):
+                match = ch
+                break
+        if not match and nm:  # fallback: their name is in the room name
+            for ch in chats:
+                cn = _norm_name(ch.get("name") or "")
+                if (nm and nm in cn) or (fn and sn and fn in cn and sn in cn):
+                    match = ch
+                    break
+        if not match:
+            not_found.append({"id": r["_id"], "name": r.get("name"), "reason": "no_matching_chat"})
+            continue
+        url = f"https://app.circle.so/c/messages/{match.get('uuid')}"
+        linked.append({"id": r["_id"], "name": r.get("name"), "url": url, "chat_name": match.get("name")})
+        if apply:
+            pinned = sorted(set(r.get("dashboard_edited_fields") or []) | {"private_chat_url"})
+            await db_.academy_members.update_one({"_id": r["_id"]}, {"$set": {
+                "private_chat_url": url,
+                "private_chat_circle_uuid": match.get("uuid"),
+                "private_chat_status": "",
+                "private_chat_last_error": "",
+                "dashboard_edited_fields": pinned,
+                "dashboard_edited_at": now,
+                "dashboard_edited_by": "link-existing-chats",
+            }})
+
+    logger.info(f"[private-chat] link-existing: linked={len(linked)} not_found={len(not_found)} apply={apply}")
+    return {
+        "ok": True, "applied": apply,
+        "coaches_read": coaches_read,
+        "counts": {"linked": len(linked), "not_found": len(not_found), "already_had_url": already},
+        "linked": linked,
+        "not_found": not_found,
+    }
+
+
 def autocreate_enabled() -> bool:
     """The hybrid auto-create job only runs when explicitly enabled — so we can
     cut over deliberately (enable this + turn the Zapier zaps 46/47/53 OFF the
