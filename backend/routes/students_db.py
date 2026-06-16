@@ -608,7 +608,22 @@ async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
     import private_chat_setup
     import asyncio as _asyncio
     if apply or refresh:
-        _asyncio.create_task(private_chat_setup.link_existing_chats(db, apply=apply))
+        async def _run():
+            try:
+                await private_chat_setup.link_existing_chats(db, apply=apply)
+            except Exception as e:
+                import logging
+                logging.getLogger("private_chat").exception("link_existing_chats crashed")
+                try:  # cache the crash so the plain URL shows it instead of staying blank
+                    await db.cache.update_one(
+                        {"_id": "private_chat_link_existing"},
+                        {"$set": {"cached_at": datetime.now(timezone.utc),
+                                  "result": {"ok": False, "error": f"scan crashed: {type(e).__name__}: {e}"[:400]}}},
+                        upsert=True,
+                    )
+                except Exception:
+                    pass
+        _asyncio.create_task(_run())
         return {"status": f"scan started (apply={apply}) — re-open this URL with NO params in ~60s for the result"}
     cached = await db.cache.find_one({"_id": "private_chat_link_existing"}, {"_id": 0})
     if not cached:
