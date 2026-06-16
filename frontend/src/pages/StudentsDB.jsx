@@ -62,6 +62,7 @@ export default function StudentsDB() {
   const [mismatchOnly, setMismatchOnly] = useState(false);
   const [dismissedOnly, setDismissedOnly] = useState(false);
   const [refundedOnly, setRefundedOnly] = useState(false);
+  const [bgOnly, setBgOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -104,19 +105,21 @@ export default function StudentsDB() {
       if (mismatchOnly && r.allowance_flag !== "mismatch") return false;
       if (dismissedOnly && !r.setup_not_needed) return false;
       if (refundedOnly && !r.has_refund) return false;
+      if (bgOnly && !isBandG(r.boost_and_go)) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly]);
 
   // Reset the visible window whenever the filter/search changes, so a new
   // query shows from the top (and keeps the DOM light).
-  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly]);
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly]);
 
   const refundedCount = useMemo(() => rows.filter((r) => r.has_refund).length, [rows]);
+  const bgCount = useMemo(() => rows.filter((r) => isBandG(r.boost_and_go)).length, [rows]);
 
   const dismissedCount = useMemo(() => rows.filter((r) => r.setup_not_needed).length, [rows]);
 
@@ -296,6 +299,13 @@ export default function StudentsDB() {
                  title="Students with one or more refunds — full detail on the Refunds board">
             <input type="checkbox" checked={refundedOnly} onChange={(e) => setRefundedOnly(e.target.checked)} />
             Refunded ({refundedCount})
+          </label>
+        )}
+        {bgCount > 0 && (
+          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${bgOnly ? "bg-violet-50 text-violet-700" : "text-[var(--ayci-ink-muted)]"}`}
+                 title="Active Boost & Go / B&G Plus students (the boost_and_go column, separate from Tier)">
+            <input type="checkbox" checked={bgOnly} onChange={(e) => setBgOnly(e.target.checked)} />
+            Boost &amp; Go ({bgCount})
           </label>
         )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">

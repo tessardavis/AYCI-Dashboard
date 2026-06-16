@@ -567,7 +567,30 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
     to reflect it."""
     import private_chat_setup
     import asyncio as _asyncio
-    _asyncio.create_task(private_chat_setup.create_for_student(db, monday_item_id))
+
+    async def _run():
+        try:
+            res = await private_chat_setup.create_for_student(db, monday_item_id)
+            # Record any non-success outcome (other than DMs-off, which writes its
+            # own status) so nothing fails silently — surfaced as private_chat_last_error.
+            if res and not res.get("ok") and res.get("skipped") != "awaiting_dms":
+                note = res.get("error") or res.get("skipped") or "create did not complete"
+                await db.academy_members.update_one({"_id": monday_item_id}, {"$set": {
+                    "private_chat_last_error": str(note)[:300],
+                    "private_chat_last_error_at": datetime.now(timezone.utc),
+                }})
+        except Exception as e:
+            import logging
+            logging.getLogger("private_chat").exception(f"create_for_student crashed for {monday_item_id}")
+            try:
+                await db.academy_members.update_one({"_id": monday_item_id}, {"$set": {
+                    "private_chat_last_error": f"exception: {type(e).__name__}: {e}"[:300],
+                    "private_chat_last_error_at": datetime.now(timezone.utc),
+                }})
+            except Exception:
+                pass
+
+    _asyncio.create_task(_run())
     return {"ok": True, "queued": True, "id": monday_item_id}
 
 
