@@ -458,7 +458,9 @@ async def create_for_student(db_, student_id: str) -> dict:
             }})
         except Exception:
             pass
-        return {"ok": False, "error": "circle group-chat create failed", "status": status, "raw": err}
+        return {"ok": False,
+                "error": f"circle create failed [{status}]: {(err or '(no body)')[:220]}",
+                "status": status, "raw": err}
 
     uuid = created["chat_room_uuid"]
     # TODO verify this URL format against an existing private_chat_url.
