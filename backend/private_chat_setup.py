@@ -523,13 +523,26 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
     who got linked and who couldn't be matched, so the residual is the genuine
     'needs a fresh chat / not on Circle' set — not a mystery.
     """
+    async def _cache(res: dict) -> dict:
+        try:
+            await db_.cache.update_one(
+                {"_id": "private_chat_link_existing"},
+                {"$set": {"cached_at": datetime.now(timezone.utc), "result": res}},
+                upsert=True,
+            )
+        except Exception:
+            pass
+        return res
+
     cfg = await settings_store.get_private_chat_config(db_)
     coach_emails = [c["email"] for c in cfg["coaches"] if c.get("email")]
     if not coach_emails:
-        return {"ok": False, "error": "no coach emails configured"}
-    _ids, _names, coaches_read, chats = await _gather_coach_chats(db_, coach_emails, use_cache=False)
+        return await _cache({"ok": False, "error": "no coach emails configured"})
+    # use_cache=True: reuse the recent coach-chats scan instead of hammering
+    # Circle on every run (which was getting rate-limited → empty → loop).
+    _ids, _names, coaches_read, chats = await _gather_coach_chats(db_, coach_emails, use_cache=True)
     if not coaches_read:
-        return {"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit)"}
+        return await _cache({"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit) — try again in a few minutes"})
 
     by_email = await _build_email_index()
     linked, not_found = [], []
@@ -583,22 +596,13 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
             }})
 
     logger.info(f"[private-chat] link-existing: linked={len(linked)} not_found={len(not_found)} apply={apply}")
-    result = {
+    return await _cache({
         "ok": True, "applied": apply,
         "coaches_read": coaches_read,
         "counts": {"linked": len(linked), "not_found": len(not_found), "already_had_url": already},
         "linked": linked,
         "not_found": not_found,
-    }
-    try:
-        await db_.cache.update_one(
-            {"_id": "private_chat_link_existing"},
-            {"$set": {"cached_at": datetime.now(timezone.utc), "result": result}},
-            upsert=True,
-        )
-    except Exception:
-        pass
-    return result
+    })
 
 
 def autocreate_enabled() -> bool:

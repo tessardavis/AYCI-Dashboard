@@ -612,8 +612,9 @@ async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
         return {"status": f"scan started (apply={apply}) — re-open this URL with NO params in ~60s for the result"}
     cached = await db.cache.find_one({"_id": "private_chat_link_existing"}, {"_id": 0})
     if not cached:
-        _asyncio.create_task(private_chat_setup.link_existing_chats(db, apply=False))
-        return {"status": "first scan started — re-open this URL with no params in ~60s"}
+        # Don't auto-kick here — repeated reloads would spawn parallel scans and
+        # hammer Circle. Ask for an explicit ?refresh=true.
+        return {"status": "no result cached yet — open this URL with ?refresh=true once, wait ~60s, then reload with no params"}
     ca = cached.get("cached_at")
     return {"cached_at": ca.isoformat() if hasattr(ca, "isoformat") else ca, **(cached.get("result") or {})}
 
