@@ -542,7 +542,11 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
         if (r.get("private_chat_url") or "").strip():
             already += 1
             continue
-        member, _via = await _match_circle_member(r, by_email)
+        # Email-only match (in-memory, fast) — no per-student Circle name_search,
+        # which would make this scan time out at the proxy.
+        em = (r.get("email") or "").strip().lower()
+        cem = (r.get("circle_email") or "").strip().lower()
+        member = by_email.get(em) or by_email.get(cem)
         if not member or not member.get("id"):
             not_found.append({"id": r["_id"], "name": r.get("name"), "reason": "not_on_circle"})
             continue
@@ -579,13 +583,22 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
             }})
 
     logger.info(f"[private-chat] link-existing: linked={len(linked)} not_found={len(not_found)} apply={apply}")
-    return {
+    result = {
         "ok": True, "applied": apply,
         "coaches_read": coaches_read,
         "counts": {"linked": len(linked), "not_found": len(not_found), "already_had_url": already},
         "linked": linked,
         "not_found": not_found,
     }
+    try:
+        await db_.cache.update_one(
+            {"_id": "private_chat_link_existing"},
+            {"$set": {"cached_at": datetime.now(timezone.utc), "result": result}},
+            upsert=True,
+        )
+    except Exception:
+        pass
+    return result
 
 
 def autocreate_enabled() -> bool:

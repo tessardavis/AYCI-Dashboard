@@ -595,13 +595,27 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
 
 
 @router.get("/students-db/private-chat/link-existing")
-async def private_chat_link_existing(apply: bool = False, admin: dict = Depends(require_admin)):
+async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
+                                     admin: dict = Depends(require_admin)):
     """Backlog fix: find eligible students who ALREADY have a coach group chat in
-    Circle but no private_chat_url on their row (e.g. zap-created chats never
-    written back), and record the URL. Dry-run by default; pass ?apply=true to
-    write. Returns linked[] + not_found[] so the residual is clear."""
+    Circle but no private_chat_url (e.g. zap-created chats never written back) and
+    record the URL. The scan is slow (reads every coach's chats), so it runs in
+    the BACKGROUND and caches the result:
+      - ?refresh=true  → start a fresh DRY-RUN scan (returns 'started').
+      - ?apply=true    → start a scan that WRITES the URLs (returns 'started').
+      - no params      → return the last cached result (or kick a first run).
+    Re-open with no params ~60s after a refresh/apply to see linked[] + not_found[]."""
     import private_chat_setup
-    return await private_chat_setup.link_existing_chats(db, apply=apply)
+    import asyncio as _asyncio
+    if apply or refresh:
+        _asyncio.create_task(private_chat_setup.link_existing_chats(db, apply=apply))
+        return {"status": f"scan started (apply={apply}) — re-open this URL with NO params in ~60s for the result"}
+    cached = await db.cache.find_one({"_id": "private_chat_link_existing"}, {"_id": 0})
+    if not cached:
+        _asyncio.create_task(private_chat_setup.link_existing_chats(db, apply=False))
+        return {"status": "first scan started — re-open this URL with no params in ~60s"}
+    ca = cached.get("cached_at")
+    return {"cached_at": ca.isoformat() if hasattr(ca, "isoformat") else ca, **(cached.get("result") or {})}
 
 
 @router.get("/students-db/private-chat/auto-create")
