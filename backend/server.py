@@ -1189,6 +1189,28 @@ async def on_startup():
         replace_existing=True,
     )
 
+    # Private-chat HYBRID auto-create (Route 2, Phase 1). Inert until
+    # PRIVATE_CHAT_AUTOCREATE_ENABLED=true — enable it the same day the Monday
+    # zaps 46/47/53 are turned off (running both would double-create). Creates
+    # clear-cut chats, flags DMs-off as "Awaiting DMs", leaves edge cases for
+    # the team. Every 30 min so new joiners get a chat promptly.
+    async def _private_chat_autocreate():
+        try:
+            import private_chat_setup
+            if not private_chat_setup.autocreate_enabled():
+                return
+            res = await private_chat_setup.auto_create_ready_chats(db, limit=25)
+            logger.info(f"[scheduler] private_chat auto-create: {res.get('summary')}")
+        except Exception as e:
+            logger.warning(f"[scheduler] private_chat auto-create failed: {e}")
+
+    scheduler.add_job(
+        _private_chat_autocreate,
+        CronTrigger(minute="*/30", timezone=tz),
+        id="private_chat_autocreate",
+        replace_existing=True,
+    )
+
     # Academy Members Mongo mirror — refresh every 15 minutes so the
     # Student Lookup + Upcoming Interviews pages don't have to hit Monday
     # on each request. Idempotent; ~5-10s per run for a ~3.5k row board.

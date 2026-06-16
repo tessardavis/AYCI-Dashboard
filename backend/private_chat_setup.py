@@ -64,6 +64,24 @@ async def _build_email_index() -> dict:
     }
 
 
+def _looks_like_dms_off(error_text: Optional[str], status) -> bool:
+    """Heuristic: did Circle reject the group-chat create because the student has
+    direct messages switched off? Circle's exact wording isn't documented, so we
+    match likely phrasings on a 4xx. The raw error is always logged so we can
+    tighten this on the first confirmed real case."""
+    t = (error_text or "").lower()
+    if not t:
+        return False
+    keywords = (
+        "direct message", "messaging is", "messaging disabled", "disabled messaging",
+        "not allow", "cannot be messaged", "can't be messaged", "does not allow",
+        "messaging off", "privacy", "blocked",
+    )
+    hit = any(k in t for k in keywords)
+    # Only treat as DMs-off on a client-side rejection, not a 5xx/transient.
+    return hit and (status in (400, 403, 409, 422) or status is None)
+
+
 def _chat_name(row: dict) -> str:
     fn = (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "").strip()
     return f"{fn} - Private Coaching".strip(" -") or "Private Coaching"
@@ -336,7 +354,23 @@ async def create_for_student(db_, student_id: str) -> dict:
     chat_name = _chat_name(row)
     created = await circle_api.create_group_chat(db_, sender_email, member_ids, chat_name)
     if not created or not created.get("chat_room_uuid"):
-        return {"ok": False, "error": "circle group-chat create failed", "raw": (created or {}).get("raw")}
+        err = (created or {}).get("error") or ""
+        status = (created or {}).get("status")
+        logger.warning(f"[private-chat] create failed for {student_id} status={status} err={err[:200]}")
+        if _looks_like_dms_off(err, status):
+            # The student has Circle DMs off — record it so the team chases them
+            # (replaces the signal the old Zapier zap used to set). Pinned so the
+            # Monday sync won't wipe it.
+            now = datetime.now(timezone.utc)
+            pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_chat_status"})
+            await db_.academy_members.update_one({"_id": student_id}, {"$set": {
+                "private_chat_status": "Awaiting DMs",
+                "dashboard_edited_fields": pinned,
+                "dashboard_edited_at": now,
+                "dashboard_edited_by": "private-chat-setup",
+            }})
+            return {"ok": False, "skipped": "awaiting_dms", "detail": err[:200]}
+        return {"ok": False, "error": "circle group-chat create failed", "status": status, "raw": err}
 
     uuid = created["chat_room_uuid"]
     # TODO verify this URL format against an existing private_chat_url.
@@ -378,3 +412,69 @@ async def create_for_student(db_, student_id: str) -> dict:
         "welcome_posted": bool(posted),
         "raw": created.get("raw"),
     }
+
+
+def autocreate_enabled() -> bool:
+    """The hybrid auto-create job only runs when explicitly enabled — so we can
+    cut over deliberately (enable this + turn the Zapier zaps 46/47/53 OFF the
+    same day; running both would double-create)."""
+    import os
+    return os.environ.get("PRIVATE_CHAT_AUTOCREATE_ENABLED", "").strip().lower() == "true"
+
+
+async def auto_create_ready_chats(db_, limit: int = 25) -> dict:
+    """HYBRID auto-create. Creates chats for the clear-cut cases and leaves the
+    judgement cases for the team:
+
+      - eligible + on Circle + template set + no existing chat  → CREATE
+      - DMs off (create rejected)                               → flag "Awaiting DMs"
+      - on Circle but no welcome template for their tier        → report (no create)
+      - not matched on Circle (likely dual-email / not joined)  → report (no create)
+
+    Idempotent and guarded — create_for_student re-checks eligibility, existing
+    chats across ALL coaches, and dups before creating. `limit` caps creates per
+    run so a backlog doesn't fire a huge burst / hit Circle rate limits.
+    """
+    pv = await preview(db_)
+    out = {
+        "ran_at": datetime.now(timezone.utc).isoformat(),
+        "config_ready": pv.get("config_ready"),
+        "created": [], "awaiting_dms": [], "no_template": [],
+        "skipped": [], "errors": [],
+        "not_on_circle_count": (pv.get("counts") or {}).get("not_on_circle", 0),
+    }
+    if not pv.get("config_ready"):
+        out["error"] = "coach config incomplete (need coach emails + a sender)"
+        return out
+
+    created_n = 0
+    for cand in pv.get("ready") or []:
+        if not cand.get("has_template"):
+            out["no_template"].append({"id": cand["id"], "name": cand.get("name"), "audience": cand.get("audience")})
+            continue
+        if created_n >= limit:
+            out["skipped"].append({"id": cand["id"], "name": cand.get("name"), "reason": "limit_reached"})
+            continue
+        created_n += 1
+        try:
+            r = await create_for_student(db_, cand["id"])
+            if r.get("ok"):
+                out["created"].append({"id": cand["id"], "name": cand.get("name"), "url": r.get("private_chat_url")})
+            elif r.get("skipped") == "awaiting_dms":
+                out["awaiting_dms"].append({"id": cand["id"], "name": cand.get("name")})
+            elif r.get("skipped"):
+                out["skipped"].append({"id": cand["id"], "name": cand.get("name"), "reason": r.get("skipped")})
+            else:
+                out["errors"].append({"id": cand["id"], "name": cand.get("name"), "error": r.get("error")})
+        except Exception as e:
+            out["errors"].append({"id": cand["id"], "name": cand.get("name"), "error": str(e)[:200]})
+
+    out["summary"] = {
+        "created": len(out["created"]),
+        "awaiting_dms": len(out["awaiting_dms"]),
+        "no_template": len(out["no_template"]),
+        "not_on_circle": out["not_on_circle_count"],
+        "errors": len(out["errors"]),
+    }
+    logger.info(f"[private-chat] auto-create: {out['summary']}")
+    return out

@@ -564,6 +564,18 @@ async def create_private_chat(monday_item_id: str, admin: dict = Depends(require
     return await private_chat_setup.create_for_student(db, monday_item_id)
 
 
+@router.get("/students-db/private-chat/auto-create")
+async def private_chat_auto_create(limit: int = 25, admin: dict = Depends(require_admin)):
+    """HYBRID auto-create (Phase 1): create chats for all clear-cut ready students
+    (eligible, on Circle, template set, no chat), flag DMs-off as 'Awaiting DMs',
+    and report the judgement cases (no template / not on Circle) for the team.
+    Idempotent + guarded. This is the dashboard-native replacement for the Monday
+    zaps 46/47/53 — run it on demand to verify, then enable
+    PRIVATE_CHAT_AUTOCREATE_ENABLED + turn those zaps OFF."""
+    import private_chat_setup
+    return await private_chat_setup.auto_create_ready_chats(db, limit=limit)
+
+
 @router.get("/students-db/{monday_item_id}")
 async def get_student(
     monday_item_id: str,

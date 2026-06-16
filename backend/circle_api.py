@@ -449,9 +449,12 @@ async def create_group_chat(
                 )
                 return {"chat_room_uuid": uuid, "name": name, "raw": body}
             logger.warning(f"[circle-api] create_group_chat failed {r.status_code} {r.text[:240]}")
+            # Surface the failure detail so the caller can distinguish a DMs-off
+            # rejection (→ flag "Awaiting DMs") from a generic error.
+            return {"chat_room_uuid": None, "status": r.status_code, "error": (r.text or "")[:300]}
         except Exception as e:
             logger.warning(f"[circle-api] create_group_chat errored: {e}")
-    return None
+            return {"chat_room_uuid": None, "status": None, "error": str(e)[:300]}
 
 
 def _build_tiptap_body(text: str) -> dict:
