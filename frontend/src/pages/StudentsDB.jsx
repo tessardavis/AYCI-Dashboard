@@ -336,7 +336,7 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Used</th>
                 <th className="px-3 py-2 font-semibold">Allowance</th>
                 <th className="px-3 py-2 font-semibold">Private chat</th>
-                <th className="px-3 py-2 font-semibold">Tally</th>
+                <th className="px-3 py-2 font-semibold">Interview form</th>
                 <th className="px-3 py-2 font-semibold w-16"></th>
               </tr>
             </thead>
@@ -457,9 +457,9 @@ export default function StudentsDB() {
                             .catch(() => toast.error("Couldn't copy — open the student and copy from there"));
                         }}
                         className="text-orange-700 hover:underline"
-                        title="Copy this student's pre-filled 'report interview date' Tally link to send to them"
+                        title="Copy this student's pre-filled 'report interview date' form link to send to them"
                       >
-                        Copy link
+                        Copy form link
                       </button>
                     ) : (
                       <span className="text-slate-400">—</span>
