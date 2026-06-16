@@ -2,6 +2,33 @@
 
 _Portable companion to `ZAPIER_AUDIT.md` (which has the per-zap detail). Last updated 2026-06-14._
 
+## Recent changes — 2026-06-16 session
+
+**Private-chat auto-creation de-Oksana'd (Zapier, not the dashboard).** "New chats
+still include Oksana" turned out to be the **Zapier zaps 46/47/53** (Private Chat
+for VIP+PP / Legacy / Boost & Go — auto-fire when a student joins Circle), NOT the
+dashboard (its Private chat setup card is manual + already Oksana-free). Fix:
+removed Oksana from the shared Zapier coach-list Table + swapped every Circle
+step's connection Oksana→Coralie on all three, republished. New auto-chats are
+Coralie-created, Oksana-free. Existing chats unchanged. (Long-term: retire 46/47/53
+for dashboard-native creation.) See memory [[private-chat-creation-paths]].
+
+**Upcoming Interviews: active Boost & Go now routes to the private pane regardless
+of tier.** A B&G student whose Tier reads "Silver"/"Gold" (legacy) was bucketed as
+Academy and hidden from the default view (e.g. dr.markali_surge — B&G Plus, tier
+Silver). `upcoming_interviews.py` now treats active `boost_and_go` as private.
+
+**Interview calendar sweeps ALL upcoming students, not just reconcile-changed.** A
+reschedule that reached the dashboard via the Monday sync (not the Tally reconcile)
+updated `interview_date` but never the Google Calendar. New
+`sync_upcoming_calendar()` (wired into both scheduled reconcile runs + `GET
+/api/admin/google-calendar/sync-upcoming?days=N`) ensures an event for every
+future-dated student (idempotent).
+
+**Private videos — permanent-failure detection.** After 3 failed prepare attempts
+on the same source, mark it "failed" (UI: "upload looks corrupt — re-record") and
+stop the status-poll re-download loop. Cleared by `GET /api/private-videos/{id}/refetch`.
+
 ## Recent changes — 2026-06-15 session
 
 **Circle DM → ticket triage FIXED & LIVE.** The triage was creating 0 tickets: it
