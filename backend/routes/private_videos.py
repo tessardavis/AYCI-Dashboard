@@ -760,16 +760,23 @@ async def send_to_circle_preview(
     item_id: str,
     user: dict = Depends(require_board("private_videos")),
 ):
-    """Return exactly what /send-to-circle would deliver — rendered message,
-    destination Circle DM URL, full Zapier payload — WITHOUT sending or
-    marking the row Done. Used by the dashboard's Preview button so the
-    coach can verify recipient + content before firing the real webhook."""
+    """Return exactly what /send-to-circle would deliver — rendered message +
+    the destination Circle DM (the recorded private_chat_url) — WITHOUT sending
+    or marking the row Done. Used by the dashboard's Preview button so the coach
+    can verify recipient + content before posting."""
     built = await _build_send_to_circle_payload(item_id, current_user=user)
+
+    # Send now posts directly into the recorded room, so the things that make
+    # Send fail are a missing link (no room to post to) or no sender configured.
+    chat_uuid = _chat_uuid_from_url(built["destination"] or "")
+    cfg = await settings_store.get_private_chat_config(db)
+    sender_email = (cfg.get("sender_email") or "").strip().lower()
+
     return {
         "message_text": built["message_text"],
         "destination": built["destination"],
         "destination_label": "Circle Group DM (private_chat_url)" if built["destination"] else None,
-        "zapier_configured": bool(built["zapier_url"]),
+        "sender_email": sender_email or None,
         "student_name": built["student_name"],
         "student_email": built["student_email"],
         "first_name": built["first_name"],
@@ -783,8 +790,8 @@ async def send_to_circle_preview(
         "payload": built["payload"],
         "warnings": [
             w for w in [
-                None if built["zapier_url"] else "Zapier webhook NOT configured — Send now will fail. Set it in Settings → Integrations → 'Zapier Circle reply webhook'.",
-                None if built["destination"] else "No private_chat_url on this row — Zapier may not know which DM to post to",
+                None if chat_uuid else "No private chat link on file — Send will fail. Set up this student's private chat first.",
+                None if sender_email else "No sending coach configured — Send will fail. Set the sender in Settings → Private chat config.",
                 None if built["row"].get("assignee_team_member_id") else "No coach assigned — message will say 'Your AYCI coach' instead of your name. Pick an assignee in the form above before sending.",
                 None if built["tally_video_url"] else "No student video URL on this row — message won't include the student's original video",
                 None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance — 'submission X of Y' line will be omitted",
