@@ -15,10 +15,28 @@ from pydantic import BaseModel
 from db import db
 from deps import require_admin, require_board
 import private_videos_store as pv_store
+import circle_api
+import settings_store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/private-videos", tags=["private-videos"])
+
+# Circle chat-room UUID, e.g. 8bc9c456-5a23-4280-917d-c121524fdff5
+_CHAT_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
+)
+
+
+def _chat_uuid_from_url(url: str) -> Optional[str]:
+    """Pull the Circle chat-room UUID out of a private_chat_url. Handles both
+    shapes we've seen — https://app.circle.so/c/messages/<uuid> and
+    https://ayci-academy.circle.so/messages/<uuid> — by matching the UUID
+    anywhere in the string. Returns None if there isn't one."""
+    if not url:
+        return None
+    m = _CHAT_UUID_RE.search(url)
+    return m.group(0) if m else None
 
 
 def _video_filename_for(row: dict) -> str:
@@ -780,37 +798,62 @@ async def send_to_circle(
     item_id: str,
     user: dict = Depends(require_board("private_videos")),
 ):
-    """POST the voicenote URL to the configured Zapier webhook (which then
-    posts a fixed message into the student's Circle Group DM). On success,
-    stamp `replied_at = now` and flip status → Done."""
+    """Post the coach's voicenote reply DIRECTLY into the student's existing
+    private chat — the exact room recorded as their `private_chat_url` — using
+    the same direct-to-room post the welcome message uses
+    (`circle_api.post_dm_message`). On success, stamp `replied_at = now` and
+    flip status → Done.
+
+    Why direct-to-UUID and NOT via Zapier / a participant list: Circle keys a
+    group chat on its exact member set, so resolving the room by rebuilding the
+    roster lands in a different (or duplicate) room whenever the roster is off
+    by one — e.g. the go-forward sender Coralie present vs absent. That was the
+    bug: video replies posted to a Coralie-less duplicate room instead of the
+    recorded chat. The recorded link is the single source of truth, so we post
+    straight to it — which works for both existing students (link already on
+    file) and new ones (setup records the link first)."""
     built = await _build_send_to_circle_payload(
         item_id, current_user=user, override_assignee=True,
     )
-    zapier_url = built["zapier_url"]
-    if not zapier_url:
+    message_text = built["message_text"]
+    destination = built["destination"]  # the recorded private_chat_url
+
+    chat_uuid = _chat_uuid_from_url(destination or "")
+    if not chat_uuid:
         raise HTTPException(
             400,
-            "Zapier webhook not configured — set it in Settings → Integrations → 'Zapier Circle reply webhook'",
+            "No private chat link on file for this student — set up their "
+            "private chat first, then resend.",
         )
-    payload = built["payload"]
-    now_iso = payload["event"]["triggerTime"]
 
-    try:
-        async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.post(zapier_url, json=payload)
-    except Exception as e:
-        logger.warning(f"[private-videos] zapier send failed for {item_id}: {e}")
-        raise HTTPException(502, f"Failed to reach Zapier: {e}") from e
+    cfg = await settings_store.get_private_chat_config(db)
+    sender_email = (cfg.get("sender_email") or "").strip().lower()
+    if not sender_email:
+        raise HTTPException(
+            400,
+            "No sending coach configured — set the sender in Settings → "
+            "Private chat config before sending.",
+        )
 
-    if r.status_code >= 300:
-        logger.warning(f"[private-videos] zapier returned {r.status_code}: {r.text[:200]}")
-        raise HTTPException(502, f"Zapier returned HTTP {r.status_code}")
+    posted = await circle_api.post_dm_message(db, sender_email, chat_uuid, message_text)
+    if not posted:
+        logger.warning(
+            f"[private-videos] direct post failed for {item_id} "
+            f"room={chat_uuid} sender={sender_email}"
+        )
+        raise HTTPException(
+            502,
+            f"Couldn't post into the student's private chat (room {chat_uuid}) "
+            f"as {sender_email}. The sender may not be a member of that room, or "
+            f"their Circle token expired — check the link and the sender's Circle access.",
+        )
 
-    # Mark replied + Done
+    now_iso = datetime.now(timezone.utc).isoformat()
     update = {
         "replied_at": now_iso,
         "status": "done",
         "updated_at": now_iso,
+        "posted_chat_uuid": chat_uuid,
     }
     await db.private_video_submissions.update_one(
         {"id": item_id}, {"$set": update}
@@ -820,5 +863,5 @@ async def send_to_circle(
     return {
         "ok": True,
         "item": pv_store._decorate(fresh, team_by_id),
-        "zapier_status": r.status_code,
+        "posted_chat_uuid": chat_uuid,
     }
