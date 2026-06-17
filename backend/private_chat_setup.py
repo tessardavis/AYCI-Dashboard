@@ -251,9 +251,19 @@ async def _gather_coach_chats(db_, coach_emails: list, use_cache: bool = True) -
     names: list = []
     coaches_read: list = []
     chats: list = []
-    for ce in coach_emails:
-        cc = await circle_api.list_group_chats(db_, ce)
-        if not cc:
+    # Read each coach's chats CONCURRENTLY. Every coach authenticates with their
+    # OWN Circle token, so this fans out across 4 separate auth contexts rather
+    # than serialising them — ~4x faster wall time. Sequential reads were
+    # blowing the caller's 75s budget (4 coaches × slow paged reads). Each
+    # coach still paginates internally, so we never burst more than ~4 requests
+    # at once. A coach that errors/empties is just skipped (partial coverage is
+    # fine — every private chat includes the coaches, so the others cover it).
+    results = await asyncio.gather(
+        *[circle_api.list_group_chats(db_, ce) for ce in coach_emails],
+        return_exceptions=True,
+    )
+    for ce, cc in zip(coach_emails, results):
+        if isinstance(cc, BaseException) or not cc:
             continue
         coaches_read.append({"email": ce, "chats": len(cc)})
         for ch in cc:
@@ -567,7 +577,7 @@ async def _link_existing_impl(db_, apply: bool = False) -> dict:
     # Circle on every run (which was getting rate-limited → empty → loop).
     try:
         _ids, _names, coaches_read, chats = await asyncio.wait_for(
-            _gather_coach_chats(db_, coach_emails, use_cache=True), timeout=75)
+            _gather_coach_chats(db_, coach_emails, use_cache=True), timeout=180)
     except asyncio.TimeoutError:
         return await _cache({"ok": False, "error": "Circle read timed out — likely rate-limited; the scheduled run will retry shortly"})
     if not coaches_read:
