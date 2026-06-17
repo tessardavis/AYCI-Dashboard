@@ -1450,9 +1450,13 @@ async def on_startup():
         except Exception as e:
             logger.warning(f"[scheduler] over-allowance check failed: {e}")
 
+    # Every 30 min (was */5): each run does an uncached per-student Calendly
+    # fan-out (one /scheduled_events crawl per private student). Over-allowance
+    # alerts aren't time-critical, so 30 min is plenty and cuts Calendly load
+    # ~6x — same waste/rate-limit pattern that caused the Circle /comments blow-up.
     scheduler.add_job(
         _over_allowance_check,
-        CronTrigger(minute="*/5", timezone=tz),
+        CronTrigger(minute="*/30", timezone=tz),
         id="over_allowance_check",
         replace_existing=True,
     )
