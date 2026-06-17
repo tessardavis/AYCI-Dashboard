@@ -1216,6 +1216,12 @@ async def on_startup():
     # every 20 min so it self-heals once Circle isn't rate-limited — no manual
     # triggering. Single-flight + cached, so it can't pile up. apply=True writes
     # the URLs (idempotent: only records chats that already exist).
+    # NOTE: the scheduled link-existing scan is DISABLED — reading every coach's
+    # Circle chats (Coralie has hundreds of threads) consistently times out and
+    # just ties up Circle every 20 min. The real fix is the zap writing
+    # private_chat_url back to the dashboard in real-time (update-by-email). The
+    # manual endpoint GET /students-db/private-chat/link-existing still exists if
+    # Circle ever behaves, but nothing schedules it now.
     async def _private_chat_link_existing():
         try:
             import private_chat_setup
@@ -1223,13 +1229,7 @@ async def on_startup():
             logger.info(f"[scheduler] link_existing_chats: {res.get('counts') or res.get('error')}")
         except Exception as e:
             logger.warning(f"[scheduler] link_existing_chats failed: {e}")
-
-    scheduler.add_job(
-        _private_chat_link_existing,
-        CronTrigger(minute="*/20", timezone=tz),
-        id="private_chat_link_existing",
-        replace_existing=True,
-    )
+    # (intentionally not scheduled — see note above)
 
     # Academy Members Mongo mirror — refresh every 15 minutes so the
     # Student Lookup + Upcoming Interviews pages don't have to hit Monday
