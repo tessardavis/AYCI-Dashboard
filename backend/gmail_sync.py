@@ -140,9 +140,11 @@ def _client_secret() -> str:
 
 
 def _redirect_uri() -> str:
+    # NB: this exact string must also be listed under "Authorized redirect URIs"
+    # on the Google Cloud OAuth client, or Google returns redirect_uri_mismatch.
     return os.environ.get(
         "GMAIL_OAUTH_REDIRECT_URI",
-        "https://ayci-dashboard.preview.emergentagent.com/api/oauth/gmail/callback",
+        "https://ayci-dashboard.onrender.com/api/oauth/gmail/callback",
     )
 
 

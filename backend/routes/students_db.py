@@ -557,6 +557,59 @@ async def private_chat_no_chat_audit(user: dict = Depends(require_board("student
     return await private_chat_setup.no_chat_audit(db)
 
 
+@router.get("/students-db/private-chat/maintenance")
+async def private_chat_maintenance(
+    clear_awaiting: bool = False,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Pure-DB backlog + flag maintenance — NO Circle reads (so it never hits the
+    Circle rate-limit/timeout that breaks the link-existing scan).
+
+      - `missing_url`: eligible (current private tier OR active B&G) students with no
+        private_chat_url — the backlog of chats created before the zaps wrote URLs back.
+      - `stale_awaiting`: students still carrying an 'Awaiting DMs'-style
+        private_chat_status (left over from the now-deleted DMs-off zap branch).
+      - `other_status`: students with some OTHER non-empty status — surfaced, NOT
+        cleared, so nothing meaningful is wiped silently.
+      - `?clear_awaiting=true` blanks the status ONLY on the stale_awaiting set.
+
+    Auth: X-Webhook-Secret (ZAPIER_WEBHOOK_SECRET)."""
+    _check_webhook_secret(x_webhook_secret)
+    missing_url, stale_awaiting, other_status = [], [], []
+    async for r in db.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
+        if not (_is_current_private_tier(r.get("tier")) or _b_and_g_active(r.get("boost_and_go"))):
+            continue
+        email = (r.get("email") or "").strip().lower() or None
+        circle_email = (r.get("circle_email") or "").strip().lower() or None
+        status = (r.get("private_chat_status") or "").strip()
+        base = {"id": r["_id"], "name": r.get("name"), "email": email,
+                "circle_email": circle_email, "tier": r.get("tier"),
+                "boost_and_go": r.get("boost_and_go")}
+        if not (r.get("private_chat_url") or "").strip():
+            missing_url.append({**base, "status": status or None})
+        if status:
+            sl = status.lower()
+            (stale_awaiting if ("awaiting" in sl or "dms" in sl) else other_status).append(
+                {**base, "status": status})
+    cleared = 0
+    if clear_awaiting and stale_awaiting:
+        res = await db.academy_members.update_many(
+            {"_id": {"$in": [s["id"] for s in stale_awaiting]}},
+            {"$set": {"private_chat_status": ""}},
+        )
+        cleared = res.modified_count
+    for lst in (missing_url, stale_awaiting, other_status):
+        lst.sort(key=lambda x: (x.get("name") or "").lower())
+    return {
+        "ok": True,
+        "counts": {"missing_url": len(missing_url), "stale_awaiting": len(stale_awaiting),
+                   "other_status": len(other_status), "cleared": cleared},
+        "missing_url": missing_url,
+        "stale_awaiting": stale_awaiting,
+        "other_status": other_status,
+    }
+
+
 @router.post("/students-db/{monday_item_id}/create-private-chat")
 async def create_private_chat(monday_item_id: str, user: dict = Depends(require_board("students"))):
     """Manual trigger: create ONE student's coach group chat (guarded against
