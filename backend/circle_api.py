@@ -10,6 +10,7 @@ Auth model:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,44 @@ logger = logging.getLogger(__name__)
 ADMIN_BASE = "https://app.circle.so/api/admin/v2"
 HEADLESS_BASE = "https://app.circle.so/api/headless/v1"
 HEADLESS_AUTH = "https://app.circle.so/api/v1/headless/auth_token"
+
+# Circle rate-limits aggressively (429), especially during the bulk coach-chat
+# scan. Retry transient throttles with a short backoff so a scan rides through
+# mild rate-limiting instead of returning empty.
+_RETRY_STATUSES = {429, 503}
+_MAX_RETRIES = 4
+
+
+def _retry_after_seconds(r: httpx.Response) -> float:
+    """Honour a Retry-After header (seconds) if Circle sends one, capped so a
+    single 429 can't stall a request for minutes."""
+    try:
+        ra = (r.headers or {}).get("Retry-After")
+        if ra:
+            return min(float(ra), 20.0)
+    except (TypeError, ValueError):
+        pass
+    return 0.0
+
+
+async def _request_with_backoff(c: httpx.AsyncClient, method: str, url: str,
+                                *, label: str = "", **kwargs) -> Optional[httpx.Response]:
+    """Issue a request, retrying on 429/503 with Retry-After (else exponential
+    1s/2s/4s) backoff. Returns the final Response (caller checks status), or
+    None on a network-level error."""
+    r: Optional[httpx.Response] = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            r = await c.request(method, url, **kwargs)
+        except Exception as e:
+            logger.warning(f"[circle-api] {label or url} errored: {e}")
+            return None
+        if r.status_code not in _RETRY_STATUSES or attempt == _MAX_RETRIES - 1:
+            return r
+        wait = _retry_after_seconds(r) or float(2 ** attempt)
+        logger.info(f"[circle-api] {label or url} {r.status_code} — backoff {wait}s (attempt {attempt + 1})")
+        await asyncio.sleep(wait)
+    return r
 
 
 def _admin_headers() -> dict:
@@ -52,22 +91,21 @@ async def _get_access_token(db, admin_email: str) -> Optional[str]:
             pass
 
     async with httpx.AsyncClient(timeout=15) as c:
-        try:
-            r = await c.post(
-                HEADLESS_AUTH,
-                headers={
-                    "Authorization": f"Bearer {_headless_parent_token()}",
-                    "Content-Type": "application/json",
-                },
-                json={"email": admin_email},
-            )
-            if r.status_code != 200:
-                logger.warning(f"[circle-api] headless auth_token({admin_email}) failed: {r.status_code} {r.text[:160]}")
-                return None
-            body = r.json()
-        except Exception as e:
-            logger.warning(f"[circle-api] headless auth_token errored: {e}")
+        r = await _request_with_backoff(
+            c, "POST", HEADLESS_AUTH,
+            label=f"auth_token({admin_email})",
+            headers={
+                "Authorization": f"Bearer {_headless_parent_token()}",
+                "Content-Type": "application/json",
+            },
+            json={"email": admin_email},
+        )
+        if r is None:
             return None
+        if r.status_code != 200:
+            logger.warning(f"[circle-api] headless auth_token({admin_email}) failed: {r.status_code} {r.text[:160]}")
+            return None
+        body = r.json()
 
     await db.app_settings.update_one(
         {"id": cache_id},
@@ -314,37 +352,36 @@ async def list_group_chats(db, admin_email: str, max_pages: int = 30) -> list[di
     out: list[dict] = []
     async with httpx.AsyncClient(timeout=25) as c:
         for page in range(1, max_pages + 1):
-            try:
-                r = await c.get(
-                    f"{HEADLESS_BASE}/messages",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    params={"per_page": 100, "page": page},
-                )
-                if r.status_code != 200:
-                    logger.warning(f"[circle-api] list_group_chats p{page} failed: {r.status_code} {r.text[:120]}")
-                    break
-                body = r.json()
-                for rec in body.get("records") or []:
-                    if rec.get("chat_room_kind") != "group":
-                        continue
-                    pids = []
-                    for p in rec.get("other_participants_preview") or []:
-                        if isinstance(p, dict):
-                            pid = p.get("id") or p.get("community_member_id")
-                            if pid:
-                                try:
-                                    pids.append(int(pid))
-                                except (TypeError, ValueError):
-                                    pass
-                    out.append({
-                        "uuid": rec.get("uuid"),
-                        "name": rec.get("chat_room_name") or "",
-                        "participant_ids": pids,
-                    })
-                if not body.get("has_next_page"):
-                    break
-            except Exception as e:
-                logger.warning(f"[circle-api] list_group_chats errored: {e}")
+            r = await _request_with_backoff(
+                c, "GET", f"{HEADLESS_BASE}/messages",
+                label=f"list_group_chats({admin_email}) p{page}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"per_page": 100, "page": page},
+            )
+            if r is None:
+                break
+            if r.status_code != 200:
+                logger.warning(f"[circle-api] list_group_chats p{page} failed: {r.status_code} {r.text[:120]}")
+                break
+            body = r.json()
+            for rec in body.get("records") or []:
+                if rec.get("chat_room_kind") != "group":
+                    continue
+                pids = []
+                for p in rec.get("other_participants_preview") or []:
+                    if isinstance(p, dict):
+                        pid = p.get("id") or p.get("community_member_id")
+                        if pid:
+                            try:
+                                pids.append(int(pid))
+                            except (TypeError, ValueError):
+                                pass
+                out.append({
+                    "uuid": rec.get("uuid"),
+                    "name": rec.get("chat_room_name") or "",
+                    "participant_ids": pids,
+                })
+            if not body.get("has_next_page"):
                 break
     return out
 
