@@ -22,6 +22,7 @@ Env required:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -569,6 +570,12 @@ async def status() -> dict:
 # Safety net: poll Wati for the latest inbound messages on every OPEN ticket
 # and append any we don't already have. Catches webhook drops + URL-config
 # drift (the exact bug that hid Shailaja's "Thanks" reply on 2026-05-05).
+# Throttle for the open-ticket reconcile sweep so Wati doesn't 429 us.
+_RECONCILE_DELAY = 0.5        # seconds between getMessages calls
+_RECONCILE_429_RETRIES = 2    # extra attempts when a call comes back 429
+_RECONCILE_BACKOFF = 1.0      # base backoff (×attempt) between 429 retries
+
+
 async def reconcile_open_tickets(db) -> dict:
     if not is_configured():
         return {"ok": False, "reason": "wati not configured"}
@@ -618,15 +625,31 @@ async def reconcile_open_tickets(db) -> dict:
             except Exception as e:
                 logger.warning(f"[wati-reconcile] self-heal failed for {wa}: {e}")
 
-            try:
-                r = await client.get(
-                    f"{base}/api/v1/getMessages/{wa}",
-                    headers=headers,
-                    params={"pageSize": 30},
-                )
+            # Pace requests — Wati rate-limits (HTTP 429) on bursts, which was
+            # turning the whole sweep red. A short delay before each call plus a
+            # bounded backoff-retry on 429 keeps us under the limit while still
+            # finishing comfortably inside the 5-min schedule.
+            await asyncio.sleep(_RECONCILE_DELAY)
+            items = None
+            for attempt in range(_RECONCILE_429_RETRIES + 1):
+                try:
+                    r = await client.get(
+                        f"{base}/api/v1/getMessages/{wa}",
+                        headers=headers,
+                        params={"pageSize": 30},
+                    )
+                except Exception as e:
+                    errors.append(f"{wa}: {e}")
+                    break
+                if r.status_code == 429:
+                    if attempt < _RECONCILE_429_RETRIES:
+                        await asyncio.sleep(_RECONCILE_BACKOFF * (attempt + 1))
+                        continue
+                    errors.append(f"{wa}: HTTP 429 (rate-limited after retries)")
+                    break
                 if r.status_code >= 300:
                     errors.append(f"{wa}: HTTP {r.status_code}")
-                    continue
+                    break
                 data = r.json() or {}
                 msgs_raw = data.get("messages") or {}
                 items = (
@@ -634,9 +657,9 @@ async def reconcile_open_tickets(db) -> dict:
                     if isinstance(msgs_raw, dict)
                     else (msgs_raw or data.get("items") or [])
                 ) or []
-            except Exception as e:
-                errors.append(f"{wa}: {e}")
-                continue
+                break
+            if items is None:
+                continue  # errored / exhausted retries — already recorded
 
             seen_ids = set(t.get("wati_message_ids") or [])
             # Also check note-level message ids to be safe
