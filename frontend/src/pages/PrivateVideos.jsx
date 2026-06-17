@@ -1098,7 +1098,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                 <a href={item.private_chat} target="_blank" rel="noreferrer" className="text-sky-700 font-semibold hover:underline">
                   this Circle Group DM
                 </a>{" "}
-                via Zapier (marks the submission Done).
+                (marks the submission Done).
               </div>
             </div>
           )}
@@ -1152,15 +1152,13 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                 </Button>
                 <Button
                   onClick={sendFromPreview}
-                  disabled={sending || !preview.destination || !preview.zapier_configured}
+                  disabled={sending || !preview.destination}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   data-testid="pv-edit-send-confirmed"
                   title={
-                    !preview.zapier_configured
-                      ? "Zapier webhook not configured (see warning above) — Send will fail"
-                      : !preview.destination
-                        ? "Can't send — no destination Circle DM URL on this row"
-                        : "Deliver this message now"
+                    !preview.destination
+                      ? "Can't send — no private chat link on this row (set up the student's chat first)"
+                      : "Deliver this message now"
                   }
                 >
                   {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
