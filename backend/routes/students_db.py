@@ -557,9 +557,23 @@ async def private_chat_no_chat_audit(user: dict = Depends(require_board("student
     return await private_chat_setup.no_chat_audit(db)
 
 
+def _to_dt(v) -> Optional[datetime]:
+    """Coerce a Mongo/ISO date value to an aware datetime, or None."""
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    if isinstance(v, str) and v.strip():
+        try:
+            dt = datetime.fromisoformat(v.strip().replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
 @router.get("/students-db/private-chat/maintenance")
 async def private_chat_maintenance(
     clear_awaiting: bool = False,
+    recent_days: Optional[int] = None,
     x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
 ):
     """Pure-DB backlog + flag maintenance — NO Circle reads (so it never hits the
@@ -567,6 +581,9 @@ async def private_chat_maintenance(
 
       - `missing_url`: eligible (current private tier OR active B&G) students with no
         private_chat_url — the backlog of chats created before the zaps wrote URLs back.
+      - `missing_url_recent`: subset whose monday_created_at (proxy for "joined") is
+        within `recent_days` — the likely-genuine gaps (e.g. chats that failed during
+        the Coralie-in-list bug). Only returned when `?recent_days=N` is set.
       - `stale_awaiting`: students still carrying an 'Awaiting DMs'-style
         private_chat_status (left over from the now-deleted DMs-off zap branch).
       - `other_status`: students with some OTHER non-empty status — surfaced, NOT
@@ -582,9 +599,12 @@ async def private_chat_maintenance(
         email = (r.get("email") or "").strip().lower() or None
         circle_email = (r.get("circle_email") or "").strip().lower() or None
         status = (r.get("private_chat_status") or "").strip()
+        joined = _to_dt(r.get("monday_created_at")) or _to_dt(r.get("created_at"))
         base = {"id": r["_id"], "name": r.get("name"), "email": email,
                 "circle_email": circle_email, "tier": r.get("tier"),
-                "boost_and_go": r.get("boost_and_go")}
+                "boost_and_go": r.get("boost_and_go"),
+                "cohort_joined": r.get("cohort_joined"),
+                "joined_at": joined.isoformat() if joined else None}
         if not (r.get("private_chat_url") or "").strip():
             missing_url.append({**base, "status": status or None})
         if status:
@@ -600,7 +620,7 @@ async def private_chat_maintenance(
         cleared = res.modified_count
     for lst in (missing_url, stale_awaiting, other_status):
         lst.sort(key=lambda x: (x.get("name") or "").lower())
-    return {
+    out = {
         "ok": True,
         "counts": {"missing_url": len(missing_url), "stale_awaiting": len(stale_awaiting),
                    "other_status": len(other_status), "cleared": cleared},
@@ -608,6 +628,14 @@ async def private_chat_maintenance(
         "stale_awaiting": stale_awaiting,
         "other_status": other_status,
     }
+    if recent_days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
+        recent = [m for m in missing_url
+                  if (_to_dt(m.get("joined_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff]
+        recent.sort(key=lambda x: x.get("joined_at") or "", reverse=True)
+        out["counts"]["missing_url_recent"] = len(recent)
+        out["missing_url_recent"] = recent
+    return out
 
 
 @router.post("/students-db/{monday_item_id}/create-private-chat")
