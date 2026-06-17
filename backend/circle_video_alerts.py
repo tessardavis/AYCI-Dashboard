@@ -82,6 +82,10 @@ async def check_and_send(db) -> dict:
             coach_act.RECORDED_ANSWERS_START,
             "Recorded Answer Review",
             db=db,
+            # This alert only reads result["rate_limited"], which is derived
+            # purely from posts. Skip the per-post /comments fan-out — it was
+            # costing ~1.9M Circle Admin-API calls/month (~$7k) for nothing.
+            fetch_comments=False,
         )
     except Exception as e:
         logger.warning(f"[circle-video-alerts] analyse failed: {e}")

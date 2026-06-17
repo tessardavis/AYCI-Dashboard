@@ -260,6 +260,7 @@ async def analyse_circle_space(
     start_date: date,
     label: str,
     db=None,
+    fetch_comments: bool = True,
 ) -> dict:
     """
     Aggregate post + comment activity in one Circle space since `start_date`.
@@ -322,8 +323,15 @@ async def analyse_circle_space(
                 fetch_failed_post_ids.add(p["id"])
                 comments_by_post[p["id"]] = []
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        await asyncio.gather(*(_load(p, c) for p in in_window))
+    # Comment fetches dominate Circle Admin-API usage: one /comments call per
+    # post, fanned out every time this runs. Callers that only need post-level
+    # output (e.g. the rate-limit video alert, which is derived purely from
+    # posts) pass fetch_comments=False to skip the fan-out entirely. This was
+    # the source of ~1.9M /api/admin/v2/comments calls/month (the every-5-min
+    # circle_video_alerts job crawling every comment for data it never used).
+    if fetch_comments:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+            await asyncio.gather(*(_load(p, c) for p in in_window))
 
     # Per-day counts (zero-filled)
     per_day_map: dict[str, int] = {}
