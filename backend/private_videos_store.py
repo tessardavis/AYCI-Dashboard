@@ -406,7 +406,13 @@ async def _academy_lookup(db, email: str) -> dict:
         return ((cols.get(title) or {}).get("text") or "").strip()
 
     tier_text = _txt("Tier").lower()
-    private_chat = _txt("Private Chat Link")
+    # Prefer the authoritative scalar (set from Monday's column OR recorded by
+    # private-chat-setup). Fall back to the raw Monday column text only if the
+    # scalar is absent (e.g. the live-API lookup path, which doesn't surface
+    # the scalar). Reading the column alone missed dashboard-recorded chats —
+    # the link existed but video replies couldn't see it, so the room got
+    # guessed (→ wrong DM).
+    private_chat = ((result.get("data") or {}).get("private_chat_url") or "").strip() or _txt("Private Chat Link")
     interview_date = _txt("Interview Date") or None
     interview_type = _txt("Interview Type") or None
 

@@ -476,6 +476,14 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         "created_at": row.get("monday_created_at"),
                         "columns": cols,
                         "allowances": allowances,
+                        # Authoritative private-chat link. This scalar is the
+                        # merged value — set from Monday's "Private Chat Link"
+                        # column OR (more often) recorded by private-chat-setup,
+                        # which only ever writes the scalar, never Monday's
+                        # column. Callers should prefer this over the raw
+                        # columns["Private Chat Link"] text, which is empty for
+                        # dashboard-recorded chats.
+                        "private_chat_url": row.get("private_chat_url"),
                     },
                     "error": None,
                     "source": "mongo_mirror",
