@@ -60,10 +60,17 @@ OVER_ALLOWANCE_CACHE_KEY = "over_allowance_snapshot"
 SENT_COLLECTION = "over_allowance_alerts_sent"
 
 
-async def _fetch_all_private_students() -> list[dict]:
+async def _fetch_all_private_students(db=None) -> list[dict]:
     """All Private Plus / VIP students on Monday, regardless of interview
     date. Returns name, email, tier, monday_url, and totals from the
-    call/mock/bonus columns."""
+    call/mock/bonus columns.
+
+    `extra_bonus_calls` — a dashboard-native numeric override on the student
+    record (academy_members mirror) — is added to the bonus total. This lets
+    the team record a student who earned more than one 1:1 bonus call (e.g. a
+    signup bonus *and* an upgrade bonus during a launch) without needing a
+    second Monday status column, so over-allowance stops false-flagging them.
+    Maintained on the dashboard, not Monday (we're retiring the board)."""
     column_ids = [COL_TIER, COL_EMAIL, COL_INTERVIEW_DATE, COL_SPECIALITY, COL_HOSPITAL] + [
         c for c, _ in CALL_COLS + MOCK_COLS + BONUS_COLS
     ]
@@ -98,6 +105,22 @@ async def _fetch_all_private_students() -> list[dict]:
             if not cursor:
                 break
 
+    # Dashboard-native bonus-call overrides, keyed by monday item id (== the
+    # academy_members `_id`). Only fetch the ones with a non-zero override set.
+    overrides: dict[str, int] = {}
+    if db is not None:
+        try:
+            async for row in db.academy_members.find(
+                {"extra_bonus_calls": {"$gt": 0}},
+                {"_id": 1, "extra_bonus_calls": 1},
+            ):
+                try:
+                    overrides[str(row["_id"])] = max(0, int(row.get("extra_bonus_calls") or 0))
+                except (TypeError, ValueError):
+                    continue
+        except Exception as e:
+            logger.warning(f"[over-allowance] extra_bonus_calls fold-in failed: {e}")
+
     out: list[dict] = []
     for it in items:
         cols_by_id = {cv.get("id"): cv for cv in (it.get("column_values") or [])}
@@ -110,7 +133,9 @@ async def _fetch_all_private_students() -> list[dict]:
         calls = _allowance(cols_by_id, CALL_COLS)
         mocks = _allowance(cols_by_id, MOCK_COLS)
         bonus = _allowance(cols_by_id, BONUS_COLS)
-        total = calls["total"] + mocks["total"] + bonus["total"]
+        extra_bonus = overrides.get(str(it.get("id")), 0)
+        bonus_total = bonus["total"] + extra_bonus
+        total = calls["total"] + mocks["total"] + bonus_total
         if total <= 0:
             continue  # no per-student allowance configured — skip
         out.append({
@@ -124,7 +149,8 @@ async def _fetch_all_private_students() -> list[dict]:
             "hospital": cols_by_id.get(COL_HOSPITAL, {}).get("text") or "",
             "monday_calls_total": calls["total"],
             "monday_mocks_total": mocks["total"],
-            "monday_bonus_total": bonus["total"],
+            "monday_bonus_total": bonus_total,
+            "extra_bonus_calls": extra_bonus,
             "monday_total_allowance": total,
         })
     return out
@@ -193,7 +219,7 @@ async def find_over_allowance_students(db) -> dict:
     Calendly all-time private-call count exceeds Monday's total allowance.
     Excludes (email, over_by) pairs that the team has acknowledged — the row
     re-appears if `over_by` grows further (e.g. +1 → +2 over)."""
-    students = await _fetch_all_private_students()
+    students = await _fetch_all_private_students(db)
     emails = [s["email"] for s in students if s.get("email")]
     counts = await _count_calendly_alltime(emails)
 
@@ -324,8 +350,13 @@ async def notify_over_allowance_breaches(db, force: bool = False) -> dict:
         link_line = (
             f"<{base_url}/coach-activity|Open Coach Activity board>" if base_url else "Open the Coach Activity board"
         )
+        extra_bonus = int(s.get("extra_bonus_calls") or 0)
+        bonus_str = (
+            f"{s['monday_bonus_total']} bonus (incl. +{extra_bonus} added)"
+            if extra_bonus else f"{s['monday_bonus_total']} bonus"
+        )
         breakdown = (
-            f"{s['monday_calls_total']} calls + {s['monday_mocks_total']} mock + {s['monday_bonus_total']} bonus"
+            f"{s['monday_calls_total']} calls + {s['monday_mocks_total']} mock + {bonus_str}"
         )
         text = (
             f":rotating_light: *Over-allowance booking* — {s['tier']}\n"

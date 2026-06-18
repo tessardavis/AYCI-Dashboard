@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertOctagon, Check, ChevronDown, ChevronUp, ExternalLink, History, Loader2, RefreshCw } from "lucide-react";
+import { AlertOctagon, Check, ChevronDown, ChevronUp, ExternalLink, History, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -28,6 +28,7 @@ export default function OverAllowanceWidget() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acking, setAcking] = useState({}); // email -> bool
+  const [bumping, setBumping] = useState({}); // email -> bool
 
   const load = async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -66,6 +67,46 @@ export default function OverAllowanceWidget() {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Acknowledge failed");
     } finally {
       setAcking((m) => ({ ...m, [s.email]: false }));
+    }
+  };
+
+  // Grant the student one more 1:1 bonus call (e.g. they earned a signup bonus
+  // AND an upgrade bonus). Stored on the dashboard record (extra_bonus_calls),
+  // not Monday. Adding 1 raises their allowance by 1, so over_by drops by 1.
+  const addBonus = async (s) => {
+    if (!s.monday_id) {
+      toast.error("Can't add a bonus call — no student record id on this row.");
+      return;
+    }
+    setBumping((m) => ({ ...m, [s.email]: true }));
+    try {
+      const next = (Number(s.extra_bonus_calls) || 0) + 1;
+      await apiClient.patch(`/students-db/${s.monday_id}`, { extra_bonus_calls: next });
+      toast.success(`Added a bonus call for ${s.name}`, {
+        description: next > 1 ? `Now ${next} extra bonus calls on their allowance.` : "Their allowance went up by 1.",
+      });
+      // Optimistic: +1 allowance ⇒ −1 over_by. Drop the row if no longer over.
+      setData((prev) => {
+        if (!prev) return prev;
+        const students = (prev.students || [])
+          .map((r) =>
+            r.email === s.email
+              ? {
+                  ...r,
+                  extra_bonus_calls: next,
+                  monday_bonus_total: (Number(r.monday_bonus_total) || 0) + 1,
+                  monday_total_allowance: (Number(r.monday_total_allowance) || 0) + 1,
+                  over_by: (Number(r.over_by) || 0) - 1,
+                }
+              : r,
+          )
+          .filter((r) => (Number(r.over_by) || 0) > 0);
+        return { ...prev, students };
+      });
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to add bonus call");
+    } finally {
+      setBumping((m) => ({ ...m, [s.email]: false }));
     }
   };
 
@@ -144,13 +185,23 @@ export default function OverAllowanceWidget() {
                 <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
                   Booked <span className="font-semibold text-rose-700">{s.calendly_calls_used}</span> Calendly calls
                   &nbsp;·&nbsp; Allowance <span className="font-semibold">{s.monday_total_allowance}</span>
-                  &nbsp;<span className="opacity-60">({s.monday_calls_total} calls + {s.monday_mocks_total} mock + {s.monday_bonus_total} bonus)</span>
+                  &nbsp;<span className="opacity-60">({s.monday_calls_total} calls + {s.monday_mocks_total} mock + {s.monday_bonus_total} bonus{Number(s.extra_bonus_calls) > 0 ? ` incl. +${s.extra_bonus_calls} added` : ""})</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-100 text-rose-900 border border-rose-200 text-[11px] font-bold">
                   +{s.over_by} over
                 </span>
+                <button
+                  onClick={() => addBonus(s)}
+                  disabled={!!bumping[s.email]}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-white border border-[var(--ayci-border)] text-[var(--ayci-ink)] hover:bg-sky-50 hover:border-sky-300 hover:text-sky-800 disabled:opacity-50 transition-colors"
+                  title="They legitimately earned an extra 1:1 bonus call (e.g. signup + upgrade). Raises their allowance by 1."
+                  data-testid={`over-allowance-add-bonus-${s.email}`}
+                >
+                  {bumping[s.email] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                  Bonus call
+                </button>
                 <button
                   onClick={() => ack(s)}
                   disabled={!!acking[s.email]}

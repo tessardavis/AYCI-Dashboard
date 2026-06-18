@@ -280,7 +280,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "setup_not_needed", "setup_not_needed_reason", "coach_notes",
         "private_chat_last_error",
         "kajabi_interview_date", "early_access_grant", "early_access_granted_at",
-        "monday_created_at",
+        "monday_created_at", "extra_bonus_calls",
         "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}
@@ -1205,6 +1205,7 @@ EDITABLE_FIELDS = {
     "tier", "cohort_joined", "interview_date", "kajabi_interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
+    "extra_bonus_calls",
 }
 
 
@@ -1231,6 +1232,7 @@ class StudentPatch(BaseModel):
     setup_not_needed_reason: Optional[str] = None
     coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)
     boost_and_go: Optional[str] = None  # e.g. "B&G" / "B&G Plus" — for dual-email fixes
+    extra_bonus_calls: Optional[int] = None  # dashboard-native extra 1:1 bonus-call entitlement (e.g. signup + upgrade) added to over-allowance
 
     class Config:
         extra = "forbid"  # reject unknown keys outright
