@@ -344,6 +344,7 @@ export default function StudentsDB() {
                 <th className="px-3 py-2 font-semibold">Email</th>
                 <th className="px-3 py-2 font-semibold">Tier</th>
                 <th className="px-3 py-2 font-semibold">Cohort</th>
+                <th className="px-3 py-2 font-semibold">Joined</th>
                 <th className="px-3 py-2 font-semibold">Interview</th>
                 <th className="px-3 py-2 font-semibold">Speciality</th>
                 <th className="px-3 py-2 font-semibold">Used</th>
@@ -411,6 +412,9 @@ export default function StudentsDB() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
+                  <td className="px-3 py-2 text-[12px] text-slate-500" title={r.monday_created_at || ""}>
+                    {formatDate(r.monday_created_at)}
+                  </td>
                   <td className="px-3 py-2 text-[12px]">
                     <span
                       className={r.early_interview_flag === "before" ? "text-orange-700 font-semibold" : ""}
