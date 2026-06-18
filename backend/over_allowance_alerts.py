@@ -292,7 +292,7 @@ async def _oksana_email(db) -> Optional[str]:
     return (user or {}).get("email")
 
 
-async def notify_over_allowance_breaches(db) -> dict:
+async def notify_over_allowance_breaches(db, force: bool = False) -> dict:
     """For each currently over-allowance student, post an alert to the
     #fulfillment-team Slack channel once. Re-alert only when `over_by` grows
     beyond the previously notified value (so a student going from 1-over to
@@ -319,7 +319,7 @@ async def notify_over_allowance_breaches(db) -> dict:
         key = f"over_allowance:{s['email']}"
         prev = await db[SENT_COLLECTION].find_one({"key": key}, {"_id": 0, "over_by": 1})
         prev_over_by = (prev or {}).get("over_by", 0)
-        if s["over_by"] <= prev_over_by:
+        if not force and s["over_by"] <= prev_over_by:
             continue  # already notified at this severity or worse
         link_line = (
             f"<{base_url}/coach-activity|Open Coach Activity board>" if base_url else "Open the Coach Activity board"

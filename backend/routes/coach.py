@@ -99,11 +99,14 @@ async def coach_activity_over_allowance(
 
 @router.post("/coach-activity/over-allowance/notify")
 async def coach_activity_over_allowance_notify(
+    force: bool = False,
     user: dict = Depends(require_board("coach_activity")),
 ):
-    """Force the over-allowance check + Slack DM to Oksana right now.
-    Useful for testing or after a manual Monday-allowance fix."""
-    return await over_alerts.notify_over_allowance_breaches(db)
+    """Run the over-allowance check + post alerts to #fulfillment-team right now.
+    Useful for testing or after a manual Monday-allowance fix. `?force=true`
+    re-posts every current breach, ignoring the already-alerted dedup (for a
+    test)."""
+    return await over_alerts.notify_over_allowance_breaches(db, force=force)
 
 
 
