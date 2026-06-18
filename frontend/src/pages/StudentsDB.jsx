@@ -131,7 +131,9 @@ export default function StudentsDB() {
       if (dismissedOnly && !r.setup_not_needed) return false;
       if (refundedOnly && !r.has_refund) return false;
       if (bgOnly && !isBandG(r.boost_and_go)) return false;
-      const isEarly = ["before", "unparsed"].includes(r.early_interview_flag);
+      // Only flag actual, parseable dates on/before the cutoff — not vague
+      // answers like "no date yet" / "within 12 months" (those parse to null).
+      const isEarly = r.early_interview_flag === "before";
       if (earlyFilter === "allocate" && !(isEarly && !r.early_access_grant)) return false;
       if (earlyFilter === "granted" && !r.early_access_grant) return false;
       if (q) {
@@ -178,7 +180,7 @@ export default function StudentsDB() {
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
   const earlyToAllocateCount = useMemo(
-    () => rows.filter((r) => ["before", "unparsed"].includes(r.early_interview_flag) && !r.early_access_grant).length,
+    () => rows.filter((r) => r.early_interview_flag === "before" && !r.early_access_grant).length,
     [rows],
   );
   const earlyGrantedCount = useMemo(() => rows.filter((r) => r.early_access_grant).length, [rows]);
@@ -367,7 +369,7 @@ export default function StudentsDB() {
             const cuts = [...new Set(filtered.map((r) => r.early_access_cutoff).filter(Boolean))];
             return cuts.length ? <> — cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
           })()}
-          . Dates we couldn't read are included too, for a manual check. To actually <strong>grant</strong>, they must be <strong>on Circle with the cohort tag</strong> — if not, get them on board first (the grant button will tell you).{" "}
+. Only students whose Kajabi/interview date is an actual date on or before the cutoff are listed — vague answers ("no date yet", "within 12 months") aren't. To actually <strong>grant</strong>, they must be <strong>on Circle with the cohort tag</strong> — if not, get them on board first (the grant button will tell you).{" "}
           <span className="text-emerald-700 font-semibold">✓ Access</span> = already granted; <span className="text-slate-500">no access yet</span> = still to do.
         </div>
       )}
@@ -498,7 +500,7 @@ export default function StudentsDB() {
                       <div className="text-[10px] mt-0.5 text-emerald-700 font-semibold" title={`Early-access granted: ${r.early_access_grant}`}>
                         ✓ Access: {r.early_access_grant}
                       </div>
-                    ) : ["before", "unparsed"].includes(r.early_interview_flag) ? (
+                    ) : r.early_interview_flag === "before" ? (
                       r.in_cohort_on_circle ? (
                         <div className="text-[10px] mt-0.5 text-orange-700 font-semibold" title="Eligible + early interview, and in the cohort on Circle — ready to grant (open Edit).">
                           ⏱ ready to grant
