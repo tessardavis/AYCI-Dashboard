@@ -348,7 +348,7 @@ export default function StudentsDB() {
         {(earlyGrantedCount > 0 || earlyFilter === "granted") && (
           <button type="button" onClick={() => setEarlyFilter(earlyFilter === "granted" ? null : "granted")}
                   className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyFilter === "granted" ? "bg-emerald-100 text-emerald-800 font-semibold" : "bg-emerald-50 text-emerald-700"}`}
-                  title="Students who have already been given previous-cohort / bonus-calls access.">
+                  title="Students who have already been given previous-cohort / Sunday-group-calls access.">
             ✓ Early — access given ({earlyGrantedCount})
           </button>
         )}
@@ -699,7 +699,7 @@ function EditModal({ row, onClose, onSaved }) {
 
   const [granting, setGranting] = useState(null);
   const grantAccess = async (kind) => {
-    const labels = { previous: "previous-cohort access", bonus: "bonus calls", both: "previous cohort + bonus calls" };
+    const labels = { previous: "previous-cohort access", bonus: "Sunday group calls", both: "previous cohort + Sunday group calls" };
     if (!window.confirm(`Grant ${labels[kind]} to ${row.name || row.email}? This adds them to the Circle space(s) and DMs them.`)) return;
     setGranting(kind);
     try {
@@ -826,7 +826,7 @@ function EditModal({ row, onClose, onSaved }) {
               {row.early_access_grant && <span className="ml-1 text-emerald-700 font-semibold">· already granted: {row.early_access_grant}</span>}
             </div>
             <div className="flex gap-2 flex-wrap">
-              {[["previous", "Previous Cohort"], ["bonus", "Bonus Calls"], ["both", "Both"]].map(([k, lbl]) => (
+              {[["previous", "Previous Cohort"], ["bonus", "Sunday Group Calls"], ["both", "Both"]].map(([k, lbl]) => (
                 <Button
                   key={k}
                   variant="outline"

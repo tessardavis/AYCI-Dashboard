@@ -1,6 +1,6 @@
 # AYCI Dashboard — Support Team SOP (Coralie & Megan)
 
-A practical guide to the tasks you'll do most in the dashboard: **setting up private-tier private chats** (and finding the ones that are missing), **giving early-interview students catch-up access** (previous cohort + bonus calls), and a tour of the **other boards** you have.
+A practical guide to the tasks you'll do most in the dashboard: **setting up private-tier private chats** (and finding the ones that are missing), **giving early-interview students catch-up access** (previous cohort + Sunday group calls), and a tour of the **other boards** you have.
 
 Dashboard: **ayci-dashboard-nfiw.vercel.app** · log in with your own account. The left sidebar is your menu — you only see the boards you've been given access to. If a board you need is missing, ask Tessa to enable it (and do a full page reload / re-login after she does, or it won't show up).
 
@@ -34,11 +34,11 @@ Click **"Not needed"** on their row (e.g. they've landed a job / aren't really p
 
 ---
 
-## 2. Early-interview access — previous cohort + bonus calls
+## 2. Early-interview access — previous cohort + Sunday group calls
 
 **Why:** if someone joins and their interview is **soon** — before the end of **Week 3** of the cohort (the cutoff date is set per cohort) — they won't get through the course in time. So we give them a head start:
 - **Previous Cohort** = access to the previous cohort's **curriculum space** on Circle, so they can work through the material + watch the recorded sessions now.
-- **Bonus Calls** = access to the **Bonus Live Sessions** (the Sunday group coaching calls we run between cohorts) — which they wouldn't normally get.
+- **Sunday Group Calls** = access to the **Bonus Live Sessions space** (the Sunday group coaching calls we run between cohorts) — which they wouldn't normally get.
 - **Both** = both of the above.
 
 **Only grant once they're actually in the current cohort on Circle** (i.e. they carry the cohort tag, e.g. "June '26"). The dashboard enforces this — if you try to grant before they've joined the cohort, it'll stop you with a message. So if someone shows as early but isn't on Circle yet, **get them on board first**, then grant.
@@ -53,12 +53,12 @@ The list includes anyone in the **June cohort via Kit** (new signups *or* "in be
 ### Granting access
 Open the student → **Edit** → scroll to the **"Early-interview access (course catch-up)"** box. Check their interview date, then click one of:
 - **Previous Cohort** — adds them to the previous cohort's curriculum space + DMs them.
-- **Bonus Calls** — adds them to Bonus Live Sessions + DMs them.
+- **Sunday Group Calls** — adds them to the Bonus Live Sessions space + DMs them.
 - **Both** — does both.
 
 It adds them to the Circle space(s) and sends them a DM from Coralie automatically. You'll get a confirmation toast. (You can confirm in Circle that they were added + got the DM.)
 
-> Use your judgement on which to grant — most early-interview late-joiners get **Previous Cohort** (so they can catch up on the course); add **Bonus Calls** if they'd benefit from the live Sunday sessions before their interview.
+> Use your judgement on which to grant — most early-interview late-joiners get **Previous Cohort** (so they can catch up on the course); add **Sunday Group Calls** if they'd benefit from the live Sunday sessions before their interview.
 
 ---
 
