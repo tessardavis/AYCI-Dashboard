@@ -8,6 +8,16 @@ The dashboard gives you a live health-check of a single cohort: how many people 
 
 ---
 
+## Your weekly checklist
+
+1. Pick the current cohort from the dropdown.
+2. Look at **On Circle** / **Circle community join rate** — is the % climbing?
+3. Open **Still to join Circle** and chase everyone on it to **find their invite email and join** (work top-down — highest tiers first).
+4. Glance at **Introduced themselves** and **Milestones** to see if the group is engaging.
+5. Anything that looks wrong about a specific person (e.g. you know they've joined but they're still listed) → flag to Tessa; it's almost always an email mismatch.
+
+---
+
 ## The four headline cards
 
 | Card | What it means |
@@ -15,7 +25,7 @@ The dashboard gives you a live health-check of a single cohort: how many people 
 | **Cohort total** | Everyone in this cohort — new signups *plus* returning ("legacy") members. The full headcount. |
 | **New (Kit)** | People who signed up **fresh** for this launch (tagged "Cohort – New" in Kit). The "% of Kit" is their share of the cohort. |
 | **Legacy (Kit)** | **Returning** members rolled into this cohort (tagged "Cohort – Legacy" in Kit) — e.g. people who upgraded or carried over. |
-| **On Circle** | Of the **new** signups, how many have actually joined the Circle community **and** been given this cohort's tag. Shown as `joined / new` with a %. This is the key "have they turned up?" number. |
+| **On Circle** | Of the **new** signups, how many have actually **joined the Circle community and joined this cohort** (they do this themselves via their invite email). Shown as `joined / new` with a %. This is the key "have they turned up?" number. |
 
 > "New vs Legacy" comes from Kit tags, which are the source of truth for who belongs to the launch.
 
@@ -39,7 +49,7 @@ The same story as the "On Circle" card, in detail:
 
 - **"Of the N new signups, X have the tag …"** — how many new signups are on Circle with the cohort tag.
 - **"The tag has … members total"** — everyone carrying that tag (new + legacy combined).
-- **Still to join Circle** — a red count of new signups who **haven't** joined/been tagged yet, broken down by tier.
+- **Still to join Circle** — a red count of new signups who **haven't joined this cohort on Circle yet**, broken down by tier.
 
 This is your **chase list at a glance**: the higher the join rate, the more of your new cohort is actually in the community.
 
@@ -53,12 +63,12 @@ How many cohort members have **posted in the "Introduce Yourself" space** (each 
 
 ## Still to join Circle (the action table)
 
-The most actionable part — the list of people who **haven't fully joined Circle yet**, sorted by tier (highest first, so the most valuable members are at the top). For each person you see their **name, tier, signup date, email**, and a **"Has Circle account?"** status:
+The most actionable part — the list of people who **haven't joined this cohort on Circle yet**, sorted by tier (highest first, so the most valuable members are at the top). For each person you see their **name, tier, signup date, email**, and a **"Has Circle account?"** status:
 
-- **`NO ACCOUNT`** — they haven't created a Circle account at all. They need a nudge to **sign up / accept their invite**.
-- **`YES — NEEDS TAG`** — they're **on Circle already** but missing the cohort tag. Usually a quick fix: add the cohort tag to their Circle profile and they'll count as joined.
+- **`YES — NEEDS TAG`** — they **already have a Circle account** (e.g. from a previous cohort or general signup), but they **haven't joined *this* cohort yet**. We do **not** tag them — they need to **find their cohort invite email, open it, and join** via the link. That join is what puts them in the cohort.
+- **`NO ACCOUNT`** — they **don't have a Circle account at all** yet. Same thing from their side: they need to find the invite email and open it to set up their account and join the cohort.
 
-> **What to do with it:** work down the list. `NO ACCOUNT` people get chased to join; `YES — NEEDS TAG` people just need the tag added. As people join/get tagged, the "Still to join" count drops and the join-rate rises.
+> **What to do with it:** these are chase/reminder cases — nudge each person to **find their cohort invite email and open it to join Circle**. We never add people manually; the student joins themselves via the email. Once they do, they drop off this list and the join-rate ticks up. `YES — NEEDS TAG` people are usually the easiest win (they already know Circle — they just haven't clicked into this cohort yet).
 
 ---
 
