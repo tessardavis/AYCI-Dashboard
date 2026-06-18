@@ -41,10 +41,14 @@ Click **"Not needed"** on their row (e.g. they've landed a job / aren't really p
 - **Bonus Calls** = access to the **Bonus Live Sessions** (the Sunday group coaching calls we run between cohorts) — which they wouldn't normally get.
 - **Both** = both of the above.
 
-**Only grant once they're actually in the current cohort on Circle** (i.e. they carry the cohort tag, e.g. "June '26"). The dashboard enforces this — if you try to grant before they've joined the cohort, it'll stop you.
+**Only grant once they're actually in the current cohort on Circle** (i.e. they carry the cohort tag, e.g. "June '26"). The dashboard enforces this — if you try to grant before they've joined the cohort, it'll stop you with a message. So if someone shows as early but isn't on Circle yet, **get them on board first**, then grant.
 
 ### Finding who needs it
-**Students (DB)** → tick the **"⏱ Early interview"** filter. It shows students who are **in the current cohort on Circle** (carry the cohort tag) AND whose interview is on/before their cohort's Week-3 cutoff (or whose date we couldn't read — worth a manual look). The **Joined** column shows their signup date and the **Interview** column highlights early dates in orange. Each row shows **"✓ Access: …"** if they've already been granted, or **"no access yet"** if not.
+**Students (DB)** has two chips for this:
+- **"⏱ Early — to allocate (N)"** — students who need access but don't have it yet. *This is your to-do list.*
+- **"✓ Early — access given (N)"** — students you've already sorted.
+
+The list includes anyone in the **June cohort via Kit** (new signups *or* "in between" joiners — not legacy/returning) whose interview is on/before the Week-3 cutoff (or whose date we couldn't read — worth a manual look). The **Joined** column shows their signup date, the **Interview** column highlights early dates in orange, and each row shows **"✓ Access: …"** (granted) or **"no access yet"**.
 
 ### Granting access
 Open the student → **Edit** → scroll to the **"Early-interview access (course catch-up)"** box. Check their interview date, then click one of:
