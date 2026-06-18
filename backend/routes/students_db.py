@@ -359,6 +359,7 @@ async def list_students(
                 src = r.get("interview_date") or r.get("kajabi_interview_date")
                 if src:
                     slim["early_interview_flag"] = _early_interview_flag(src, cut)
+                    slim["early_access_cutoff"] = cut
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
         rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
         slim["has_refund"] = bool(rinfo)

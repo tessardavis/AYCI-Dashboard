@@ -326,6 +326,18 @@ export default function StudentsDB() {
         </span>
       </div>
 
+      {earlyInterviewOnly && (
+        <div className="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg p-3 text-orange-900 leading-relaxed">
+          <strong>How this list is chosen:</strong> students who <strong>joined in the last 7 days</strong> (see the <em>Joined</em> column) whose interview is <strong>on or before their cohort's Week-3 cutoff</strong>
+          {(() => {
+            const cuts = [...new Set(filtered.map((r) => r.early_access_cutoff).filter(Boolean))];
+            return cuts.length ? <> — cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
+          })()}
+          . Dates we couldn't read are included too, for a manual check. (The cutoff is set per cohort in Settings → Cohort.){" "}
+          <span className="text-emerald-700 font-semibold">✓ Access</span> = already granted; <span className="text-slate-500">no access yet</span> = still to do.
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-12 text-center text-[var(--ayci-ink-muted)]">
           <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
@@ -437,9 +449,17 @@ export default function StudentsDB() {
                       >
                         {r.early_interview_flag === "before" ? "⏱ " : ""}
                         Kajabi: {r.kajabi_interview_date}
-                        {r.early_access_grant ? " ✓" : ""}
                       </div>
                     )}
+                    {r.early_access_grant ? (
+                      <div className="text-[10px] mt-0.5 text-emerald-700 font-semibold" title={`Early-access granted: ${r.early_access_grant}`}>
+                        ✓ Access: {r.early_access_grant}
+                      </div>
+                    ) : ["before", "unparsed"].includes(r.early_interview_flag) ? (
+                      <div className="text-[10px] mt-0.5 text-slate-400" title="No early-access granted yet">
+                        no access yet
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">
