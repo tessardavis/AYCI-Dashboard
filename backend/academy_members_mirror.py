@@ -111,6 +111,18 @@ def _extract_row(item: dict) -> dict:
         t = c.get("text")
         return t if (t and t.strip()) else None
 
+    def col_text_title_contains(*terms: str) -> Optional[str]:
+        """Find a column whose TITLE contains all `terms` (case-insensitive).
+        Used for the 'Kajabi Interview Date' column — matched by title so we
+        don't have to hardcode its id."""
+        for title, c in columns_by_title.items():
+            tl = (title or "").lower()
+            if all(term in tl for term in terms):
+                t = c.get("text")
+                if t and t.strip():
+                    return t.strip()
+        return None
+
     return {
         "_id": str(item.get("id")),
         "name": item.get("name"),
@@ -125,6 +137,9 @@ def _extract_row(item: dict) -> dict:
         "cohort_start_date": col_text(COL_COHORT_START),
         "cohort_end_date": col_text(COL_COHORT_END),
         "interview_date": col_text(COL_INTERVIEW_DATE),
+        # Free-text interview date the student entered on the Kajabi signup form
+        # (Monday "Kajabi Interview Date" column). Drives the early-interview flag.
+        "kajabi_interview_date": col_text_title_contains("kajabi", "interview"),
         "speciality": col_text(COL_SPECIALITY),
         "hospital": col_text(COL_HOSPITAL),
         "interview_type": col_text(COL_INTERVIEW_TYPE),
@@ -147,7 +162,7 @@ PROTECTED_FIELDS = {
     # Scalar columns the mirror extracts from Monday today
     "name", "first_name", "surname", "email", "circle_email",
     "tier", "cohort_joined", "cohort_start_date", "cohort_end_date",
-    "interview_date", "speciality", "hospital",
+    "interview_date", "kajabi_interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "boost_and_go", "video_allowance",
     "videos_submitted",
     # Fields not yet extracted by the mirror but tracked on the row when
