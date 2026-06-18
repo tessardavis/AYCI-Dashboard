@@ -164,7 +164,7 @@ def _parse_loose_date(text: str, default_year: int) -> Optional[date]:
     yr_m = re.search(r"\b(20\d{2})\b", t)
     yr = int(yr_m.group(1)) if yr_m else default_year
     # "<day> <month>" or "<month> <day>"
-    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\b", t)
+    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b", t)
     if m and (m.group(2) in _MONTHS or m.group(2)[:3] in _MONTHS):
         mon = _MONTHS.get(m.group(2)) or _MONTHS.get(m.group(2)[:3])
         try:
