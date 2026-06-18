@@ -181,11 +181,6 @@ def _parse_loose_date(text: str, default_year: int) -> Optional[date]:
     return None
 
 
-# Early-access is for LATE joiners: only flag students who joined within this
-# many days (they won't get through the course before their interview).
-_EARLY_INTERVIEW_JOINED_WITHIN_DAYS = 7
-
-
 def _early_interview_flag(kajabi_date: str, cutoff_iso: Optional[str]) -> Optional[str]:
     """'before' / 'after' / 'unparsed' / None for the early-access triage.
     'before' = interview on/before the cohort cutoff (→ candidate for early
@@ -327,15 +322,17 @@ async def list_students(
     # Per-cohort early-access cutoffs, to flag students whose Kajabi interview
     # date falls on/before their cohort's Week-3 cutoff (course catch-up).
     cohort_cutoffs: dict = {}
+    cohort_circle_tags: dict = {}
     try:
         import settings_store
         for _lbl, _cfg in (await settings_store.get_cohort_configs(db)).items():
-            cut = (_cfg or {}).get("early_access_cutoff")
-            if cut:
-                cohort_cutoffs[_lbl.strip().lower()] = cut
+            key = _lbl.strip().lower()
+            if (_cfg or {}).get("early_access_cutoff"):
+                cohort_cutoffs[key] = _cfg["early_access_cutoff"]
+            if (_cfg or {}).get("circle_tag"):
+                cohort_circle_tags[key] = _cfg["circle_tag"].strip().lower()
     except Exception as e:
         logger.info(f"[students-db] cohort cutoffs skipped: {e}")
-    now_dt = datetime.now(timezone.utc)
 
     rows = []
     async for r in cursor:
@@ -347,15 +344,21 @@ async def list_students(
             slim["on_circle"] = bool(
                 (em and em in circle_email_index) or (ce and ce in circle_email_index)
             )
-        # Early-interview triage flag (course catch-up access) — only for LATE
-        # joiners (joined within the last 7 days) whose interview is on/before
-        # the cohort cutoff. Flag on the reconciled interview_date (clean ISO)
-        # when present, else the free-text Kajabi date.
-        cut = cohort_cutoffs.get((r.get("cohort_joined") or "").strip().lower())
-        if cut:
-            joined = _to_dt(r.get("monday_created_at"))
-            recent = bool(joined and (now_dt - joined).days <= _EARLY_INTERVIEW_JOINED_WITHIN_DAYS)
-            if recent:
+        # Early-interview triage flag (course catch-up access) — only for
+        # students who are actually IN the current cohort on Circle (they carry
+        # the cohort's Circle tag, e.g. "June '26") AND whose interview is
+        # on/before the cohort cutoff. Flag on the reconciled interview_date
+        # (clean ISO) when present, else the free-text Kajabi date. We only ever
+        # grant access once they're in the cohort, so non-tagged students don't
+        # appear here even if their interview is soon.
+        cohort_l = (r.get("cohort_joined") or "").strip().lower()
+        cut = cohort_cutoffs.get(cohort_l)
+        cohort_tag = cohort_circle_tags.get(cohort_l)
+        if cut and cohort_tag:
+            member = circle_email_index.get(em) or circle_email_index.get(ce)
+            member_tags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
+            in_cohort_on_circle = cohort_tag in member_tags
+            if in_cohort_on_circle:
                 src = r.get("interview_date") or r.get("kajabi_interview_date")
                 if src:
                     slim["early_interview_flag"] = _early_interview_flag(src, cut)
@@ -889,6 +892,17 @@ async def grant_early_access(
     if not member or not member.get("id"):
         raise HTTPException(400, "Student isn't matched on Circle (check their email / that they've joined).")
     member_id = int(member["id"])
+    # Gate: only grant once they're actually IN the current cohort on Circle
+    # (carry the cohort tag, e.g. "June '26"). Stops access being given before
+    # they've joined the cohort.
+    cohort_tag = (cfg.get("circle_tag") or "").strip().lower()
+    member_tags = [str(t).strip().lower() for t in (member.get("member_tags") or [])]
+    if cohort_tag and cohort_tag not in member_tags:
+        raise HTTPException(
+            400,
+            f"{row.get('name') or 'This student'} isn't in the {label} cohort on Circle yet "
+            f"(no '{cfg.get('circle_tag')}' tag) — grant access once they've joined the cohort.",
+        )
     # Prefer the member's own Circle email if present, else the email we matched on.
     space_email = (member.get("email") or matched_email or "").strip().lower()
 

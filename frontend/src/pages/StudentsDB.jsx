@@ -316,7 +316,7 @@ export default function StudentsDB() {
         )}
         {earlyInterviewCount > 0 && (
           <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyInterviewOnly ? "bg-orange-50 text-orange-700" : "text-[var(--ayci-ink-muted)]"}`}
-                 title="Students who joined in the last 7 days whose interview is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — late joiners who won't finish the course in time, so candidates for previous-cohort + bonus-calls access.">
+                 title="Students who are in the current cohort on Circle (carry the cohort tag) AND whose interview is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — they won't finish the course in time, so candidates for previous-cohort + bonus-calls access.">
             <input type="checkbox" checked={earlyInterviewOnly} onChange={(e) => setEarlyInterviewOnly(e.target.checked)} />
             ⏱ Early interview ({earlyInterviewCount})
           </label>
@@ -328,7 +328,7 @@ export default function StudentsDB() {
 
       {earlyInterviewOnly && (
         <div className="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg p-3 text-orange-900 leading-relaxed">
-          <strong>How this list is chosen:</strong> students who <strong>joined in the last 7 days</strong> (see the <em>Joined</em> column) whose interview is <strong>on or before their cohort's Week-3 cutoff</strong>
+          <strong>How this list is chosen:</strong> students who are <strong>in the current cohort on Circle</strong> (they carry the cohort tag) whose interview is <strong>on or before their cohort's Week-3 cutoff</strong>
           {(() => {
             const cuts = [...new Set(filtered.map((r) => r.early_access_cutoff).filter(Boolean))];
             return cuts.length ? <> — cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
