@@ -442,7 +442,25 @@ export default function StudentsDB() {
                     ) : r.setup_not_needed ? (
                       <span className="text-slate-400" title={r.setup_not_needed_reason || "Setup not needed"}>n/a</span>
                     ) : (
-                      <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
+                        {r.on_circle === false && (
+                          <span
+                            className="text-[10px] font-semibold text-red-600"
+                            title="This email matches no Circle member — likely a typo'd/wrong email, or they haven't joined Circle yet. Fix the email, then create the chat."
+                          >
+                            not on Circle
+                          </span>
+                        )}
+                        {r.on_circle === true && (
+                          <span
+                            className="text-[10px] text-emerald-700"
+                            title="On Circle — just needs a private chat created (click Edit, or trigger create-chat)."
+                          >
+                            on Circle · needs chat
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2 text-[12px]">

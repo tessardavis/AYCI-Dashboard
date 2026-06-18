@@ -234,11 +234,28 @@ async def list_students(
     except Exception as e:
         logger.info(f"[students-db] refunds aggregate skipped: {e}")
 
+    # Circle-presence index (lowercased email → member) from the slim member
+    # cache (cached in-process ~30 min, so this is cheap). Lets the needs-setup
+    # view show whether a student is actually ON Circle: a "not on Circle" row
+    # is almost always a wrong/typo'd email or a non-joiner (→ fix the email or
+    # chase them), vs "on Circle, just needs a chat created".
+    circle_email_index: dict = {}
+    try:
+        import private_chat_setup
+        circle_email_index = await private_chat_setup._build_email_index()
+    except Exception as e:
+        logger.info(f"[students-db] circle email index skipped: {e}")
+
     rows = []
     async for r in cursor:
         slim = _slim_row_for_list(r)
         em = (r.get("email") or "").strip().lower()
         ce = (r.get("circle_email") or "").strip().lower()
+        # Only meaningful for rows the team still has to action.
+        if slim.get("needs_setup") and circle_email_index:
+            slim["on_circle"] = bool(
+                (em and em in circle_email_index) or (ce and ce in circle_email_index)
+            )
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
         rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
         slim["has_refund"] = bool(rinfo)
