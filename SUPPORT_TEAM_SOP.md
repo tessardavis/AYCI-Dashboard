@@ -41,10 +41,10 @@ Click **"Not needed"** on their row (e.g. they've landed a job / aren't really p
 - **Bonus Calls** = access to the **Bonus Live Sessions** (the Sunday group coaching calls we run between cohorts) — which they wouldn't normally get.
 - **Both** = both of the above.
 
-This is only for **late joiners** (people who joined in the **last 7 days**) with an interview before the cutoff — not everyone with an early interview.
+**Only grant once they're actually in the current cohort on Circle** (i.e. they carry the cohort tag, e.g. "June '26"). The dashboard enforces this — if you try to grant before they've joined the cohort, it'll stop you.
 
 ### Finding who needs it
-**Students (DB)** → tick the **"⏱ Early interview"** filter. It shows students who **joined in the last 7 days** AND whose interview is on/before their cohort's Week-3 cutoff (or whose date we couldn't read — worth a manual look). The **Joined** column shows their signup date and the **Interview** column highlights early dates in orange.
+**Students (DB)** → tick the **"⏱ Early interview"** filter. It shows students who are **in the current cohort on Circle** (carry the cohort tag) AND whose interview is on/before their cohort's Week-3 cutoff (or whose date we couldn't read — worth a manual look). The **Joined** column shows their signup date and the **Interview** column highlights early dates in orange. Each row shows **"✓ Access: …"** if they've already been granted, or **"no access yet"** if not.
 
 ### Granting access
 Open the student → **Edit** → scroll to the **"Early-interview access (course catch-up)"** box. Check their interview date, then click one of:
