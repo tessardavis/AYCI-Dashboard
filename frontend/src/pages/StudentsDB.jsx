@@ -412,7 +412,13 @@ export default function StudentsDB() {
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">
-                    {formatDate(r.interview_date)}
+                    <span
+                      className={r.early_interview_flag === "before" ? "text-orange-700 font-semibold" : ""}
+                      title={r.early_interview_flag === "before" ? "Interview is on/before this cohort's Week-3 cutoff — candidate for early access" : undefined}
+                    >
+                      {formatDate(r.interview_date)}
+                      {r.early_interview_flag === "before" ? " ⏱" : ""}
+                    </span>
                     {r.kajabi_interview_date && (
                       <div
                         className={
@@ -746,7 +752,8 @@ function EditModal({ row, onClose, onSaved }) {
               Early-interview access (course catch-up)
             </div>
             <div className="text-[11px] text-[var(--ayci-ink-muted)] mb-2">
-              Kajabi interview date: <strong>{row.kajabi_interview_date || "—"}</strong>
+              Interview date: <strong>{formatDate(row.interview_date)}</strong>
+              {row.kajabi_interview_date ? <span> · Kajabi: {row.kajabi_interview_date}</span> : null}
               {row.early_interview_flag === "before" && <span className="ml-1 text-orange-700 font-semibold">· before Week-3 cutoff</span>}
               {row.early_interview_flag === "unparsed" && <span className="ml-1 text-amber-600">· couldn't read date — check it</span>}
               {row.early_interview_flag === "after" && <span className="ml-1 text-slate-500">· after cutoff (not usually needed)</span>}
