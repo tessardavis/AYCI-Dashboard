@@ -64,6 +64,7 @@ export default function StudentsDB() {
   const [refundedOnly, setRefundedOnly] = useState(false);
   const [bgOnly, setBgOnly] = useState(false);
   const [earlyFilter, setEarlyFilter] = useState(null); // null | "allocate" | "granted"
+  const [creatingChatId, setCreatingChatId] = useState(null);
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -81,6 +82,26 @@ export default function StudentsDB() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Create a student's private chat from here (same backend action as the
+  // Settings card). Creation runs in the background (~1 min) — refresh a
+  // couple of times so the row updates (link recorded, or 'Awaiting DMs').
+  const createChat = async (row) => {
+    setCreatingChatId(row._id);
+    try {
+      await apiClient.post(`/students-db/${encodeURIComponent(row._id)}/create-private-chat`);
+      toast(`Creating chat for ${row.name || row.email}… the row updates in up to ~1 min.`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't start creating — try again.");
+      setCreatingChatId(null);
+      return;
+    }
+    for (const ms of [10000, 15000]) {
+      await new Promise((r) => setTimeout(r, ms));
+      try { await load(); } catch { /* keep waiting */ }
+    }
+    setCreatingChatId(null);
+  };
 
   // Derive filter dropdown options from the loaded data
   const { tierOptions, cohortOptions } = useMemo(() => {
@@ -527,10 +548,21 @@ export default function StudentsDB() {
                         {r.on_circle === true && (
                           <span
                             className="text-[10px] text-emerald-700"
-                            title="On Circle — just needs a private chat created (click Edit, or trigger create-chat)."
+                            title="On Circle — just needs a private chat created."
                           >
                             on Circle · needs chat
                           </span>
+                        )}
+                        {r.on_circle === true && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); createChat(r); }}
+                            disabled={creatingChatId === r._id}
+                            className="mt-0.5 self-start text-[11px] px-2 py-0.5 rounded bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-60"
+                            title="Create this student's private group chat now (adds the coaches + posts the welcome). Takes up to ~1 min."
+                          >
+                            {creatingChatId === r._id ? "Creating…" : "Create chat"}
+                          </button>
                         )}
                       </div>
                     )}

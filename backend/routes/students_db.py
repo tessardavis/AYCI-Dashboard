@@ -994,6 +994,45 @@ async def grant_early_access(
             "item": _slim_row_for_list(fresh)}
 
 
+@router.get("/students-db/early-access/debug")
+async def early_access_debug(refresh: bool = False, emails: str = "",
+                             user: dict = Depends(require_board("students"))):
+    """Diagnostic for the early-interview Kit-tag inclusion. Per cohort with an
+    early_access_cutoff, shows how many emails the 'Cohort - New' and
+    'In Between' Kit tags return (so we can tell 'Kit fetch broke' from
+    'correctly excluded'). ?refresh=true busts the cache; ?emails=a@b,c@d checks
+    whether specific students are in the eligibility map."""
+    import settings_store
+    import cohort as cohort_mod
+    if refresh:
+        try:
+            await db.cache.delete_one({"_id": "early_access_email_cohort"})
+        except Exception:
+            pass
+    out = []
+    configs = await settings_store.get_cohort_configs(db)
+    for label, cfg in configs.items():
+        if not (cfg or {}).get("early_access_cutoff"):
+            continue
+        entry = {"cohort": label, "cutoff": cfg.get("early_access_cutoff")}
+        for key in ("new_tag_id", "in_between_tag_id"):
+            tid = (cfg or {}).get(key)
+            if not tid:
+                entry[key] = None
+                continue
+            try:
+                tag_emails = await cohort_mod._ck_tag_emails(int(tid))
+                entry[key] = {"tag_id": tid, "count": len(tag_emails)}
+            except Exception as e:
+                entry[key] = {"tag_id": tid, "error": f"{type(e).__name__}: {e}"[:200]}
+        out.append(entry)
+    ea_map = await _early_access_email_cohort(db)
+    checked = {}
+    for e in [x.strip().lower() for x in (emails or "").split(",") if x.strip()]:
+        checked[e] = ea_map.get(e) or "NOT in eligibility map"
+    return {"cohorts": out, "eligibility_map_size": len(ea_map), "checked_emails": checked}
+
+
 @router.get("/students-db/private-chat/link-existing")
 async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
                                      admin: dict = Depends(require_admin)):
