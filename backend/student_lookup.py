@@ -484,6 +484,10 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         # columns["Private Chat Link"] text, which is empty for
                         # dashboard-recorded chats.
                         "private_chat_url": row.get("private_chat_url"),
+                        # Alt emails so the lookup can retry Calendly/Stripe under
+                        # them (students often book/pay with a different email).
+                        "circle_email": row.get("circle_email"),
+                        "other_emails": row.get("other_emails"),
                     },
                     "error": None,
                     "source": "mongo_mirror",

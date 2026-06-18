@@ -20,6 +20,7 @@ const EDITABLE_FIELDS = [
   { key: "surname",        label: "Surname" },
   { key: "email",          label: "Email" },
   { key: "circle_email",   label: "Circle email" },
+  { key: "other_emails",   label: "Other emails (Calendly/Stripe booked under — comma-separated)" },
   { key: "tier",           label: "Tier" },
   { key: "cohort_joined",  label: "Cohort joined" },
   { key: "interview_date", label: "Interview date" },

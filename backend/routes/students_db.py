@@ -259,7 +259,7 @@ async def _early_access_email_cohort(db) -> dict:
 def _slim_row_for_list(row: dict) -> dict:
     """Drop heavy fields (full column dicts) from list responses."""
     keep = (
-        "_id", "name", "first_name", "surname", "email", "circle_email",
+        "_id", "name", "first_name", "surname", "email", "circle_email", "other_emails",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
         "interview_type", "private_chat_url", "private_chat_status",
         "boost_and_go", "video_allowance",
@@ -1188,7 +1188,7 @@ async def get_student(
 # upstream automations control (e.g. someone PATCHing video_allowance
 # when Stripe is supposed to own that).
 EDITABLE_FIELDS = {
-    "name", "first_name", "surname", "email", "circle_email",
+    "name", "first_name", "surname", "email", "circle_email", "other_emails",
     "tier", "cohort_joined", "interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
@@ -1203,6 +1203,7 @@ class StudentPatch(BaseModel):
     surname: Optional[str] = None
     email: Optional[str] = None
     circle_email: Optional[str] = None
+    other_emails: Optional[str] = None  # comma/space-separated alt emails (Calendly/Stripe booked under)
     tier: Optional[str] = None
     cohort_joined: Optional[str] = None
     interview_date: Optional[str] = None  # ISO yyyy-mm-dd

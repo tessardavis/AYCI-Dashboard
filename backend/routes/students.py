@@ -1,6 +1,7 @@
 """Student Lookup, name search, at-risk dashboard, drive summary."""
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Awaitable, Optional
@@ -108,6 +109,31 @@ async def _run_lookup_fanout(
         _bounded_platform("calendly",   lookup.calendly_lookup(email),                       PLATFORM_TIMEOUTS["calendly"]),
         _bounded_platform("tally",      tally.lookup_student(db, email),                     PLATFORM_TIMEOUTS["tally"]),
     )
+    # Students often book Calendly / pay Stripe under a DIFFERENT email than the
+    # one we searched. Retry those two under any known alternate emails — the
+    # student's circle_email + any recorded `other_emails` — and merge in a hit.
+    md = (monday_safe or {}).get("data") or {}
+    alt_emails: list[str] = []
+    for raw in [md.get("circle_email")] + re.split(r"[,\s;]+", md.get("other_emails") or ""):
+        e = (raw or "").strip().lower()
+        if e and "@" in e and e != email and e not in alt_emails:
+            alt_emails.append(e)
+    if alt_emails:
+        if not (calendly_safe or {}).get("found"):
+            for ae in alt_emails:
+                r = await _bounded_platform("calendly", lookup.calendly_lookup(ae), PLATFORM_TIMEOUTS["calendly"])
+                if (r or {}).get("found"):
+                    r["matched_email"] = ae
+                    calendly_safe = r
+                    break
+        if not (stripe_safe or {}).get("found"):
+            for ae in alt_emails:
+                r = await _bounded_platform("stripe", lookup.stripe_lookup(ae), PLATFORM_TIMEOUTS["stripe"])
+                if (r or {}).get("found"):
+                    r["matched_email"] = ae
+                    stripe_safe = r
+                    break
+
     drive_link = None
     drive_summary = None
     student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
