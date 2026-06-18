@@ -316,7 +316,7 @@ export default function StudentsDB() {
         )}
         {earlyInterviewCount > 0 && (
           <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyInterviewOnly ? "bg-orange-50 text-orange-700" : "text-[var(--ayci-ink-muted)]"}`}
-                 title="New signups whose Kajabi interview date is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — candidates for previous-cohort + bonus-calls access.">
+                 title="Students who joined in the last 7 days whose interview is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — late joiners who won't finish the course in time, so candidates for previous-cohort + bonus-calls access.">
             <input type="checkbox" checked={earlyInterviewOnly} onChange={(e) => setEarlyInterviewOnly(e.target.checked)} />
             ⏱ Early interview ({earlyInterviewCount})
           </label>

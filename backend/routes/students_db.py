@@ -181,6 +181,11 @@ def _parse_loose_date(text: str, default_year: int) -> Optional[date]:
     return None
 
 
+# Early-access is for LATE joiners: only flag students who joined within this
+# many days (they won't get through the course before their interview).
+_EARLY_INTERVIEW_JOINED_WITHIN_DAYS = 7
+
+
 def _early_interview_flag(kajabi_date: str, cutoff_iso: Optional[str]) -> Optional[str]:
     """'before' / 'after' / 'unparsed' / None for the early-access triage.
     'before' = interview on/before the cohort cutoff (→ candidate for early
@@ -330,6 +335,7 @@ async def list_students(
                 cohort_cutoffs[_lbl.strip().lower()] = cut
     except Exception as e:
         logger.info(f"[students-db] cohort cutoffs skipped: {e}")
+    now_dt = datetime.now(timezone.utc)
 
     rows = []
     async for r in cursor:
@@ -341,16 +347,18 @@ async def list_students(
             slim["on_circle"] = bool(
                 (em and em in circle_email_index) or (ce and ce in circle_email_index)
             )
-        # Early-interview triage flag (course catch-up access). Flag on the
-        # reconciled interview_date (clean ISO) when present, else the free-text
-        # Kajabi date — so the filter works immediately off the interview dates
-        # we already have, before the signup zap starts sending
-        # kajabi_interview_date.
+        # Early-interview triage flag (course catch-up access) — only for LATE
+        # joiners (joined within the last 7 days) whose interview is on/before
+        # the cohort cutoff. Flag on the reconciled interview_date (clean ISO)
+        # when present, else the free-text Kajabi date.
         cut = cohort_cutoffs.get((r.get("cohort_joined") or "").strip().lower())
         if cut:
-            src = r.get("interview_date") or r.get("kajabi_interview_date")
-            if src:
-                slim["early_interview_flag"] = _early_interview_flag(src, cut)
+            joined = _to_dt(r.get("monday_created_at"))
+            recent = bool(joined and (now_dt - joined).days <= _EARLY_INTERVIEW_JOINED_WITHIN_DAYS)
+            if recent:
+                src = r.get("interview_date") or r.get("kajabi_interview_date")
+                if src:
+                    slim["early_interview_flag"] = _early_interview_flag(src, cut)
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
         rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
         slim["has_refund"] = bool(rinfo)
