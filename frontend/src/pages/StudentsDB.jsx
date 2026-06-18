@@ -7,6 +7,7 @@
  * backend).
  */
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, Search, X, Save, RefreshCw } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -406,7 +407,16 @@ export default function StudentsDB() {
                   onClick={() => setEditing(r)}
                 >
                   <td className="px-3 py-2 font-semibold text-[var(--ayci-ink)]">
-                    {r.name || "—"}
+                    {(r.email || r.name) ? (
+                      <Link
+                        to={`/students?${r.email ? `email=${encodeURIComponent(r.email)}` : `name=${encodeURIComponent(r.name || "")}`}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:underline hover:text-[var(--ayci-teal)]"
+                        title="Open in Student Lookup"
+                      >
+                        {r.name || "—"}
+                      </Link>
+                    ) : (r.name || "—")}
                     {r.needs_setup && (
                       <span
                         className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 align-middle"
