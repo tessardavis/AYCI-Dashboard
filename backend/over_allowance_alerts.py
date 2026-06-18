@@ -293,9 +293,11 @@ async def _oksana_email(db) -> Optional[str]:
 
 
 async def notify_over_allowance_breaches(db) -> dict:
-    """For each currently over-allowance student, DM Oksana once. Re-DM only
-    when `over_by` grows beyond the previously notified value (so a student
-    going from 1-over to 2-over triggers a fresh ping)."""
+    """For each currently over-allowance student, post an alert to the
+    #fulfillment-team Slack channel once. Re-alert only when `over_by` grows
+    beyond the previously notified value (so a student going from 1-over to
+    2-over triggers a fresh ping). Channel override: env SLACK_FULFILLMENT_CHANNEL.
+    NB the bot must be a member of the channel (/invite it once)."""
     snapshot = await find_over_allowance_students(db)
     students = snapshot.get("students") or []
     # Cache for the UI
@@ -309,11 +311,7 @@ async def notify_over_allowance_breaches(db) -> dict:
     if not students:
         return {"notified": 0, "total_over": 0, "students": []}
 
-    oksana_email = await _oksana_email(db)
-    if not oksana_email:
-        logger.warning("[over-allowance] no Oksana email — skipping DM")
-        return {"notified": 0, "total_over": len(students), "skipped": "no_oksana_email"}
-
+    channel = (os.environ.get("SLACK_FULFILLMENT_CHANNEL") or "#fulfillment-team").strip()
     import slack_dm
     base_url = (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
     notified = 0
@@ -336,7 +334,7 @@ async def notify_over_allowance_breaches(db) -> dict:
             f"Over by *{s['over_by']}*\n"
             f"{link_line}"
         )
-        res = await slack_dm.dm_user(db, oksana_email, text)
+        res = await slack_dm.post_to_channel(db, channel, text)
         if res.get("ok"):
             notified += 1
             await db[SENT_COLLECTION].update_one(
@@ -350,9 +348,9 @@ async def notify_over_allowance_breaches(db) -> dict:
                 }},
                 upsert=True,
             )
-            logger.info(f"[over-allowance] DM'd Oksana about {s['name']} (over_by={s['over_by']})")
+            logger.info(f"[over-allowance] alerted {channel} about {s['name']} (over_by={s['over_by']})")
         else:
-            logger.warning(f"[over-allowance] DM failed for {s['email']}: {res.get('error')}")
+            logger.warning(f"[over-allowance] {channel} alert failed for {s['email']}: {res.get('error')}")
     return {"notified": notified, "total_over": len(students)}
 
 

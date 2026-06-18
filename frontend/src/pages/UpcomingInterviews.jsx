@@ -1048,7 +1048,7 @@ function AcademyRow({ student, today }) {
           {student.over_allowance && (
             <span
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
-              title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. Oksana has been DM'd in Slack.`}
+              title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. The #fulfillment-team Slack channel has been alerted.`}
               data-testid={`over-allowance-chip-${student.email}`}
             >
               <AlertOctagon className="w-3 h-3" />
@@ -1130,7 +1130,7 @@ function PrivateCard({ student, today }) {
             {student.over_allowance && (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
-                title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. Oksana has been DM'd in Slack.`}
+                title={`Booked ${student.over_allowance.calendly_calls_used} Calendly calls vs Monday allowance of ${student.over_allowance.monday_total_allowance}. The #fulfillment-team Slack channel has been alerted.`}
                 data-testid={`over-allowance-chip-${student.email}`}
               >
                 <AlertOctagon className="w-3 h-3" />

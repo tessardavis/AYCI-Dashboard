@@ -94,7 +94,7 @@ export default function OverAllowanceWidget() {
               )}
             </h3>
             <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
-              Calendly bookings exceed Monday slot allowance. Oksana is DM'd in Slack the moment a student crosses over. Acknowledge to hide a row until the breach grows further.
+              Calendly bookings exceed Monday slot allowance. The #fulfillment-team Slack channel is alerted the moment a student crosses over. Acknowledge to hide a row until the breach grows further.
             </p>
           </div>
         </div>

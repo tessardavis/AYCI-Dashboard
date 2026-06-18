@@ -140,3 +140,32 @@ async def dm_user(db, email: str, text: str, *, blocks: Optional[list] = None) -
     if not data.get("ok"):
         logger.warning(f"[slack-dm] Slack rejected DM to {email}: {data.get('error')}")
     return data
+
+
+# -------------------------------------------------------- Channel post
+async def post_to_channel(db, channel: str, text: str, *, blocks: Optional[list] = None) -> dict:
+    """Post a message to a Slack channel (e.g. "#fulfillment-team" or a channel
+    ID) via the same bot token. The bot must be a member of the channel
+    (/invite @<bot> once). Returns {ok, error, ts}."""
+    token = await get_bot_token(db)
+    if not token:
+        return {"ok": False, "error": "no bot token configured"}
+    if not channel:
+        return {"ok": False, "error": "no channel provided"}
+    payload = {"channel": channel, "text": text}
+    if blocks:
+        payload["blocks"] = blocks
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(
+                f"{SLACK_API}/chat.postMessage",
+                headers={"Authorization": f"Bearer {token}"},
+                json=payload,
+            )
+        data = r.json()
+    except Exception as e:
+        logger.warning(f"[slack-dm] channel postMessage failed: {e}")
+        return {"ok": False, "error": str(e)}
+    if not data.get("ok"):
+        logger.warning(f"[slack-dm] Slack rejected post to {channel}: {data.get('error')}")
+    return data
