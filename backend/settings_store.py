@@ -51,7 +51,7 @@ _COHORT_CFG_STR_KEYS = (
 )
 _COHORT_CFG_INT_KEYS = (
     "new_tag_id", "legacy_tag_id", "intros_space_id",
-    "prev_cohort_space_id", "bonus_calls_space_id",
+    "prev_cohort_space_id", "bonus_calls_space_id", "in_between_tag_id",
 )
 
 DEFAULT_COHORT_CONFIGS: dict = {
@@ -74,6 +74,10 @@ DEFAULT_COHORT_CONFIGS: dict = {
         "prev_cohort_space_id": 2529501,             # AYCI Curriculum - April 26
         "prev_cohort_curriculum_url": "https://ayci-academy.circle.so/c/ayci-curriculum-apr-26/",
         "bonus_calls_space_id": 1944718,             # Bonus Live Sessions (permanent)
+        # Early-interview inclusion = anyone in EITHER of these Kit tags (new
+        # June signups, or "in between" gap-joiners) with a soon interview.
+        # new_tag_id (above) doubles as the "Cohort - New" tag.
+        "in_between_tag_id": 19785979,               # [AYCI JUN-26] In Between
     },
 }
 

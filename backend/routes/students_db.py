@@ -198,6 +198,55 @@ def _early_interview_flag(kajabi_date: str, cutoff_iso: Optional[str]) -> Option
     return "before" if parsed <= cutoff else "after"
 
 
+_EA_CACHE_TTL_MIN = 30
+
+
+async def _early_access_email_cohort(db) -> dict:
+    """{lowercased email: cohort_label} for students eligible for the
+    early-interview catch-up flag — anyone in a cohort's 'Cohort - New' or
+    'In Between' ConvertKit tag (new signups + in-between joiners; NOT legacy
+    who've already done the course). Mapped to the cohort whose tag they're in,
+    so in-between joiners (not marked that cohort on Monday) still resolve to
+    the right cohort's cutoff + spaces. Cached ~30 min in Mongo because the
+    ConvertKit reads are slow; returns the last good cache on error."""
+    doc = await db.cache.find_one({"_id": "early_access_email_cohort"})
+    ca = (doc or {}).get("cached_at")
+    if isinstance(ca, datetime):
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        if (datetime.now(timezone.utc) - ca).total_seconds() < _EA_CACHE_TTL_MIN * 60:
+            return (doc or {}).get("map") or {}
+    import settings_store
+    import cohort as cohort_mod
+    out: dict = {}
+    try:
+        configs = await settings_store.get_cohort_configs(db)
+        for label, cfg in configs.items():
+            if not (cfg or {}).get("early_access_cutoff"):
+                continue
+            for key in ("new_tag_id", "in_between_tag_id"):
+                tid = (cfg or {}).get(key)
+                if not tid:
+                    continue
+                try:
+                    emails = await cohort_mod._ck_tag_emails(int(tid))
+                except Exception as e:
+                    logger.info(f"[early-access] CK tag {tid} fetch failed: {e}")
+                    continue
+                for em in emails:
+                    out[(em or "").strip().lower()] = label
+        out.pop("", None)
+        await db.cache.update_one(
+            {"_id": "early_access_email_cohort"},
+            {"$set": {"cached_at": datetime.now(timezone.utc), "map": out}},
+            upsert=True,
+        )
+        return out
+    except Exception as e:
+        logger.warning(f"[early-access] email-cohort refresh failed: {e}")
+        return (doc or {}).get("map") or {}
+
+
 def _slim_row_for_list(row: dict) -> dict:
     """Drop heavy fields (full column dicts) from list responses."""
     keep = (
@@ -321,18 +370,21 @@ async def list_students(
 
     # Per-cohort early-access cutoffs, to flag students whose Kajabi interview
     # date falls on/before their cohort's Week-3 cutoff (course catch-up).
-    cohort_cutoffs: dict = {}
-    cohort_circle_tags: dict = {}
+    cohort_cutoffs: dict = {}  # cohort label (lower) -> early_access_cutoff ISO
     try:
         import settings_store
         for _lbl, _cfg in (await settings_store.get_cohort_configs(db)).items():
-            key = _lbl.strip().lower()
             if (_cfg or {}).get("early_access_cutoff"):
-                cohort_cutoffs[key] = _cfg["early_access_cutoff"]
-            if (_cfg or {}).get("circle_tag"):
-                cohort_circle_tags[key] = _cfg["circle_tag"].strip().lower()
+                cohort_cutoffs[_lbl.strip().lower()] = _cfg["early_access_cutoff"]
     except Exception as e:
         logger.info(f"[students-db] cohort cutoffs skipped: {e}")
+    # email -> cohort label for early-access eligibility (Kit 'Cohort - New' /
+    # 'In Between' tags). Cached. Drives the early-interview flag.
+    ea_email_cohort: dict = {}
+    try:
+        ea_email_cohort = await _early_access_email_cohort(db)
+    except Exception as e:
+        logger.info(f"[students-db] early-access emails skipped: {e}")
 
     rows = []
     async for r in cursor:
@@ -344,21 +396,18 @@ async def list_students(
             slim["on_circle"] = bool(
                 (em and em in circle_email_index) or (ce and ce in circle_email_index)
             )
-        # Early-interview triage flag (course catch-up access) — only for
-        # students who are actually IN the current cohort on Circle (they carry
-        # the cohort's Circle tag, e.g. "June '26") AND whose interview is
-        # on/before the cohort cutoff. Flag on the reconciled interview_date
-        # (clean ISO) when present, else the free-text Kajabi date. We only ever
-        # grant access once they're in the cohort, so non-tagged students don't
-        # appear here even if their interview is soon.
-        cohort_l = (r.get("cohort_joined") or "").strip().lower()
-        cut = cohort_cutoffs.get(cohort_l)
-        cohort_tag = cohort_circle_tags.get(cohort_l)
-        if cut and cohort_tag:
-            member = circle_email_index.get(em) or circle_email_index.get(ce)
-            member_tags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
-            in_cohort_on_circle = cohort_tag in member_tags
-            if in_cohort_on_circle:
+        # Early-interview triage flag (course catch-up access). Inclusion = the
+        # student is in their cohort's Kit 'Cohort - New' or 'In Between' tag
+        # (new June signups + in-between joiners — NOT legacy who've done the
+        # course) AND their interview is on/before that cohort's cutoff. NOT
+        # gated on the Circle tag: we want to SEE them even before they're on
+        # Circle so we can chase them on board. The GRANT is what requires the
+        # cohort Circle tag. Flag on the reconciled interview_date (clean ISO)
+        # when present, else the free-text Kajabi date.
+        ea_label = ea_email_cohort.get(em) or ea_email_cohort.get(ce)
+        if ea_label:
+            cut = cohort_cutoffs.get(ea_label.strip().lower())
+            if cut:
                 src = r.get("interview_date") or r.get("kajabi_interview_date")
                 if src:
                     slim["early_interview_flag"] = _early_interview_flag(src, cut)
@@ -861,9 +910,17 @@ async def grant_early_access(
     import settings_store
     import circle_api
     configs = await settings_store.get_cohort_configs(db)
-    label = (row.get("cohort_joined") or "").strip()
+    # In-between joiners aren't marked the cohort on Monday — resolve their
+    # cohort from the Kit-tag eligibility map so they get the right config;
+    # fall back to Monday's Cohort Joined.
+    ea_map = await _early_access_email_cohort(db)
+    label = (
+        ea_map.get((row.get("circle_email") or "").strip().lower())
+        or ea_map.get((row.get("email") or "").strip().lower())
+        or (row.get("cohort_joined") or "").strip()
+    )
     cfg = configs.get(label) or next(
-        (v for k, v in configs.items() if k.strip().lower() == label.lower()), {}
+        (v for k, v in configs.items() if k.strip().lower() == label.strip().lower()), {}
     )
     prev_space = cfg.get("prev_cohort_space_id")
     bonus_space = cfg.get("bonus_calls_space_id")

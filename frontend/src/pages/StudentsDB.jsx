@@ -63,7 +63,7 @@ export default function StudentsDB() {
   const [dismissedOnly, setDismissedOnly] = useState(false);
   const [refundedOnly, setRefundedOnly] = useState(false);
   const [bgOnly, setBgOnly] = useState(false);
-  const [earlyInterviewOnly, setEarlyInterviewOnly] = useState(false);
+  const [earlyFilter, setEarlyFilter] = useState(null); // null | "allocate" | "granted"
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -107,18 +107,20 @@ export default function StudentsDB() {
       if (dismissedOnly && !r.setup_not_needed) return false;
       if (refundedOnly && !r.has_refund) return false;
       if (bgOnly && !isBandG(r.boost_and_go)) return false;
-      if (earlyInterviewOnly && !["before", "unparsed"].includes(r.early_interview_flag)) return false;
+      const isEarly = ["before", "unparsed"].includes(r.early_interview_flag);
+      if (earlyFilter === "allocate" && !(isEarly && !r.early_access_grant)) return false;
+      if (earlyFilter === "granted" && !r.early_access_grant) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyInterviewOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyFilter]);
 
   // Reset the visible window whenever the filter/search changes, so a new
   // query shows from the top (and keeps the DOM light).
-  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyInterviewOnly]);
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyFilter]);
 
   const refundedCount = useMemo(() => rows.filter((r) => r.has_refund).length, [rows]);
   const bgCount = useMemo(() => rows.filter((r) => isBandG(r.boost_and_go)).length, [rows]);
@@ -151,10 +153,11 @@ export default function StudentsDB() {
   };
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
-  const earlyInterviewCount = useMemo(
-    () => rows.filter((r) => ["before", "unparsed"].includes(r.early_interview_flag)).length,
+  const earlyToAllocateCount = useMemo(
+    () => rows.filter((r) => ["before", "unparsed"].includes(r.early_interview_flag) && !r.early_access_grant).length,
     [rows],
   );
+  const earlyGrantedCount = useMemo(() => rows.filter((r) => r.early_access_grant).length, [rows]);
   const allowanceMissing = useMemo(() => rows.filter((r) => r.allowance_flag === "missing").length, [rows]);
   const allowanceMismatch = useMemo(() => rows.filter((r) => r.allowance_flag === "mismatch").length, [rows]);
   const [applyingAllow, setApplyingAllow] = useState(false);
@@ -314,26 +317,33 @@ export default function StudentsDB() {
             Boost &amp; Go ({bgCount})
           </label>
         )}
-        {earlyInterviewCount > 0 && (
-          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyInterviewOnly ? "bg-orange-50 text-orange-700" : "text-[var(--ayci-ink-muted)]"}`}
-                 title="Students who are in the current cohort on Circle (carry the cohort tag) AND whose interview is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — they won't finish the course in time, so candidates for previous-cohort + bonus-calls access.">
-            <input type="checkbox" checked={earlyInterviewOnly} onChange={(e) => setEarlyInterviewOnly(e.target.checked)} />
-            ⏱ Early interview ({earlyInterviewCount})
-          </label>
+        {(earlyToAllocateCount > 0 || earlyFilter === "allocate") && (
+          <button type="button" onClick={() => setEarlyFilter(earlyFilter === "allocate" ? null : "allocate")}
+                  className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyFilter === "allocate" ? "bg-orange-100 text-orange-800 font-semibold" : "bg-orange-50 text-orange-700"}`}
+                  title="Early-interview students (in the June cohort via Kit — new signups or 'in between' joiners — with an interview on/before the Week-3 cutoff) who DON'T have access yet. These are the ones to allocate.">
+            ⏱ Early — to allocate ({earlyToAllocateCount})
+          </button>
+        )}
+        {(earlyGrantedCount > 0 || earlyFilter === "granted") && (
+          <button type="button" onClick={() => setEarlyFilter(earlyFilter === "granted" ? null : "granted")}
+                  className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyFilter === "granted" ? "bg-emerald-100 text-emerald-800 font-semibold" : "bg-emerald-50 text-emerald-700"}`}
+                  title="Students who have already been given previous-cohort / bonus-calls access.">
+            ✓ Early — access given ({earlyGrantedCount})
+          </button>
         )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
       </div>
 
-      {earlyInterviewOnly && (
+      {earlyFilter && (
         <div className="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg p-3 text-orange-900 leading-relaxed">
-          <strong>How this list is chosen:</strong> students who are <strong>in the current cohort on Circle</strong> (they carry the cohort tag) whose interview is <strong>on or before their cohort's Week-3 cutoff</strong>
+          <strong>How this list is chosen:</strong> students in the <strong>June cohort via Kit</strong> (new signups or "in between" joiners — not legacy/returning) whose interview is <strong>on or before the Week-3 cutoff</strong>
           {(() => {
             const cuts = [...new Set(filtered.map((r) => r.early_access_cutoff).filter(Boolean))];
             return cuts.length ? <> — cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
           })()}
-          . Dates we couldn't read are included too, for a manual check. (The cutoff is set per cohort in Settings → Cohort.){" "}
+          . Dates we couldn't read are included too, for a manual check. To actually <strong>grant</strong>, they must be <strong>on Circle with the cohort tag</strong> — if not, get them on board first (the grant button will tell you).{" "}
           <span className="text-emerald-700 font-semibold">✓ Access</span> = already granted; <span className="text-slate-500">no access yet</span> = still to do.
         </div>
       )}
