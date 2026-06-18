@@ -34,31 +34,34 @@ Click **"Not needed"** on their row (e.g. they've landed a job / aren't really p
 
 ---
 
-## 2. Early-interview access — previous cohort + Sunday group calls
+## 2. Previous-cohort & Sunday-coaching-call allocation
 
-**Why:** if someone joins and their interview is **soon** — before the end of **Week 3** of the cohort (the cutoff date is set per cohort) — they won't get through the course in time. So we give them a head start:
-- **Previous Cohort** = access to the previous cohort's **curriculum space** on Circle, so they can work through the material + watch the recorded sessions now.
-- **Sunday Group Calls** = access to the **Bonus Live Sessions space** (the Sunday group coaching calls we run between cohorts) — which they wouldn't normally get.
-- **Both** = both of the above.
+**The goal:** students who have interviews **soon** — and therefore won't get the benefit of the full cohort before their interview — should be given access to the **previous cohort** (its curriculum + recorded sessions) and/or the **Sunday coaching calls**, so they can prepare in time.
 
-**Only grant once they're actually in the current cohort on Circle** (i.e. they carry the cohort tag, e.g. "June '26"). The dashboard enforces this — if you try to grant before they've joined the cohort, it'll stop you with a message. So if someone shows as early but isn't on Circle yet, **get them on board first**, then grant.
+### Who's on the list
+On **Students (DB)** there are **two filter chips**:
+- **⏱ Early — to allocate** — students who need access but don't have it yet. *Your to-do list.*
+- **✓ Early — access given** — students who've already been sorted.
 
-### Finding who needs it
-**Students (DB)** has two chips for this:
-- **"⏱ Early — to allocate (N)"** — students who need access but don't have it yet. *This is your to-do list.*
-- **"✓ Early — access given (N)"** — students you've already sorted.
+These include **new June-26 students** and **"in-between" students** (who joined between cohorts) who have an interview **before 19th July (end of Week 3)**. (Legacy/returning students who've already done the course are not included.)
 
-The list includes anyone in the **June cohort via Kit** (new signups *or* "in between" joiners — not legacy/returning) whose interview is on/before the Week-3 cutoff (or whose date we couldn't read — worth a manual look). The **Joined** column shows their signup date, the **Interview** column highlights early dates in orange, and each row shows **"✓ Access: …"** (granted) or **"no access yet"**.
+**It stays up to date automatically:** if a student gets a soon interview date and submits the **Tally interview-date form**, they'll be added to this list on their own (no manual step).
 
-### Granting access
-Open the student → **Edit** → scroll to the **"Early-interview access (course catch-up)"** box. Check their interview date, then click one of:
-- **Previous Cohort** — adds them to the previous cohort's curriculum space + DMs them.
-- **Sunday Group Calls** — adds them to the Bonus Live Sessions space + DMs them.
+### Join the cohort first
+We **don't** grant this access until the student has actually **joined the current cohort on Circle** — joining the cohort is the priority. So on the to-allocate list, each row shows one of:
+- **⏱ ready to grant** — they're in the cohort on Circle → go ahead.
+- **⏱ get on board first** — not in the cohort yet → chase them to join Circle / the cohort first, *then* grant.
+
+### How to allocate
+Open the student → **Edit** → at the bottom (**Early-interview access**) click one of:
+- **Previous Cohort** — adds them to the previous cohort's curriculum space.
+- **Sunday Group Calls** — adds them to the Sunday coaching calls (Bonus Live Sessions space).
 - **Both** — does both.
 
-It adds them to the Circle space(s) and sends them a DM from Coralie automatically. You'll get a confirmation toast. (You can confirm in Circle that they were added + got the DM.)
+This adds them to the Circle space(s) **and sends them a DM** letting them know. You'll get a confirmation, and the row flips to **"✓ Access given"**.
 
-> Use your judgement on which to grant — most early-interview late-joiners get **Previous Cohort** (so they can catch up on the course); add **Sunday Group Calls** if they'd benefit from the live Sunday sessions before their interview.
+### If they're not in the cohort yet
+If you try to allocate to someone who **isn't yet in the Circle cohort**, the dashboard **won't let you** — it shows a message explaining why (they need to join the cohort first). Nothing is sent or changed. Get them on board, then come back and grant.
 
 ---
 
