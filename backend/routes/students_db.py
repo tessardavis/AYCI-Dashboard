@@ -256,6 +256,20 @@ async def _early_access_email_cohort(db) -> dict:
         return (doc or {}).get("map") or {}
 
 
+def _row_emails(row: dict) -> list[str]:
+    """All known emails for a student — primary `email`, `circle_email`, and any
+    `other_emails` (comma/space separated) — lowercased + deduped. Used so every
+    cross-system match (Circle, refunds, videos, early-access) treats a student's
+    multiple addresses as ONE identity (the combined-identity model)."""
+    out: list[str] = []
+    parts = [row.get("email"), row.get("circle_email")] + re.split(r"[,\s;]+", row.get("other_emails") or "")
+    for raw in parts:
+        e = (raw or "").strip().lower()
+        if e and e not in out:
+            out.append(e)
+    return out
+
+
 def _slim_row_for_list(row: dict) -> dict:
     """Drop heavy fields (full column dicts) from list responses."""
     keep = (
@@ -401,13 +415,12 @@ async def list_students(
     rows = []
     async for r in cursor:
         slim = _slim_row_for_list(r)
-        em = (r.get("email") or "").strip().lower()
-        ce = (r.get("circle_email") or "").strip().lower()
+        # Match every cross-system signal against ALL of the student's emails
+        # (primary + circle + other_emails) — combined-identity model.
+        emails = _row_emails(r)
         # Only meaningful for rows the team still has to action.
         if slim.get("needs_setup") and circle_email_index:
-            slim["on_circle"] = bool(
-                (em and em in circle_email_index) or (ce and ce in circle_email_index)
-            )
+            slim["on_circle"] = any(e in circle_email_index for e in emails)
         # Early-interview triage flag (course catch-up access). Inclusion = the
         # student is in their cohort's Kit 'Cohort - New' or 'In Between' tag
         # (new June signups + in-between joiners — NOT legacy who've done the
@@ -416,7 +429,7 @@ async def list_students(
         # Circle so we can chase them on board. The GRANT is what requires the
         # cohort Circle tag. Flag on the reconciled interview_date (clean ISO)
         # when present, else the free-text Kajabi date.
-        ea_label = ea_email_cohort.get(em) or ea_email_cohort.get(ce)
+        ea_label = next((ea_email_cohort.get(e) for e in emails if e in ea_email_cohort), None)
         if ea_label:
             cut = cohort_cutoffs.get(ea_label.strip().lower())
             if cut:
@@ -429,14 +442,15 @@ async def list_students(
                     # enforces it. Lets the to-allocate list show 'ready to
                     # grant' vs 'get them on board first'.
                     ctag = cohort_circle_tags.get(ea_label.strip().lower())
-                    member = circle_email_index.get(em) or circle_email_index.get(ce)
+                    member = next((circle_email_index[e] for e in emails if e in circle_email_index), None)
                     mtags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
                     slim["in_cohort_on_circle"] = bool(ctag and ctag in mtags)
-        slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
-        rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
-        slim["has_refund"] = bool(rinfo)
-        slim["refund_count"] = (rinfo or {}).get("count", 0)
-        slim["refund_total"] = (rinfo or {}).get("total", 0)
+        slim["videos_used"] = sum(used_counts.get(e, 0) for e in emails)
+        rcount = sum((refund_by_email.get(e) or {}).get("count", 0) for e in emails)
+        rtotal = round(sum((refund_by_email.get(e) or {}).get("total", 0) for e in emails), 2)
+        slim["has_refund"] = rcount > 0
+        slim["refund_count"] = rcount
+        slim["refund_total"] = rtotal
         if refunded is True and not slim["has_refund"]:
             continue
         # Early-interview filter: rows whose interview is before the cutoff OR
@@ -934,9 +948,9 @@ async def grant_early_access(
     # cohort from the Kit-tag eligibility map so they get the right config;
     # fall back to Monday's Cohort Joined.
     ea_map = await _early_access_email_cohort(db)
+    row_emails = _row_emails(row)
     label = (
-        ea_map.get((row.get("circle_email") or "").strip().lower())
-        or ea_map.get((row.get("email") or "").strip().lower())
+        next((ea_map.get(e) for e in row_emails if e in ea_map), None)
         or (row.get("cohort_joined") or "").strip()
     )
     cfg = configs.get(label) or next(
@@ -958,9 +972,8 @@ async def grant_early_access(
     try:
         import private_chat_setup
         idx = await private_chat_setup._build_email_index()
-        for cand in ((row.get("circle_email") or "").strip().lower(),
-                     (row.get("email") or "").strip().lower()):
-            if cand and cand in idx:
+        for cand in row_emails:
+            if cand in idx:
                 member = idx[cand]
                 matched_email = cand
                 break
@@ -1780,8 +1793,18 @@ async def intake_student(
     if source:
         set_fields["source"] = source
 
+    # Merge into an existing record if this email matches ANY known address —
+    # primary, circle, OR one listed in other_emails — so a signup under a
+    # second email updates the same student instead of creating a duplicate
+    # (combined-identity model). other_emails is a delimited string, so match
+    # the address as a whole token within it.
+    _email_re = rf"(^|[,;\s]){re.escape(email_l)}([,;\s]|$)"
     existing = await db.academy_members.find_one(
-        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+        {"$or": [
+            {"email": email_l},
+            {"circle_email": email_l},
+            {"other_emails": {"$regex": _email_re, "$options": "i"}},
+        ]},
         {"_id": 1, "dashboard_edited_fields": 1},
     )
 
