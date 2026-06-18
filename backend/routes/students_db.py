@@ -715,6 +715,59 @@ async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
     return {"cached_at": ca.isoformat() if hasattr(ca, "isoformat") else ca, **(cached.get("result") or {})}
 
 
+@router.get("/students-db/private-chat/debug-coaches")
+async def private_chat_debug_coaches(admin: dict = Depends(require_admin)):
+    """Diagnostic for the link-existing scan. For each configured coach,
+    sequentially mint a Headless session and read page 1 of their group chats,
+    reporting the outcome per coach (no email / token mint failed / HTTP status
+    / how many group chats). Cheap (1 page each) and gentle (sequential), so it
+    pins down WHY the bulk scan returns 'couldn't read any coach group chats' —
+    auth failure vs 429 throttle vs genuinely empty — without the heavy 30-page
+    fan-out."""
+    import settings_store
+    import circle_api
+    import httpx as _httpx
+    cfg = await settings_store.get_private_chat_config(db)
+    out = []
+    for c in cfg.get("coaches") or []:
+        name, email = c.get("name"), (c.get("email") or "").strip()
+        entry = {"name": name, "email": email or None}
+        if not email:
+            entry["result"] = "no_email_configured"
+            out.append(entry)
+            continue
+        token = await circle_api._get_access_token(db, email)
+        entry["token_ok"] = bool(token)
+        if not token:
+            entry["result"] = "token_mint_failed"
+            out.append(entry)
+            continue
+        try:
+            async with _httpx.AsyncClient(timeout=20) as cli:
+                r = await cli.get(
+                    f"{circle_api.HEADLESS_BASE}/messages",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"per_page": 100, "page": 1},
+                )
+            entry["list_status"] = r.status_code
+            if r.status_code == 200:
+                body = r.json()
+                recs = body.get("records") or []
+                entry["records"] = len(recs)
+                entry["group_chats"] = sum(1 for x in recs if x.get("chat_room_kind") == "group")
+                entry["has_next_page"] = bool(body.get("has_next_page"))
+            else:
+                entry["body"] = (r.text or "")[:200]
+        except Exception as e:
+            entry["error"] = f"{type(e).__name__}: {e}"[:200]
+        out.append(entry)
+    return {
+        "parent_token_configured": bool(circle_api._headless_parent_token()),
+        "sender_email": cfg.get("sender_email"),
+        "coaches": out,
+    }
+
+
 @router.get("/students-db/private-chat/auto-create")
 async def private_chat_auto_create(limit: int = 25, admin: dict = Depends(require_admin)):
     """HYBRID auto-create (Phase 1): create chats for all clear-cut ready students
