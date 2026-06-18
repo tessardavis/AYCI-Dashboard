@@ -1,12 +1,13 @@
 """Cohort labels + summary."""
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import cohort as cohort_mod
+import settings_store
 
 from db import db
-from deps import require_board
+from deps import require_board, require_admin
 
 router = APIRouter(prefix="/api", tags=["cohorts"])
 
@@ -15,6 +16,25 @@ router = APIRouter(prefix="/api", tags=["cohorts"])
 async def cohort_labels(user: dict = Depends(require_board("cohort"))):
     """Returns the list of cohort labels from Monday's 'Cohort Joined' dropdown."""
     return await cohort_mod.fetch_cohort_labels()
+
+
+@router.get("/cohorts/config")
+async def get_cohort_config(user: dict = Depends(require_board("cohort"))):
+    """Per-cohort dashboard config: {cohort_label: {circle_tag, new_tag_id,
+    legacy_tag_id, intros_space_id}}. Editable in Settings so each launch is a
+    config change, not a deploy."""
+    return await settings_store.get_cohort_configs(db)
+
+
+@router.put("/cohorts/config")
+async def put_cohort_config(payload: dict, admin: dict = Depends(require_admin)):
+    """Replace the per-cohort config map. Accepts {"configs": {...}} or the
+    bare map."""
+    configs = payload.get("configs") if isinstance(payload, dict) and "configs" in payload else payload
+    try:
+        return await settings_store.set_cohort_configs(db, configs)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/cohorts/summary")

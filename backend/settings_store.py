@@ -37,6 +37,77 @@ async def set_cohort_milestones(db, milestones: list[str]) -> list[str]:
     return cleaned
 
 
+# ---- Per-cohort Cohort-Dashboard config (admin-editable) ----------------
+# Each cohort's ConvertKit "Cohort - New" / "Cohort - Legacy" tag IDs, its
+# Circle cross-reference tag, and its Circle "Introduce Yourself" space id.
+# Lets the Cohort Dashboard work for any cohort without a code change each
+# launch. Keyed by the exact Monday "Cohort Joined" label (e.g. "June 26").
+# NB Circle tags use the FULL month for some cohorts ("June '26") but an
+# abbreviation for others ("Apr '26") — so it's stored explicitly, never
+# derived.
+DEFAULT_COHORT_CONFIGS: dict = {
+    "April 26": {
+        "circle_tag": "Apr '26",
+        "new_tag_id": 14407610,
+        "legacy_tag_id": 14407628,
+        "intros_space_id": 2529515,
+    },
+    "June 26": {
+        "circle_tag": "June '26",
+        "new_tag_id": 19550942,
+        "legacy_tag_id": 19550968,
+        "intros_space_id": 2647286,
+    },
+}
+
+
+async def get_cohort_configs(db) -> dict:
+    """Return {cohort_label: {circle_tag, new_tag_id, legacy_tag_id,
+    intros_space_id}}. The stored doc is merged OVER the seeded defaults so
+    editing one cohort never silently drops the known ones."""
+    doc = await db.app_settings.find_one({"_id": "cohort_configs"}, {"_id": 0})
+    merged = {k: dict(v) for k, v in DEFAULT_COHORT_CONFIGS.items()}
+    stored = (doc or {}).get("configs") or {}
+    if isinstance(stored, dict):
+        for label, cfg in stored.items():
+            if isinstance(cfg, dict):
+                merged[str(label)] = {**merged.get(str(label), {}), **cfg}
+    return merged
+
+
+async def set_cohort_configs(db, configs: dict) -> dict:
+    """Replace the stored per-cohort config map. Validates each entry — ids
+    must be integers, circle_tag a non-empty string."""
+    if not isinstance(configs, dict) or not configs:
+        raise ValueError("configs must be a non-empty object keyed by cohort label")
+    cleaned: dict = {}
+    for label, cfg in configs.items():
+        if not isinstance(cfg, dict):
+            raise ValueError(f"config for '{label}' must be an object")
+        entry: dict = {}
+        ct = str(cfg.get("circle_tag") or "").strip()
+        if ct:
+            entry["circle_tag"] = ct
+        for k in ("new_tag_id", "legacy_tag_id", "intros_space_id"):
+            v = cfg.get(k)
+            if v in (None, ""):
+                continue
+            try:
+                entry[k] = int(v)
+            except (TypeError, ValueError):
+                raise ValueError(f"{k} for '{label}' must be a whole number")
+        if entry:
+            cleaned[str(label).strip()] = entry
+    if not cleaned:
+        raise ValueError("no valid cohort configs to save")
+    await db.app_settings.update_one(
+        {"_id": "cohort_configs"},
+        {"$set": {"configs": cleaned}},
+        upsert=True,
+    )
+    return cleaned
+
+
 # ---- Coach Activity Circle space IDs (per cohort, admin-editable) -------
 # End dates default to None — if unset, the SLA digest fires forever (legacy
 # behaviour). Set an end date when a cohort wraps so the digest goes quiet

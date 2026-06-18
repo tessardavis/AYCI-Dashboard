@@ -188,13 +188,25 @@ async def cohort_summary(
       is April 26, defaults are used.
     - intros_space_id: Circle space id for the "Introduce Yourself" space.
     """
-    # Defaults for April 2026 if unspecified
-    if new_tag_id is None and cohort_label.strip().lower() == "april 26":
-        new_tag_id = DEFAULT_NEW_TAG_ID
-    if legacy_tag_id is None and cohort_label.strip().lower() == "april 26":
-        legacy_tag_id = DEFAULT_LEGACY_TAG_ID
-    if intros_space_id is None and cohort_label.strip().lower() == "april 26":
-        intros_space_id = DEFAULT_INTROS_SPACE_ID
+    # Pull the cohort's config (ConvertKit tag IDs, Circle tag, Intros space)
+    # from the admin-editable settings. Any value passed explicitly to this
+    # function still wins; otherwise we fall back to the configured cohort,
+    # then (for circle_tag) to the derived abbreviation. This replaces the old
+    # April-only hardcode so every cohort works without a code change.
+    import settings_store
+    _configs = await settings_store.get_cohort_configs(db)
+    _label = cohort_label.strip()
+    cohort_cfg = _configs.get(_label) or next(
+        (v for k, v in _configs.items() if k.strip().lower() == _label.lower()), {}
+    )
+    if new_tag_id is None:
+        new_tag_id = cohort_cfg.get("new_tag_id")
+    if legacy_tag_id is None:
+        legacy_tag_id = cohort_cfg.get("legacy_tag_id")
+    if intros_space_id is None:
+        intros_space_id = cohort_cfg.get("intros_space_id")
+    if circle_tag is None:
+        circle_tag = cohort_cfg.get("circle_tag")
 
     items = await _fetch_cohort_items(cohort_label)
     monday_total = len(items)  # all Monday students with Cohort Joined = this cohort
