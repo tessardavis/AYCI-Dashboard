@@ -370,12 +370,15 @@ async def list_students(
 
     # Per-cohort early-access cutoffs, to flag students whose Kajabi interview
     # date falls on/before their cohort's Week-3 cutoff (course catch-up).
-    cohort_cutoffs: dict = {}  # cohort label (lower) -> early_access_cutoff ISO
+    cohort_cutoffs: dict = {}       # cohort label (lower) -> early_access_cutoff ISO
+    cohort_circle_tags: dict = {}   # cohort label (lower) -> circle tag (lower), for "ready to grant"
     try:
         import settings_store
         for _lbl, _cfg in (await settings_store.get_cohort_configs(db)).items():
             if (_cfg or {}).get("early_access_cutoff"):
                 cohort_cutoffs[_lbl.strip().lower()] = _cfg["early_access_cutoff"]
+            if (_cfg or {}).get("circle_tag"):
+                cohort_circle_tags[_lbl.strip().lower()] = _cfg["circle_tag"].strip().lower()
     except Exception as e:
         logger.info(f"[students-db] cohort cutoffs skipped: {e}")
     # email -> cohort label for early-access eligibility (Kit 'Cohort - New' /
@@ -412,6 +415,14 @@ async def list_students(
                 if src:
                     slim["early_interview_flag"] = _early_interview_flag(src, cut)
                     slim["early_access_cutoff"] = cut
+                    # Are they in the cohort on Circle yet (= can we grant now)?
+                    # Display-only — does NOT gate visibility; the grant itself
+                    # enforces it. Lets the to-allocate list show 'ready to
+                    # grant' vs 'get them on board first'.
+                    ctag = cohort_circle_tags.get(ea_label.strip().lower())
+                    member = circle_email_index.get(em) or circle_email_index.get(ce)
+                    mtags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
+                    slim["in_cohort_on_circle"] = bool(ctag and ctag in mtags)
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
         rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
         slim["has_refund"] = bool(rinfo)

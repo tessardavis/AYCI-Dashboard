@@ -487,9 +487,15 @@ export default function StudentsDB() {
                         ✓ Access: {r.early_access_grant}
                       </div>
                     ) : ["before", "unparsed"].includes(r.early_interview_flag) ? (
-                      <div className="text-[10px] mt-0.5 text-slate-400" title="No early-access granted yet">
-                        no access yet
-                      </div>
+                      r.in_cohort_on_circle ? (
+                        <div className="text-[10px] mt-0.5 text-orange-700 font-semibold" title="Eligible + early interview, and in the cohort on Circle — ready to grant (open Edit).">
+                          ⏱ ready to grant
+                        </div>
+                      ) : (
+                        <div className="text-[10px] mt-0.5 text-amber-600" title="Eligible + early interview, but NOT in the June cohort on Circle yet — get them on board (join Circle + cohort tag) before you can grant.">
+                          ⏱ get on board first
+                        </div>
+                      )
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
