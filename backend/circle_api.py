@@ -447,26 +447,28 @@ async def post_dm_message(
         return None
 
 
-async def add_member_to_space(db, space_id: int, member_id: int) -> dict:
-    """Add a community member to a Circle space via the Admin API. Returns
-    {ok, status, error}. A 422 'already a member' is treated as success
-    (idempotent). Replaces the Zapier 'Add Member to Space' step used by the
-    early-interview course-catch-up grant."""
-    if not space_id or not member_id:
-        return {"ok": False, "error": "missing space_id or member_id"}
+async def add_member_to_space(db, space_id: int, email: str) -> dict:
+    """Add a community member (by EMAIL) to a Circle space via the Admin API.
+    Returns {ok, status, error}. A 409/422 'already a member' is treated as
+    success (idempotent). Replaces the Zapier 'Add Member to Space' step used by
+    the early-interview course-catch-up grant. NB the Admin v2 /space_members
+    endpoint keys on `email`, not community_member_id."""
+    email = (email or "").strip().lower()
+    if not space_id or not email:
+        return {"ok": False, "error": "missing space_id or email"}
     async with httpx.AsyncClient(timeout=20) as c:
         try:
             r = await c.post(
                 f"{ADMIN_BASE}/space_members",
                 headers={**_admin_headers(), "Content-Type": "application/json"},
-                json={"space_id": int(space_id), "community_member_id": int(member_id)},
+                json={"space_id": int(space_id), "email": email},
             )
             if r.status_code in (200, 201):
                 return {"ok": True, "status": r.status_code}
             txt = (r.text or "")[:300]
             if r.status_code in (409, 422) and "already" in txt.lower():
                 return {"ok": True, "status": r.status_code, "already_member": True}
-            logger.warning(f"[circle-api] add_member_to_space({space_id},{member_id}) failed {r.status_code} {txt}")
+            logger.warning(f"[circle-api] add_member_to_space({space_id},{email}) failed {r.status_code} {txt}")
             return {"ok": False, "status": r.status_code, "error": txt}
         except Exception as e:
             logger.warning(f"[circle-api] add_member_to_space errored: {e}")

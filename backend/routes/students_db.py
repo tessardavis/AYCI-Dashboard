@@ -855,8 +855,10 @@ async def grant_early_access(
     if grant in ("bonus", "both") and not bonus_space:
         raise HTTPException(400, f"No bonus-calls space configured for cohort '{label}' — set it in Settings → Cohort.")
 
-    # Resolve the student's Circle member id from the cached member index.
+    # Resolve the student's Circle member from the cached member index. We need
+    # their email for the Admin space-add and their member id for the 1:1 DM.
     member = None
+    matched_email = None
     try:
         import private_chat_setup
         idx = await private_chat_setup._build_email_index()
@@ -864,18 +866,21 @@ async def grant_early_access(
                      (row.get("email") or "").strip().lower()):
             if cand and cand in idx:
                 member = idx[cand]
+                matched_email = cand
                 break
     except Exception as e:
         logger.warning(f"[early-access] member lookup failed for {monday_item_id}: {e}")
     if not member or not member.get("id"):
         raise HTTPException(400, "Student isn't matched on Circle (check their email / that they've joined).")
     member_id = int(member["id"])
+    # Prefer the member's own Circle email if present, else the email we matched on.
+    space_email = (member.get("email") or matched_email or "").strip().lower()
 
     results: dict = {}
     if grant in ("previous", "both"):
-        results["previous"] = await circle_api.add_member_to_space(db, int(prev_space), member_id)
+        results["previous"] = await circle_api.add_member_to_space(db, int(prev_space), space_email)
     if grant in ("bonus", "both"):
-        results["bonus"] = await circle_api.add_member_to_space(db, int(bonus_space), member_id)
+        results["bonus"] = await circle_api.add_member_to_space(db, int(bonus_space), space_email)
     failed = {k: v.get("error") or v.get("status") for k, v in results.items() if not v.get("ok")}
     if failed:
         raise HTTPException(502, f"Couldn't add to space(s): {failed}")
