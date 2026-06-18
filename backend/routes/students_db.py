@@ -756,6 +756,18 @@ async def private_chat_debug_coaches(admin: dict = Depends(require_admin)):
                 entry["records"] = len(recs)
                 entry["group_chats"] = sum(1 for x in recs if x.get("chat_room_kind") == "group")
                 entry["has_next_page"] = bool(body.get("has_next_page"))
+                # Diagnostic: what does a record actually look like, and what
+                # kind values exist? (We were filtering on chat_room_kind=="group"
+                # and getting 0 — find the real field/value.)
+                kinds: dict = {}
+                for x in recs:
+                    for kf in ("chat_room_kind", "kind", "room_kind", "type"):
+                        v = x.get(kf)
+                        if v is not None:
+                            kinds[f"{kf}={v}"] = kinds.get(f"{kf}={v}", 0) + 1
+                entry["kind_values_seen"] = kinds
+                if recs:
+                    entry["sample_record_keys"] = sorted(recs[0].keys())
             else:
                 entry["body"] = (r.text or "")[:200]
         except Exception as e:
