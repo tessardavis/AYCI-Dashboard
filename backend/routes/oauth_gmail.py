@@ -29,6 +29,12 @@ async def status(user: dict = Depends(get_current_user)):
     all_inboxes = await gmail_sync.list_inboxes(db) if _is_admin(user) else None
     return {
         "configured": gmail_sync.is_configured(),
+        # Diagnostics — which creds the BACKEND process actually sees (booleans,
+        # no secret leak) + the redirect it'll use. Lets us tell "env var not set
+        # on this service / not redeployed" from "wrong value".
+        "client_id_present": bool(gmail_sync._client_id()),
+        "client_secret_present": bool(gmail_sync._client_secret()),
+        "redirect_uri": gmail_sync._redirect_uri(),
         "is_admin": _is_admin(user),
         "my_inbox_count": len(mine),
         "inboxes": mine,
