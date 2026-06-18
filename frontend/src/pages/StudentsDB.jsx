@@ -63,6 +63,7 @@ export default function StudentsDB() {
   const [dismissedOnly, setDismissedOnly] = useState(false);
   const [refundedOnly, setRefundedOnly] = useState(false);
   const [bgOnly, setBgOnly] = useState(false);
+  const [earlyInterviewOnly, setEarlyInterviewOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
   const [editing, setEditing] = useState(null);
 
@@ -106,17 +107,18 @@ export default function StudentsDB() {
       if (dismissedOnly && !r.setup_not_needed) return false;
       if (refundedOnly && !r.has_refund) return false;
       if (bgOnly && !isBandG(r.boost_and_go)) return false;
+      if (earlyInterviewOnly && !["before", "unparsed"].includes(r.early_interview_flag)) return false;
       if (q) {
         const hay = `${r.name || ""} ${r.email || ""} ${r.first_name || ""} ${r.surname || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly]);
+  }, [rows, search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyInterviewOnly]);
 
   // Reset the visible window whenever the filter/search changes, so a new
   // query shows from the top (and keeps the DOM light).
-  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly]);
+  useEffect(() => { setVisibleCount(100); }, [search, tierFilter, cohortFilter, hasInterviewOnly, needsSetupOnly, mismatchOnly, dismissedOnly, refundedOnly, bgOnly, earlyInterviewOnly]);
 
   const refundedCount = useMemo(() => rows.filter((r) => r.has_refund).length, [rows]);
   const bgCount = useMemo(() => rows.filter((r) => isBandG(r.boost_and_go)).length, [rows]);
@@ -149,6 +151,10 @@ export default function StudentsDB() {
   };
 
   const needsSetupCount = useMemo(() => rows.filter((r) => r.needs_setup).length, [rows]);
+  const earlyInterviewCount = useMemo(
+    () => rows.filter((r) => ["before", "unparsed"].includes(r.early_interview_flag)).length,
+    [rows],
+  );
   const allowanceMissing = useMemo(() => rows.filter((r) => r.allowance_flag === "missing").length, [rows]);
   const allowanceMismatch = useMemo(() => rows.filter((r) => r.allowance_flag === "mismatch").length, [rows]);
   const [applyingAllow, setApplyingAllow] = useState(false);
@@ -308,6 +314,13 @@ export default function StudentsDB() {
             Boost &amp; Go ({bgCount})
           </label>
         )}
+        {earlyInterviewCount > 0 && (
+          <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyInterviewOnly ? "bg-orange-50 text-orange-700" : "text-[var(--ayci-ink-muted)]"}`}
+                 title="New signups whose Kajabi interview date is on/before their cohort's Week-3 cutoff (or a date we couldn't read) — candidates for previous-cohort + bonus-calls access.">
+            <input type="checkbox" checked={earlyInterviewOnly} onChange={(e) => setEarlyInterviewOnly(e.target.checked)} />
+            ⏱ Early interview ({earlyInterviewCount})
+          </label>
+        )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
           {filtered.length} / {rows.length}
         </span>
@@ -398,7 +411,26 @@ export default function StudentsDB() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
-                  <td className="px-3 py-2 text-[12px]">{formatDate(r.interview_date)}</td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {formatDate(r.interview_date)}
+                    {r.kajabi_interview_date && (
+                      <div
+                        className={
+                          "text-[10px] mt-0.5 " +
+                          (r.early_interview_flag === "before"
+                            ? "text-orange-700 font-semibold"
+                            : r.early_interview_flag === "unparsed"
+                              ? "text-amber-600"
+                              : "text-slate-400")
+                        }
+                        title={`Kajabi signup interview date: "${r.kajabi_interview_date}"${r.early_access_grant ? ` · access granted: ${r.early_access_grant}` : ""}`}
+                      >
+                        {r.early_interview_flag === "before" ? "⏱ " : ""}
+                        Kajabi: {r.kajabi_interview_date}
+                        {r.early_access_grant ? " ✓" : ""}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
                   <td className="px-3 py-2 text-[12px]">
                     {(() => {
@@ -593,6 +625,22 @@ function EditModal({ row, onClose, onSaved }) {
 
   const setField = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
 
+  const [granting, setGranting] = useState(null);
+  const grantAccess = async (kind) => {
+    const labels = { previous: "previous-cohort access", bonus: "bonus calls", both: "previous cohort + bonus calls" };
+    if (!window.confirm(`Grant ${labels[kind]} to ${row.name || row.email}? This adds them to the Circle space(s) and DMs them.`)) return;
+    setGranting(kind);
+    try {
+      const { data } = await apiClient.post(`/students-db/${row._id}/grant-early-access`, { grant: kind });
+      toast.success(`Granted ${labels[kind]}${data.dm_sent ? " + DM sent" : " (DM not sent — check sender)"}`);
+      onSaved(data.item);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Grant failed");
+    } finally {
+      setGranting(null);
+    }
+  };
+
   const protectedFields = new Set(row.dashboard_edited_fields || []);
 
   const save = async () => {
@@ -690,6 +738,39 @@ function EditModal({ row, onClose, onSaved }) {
               )}
             </div>
           ))}
+        </div>
+
+        <div className="px-4 pb-2">
+          <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3">
+            <div className="text-[11px] uppercase tracking-wider font-bold text-orange-800 mb-1">
+              Early-interview access (course catch-up)
+            </div>
+            <div className="text-[11px] text-[var(--ayci-ink-muted)] mb-2">
+              Kajabi interview date: <strong>{row.kajabi_interview_date || "—"}</strong>
+              {row.early_interview_flag === "before" && <span className="ml-1 text-orange-700 font-semibold">· before Week-3 cutoff</span>}
+              {row.early_interview_flag === "unparsed" && <span className="ml-1 text-amber-600">· couldn't read date — check it</span>}
+              {row.early_interview_flag === "after" && <span className="ml-1 text-slate-500">· after cutoff (not usually needed)</span>}
+              {row.early_access_grant && <span className="ml-1 text-emerald-700 font-semibold">· already granted: {row.early_access_grant}</span>}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {[["previous", "Previous Cohort"], ["bonus", "Bonus Calls"], ["both", "Both"]].map(([k, lbl]) => (
+                <Button
+                  key={k}
+                  variant="outline"
+                  size="sm"
+                  disabled={!!granting}
+                  onClick={() => grantAccess(k)}
+                  className="border-orange-300 text-orange-800 hover:bg-orange-100"
+                >
+                  {granting === k ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
+                  {lbl}
+                </Button>
+              ))}
+            </div>
+            <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1.5">
+              Adds them to the Circle space(s) + DMs them (as the configured sender). Replaces the old Zapier flow.
+            </div>
+          </div>
         </div>
 
         {protectedFields.size > 0 && (
