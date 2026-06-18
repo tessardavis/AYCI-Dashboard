@@ -6,7 +6,7 @@ import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 
-const DEFAULT_COHORT = "April 26";
+const DEFAULT_COHORT = "June 26";
 
 export default function CohortDashboard() {
   const [cohort, setCohort] = useState(DEFAULT_COHORT);

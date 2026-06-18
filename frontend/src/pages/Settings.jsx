@@ -28,6 +28,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { formatValue } from "@/lib/format";
 import MetricSourceDialog from "@/components/MetricSourceDialog";
 import CohortMilestonesSection from "@/components/settings/CohortMilestonesSection";
+import CohortConfigSection from "@/components/settings/CohortConfigSection";
 import ConnectedInboxesSection from "@/components/settings/ConnectedInboxesSection";
 import IntegrationsSection from "@/components/settings/IntegrationsSection";
 
@@ -80,7 +81,7 @@ export default function Settings() {
         {isAdmin && <TabsContent value="metrics"><MetricsSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="rocks"><RocksSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>}
-        {isAdmin && <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /></TabsContent>}
+        {isAdmin && <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /><CohortConfigSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>}
         {(isAdmin || hasStudents) && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>}
         {hasBot && <TabsContent value="bot"><CoachPlaybookSection isAdmin={hasBot} /></TabsContent>}
