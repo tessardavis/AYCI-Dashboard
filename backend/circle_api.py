@@ -365,7 +365,11 @@ async def list_group_chats(db, admin_email: str, max_pages: int = 30) -> list[di
                 break
             body = r.json()
             for rec in body.get("records") or []:
-                if rec.get("chat_room_kind") != "group":
+                # Circle's headless /messages reports group rooms as
+                # chat_room_kind == "group_chat" (NOT "group" — that value
+                # never appears, which silently returned 0 group chats and
+                # made the link-existing scan look rate-limited).
+                if rec.get("chat_room_kind") != "group_chat":
                     continue
                 pids = []
                 for p in rec.get("other_participants_preview") or []:

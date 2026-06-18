@@ -754,7 +754,7 @@ async def private_chat_debug_coaches(admin: dict = Depends(require_admin)):
                 body = r.json()
                 recs = body.get("records") or []
                 entry["records"] = len(recs)
-                entry["group_chats"] = sum(1 for x in recs if x.get("chat_room_kind") == "group")
+                entry["group_chats"] = sum(1 for x in recs if x.get("chat_room_kind") == "group_chat")
                 entry["has_next_page"] = bool(body.get("has_next_page"))
                 # Diagnostic: what does a record actually look like, and what
                 # kind values exist? (We were filtering on chat_room_kind=="group"
