@@ -45,6 +45,15 @@ async def set_cohort_milestones(db, milestones: list[str]) -> list[str]:
 # NB Circle tags use the FULL month for some cohorts ("June '26") but an
 # abbreviation for others ("Apr '26") — so it's stored explicitly, never
 # derived.
+# String fields stored verbatim; integer fields coerced to int.
+_COHORT_CFG_STR_KEYS = (
+    "circle_tag", "early_access_cutoff", "prev_cohort_name", "prev_cohort_curriculum_url",
+)
+_COHORT_CFG_INT_KEYS = (
+    "new_tag_id", "legacy_tag_id", "intros_space_id",
+    "prev_cohort_space_id", "bonus_calls_space_id",
+)
+
 DEFAULT_COHORT_CONFIGS: dict = {
     "April 26": {
         "circle_tag": "Apr '26",
@@ -57,13 +66,21 @@ DEFAULT_COHORT_CONFIGS: dict = {
         "new_tag_id": 19550942,
         "legacy_tag_id": 19550968,
         "intros_space_id": 2647286,
+        # Early-interview access (course catch-up): students whose interview is
+        # on/before the cutoff get added to the PREVIOUS cohort's curriculum
+        # space and/or the Bonus Live Sessions space (Sunday group coaching).
+        "early_access_cutoff": "2026-07-19",         # end of Week 3, June 26 cohort
+        "prev_cohort_name": "April 26",
+        "prev_cohort_space_id": 2529501,             # AYCI Curriculum - April 26
+        "prev_cohort_curriculum_url": "https://ayci-academy.circle.so/c/ayci-curriculum-apr-26/",
+        "bonus_calls_space_id": 1944718,             # Bonus Live Sessions (permanent)
     },
 }
 
 
 async def get_cohort_configs(db) -> dict:
-    """Return {cohort_label: {circle_tag, new_tag_id, legacy_tag_id,
-    intros_space_id}}. The stored doc is merged OVER the seeded defaults so
+    """Return {cohort_label: {circle_tag, new/legacy/intros ids, and the
+    early-access fields}}. The stored doc is merged OVER the seeded defaults so
     editing one cohort never silently drops the known ones."""
     doc = await db.app_settings.find_one({"_id": "cohort_configs"}, {"_id": 0})
     merged = {k: dict(v) for k, v in DEFAULT_COHORT_CONFIGS.items()}
@@ -76,19 +93,26 @@ async def get_cohort_configs(db) -> dict:
 
 
 async def set_cohort_configs(db, configs: dict) -> dict:
-    """Replace the stored per-cohort config map. Validates each entry — ids
-    must be integers, circle_tag a non-empty string."""
+    """Upsert the per-cohort config map. Each incoming cohort entry is MERGED
+    over what's already stored for that cohort, so a caller that only sends a
+    subset of fields (e.g. the Cohort Dashboard card) never wipes the
+    early-access fields, and vice-versa. Validates field types."""
     if not isinstance(configs, dict) or not configs:
         raise ValueError("configs must be a non-empty object keyed by cohort label")
-    cleaned: dict = {}
+    doc = await db.app_settings.find_one({"_id": "cohort_configs"}, {"_id": 0})
+    stored = {k: dict(v) for k, v in ((doc or {}).get("configs") or {}).items() if isinstance(v, dict)}
     for label, cfg in configs.items():
         if not isinstance(cfg, dict):
             raise ValueError(f"config for '{label}' must be an object")
         entry: dict = {}
-        ct = str(cfg.get("circle_tag") or "").strip()
-        if ct:
-            entry["circle_tag"] = ct
-        for k in ("new_tag_id", "legacy_tag_id", "intros_space_id"):
+        for k in _COHORT_CFG_STR_KEYS:
+            if k in cfg:
+                s = str(cfg.get(k) or "").strip()
+                if s:
+                    entry[k] = s
+        for k in _COHORT_CFG_INT_KEYS:
+            if k not in cfg:
+                continue
             v = cfg.get(k)
             if v in (None, ""):
                 continue
@@ -96,16 +120,14 @@ async def set_cohort_configs(db, configs: dict) -> dict:
                 entry[k] = int(v)
             except (TypeError, ValueError):
                 raise ValueError(f"{k} for '{label}' must be a whole number")
-        if entry:
-            cleaned[str(label).strip()] = entry
-    if not cleaned:
-        raise ValueError("no valid cohort configs to save")
+        key = str(label).strip()
+        stored[key] = {**stored.get(key, {}), **entry}
     await db.app_settings.update_one(
         {"_id": "cohort_configs"},
-        {"$set": {"configs": cleaned}},
+        {"$set": {"configs": stored}},
         upsert=True,
     )
-    return cleaned
+    return stored
 
 
 # ---- Coach Activity Circle space IDs (per cohort, admin-editable) -------

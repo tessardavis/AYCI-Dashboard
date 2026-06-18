@@ -20,8 +20,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -128,6 +129,75 @@ def _needs_private_chat_setup(row: dict) -> bool:
     return no_chat or _private_chat_blocked(row) or _allowance_flag(row) == "missing"
 
 
+_MONTHS = {}
+for _i, _m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july",
+     "august", "september", "october", "november", "december"], 1):
+    _MONTHS[_m] = _i
+    _MONTHS[_m[:3]] = _i
+
+
+def _parse_loose_date(text: str, default_year: int) -> Optional[date]:
+    """Best-effort parse of a free-text interview date. Handles ISO
+    (2026-07-19), d/m or d/m/y, '19th July [2026]', 'July 19'. Returns a date
+    or None for vague text ('soon', 'July', 'TBC') — None means 'show the raw
+    text and let a human judge', never a wrong guess. `default_year` (the
+    cohort cutoff's year) fills in a missing year."""
+    if not text:
+        return None
+    t = str(text).strip().lower()
+    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+    m = re.search(r"\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b", t)
+    if m:
+        yr = int(m.group(3)) if m.group(3) else default_year
+        if yr < 100:
+            yr += 2000
+        try:
+            return date(yr, int(m.group(2)), int(m.group(1)))  # UK d/m order
+        except ValueError:
+            pass
+    yr_m = re.search(r"\b(20\d{2})\b", t)
+    yr = int(yr_m.group(1)) if yr_m else default_year
+    # "<day> <month>" or "<month> <day>"
+    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\b", t)
+    if m and (m.group(2) in _MONTHS or m.group(2)[:3] in _MONTHS):
+        mon = _MONTHS.get(m.group(2)) or _MONTHS.get(m.group(2)[:3])
+        try:
+            return date(yr, mon, int(m.group(1)))
+        except (ValueError, TypeError):
+            pass
+    m = re.search(r"\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b", t)
+    if m and (m.group(1) in _MONTHS or m.group(1)[:3] in _MONTHS):
+        mon = _MONTHS.get(m.group(1)) or _MONTHS.get(m.group(1)[:3])
+        try:
+            return date(yr, mon, int(m.group(2)))
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def _early_interview_flag(kajabi_date: str, cutoff_iso: Optional[str]) -> Optional[str]:
+    """'before' / 'after' / 'unparsed' / None for the early-access triage.
+    'before' = interview on/before the cohort cutoff (→ candidate for early
+    access). 'unparsed' = there's a date string we couldn't read (show raw)."""
+    raw = (kajabi_date or "").strip()
+    if not raw or not cutoff_iso:
+        return None
+    try:
+        cutoff = date.fromisoformat(cutoff_iso)
+    except ValueError:
+        return None
+    parsed = _parse_loose_date(raw, cutoff.year)
+    if not parsed:
+        return "unparsed"
+    return "before" if parsed <= cutoff else "after"
+
+
 def _slim_row_for_list(row: dict) -> dict:
     """Drop heavy fields (full column dicts) from list responses."""
     keep = (
@@ -137,6 +207,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "boost_and_go", "video_allowance",
         "setup_not_needed", "setup_not_needed_reason", "coach_notes",
         "private_chat_last_error",
+        "kajabi_interview_date", "early_access_grant", "early_access_granted_at",
         "url", "synced_at", "dashboard_edited_fields",
     )
     out = {k: row.get(k) for k in keep if k in row}
@@ -153,6 +224,7 @@ async def list_students(
     cohort: Optional[str] = None,
     has_interview: Optional[bool] = None,
     refunded: Optional[bool] = None,
+    early_interview: Optional[bool] = None,
     limit: int = 500,
     user: dict = Depends(require_board("students")),
 ):
@@ -246,6 +318,18 @@ async def list_students(
     except Exception as e:
         logger.info(f"[students-db] circle email index skipped: {e}")
 
+    # Per-cohort early-access cutoffs, to flag students whose Kajabi interview
+    # date falls on/before their cohort's Week-3 cutoff (course catch-up).
+    cohort_cutoffs: dict = {}
+    try:
+        import settings_store
+        for _lbl, _cfg in (await settings_store.get_cohort_configs(db)).items():
+            cut = (_cfg or {}).get("early_access_cutoff")
+            if cut:
+                cohort_cutoffs[_lbl.strip().lower()] = cut
+    except Exception as e:
+        logger.info(f"[students-db] cohort cutoffs skipped: {e}")
+
     rows = []
     async for r in cursor:
         slim = _slim_row_for_list(r)
@@ -256,12 +340,20 @@ async def list_students(
             slim["on_circle"] = bool(
                 (em and em in circle_email_index) or (ce and ce in circle_email_index)
             )
+        # Early-interview triage flag (course catch-up access).
+        if r.get("kajabi_interview_date"):
+            cut = cohort_cutoffs.get((r.get("cohort_joined") or "").strip().lower())
+            slim["early_interview_flag"] = _early_interview_flag(r.get("kajabi_interview_date"), cut)
         slim["videos_used"] = used_counts.get(em) or used_counts.get(ce) or 0
         rinfo = refund_by_email.get(em) or refund_by_email.get(ce)
         slim["has_refund"] = bool(rinfo)
         slim["refund_count"] = (rinfo or {}).get("count", 0)
         slim["refund_total"] = (rinfo or {}).get("total", 0)
         if refunded is True and not slim["has_refund"]:
+            continue
+        # Early-interview filter: rows whose interview is before the cutoff OR
+        # whose date we couldn't parse (so they still get a human look).
+        if early_interview is True and slim.get("early_interview_flag") not in ("before", "unparsed"):
             continue
         rows.append(slim)
     return {"items": rows, "count": len(rows)}
@@ -690,6 +782,124 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
 
     _asyncio.create_task(_run())
     return {"ok": True, "queued": True, "id": monday_item_id}
+
+
+_BONUS_CALLS_URL = "https://ayci-academy.circle.so/c/bonus-live-sessions/"
+
+
+def _early_access_dm(grant: str, first_name: str, prev_name: str,
+                     prev_url: str, bonus_url: str) -> str:
+    """Build the Circle DM for an early-access grant (sent as the configured
+    sender). Mirrors the wording the retired zap #43 used."""
+    fn = first_name or "there"
+    prev_line = (
+        "This is an automated message to let you know that you've been given access to "
+        f"the Curriculum space from the {prev_name} cohort.\n"
+        f"You can now watch the live session recordings here:\n{prev_url}"
+    )
+    bonus_line = (
+        "You've been given access to our Bonus Live Sessions — the Sunday group coaching "
+        f"calls we run between cohorts. You can join them here:\n{bonus_url}"
+    )
+    parts = [f"Hi {fn},", ""]
+    if grant == "previous":
+        parts.append(prev_line)
+    elif grant == "bonus":
+        parts.append(bonus_line)
+    else:  # both
+        parts.append(prev_line)
+        parts.append("")
+        parts.append(bonus_line.replace("You've been given", "You've also been given"))
+    parts += ["", "Hope that helps!"]
+    return "\n".join(parts)
+
+
+class EarlyAccessGrant(BaseModel):
+    grant: str  # "previous" | "bonus" | "both"
+
+    class Config:
+        extra = "forbid"
+
+
+@router.post("/students-db/{monday_item_id}/grant-early-access")
+async def grant_early_access(
+    monday_item_id: str,
+    body: EarlyAccessGrant,
+    user: dict = Depends(require_board("students")),
+):
+    """Give an early-interview student course catch-up access: add them to the
+    PREVIOUS cohort's curriculum space and/or the Bonus Live Sessions space,
+    then DM them (as the configured sender, e.g. Coralie). Replaces zaps
+    #43/#45. `grant` ∈ {previous, bonus, both}. Space IDs + curriculum URL come
+    from the student's cohort config (Settings → Cohort)."""
+    grant = (body.grant or "").strip().lower()
+    if grant not in ("previous", "bonus", "both"):
+        raise HTTPException(400, "grant must be 'previous', 'bonus' or 'both'")
+    row = await db.academy_members.find_one({"_id": monday_item_id})
+    if not row:
+        raise HTTPException(404, "Student not found")
+
+    import settings_store
+    import circle_api
+    configs = await settings_store.get_cohort_configs(db)
+    label = (row.get("cohort_joined") or "").strip()
+    cfg = configs.get(label) or next(
+        (v for k, v in configs.items() if k.strip().lower() == label.lower()), {}
+    )
+    prev_space = cfg.get("prev_cohort_space_id")
+    bonus_space = cfg.get("bonus_calls_space_id")
+    prev_url = cfg.get("prev_cohort_curriculum_url") or ""
+    prev_name = cfg.get("prev_cohort_name") or "the previous"
+    if grant in ("previous", "both") and not prev_space:
+        raise HTTPException(400, f"No previous-cohort space configured for cohort '{label}' — set it in Settings → Cohort.")
+    if grant in ("bonus", "both") and not bonus_space:
+        raise HTTPException(400, f"No bonus-calls space configured for cohort '{label}' — set it in Settings → Cohort.")
+
+    # Resolve the student's Circle member id from the cached member index.
+    member = None
+    try:
+        import private_chat_setup
+        idx = await private_chat_setup._build_email_index()
+        for cand in ((row.get("circle_email") or "").strip().lower(),
+                     (row.get("email") or "").strip().lower()):
+            if cand and cand in idx:
+                member = idx[cand]
+                break
+    except Exception as e:
+        logger.warning(f"[early-access] member lookup failed for {monday_item_id}: {e}")
+    if not member or not member.get("id"):
+        raise HTTPException(400, "Student isn't matched on Circle (check their email / that they've joined).")
+    member_id = int(member["id"])
+
+    results: dict = {}
+    if grant in ("previous", "both"):
+        results["previous"] = await circle_api.add_member_to_space(db, int(prev_space), member_id)
+    if grant in ("bonus", "both"):
+        results["bonus"] = await circle_api.add_member_to_space(db, int(bonus_space), member_id)
+    failed = {k: v.get("error") or v.get("status") for k, v in results.items() if not v.get("ok")}
+    if failed:
+        raise HTTPException(502, f"Couldn't add to space(s): {failed}")
+
+    # DM as the configured sender (e.g. Coralie).
+    pcfg = await settings_store.get_private_chat_config(db)
+    sender_email = (pcfg.get("sender_email") or "").strip().lower()
+    first = (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "").strip()
+    dm_sent = False
+    if sender_email:
+        dm = _early_access_dm(grant, first, prev_name, prev_url, _BONUS_CALLS_URL)
+        dm_sent = await circle_api.send_direct_message(db, sender_email, member_id, dm)
+
+    now = datetime.now(timezone.utc)
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"early_access_grant"})
+    await db.academy_members.update_one({"_id": monday_item_id}, {"$set": {
+        "early_access_grant": grant,
+        "early_access_granted_at": now,
+        "early_access_granted_by": user.get("email") or user.get("id"),
+        "dashboard_edited_fields": pinned,
+    }})
+    fresh = await db.academy_members.find_one({"_id": monday_item_id}, {"columns": 0, "columns_by_id": 0})
+    return {"ok": True, "grant": grant, "spaces": results, "dm_sent": dm_sent,
+            "item": _slim_row_for_list(fresh)}
 
 
 @router.get("/students-db/private-chat/link-existing")
@@ -1365,7 +1575,7 @@ PROTECTED_FIELDS = _protected_fields_set()
 
 # Extra fields the intake endpoint can set on a row in addition to the
 # normal scalar columns. Tracked so we know who/what created the row.
-INTAKE_ONLY_FIELDS = {"stage", "source", "intake_payload_meta"}
+INTAKE_ONLY_FIELDS = {"stage", "source", "intake_payload_meta", "kajabi_interview_date"}
 
 
 @router.post("/students-db/intake")

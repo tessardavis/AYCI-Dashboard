@@ -447,6 +447,65 @@ async def post_dm_message(
         return None
 
 
+async def add_member_to_space(db, space_id: int, member_id: int) -> dict:
+    """Add a community member to a Circle space via the Admin API. Returns
+    {ok, status, error}. A 422 'already a member' is treated as success
+    (idempotent). Replaces the Zapier 'Add Member to Space' step used by the
+    early-interview course-catch-up grant."""
+    if not space_id or not member_id:
+        return {"ok": False, "error": "missing space_id or member_id"}
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.post(
+                f"{ADMIN_BASE}/space_members",
+                headers={**_admin_headers(), "Content-Type": "application/json"},
+                json={"space_id": int(space_id), "community_member_id": int(member_id)},
+            )
+            if r.status_code in (200, 201):
+                return {"ok": True, "status": r.status_code}
+            txt = (r.text or "")[:300]
+            if r.status_code in (409, 422) and "already" in txt.lower():
+                return {"ok": True, "status": r.status_code, "already_member": True}
+            logger.warning(f"[circle-api] add_member_to_space({space_id},{member_id}) failed {r.status_code} {txt}")
+            return {"ok": False, "status": r.status_code, "error": txt}
+        except Exception as e:
+            logger.warning(f"[circle-api] add_member_to_space errored: {e}")
+            return {"ok": False, "status": None, "error": str(e)[:300]}
+
+
+async def send_direct_message(db, sender_email: str, member_id: int, body: str) -> bool:
+    """Send a 1:1 Circle DM from `sender_email` to `member_id`. Find-or-creates
+    the direct chat room (sender implicit from their token), then posts the
+    message. Returns True on success."""
+    if not member_id or not body:
+        return False
+    access_token = await _get_access_token(db, sender_email)
+    if not access_token:
+        logger.warning(f"[circle-api] send_direct_message: no token for {sender_email}")
+        return False
+    room_uuid = None
+    async with httpx.AsyncClient(timeout=20) as c:
+        try:
+            r = await c.post(
+                f"{HEADLESS_BASE}/messages",
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                json={"chat_room": {"kind": "direct", "community_member_ids": [int(member_id)]}},
+            )
+            if r.status_code in (200, 201):
+                b = r.json()
+                room_uuid = (
+                    b.get("chat_room_uuid") or (b.get("chat_room") or {}).get("uuid") or b.get("uuid")
+                )
+            else:
+                logger.warning(f"[circle-api] send_direct_message room create failed {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            logger.warning(f"[circle-api] send_direct_message room errored: {e}")
+    if not room_uuid:
+        return False
+    posted = await post_dm_message(db, sender_email, room_uuid, body)
+    return bool(posted)
+
+
 async def create_group_chat(
     db, sender_email: str, member_ids: list[int], name: Optional[str] = None,
 ) -> Optional[dict]:
