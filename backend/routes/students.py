@@ -119,20 +119,22 @@ async def _run_lookup_fanout(
         if e and "@" in e and e != email and e not in alt_emails:
             alt_emails.append(e)
     if alt_emails:
-        if not (calendly_safe or {}).get("found"):
+        async def _retry(platform: str, current: dict, make_coro):
+            """If `current` came back not-found, retry the platform under each
+            alternate email and return the first hit (tagged with which email)."""
+            if (current or {}).get("found"):
+                return current
             for ae in alt_emails:
-                r = await _bounded_platform("calendly", lookup.calendly_lookup(ae), PLATFORM_TIMEOUTS["calendly"])
+                r = await _bounded_platform(platform, make_coro(ae), PLATFORM_TIMEOUTS[platform])
                 if (r or {}).get("found"):
                     r["matched_email"] = ae
-                    calendly_safe = r
-                    break
-        if not (stripe_safe or {}).get("found"):
-            for ae in alt_emails:
-                r = await _bounded_platform("stripe", lookup.stripe_lookup(ae), PLATFORM_TIMEOUTS["stripe"])
-                if (r or {}).get("found"):
-                    r["matched_email"] = ae
-                    stripe_safe = r
-                    break
+                    return r
+            return current
+
+        calendly_safe = await _retry("calendly", calendly_safe, lambda ae: lookup.calendly_lookup(ae))
+        stripe_safe = await _retry("stripe", stripe_safe, lambda ae: lookup.stripe_lookup(ae))
+        circle_safe = await _retry("circle", circle_safe, lambda ae: lookup.circle_lookup(db, ae))
+        tally_safe = await _retry("tally", tally_safe, lambda ae: tally.lookup_student(db, ae))
 
     drive_link = None
     drive_summary = None

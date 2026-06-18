@@ -448,6 +448,7 @@ export default function StudentLookup() {
 function StudentNotesCard({ email, fallbackName }) {
   const [row, setRow] = useState(null);
   const [note, setNote] = useState("");
+  const [otherEmails, setOtherEmails] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -467,6 +468,7 @@ function StudentNotesCard({ email, fallbackName }) {
           null;
         setRow(match);
         setNote((match && match.coach_notes) || "");
+        setOtherEmails((match && match.other_emails) || "");
       })
       .catch(() => alive && setRow(null))
       .finally(() => alive && setLoading(false));
@@ -479,12 +481,16 @@ function StudentNotesCard({ email, fallbackName }) {
     if (!row?._id) return;
     setSaving(true);
     try {
-      const { data } = await apiClient.patch(`/students-db/${row._id}`, { coach_notes: note || null });
+      const { data } = await apiClient.patch(`/students-db/${row._id}`, {
+        coach_notes: note || null,
+        other_emails: otherEmails.trim() || null,
+      });
       setRow(data);
       setNote(data.coach_notes || "");
-      toast.success("Notes saved");
+      setOtherEmails(data.other_emails || "");
+      toast.success("Saved");
     } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't save notes");
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't save");
     } finally {
       setSaving(false);
     }
@@ -497,7 +503,9 @@ function StudentNotesCard({ email, fallbackName }) {
   const last = (row && row.surname) || (parts.length > 1 ? parts.slice(1).join(" ") : "");
   const tallyUrl = tallyPrefillUrl({ contactId: row && row._id, first, last, email, speciality: row && row.speciality });
 
-  const dirty = (note || "") !== ((row && row.coach_notes) || "");
+  const dirty =
+    (note || "") !== ((row && row.coach_notes) || "") ||
+    (otherEmails || "") !== ((row && row.other_emails) || "");
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -539,6 +547,20 @@ function StudentNotesCard({ email, fallbackName }) {
         </div>
       ) : (
         <>
+          <div className="mb-3">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">
+              Other emails (Calendly/Stripe/Circle booked under — comma-separated)
+            </div>
+            <input
+              value={otherEmails}
+              onChange={(e) => setOtherEmails(e.target.value)}
+              placeholder="e.g. henrymurphy@hotmail.co.uk"
+              className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
+            />
+            <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
+              Add any other address this student uses — the lookup then matches their Calendly, Stripe, Circle and Tally under it too.
+            </div>
+          </div>
           <textarea
             rows={4}
             value={note}
@@ -549,7 +571,7 @@ function StudentNotesCard({ email, fallbackName }) {
           <div className="flex items-center justify-end mt-2">
             <Button size="sm" onClick={save} disabled={saving || !dirty}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-              {dirty ? "Save notes" : "Saved"}
+              {dirty ? "Save changes" : "Saved"}
             </Button>
           </div>
         </>
