@@ -219,6 +219,7 @@ async def _early_access_email_cohort(db) -> dict:
     import settings_store
     import cohort as cohort_mod
     out: dict = {}
+    complete = True  # did EVERY required Kit tag fetch succeed this run?
     try:
         configs = await settings_store.get_cohort_configs(db)
         for label, cfg in configs.items():
@@ -232,16 +233,24 @@ async def _early_access_email_cohort(db) -> dict:
                     emails = await cohort_mod._ck_tag_emails(int(tid))
                 except Exception as e:
                     logger.info(f"[early-access] CK tag {tid} fetch failed: {e}")
+                    complete = False  # partial — don't trust/cache this run
                     continue
                 for em in emails:
                     out[(em or "").strip().lower()] = label
         out.pop("", None)
-        await db.cache.update_one(
-            {"_id": "early_access_email_cohort"},
-            {"$set": {"cached_at": datetime.now(timezone.utc), "map": out}},
-            upsert=True,
-        )
-        return out
+        if complete:
+            await db.cache.update_one(
+                {"_id": "early_access_email_cohort"},
+                {"$set": {"cached_at": datetime.now(timezone.utc), "map": out}},
+                upsert=True,
+            )
+            return out
+        # A Kit tag failed (likely rate-limited) → DON'T poison the cache with a
+        # partial list (that's what made the count flicker). Serve the last good
+        # cached map; fall back to the partial only if we've never cached one.
+        prev = (doc or {}).get("map")
+        logger.warning("[early-access] partial Kit fetch — keeping previous cached map")
+        return prev if prev else out
     except Exception as e:
         logger.warning(f"[early-access] email-cohort refresh failed: {e}")
         return (doc or {}).get("map") or {}
