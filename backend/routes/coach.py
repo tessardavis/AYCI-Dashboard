@@ -1,7 +1,7 @@
 """Coach activity dashboard."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, Optional
 
 import coach_activity as coach_act
 import coach_activity_dismissals as dismissals
@@ -22,17 +22,20 @@ class DismissRequest(BaseModel):
 @router.get("/coach-activity/summary")
 async def coach_activity_summary(
     refresh: bool = False,
+    cohort: Optional[str] = None,
     user: dict = Depends(require_board("coach_activity")),
 ):
     """Aggregated coaching engagement across Circle spaces + private video
-    responses. Cached 30 min via SWR."""
+    responses. Cached 30 min via SWR. `cohort` shows a past cohort (a key of
+    coach_activity.COHORT_COACH_SPACES); default = the current cohort."""
+    key = f"coach_activity:summary:{(cohort or 'current').strip()}"
     if refresh:
-        await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
+        await db["fn_cache"].delete_one({"_id": key})
     return await launches_mod._stale_while_revalidate(
         db,
-        "coach_activity:summary",
+        key,
         ttl_min=30,
-        compute_fn=lambda: coach_act.fetch_coach_activity_summary(db),
+        compute_fn=lambda: coach_act.fetch_coach_activity_summary(db, cohort),
     )
 
 

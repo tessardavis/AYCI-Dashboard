@@ -23,7 +23,7 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta, date
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -44,6 +44,20 @@ PRIVATE_VIDEOS_BOARD_ID = 5083952249         # AYCI - Private video responses
 # Day 1 cut-offs (cohort April 26)
 RECORDED_ANSWERS_START = date(2026, 4, 4)   # Mon 4 Apr — recorded answer review
 INTERVIEW_SUPPORT_START = date(2026, 4, 23) # Thu 23 Apr — interview support
+
+# Past cohorts you can flick back to on the Coach Activity page. The CURRENT
+# cohort always uses the live Settings → Coach Spaces config; these are
+# historical cohorts (their spaces are fixed). Add a cohort with its two Circle
+# space ids + Day-1 dates — found via the Circle spaces list
+# (recorded-answer-review-* / specific-interview-support-*).
+COHORT_COACH_SPACES: dict = {
+    "April 26": {
+        "recorded_answer_space_id": RECORDED_ANSWER_SPACE_ID,        # 2529508
+        "recorded_answer_start": RECORDED_ANSWERS_START.isoformat(),  # 2026-04-04
+        "interview_support_space_id": INTERVIEW_SUPPORT_SPACE_ID,     # 2529509
+        "interview_support_start": INTERVIEW_SUPPORT_START.isoformat(),  # 2026-04-23
+    },
+}
 
 # Coach roster — `(canonical_name, [emails], [name_aliases_or_partial_matches])`.
 # Aliases are useful when Circle stores a coach under their full real name (e.g.
@@ -581,10 +595,19 @@ async def fetch_private_video_submissions() -> dict:
 
 # ---------- Top-level fan-out -------------------------------------------------
 
-async def fetch_coach_activity_summary(db=None) -> dict:
+async def fetch_coach_activity_summary(db=None, cohort: Optional[str] = None) -> dict:
     """Top-level payload for the Coach Activity dashboard. Run all 3 fetches in parallel.
-    Space IDs + start dates are admin-configurable via Settings → Coach Spaces."""
-    if db is not None:
+    `cohort` (a key of COHORT_COACH_SPACES) shows a PAST cohort; otherwise the
+    CURRENT cohort's spaces + start dates from Settings → Coach Spaces."""
+    selected = "current"
+    past = COHORT_COACH_SPACES.get((cohort or "").strip()) if cohort else None
+    if past:
+        recorded_space = past["recorded_answer_space_id"]
+        interview_space = past["interview_support_space_id"]
+        recorded_start = date.fromisoformat(past["recorded_answer_start"])
+        interview_start = date.fromisoformat(past["interview_support_start"])
+        selected = (cohort or "").strip()
+    elif db is not None:
         try:
             import settings_store
             cfg = await settings_store.get_coach_spaces(db)
@@ -616,4 +639,6 @@ async def fetch_coach_activity_summary(db=None) -> dict:
         "recorded_answers": safe(recorded),
         "interview_support": safe(interview),
         "private_videos": safe(private),
+        "cohort": selected,
+        "cohort_options": ["current", *COHORT_COACH_SPACES.keys()],
     }

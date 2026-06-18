@@ -21,13 +21,17 @@ export default function CoachActivity() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cohort, setCohort] = useState("current"); // "current" or a past-cohort label
 
-  const load = async (refresh = false) => {
+  const load = async (refresh = false, cohortArg = cohort) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
     try {
+      const params = {};
+      if (refresh) params.refresh = true;
+      if (cohortArg && cohortArg !== "current") params.cohort = cohortArg;
       const { data } = await apiClient.get("/coach-activity/summary", {
-        params: refresh ? { refresh: true } : {},
+        params,
         timeout: 60000,
       });
       setData(data);
@@ -58,15 +62,31 @@ export default function CoachActivity() {
         subtitle="How quickly the team is reviewing student videos & interview-support posts across Circle and the private-tier Monday board."
         testid="coach-activity-hero"
         actions={
-          <button
-            onClick={() => load(true)}
-            disabled={refreshing || loading}
-            className="text-sm bg-white/95 border border-white/20 rounded-lg px-4 py-2 hover:bg-white disabled:opacity-50 flex items-center gap-2 h-10 text-[var(--ayci-ink)]"
-            data-testid="coach-activity-refresh"
-          >
-            {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {data?.cohort_options?.length > 1 && (
+              <select
+                value={cohort}
+                onChange={(e) => { setCohort(e.target.value); load(false, e.target.value); }}
+                disabled={refreshing || loading}
+                className="text-sm bg-white/95 border border-white/20 rounded-lg px-3 h-10 text-[var(--ayci-ink)] disabled:opacity-50"
+                title="View a past cohort's coaching activity"
+                data-testid="coach-activity-cohort"
+              >
+                {data.cohort_options.map((c) => (
+                  <option key={c} value={c}>{c === "current" ? "Current cohort" : c}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => load(true)}
+              disabled={refreshing || loading}
+              className="text-sm bg-white/95 border border-white/20 rounded-lg px-4 py-2 hover:bg-white disabled:opacity-50 flex items-center gap-2 h-10 text-[var(--ayci-ink)]"
+              data-testid="coach-activity-refresh"
+            >
+              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Refresh
+            </button>
+          </div>
         }
       />
 
