@@ -25,6 +25,7 @@ const EDITABLE_FIELDS = [
   { key: "tier",           label: "Tier" },
   { key: "cohort_joined",  label: "Cohort joined" },
   { key: "interview_date", label: "Interview date" },
+  { key: "kajabi_interview_date", label: "Kajabi interview date (free text from signup form)" },
   { key: "speciality",     label: "Speciality" },
   { key: "hospital",       label: "Hospital" },
   { key: "interview_type", label: "Interview type" },

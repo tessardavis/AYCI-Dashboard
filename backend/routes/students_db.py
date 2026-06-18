@@ -1189,7 +1189,7 @@ async def get_student(
 # when Stripe is supposed to own that).
 EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email", "other_emails",
-    "tier", "cohort_joined", "interview_date", "speciality", "hospital",
+    "tier", "cohort_joined", "interview_date", "kajabi_interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
 }
@@ -1207,6 +1207,7 @@ class StudentPatch(BaseModel):
     tier: Optional[str] = None
     cohort_joined: Optional[str] = None
     interview_date: Optional[str] = None  # ISO yyyy-mm-dd
+    kajabi_interview_date: Optional[str] = None  # free text from the Kajabi signup form
     speciality: Optional[str] = None
     hospital: Optional[str] = None
     interview_type: Optional[str] = None
