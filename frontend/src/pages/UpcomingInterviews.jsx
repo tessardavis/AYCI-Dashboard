@@ -477,7 +477,7 @@ function EveCheckInsWidget() {
     setRecovering(true);
     setRecoverReport(null);
     try {
-      const { data } = await apiClient.post("/interview-eve/backfill-scores?days=2");
+      const { data } = await apiClient.post("/interview-eve/backfill-scores?days=14");
       setRecoverReport(data);
       const n = (data.recovered || []).length;
       if (n > 0) {

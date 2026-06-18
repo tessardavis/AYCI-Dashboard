@@ -278,6 +278,10 @@ async def send_interview_eve_dms(db) -> dict:
 
 # ---------------------------------------------------------------- Score parsing
 _SCORE_RE = re.compile(r"\b(10|[1-9])\b")
+# High-confidence rating forms where the number is glued to "/10" / "out of 10"
+# and a plain word-boundary search would miss it — e.g. "9ish/10", "8/10",
+# "7 to 7.5/10" (→ 7), "8 out of 10". Decimals are floored to the integer.
+_RATING_RE = re.compile(r"(\d{1,2})(?:\.\d+)?\s*(?:ish)?\s*(?:/|out of)\s*10\b", re.IGNORECASE)
 
 
 def parse_score(text: str) -> Optional[int]:
@@ -307,6 +311,14 @@ def parse_score(text: str) -> Optional[int]:
     t = t.replace("\u20e3", "").replace("\ufe0f", "")
     t = t.strip()
     low = t.lower()
+    # High-confidence "<n>/10" / "out of 10" forms first — these carry their own
+    # rating context, so they're safe even in long replies and catch glued
+    # variants ("9ish/10") the standalone search below misses.
+    rm = _RATING_RE.search(t)
+    if rm:
+        rn = int(rm.group(1))
+        if 1 <= rn <= 10:
+            return rn
     m = _SCORE_RE.search(t)
     if not m:
         return None
