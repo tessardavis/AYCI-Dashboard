@@ -60,9 +60,11 @@ Current shape: `Calendly: Invitee Created` → **Webhooks POST `/api/students-db
 2. **Delete** the `Monday: Update Item` step.
 3. **Keep** the Slack step. ⚠️ If Slack mapped any field from the Monday steps, re-map from the Calendly trigger or the Webhooks response.
 
-- [ ] 15 Charlotte
-- [ ] 16 Becky
-- [ ] 16b Anoop
+- [x] 15 Charlotte — published 2026-06-19
+- [x] 16 Becky — published 2026-06-19
+- [x] 16b Anoop — published 2026-06-19
+
+**Done 2026-06-19.** All three torn down to `Calendly → update-by-email (fifteen_minute_call: "Booked") → Slack`. Monday Get Items + Update Item removed. (15-min zaps trigger on each coach's personal debrief/15-min event — not the round-robin, so no event-type concern.)
 
 ---
 
