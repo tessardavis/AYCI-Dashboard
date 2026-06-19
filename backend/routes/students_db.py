@@ -1506,8 +1506,12 @@ async def book_call(
             "id": None,
             "matched_on": None,
             "slot": None,
+            "field": None,
+            "value": None,
+            "previous_value": "",
             "reason": "student_not_found",
             "email": email_l,
+            "coach": coach,
         }
 
     if row.get("email") == email_l:
@@ -1533,7 +1537,12 @@ async def book_call(
             "id": row["_id"],
             "matched_on": matched_on,
             "slot": None,
+            "field": None,
+            "value": None,
+            "previous_value": "",
             "reason": "all_slots_booked",
+            "email": email_l,
+            "coach": coach,
         }
 
     field = f"call_{slot}"
@@ -1575,6 +1584,9 @@ async def book_call(
         "field": field,
         "value": value,
         "previous_value": previous_value if previous_value else "",
+        "reason": "booked",
+        "email": email_l,
+        "coach": coach,
     }
 
 
