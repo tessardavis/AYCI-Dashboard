@@ -1464,8 +1464,10 @@ async def book_call(
     Body: {"email": "x@y.z", "coach": "Anoop"}
 
     Returns the slot filled (1-4) and the value written, or slot=null with
-    reason="all_slots_booked" when every slot is already taken. 404 if no
-    student matches the email."""
+    reason="all_slots_booked" when every slot is already taken, or slot=null
+    with reason="student_not_found" when no student matches. We return 200
+    (not 404) on no-match so the calling zap's "slot is empty" fallback can
+    Slack-alert gracefully instead of erroring the whole Zap."""
     _check_webhook_secret(x_webhook_secret)
     try:
         body = await request.json()
@@ -1487,13 +1489,33 @@ async def book_call(
         )
     email_l = email.strip().lower()
 
+    # Combined-identity match: primary, circle, OR any listed alt email — so a
+    # booking made under a different address still resolves to the one record.
+    email_rx = re.escape(email_l)
     row = await db.academy_members.find_one(
-        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+        {"$or": [
+            {"email": email_l},
+            {"circle_email": email_l},
+            {"other_emails": {"$regex": email_rx, "$options": "i"}},
+        ]},
     )
     if not row:
-        raise HTTPException(404, f"No student found for email={email_l}")
+        logger.info(f"[students-db] book-call no student for email={email_l} coach={coach}")
+        return {
+            "ok": True,
+            "id": None,
+            "matched_on": None,
+            "slot": None,
+            "reason": "student_not_found",
+            "email": email_l,
+        }
 
-    matched_on = "email" if row.get("email") == email_l else "circle_email"
+    if row.get("email") == email_l:
+        matched_on = "email"
+    elif row.get("circle_email") == email_l:
+        matched_on = "circle_email"
+    else:
+        matched_on = "other_emails"
 
     # Lowest-numbered slot not already "Booked..." (Eligible or blank).
     slot = None
