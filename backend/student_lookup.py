@@ -61,12 +61,26 @@ async def _get_name_index(db) -> list[dict]:
 
     Used by both name_search (which only needs name/email/avatar) AND
     circle_lookup (which needs the wider slim shape). One cache, one
-    Mongo read per 30 min, regardless of how many lookups happen."""
+    Mongo read per 30 min, regardless of how many lookups happen.
+
+    Reloads early (before the TTL) if the underlying `circle_members_cache.all`
+    doc's `cached_at` changed — e.g. someone hit "Refresh Circle cache" or the
+    daily 05:00 rebuild ran. Without this, a refresh wouldn't show in the
+    Students list (which reads this index) for up to 30 min, and a brand-new
+    Circle member keeps showing "get on board first" even after a refresh. The
+    freshness probe only pulls `cached_at` (tiny), not the ~1.7MB members blob.
+    Cross-worker safe: any worker notices the new cached_at."""
     import time as _time
     now = _time.monotonic()
+    try:
+        meta = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0, "cached_at": 1})
+    except Exception:
+        meta = None
+    doc_cached_at = (meta or {}).get("cached_at")
     if (
         _name_index_cache["members"]
         and (now - _name_index_cache["loaded_at"]) < _NAME_INDEX_TTL_SECONDS
+        and _name_index_cache.get("doc_cached_at") == doc_cached_at
     ):
         return _name_index_cache["members"]
     # Load the whole slim doc — circle_lookup needs the extra fields
@@ -77,6 +91,7 @@ async def _get_name_index(db) -> list[dict]:
     members = (doc or {}).get("members", []) if doc else []
     _name_index_cache["members"] = members
     _name_index_cache["loaded_at"] = now
+    _name_index_cache["doc_cached_at"] = doc_cached_at
     return members
 
 
