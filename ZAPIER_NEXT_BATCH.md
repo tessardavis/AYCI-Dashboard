@@ -39,7 +39,13 @@ Result: a booking just POSTs to `book-call`; if all 4 slots are full, the coach 
 
 **Done 2026-06-19.** All three torn down to `Calendly → book-call POST → Filter (slot empty) → Slack #fulfillment-team`. Monday read/AI/Paths steps removed. `book-call` hardened along the way: 200 (not 404) on no-match, combined-identity email lookup, and a uniform response schema (`reason` = booked|all_slots_booked|student_not_found) so the Slack alert always has Email/Reason to map.
 
-> **⏳ OPEN — waiting on Megan (as of 2026-06-19):** Tessa is waiting for Megan to confirm the right Calendly calendars/event types are triggering these zaps. Becky's pulled a real booking (confirmed firing); **Anoop & Charlotte still to verify** which of their event types the round-robin (`/d/cxkz-kf9-xb4/ayci-1-1-30-min`) routes into, and that each zap's step-1 Event Type matches. Round-robin pool is intended to be **only Anoop/Charlotte/Becky** (confirmed by Tessa) — so the 3 zaps are the complete set; no Megan/Tessa zap needed. Don't consider A fully closed until Megan confirms.
+> **⏳ OPEN — waiting on Megan (as of 2026-06-19):** Tessa is waiting for Megan to confirm the right Calendly event types trigger these zaps.
+>
+> **Round-robin resolved via Calendly API (2026-06-19):** the student link `/d/cxkz-kf9-xb4/ayci-1-1-30-min` is a **single managed round-robin event type** `AYCI 1:1 (30 min)` (uri `5ffedd84-90df-425e-bf24-e08e7c7b7bca`, `pooling_type: round_robin`, `profile: null` — which is why it doesn't appear under any coach's personal event types). Recent 18 bookings all carry that one event_type URI, distributed to **Becky (12) + Anoop (6)**; Charlotte 0 recently but is in the intended pool. **Each coach's zap trigger must be scoped to `AYCI 1:1 (30 min)`** — if it's not selectable in the Event-Type dropdown for that coach's connection, use *All Event Types* + a Filter `event type name = AYCI 1:1 (30 min)`, else the zap fires on their mock/boost/personal bookings and burns a 1:1 slot. Likely the cause of Anoop looking quiet (wrong event type on his trigger).
+>
+> **⚠️ Also flag for Megan:** there's an `AYCI 1:1 (60 min)` event with 15 recent bookings — possibly a *second* round-robin (VIP 1:1s). If those 60-min calls should count against the call allowance, they need their own book-call zap (none exists today).
+>
+> Pool is intended to be **only Anoop/Charlotte/Becky** (confirmed by Tessa) for the 30-min — so the 3 zaps are the complete set; no Megan/Tessa zap needed. Don't consider A fully closed until Megan confirms the triggers.
 
 ---
 
