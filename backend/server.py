@@ -1932,6 +1932,10 @@ async def admin_circle_test_add_to_space(
     email = (email or "").strip().lower()
     token_h = {"Authorization": f"Token {token}", "Content-Type": "application/json"}
     bearer_h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    # Admin v1 token (separate from the v2 token) — the v1 API hosts the
+    # single-space `space_members` add. Set CIRCLE_ADMIN_V1_TOKEN on Render.
+    v1_token = (os.environ.get("CIRCLE_ADMIN_V1_TOKEN") or "").strip()
+    v1_h = {"Authorization": f"Token {v1_token}", "Content-Type": "application/json"} if v1_token else None
     V2 = circle_api.ADMIN_BASE                       # app.circle.so/api/admin/v2
     V1 = "https://app.circle.so/api/v1"
 
@@ -1961,12 +1965,20 @@ async def admin_circle_test_add_to_space(
     # Bearer auth variant (in case v2 wants Bearer not Token)
     await attempt("v2 space_members {space_id,email} BEARER", "POST", f"{V2}/space_members", bearer_h,
                   json={"space_id": space_id, "email": email})
-    # --- v1 endpoint ---
-    await attempt("v1 space_members {space_id,email}", "POST", f"{V1}/space_members", token_h,
+    # --- v1 endpoint with the v2 token (expected to fail auth — kept for contrast) ---
+    await attempt("v1 space_members {space_id,email} [v2 token]", "POST", f"{V1}/space_members", token_h,
                   json={"space_id": space_id, "email": email})
-    if community_member_id:
-        await attempt("v1 space_members {space_id,community_member_id}", "POST", f"{V1}/space_members", token_h,
-                      json={"space_id": space_id, "community_member_id": community_member_id})
+    # --- v1 endpoint with the ADMIN V1 token (the real candidate) ---
+    if v1_h:
+        await attempt("v1 space_members {space_id,email} [ADMIN V1 token]", "POST", f"{V1}/space_members", v1_h,
+                      json={"space_id": space_id, "email": email})
+        if community_member_id:
+            await attempt("v1 space_members {space_id,community_member_id} [ADMIN V1 token]", "POST", f"{V1}/space_members", v1_h,
+                          json={"space_id": space_id, "community_member_id": community_member_id})
+        await attempt("v1 space_members {space_id,user_email} [ADMIN V1 token]", "POST", f"{V1}/space_members", v1_h,
+                      json={"space_id": space_id, "user_email": email})
+    else:
+        results.append({"variant": "ADMIN V1 token variants", "skipped": "CIRCLE_ADMIN_V1_TOKEN not set"})
     # --- nested path variant ---
     await attempt("v2 spaces/{id}/space_members {email}", "POST", f"{V2}/spaces/{space_id}/space_members", token_h,
                   json={"email": email})
