@@ -199,6 +199,15 @@ Different brands / boards entirely. Out of scope for Academy Members retirement.
 
 ---
 
+## Retirement-readiness verification (2026-06-19)
+
+Checked the two non-zap unknowns before leaning on "the team uses the dashboard now":
+
+- **Coaches are off Monday — confirmed.** Last 1,000 board-activity events (board 1956295952, from 16 Jun) come from exactly TWO actors: `45361659` (Tessa — the account the zaps/integrations authenticate as) and `-4` (Monday system/automation user). **No individual coach accounts** (Becky/Anoop/Charlotte/Kat) appear. Events are 953 `update_column_value` + 46 `create_pulse` (signups) — the automation fingerprint. So the human-editing blocker is effectively gone; no big coach-facing editor build is required.
+- **Monday-native automations — both disabled.** `list_automations` returns 2 workflows, both `is_active: false` with `creator_deactivated` (creator's seat deactivated — lines up with Oksana offboarding): (1) *when Interview Date arrives → set a Private/Deleted status*; (2) *when Boss Badge changes + Substantive → create item in Student Wins Tracker (5095636561) + connect boards*. Neither runs. The `-4` system activity is most likely formula/mirror/connected-board recalcs, not a write-source the dashboard must replace. (Caveat: API warns legacy recipes may not all be listed.)
+
+**Net:** the ONLY remaining write-source to retire is the ~40 Zapier zaps below (all via Tessa's token). Plus repoint the codebase's remaining live-Monday **reads** (over_allowance_alerts, cohort, scorecard_auto, private_tier_utilisation, onboarding_gap) to the mirror so no code calls Monday's API, then cut the sync.
+
 ## Audit status (2026-06-02)
 
 - **80** zaps audited initially.
