@@ -67,6 +67,21 @@ For any zap that looks confusing, ask three questions:
 2. **Which zap watches it?** (round-robin 1:1 → 18/18b/18c · mock → 14/14b/14c · 15-min → 15/16/16b)
 3. **Which box does it tick on the student?** (Call slot · mock · 15-min)
 
+## Who's in the round-robin pool (and how to change it)
+
+The pool = the **hosts listed on the `AYCI 1:1 (30 min)` Round Robin event** itself.
+Confirmed 2026-06-19: **Anoop, Charlotte, Becky**.
+
+⚠️ This event does **not** appear on the normal grouped "Event Types" page (it has no
+owner profile). To open it: use the booking link `calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min`
+→ manage, or **Admin Management** (owner-only). Once open, the hosts are listed on the
+event detail panel — add/remove there to change the pool.
+
+**If you change the pool, you must also keep the zaps in sync:** each coach in the pool
+needs their own "1:1 Round Robin" zap (Calendly *Invitee Created* on `AYCI 1:1 (30 min)`
+→ `book-call` with their name). Add a coach to the pool but not a zap → their assigned
+bookings won't write a Call slot.
+
 ## Verifying the round-robin (confirmed 2026-06-19)
 
 Pulled from the Calendly API: the link is the managed round-robin event type
