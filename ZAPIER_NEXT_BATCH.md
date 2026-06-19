@@ -33,9 +33,11 @@ Current shape (Phase 1): `Calendly: Invitee Created` → **Webhooks POST `/api/s
 
 Result: a booking just POSTs to `book-call`; if all 4 slots are full, the coach gets the same Slack alert as before.
 
-- [ ] 18 Anoop
-- [ ] 18b Charlotte
-- [ ] 18c Becky
+- [x] 18 Anoop — published 2026-06-19
+- [x] 18b Charlotte — published 2026-06-19
+- [x] 18c Becky — published 2026-06-19
+
+**Done 2026-06-19.** All three torn down to `Calendly → book-call POST → Filter (slot empty) → Slack #fulfillment-team`. Monday read/AI/Paths steps removed. `book-call` hardened along the way: 200 (not 404) on no-match, combined-identity email lookup, and a uniform response schema (`reason` = booked|all_slots_booked|student_not_found) so the Slack alert always has Email/Reason to map. ⚠️ Anoop's Calendly event-type was being confirmed with Megan — double-check it's the live 1:1 link.
 
 ---
 
