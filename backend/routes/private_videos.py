@@ -834,26 +834,52 @@ async def send_to_circle(
         )
 
     cfg = await settings_store.get_private_chat_config(db)
+    # Candidate senders in priority order: the configured sender (e.g. Coralie),
+    # then the other configured coaches. We post as the FIRST one Circle accepts.
+    # Circle requires the sender to be a MEMBER of the room, so:
+    #   - new chats (created with Coralie) post as Coralie;
+    #   - existing Oksana-era chats — where Coralie isn't a member — fall back to
+    #     a coach who IS in that thread.
+    # Either way the reply lands in the student's EXISTING thread (no new thread),
+    # and it survives Oksana being deactivated. Coach emails in the config must be
+    # their CIRCLE emails (e.g. Coralie = coralie.fairon@yahoo.co.uk) for the
+    # token mint to work.
     sender_email = (cfg.get("sender_email") or "").strip().lower()
-    if not sender_email:
+    candidates: list[str] = []
+    if sender_email:
+        candidates.append(sender_email)
+    for co in (cfg.get("coaches") or []):
+        e = (co.get("email") or "").strip().lower()
+        if e and e not in candidates:
+            candidates.append(e)
+    if not candidates:
         raise HTTPException(
             400,
-            "No sending coach configured — set the sender in Settings → "
+            "No sending coach configured — set the sender + coaches in Settings → "
             "Private chat config before sending.",
         )
 
-    posted = await circle_api.post_dm_message(db, sender_email, chat_uuid, message_text)
+    posted = None
+    used_sender = None
+    for em in candidates:
+        posted = await circle_api.post_dm_message(db, em, chat_uuid, message_text)
+        if posted:
+            used_sender = em
+            break
     if not posted:
         logger.warning(
             f"[private-videos] direct post failed for {item_id} "
-            f"room={chat_uuid} sender={sender_email}"
+            f"room={chat_uuid} tried={candidates}"
         )
         raise HTTPException(
             502,
-            f"Couldn't post into the student's private chat (room {chat_uuid}) "
-            f"as {sender_email}. The sender may not be a member of that room, or "
-            f"their Circle token expired — check the link and the sender's Circle access.",
+            f"Couldn't post into the student's private chat (room {chat_uuid}) as "
+            f"any configured sender ({', '.join(candidates)}). None is a member of "
+            f"that room, or their Circle token expired — check the link and that a "
+            f"coach in this thread is listed (with their Circle email) in Settings → "
+            f"Private chat config.",
         )
+    logger.info(f"[private-videos] posted reply for {item_id} room={chat_uuid} as {used_sender}")
 
     now_iso = datetime.now(timezone.utc).isoformat()
     update = {
@@ -861,6 +887,7 @@ async def send_to_circle(
         "status": "done",
         "updated_at": now_iso,
         "posted_chat_uuid": chat_uuid,
+        "posted_by_sender": used_sender,
     }
     await db.private_video_submissions.update_one(
         {"id": item_id}, {"$set": update}
