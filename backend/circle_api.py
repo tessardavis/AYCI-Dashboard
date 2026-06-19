@@ -21,6 +21,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 ADMIN_BASE = "https://app.circle.so/api/admin/v2"
+ADMIN_V1_BASE = "https://app.circle.so/api/v1"
 HEADLESS_BASE = "https://app.circle.so/api/headless/v1"
 HEADLESS_AUTH = "https://app.circle.so/api/v1/headless/auth_token"
 
@@ -448,27 +449,43 @@ async def post_dm_message(
 
 
 async def add_member_to_space(db, space_id: int, email: str) -> dict:
-    """Add a community member (by EMAIL) to a Circle space via the Admin API.
-    Returns {ok, status, error}. A 409/422 'already a member' is treated as
-    success (idempotent). Replaces the Zapier 'Add Member to Space' step used by
-    the early-interview course-catch-up grant. NB the Admin v2 /space_members
-    endpoint keys on `email`, not community_member_id."""
+    """Add a community member (by EMAIL) to a SINGLE Circle space.
+
+    Uses the **Admin v1** API (`POST /api/v1/space_members {space_id, email}`)
+    with `CIRCLE_ADMIN_V1_TOKEN`. The Admin v2 `space_members` endpoint we tried
+    first only ever 422'd ("User not added to space") — on v2 the only thing
+    that works is `space_group_members`, which adds to the whole GROUP (an
+    over-grant). v1 does a true single-space add (confirmed 2026-06-19). This is
+    the same path the Zapier "Add Member to Space" step uses for the
+    early-interview course-catch-up grant.
+
+    Returns {ok, status, error}. Idempotent: v1 returns 200 with
+    `{"success": false, "message": "User already added to space."}` for an
+    existing member — treated as success."""
     email = (email or "").strip().lower()
     if not space_id or not email:
         return {"ok": False, "error": "missing space_id or email"}
+    token = (os.environ.get("CIRCLE_ADMIN_V1_TOKEN") or "").strip()
+    if not token:
+        return {"ok": False, "error": "CIRCLE_ADMIN_V1_TOKEN not configured "
+                "(need an Admin v1 token for single-space adds)"}
     async with httpx.AsyncClient(timeout=20) as c:
         try:
             r = await c.post(
-                f"{ADMIN_BASE}/space_members",
-                headers={**_admin_headers(), "Content-Type": "application/json"},
+                f"{ADMIN_V1_BASE}/space_members",
+                headers={"Authorization": f"Token {token}", "Content-Type": "application/json"},
                 json={"space_id": int(space_id), "email": email},
             )
-            if r.status_code in (200, 201):
-                return {"ok": True, "status": r.status_code}
             txt = (r.text or "")[:300]
-            if r.status_code in (409, 422) and "already" in txt.lower():
-                return {"ok": True, "status": r.status_code, "already_member": True}
-            logger.warning(f"[circle-api] add_member_to_space({space_id},{email}) failed {r.status_code} {txt}")
+            try:
+                data = r.json()
+            except Exception:
+                data = {}
+            msg = str(data.get("message") or "").lower()
+            already = "already added" in msg or "already a member" in msg
+            if r.status_code in (200, 201) and (data.get("success") is True or already):
+                return {"ok": True, "status": r.status_code, "already_member": already}
+            logger.warning(f"[circle-api] add_member_to_space v1({space_id},{email}) failed {r.status_code} {txt}")
             return {"ok": False, "status": r.status_code, "error": txt}
         except Exception as e:
             logger.warning(f"[circle-api] add_member_to_space errored: {e}")
