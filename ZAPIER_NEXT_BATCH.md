@@ -37,7 +37,9 @@ Result: a booking just POSTs to `book-call`; if all 4 slots are full, the coach 
 - [x] 18b Charlotte — published 2026-06-19
 - [x] 18c Becky — published 2026-06-19
 
-**Done 2026-06-19.** All three torn down to `Calendly → book-call POST → Filter (slot empty) → Slack #fulfillment-team`. Monday read/AI/Paths steps removed. `book-call` hardened along the way: 200 (not 404) on no-match, combined-identity email lookup, and a uniform response schema (`reason` = booked|all_slots_booked|student_not_found) so the Slack alert always has Email/Reason to map. ⚠️ Anoop's Calendly event-type was being confirmed with Megan — double-check it's the live 1:1 link.
+**Done 2026-06-19.** All three torn down to `Calendly → book-call POST → Filter (slot empty) → Slack #fulfillment-team`. Monday read/AI/Paths steps removed. `book-call` hardened along the way: 200 (not 404) on no-match, combined-identity email lookup, and a uniform response schema (`reason` = booked|all_slots_booked|student_not_found) so the Slack alert always has Email/Reason to map.
+
+> **⏳ OPEN — waiting on Megan (as of 2026-06-19):** Tessa is waiting for Megan to confirm the right Calendly calendars/event types are triggering these zaps. Becky's pulled a real booking (confirmed firing); **Anoop & Charlotte still to verify** which of their event types the round-robin (`/d/cxkz-kf9-xb4/ayci-1-1-30-min`) routes into, and that each zap's step-1 Event Type matches. Round-robin pool is intended to be **only Anoop/Charlotte/Becky** (confirmed by Tessa) — so the 3 zaps are the complete set; no Megan/Tessa zap needed. Don't consider A fully closed until Megan confirms.
 
 ---
 

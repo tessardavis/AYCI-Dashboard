@@ -1365,8 +1365,14 @@ async def update_student_by_email(
             400, f"Fields not writable by automation: {sorted(bad)}"
         )
 
+    # Combined-identity match: primary, circle, OR any listed alt email — so a
+    # booking/update keyed on an address the student used elsewhere resolves.
     row = await db.academy_members.find_one(
-        {"$or": [{"email": email_l}, {"circle_email": email_l}]},
+        {"$or": [
+            {"email": email_l},
+            {"circle_email": email_l},
+            {"other_emails": {"$regex": re.escape(email_l), "$options": "i"}},
+        ]},
     )
     if not row:
         # Surface as 404 so the zap's existing not-found branch fires.
@@ -1413,7 +1419,11 @@ async def update_student_by_email(
     return {
         "ok": True,
         "id": row["_id"],
-        "matched_on": "email" if row.get("email") == email_l else "circle_email",
+        "matched_on": (
+            "email" if row.get("email") == email_l
+            else "circle_email" if row.get("circle_email") == email_l
+            else "other_emails"
+        ),
         "updated_fields": sorted(set_fields.keys()),
         "previous_values": previous_values,
     }
