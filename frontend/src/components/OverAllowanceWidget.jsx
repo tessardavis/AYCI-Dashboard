@@ -185,7 +185,7 @@ export default function OverAllowanceWidget() {
                 <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
                   Booked <span className="font-semibold text-rose-700">{s.calendly_calls_used}</span> Calendly calls
                   &nbsp;·&nbsp; Allowance <span className="font-semibold">{s.monday_total_allowance}</span>
-                  &nbsp;<span className="opacity-60">({s.monday_calls_total} calls + {s.monday_mocks_total} mock + {s.monday_bonus_total} bonus{Number(s.extra_bonus_calls) > 0 ? ` incl. +${s.extra_bonus_calls} added` : ""})</span>
+                  &nbsp;<span className="opacity-60">({s.monday_calls_total} calls + {s.monday_mocks_total} mock + {s.monday_bonus_total} bonus{Number(s.added_bonus_calls ?? s.extra_bonus_calls) > 0 ? ` incl. +${Number(s.added_bonus_calls ?? s.extra_bonus_calls)} added${Number(s.upgrade_bonus_calls) > 0 ? `, ${Number(s.upgrade_bonus_calls)} from upgrade purchase` : ""}` : ""})</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">

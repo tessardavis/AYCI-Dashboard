@@ -1862,6 +1862,50 @@ async def admin_boost_and_go_backfill(
     return await bg_audit.apply_backfill(dry_run=not apply)
 
 
+@api.get("/admin/upgrade-bonus/audit")
+async def admin_upgrade_bonus_audit(
+    refresh: bool = False,
+    window_start: str = "2026-05-28",
+    window_end: str = "2026-06-23",
+    keyword: str = "upgrade",
+    cohort: str = "June 26",
+    admin: dict = Depends(require_admin),
+):
+    """Retrospective upgrade-bonus detection: students who BOUGHT an upgrade
+    offer on Stripe (Kajabi charges through it) inside the launch window earn a
+    bonus 1:1 call. The Stripe scan runs in the BACKGROUND and is cached:
+      - first call (or ?refresh=true): kicks off a scan, returns status.
+      - subsequent calls: return the cached result instantly.
+    Read-only — check `matched_charge_descriptions` + `stripe_upgrade_products`
+    to confirm the keyword is hitting the real upgrade offer before applying."""
+    import asyncio as _asyncio
+    import upgrade_bonus
+    kw = {"window_start": window_start, "window_end": window_end,
+          "keyword": keyword, "cohort": cohort}
+    if refresh:
+        _asyncio.create_task(upgrade_bonus.run_audit(**kw))
+        return {"status": "refresh started — re-open this URL (no ?refresh) in ~30-60s",
+                "previous": await upgrade_bonus.get_cached()}
+    cached = await upgrade_bonus.get_cached()
+    if cached is None:
+        _asyncio.create_task(upgrade_bonus.run_audit(**kw))
+        return {"status": "first run started — re-open this URL in ~30-60s"}
+    return cached
+
+
+@api.get("/admin/upgrade-bonus/apply")
+async def admin_upgrade_bonus_apply(
+    apply: bool = False,
+    admin: dict = Depends(require_admin),
+):
+    """Persist the latest audit's grants into upgrade_bonus_grants (idempotent —
+    keyed by Stripe charge id; removes grants whose charge no longer qualifies).
+    The over-allowance check then adds these to each student's bonus allowance.
+    DRY-RUN by default — pass ?apply=true to commit."""
+    import upgrade_bonus
+    return await upgrade_bonus.apply_grants(dry_run=not apply)
+
+
 @api.get("/admin/google-calendar/config")
 async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     """Surface what's needed to wire the AYCI Interviews calendar: the

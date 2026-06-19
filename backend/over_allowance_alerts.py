@@ -106,8 +106,12 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
                 break
 
     # Dashboard-native bonus-call overrides, keyed by monday item id (== the
-    # academy_members `_id`). Only fetch the ones with a non-zero override set.
+    # academy_members `_id`). Two sources, both added to the bonus total:
+    #   1. extra_bonus_calls — MANUAL override (the "+1 bonus call" button).
+    #   2. upgrade_bonus_grants — AUTO-detected upgrade-offer purchases on Stripe
+    #      during a launch window (see upgrade_bonus.py). One grant = one bonus.
     overrides: dict[str, int] = {}
+    auto_grants: dict[str, int] = {}
     if db is not None:
         try:
             async for row in db.academy_members.find(
@@ -120,6 +124,11 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
                     continue
         except Exception as e:
             logger.warning(f"[over-allowance] extra_bonus_calls fold-in failed: {e}")
+        try:
+            import upgrade_bonus
+            auto_grants = await upgrade_bonus.grant_counts_by_student()
+        except Exception as e:
+            logger.warning(f"[over-allowance] upgrade_bonus grants fold-in failed: {e}")
 
     out: list[dict] = []
     for it in items:
@@ -133,8 +142,11 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
         calls = _allowance(cols_by_id, CALL_COLS)
         mocks = _allowance(cols_by_id, MOCK_COLS)
         bonus = _allowance(cols_by_id, BONUS_COLS)
-        extra_bonus = overrides.get(str(it.get("id")), 0)
-        bonus_total = bonus["total"] + extra_bonus
+        sid = str(it.get("id"))
+        extra_bonus = overrides.get(sid, 0)        # manual button
+        upgrade_bonus = auto_grants.get(sid, 0)    # auto-detected Stripe upgrade purchase
+        added_bonus = extra_bonus + upgrade_bonus
+        bonus_total = bonus["total"] + added_bonus
         total = calls["total"] + mocks["total"] + bonus_total
         if total <= 0:
             continue  # no per-student allowance configured — skip
@@ -151,6 +163,8 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
             "monday_mocks_total": mocks["total"],
             "monday_bonus_total": bonus_total,
             "extra_bonus_calls": extra_bonus,
+            "upgrade_bonus_calls": upgrade_bonus,
+            "added_bonus_calls": added_bonus,
             "monday_total_allowance": total,
         })
     return out
@@ -350,10 +364,10 @@ async def notify_over_allowance_breaches(db, force: bool = False) -> dict:
         link_line = (
             f"<{base_url}/coach-activity|Open Coach Activity board>" if base_url else "Open the Coach Activity board"
         )
-        extra_bonus = int(s.get("extra_bonus_calls") or 0)
+        added_bonus = int(s.get("added_bonus_calls") or s.get("extra_bonus_calls") or 0)
         bonus_str = (
-            f"{s['monday_bonus_total']} bonus (incl. +{extra_bonus} added)"
-            if extra_bonus else f"{s['monday_bonus_total']} bonus"
+            f"{s['monday_bonus_total']} bonus (incl. +{added_bonus} added)"
+            if added_bonus else f"{s['monday_bonus_total']} bonus"
         )
         breakdown = (
             f"{s['monday_calls_total']} calls + {s['monday_mocks_total']} mock + {bonus_str}"
