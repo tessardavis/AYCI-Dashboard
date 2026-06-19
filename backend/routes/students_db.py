@@ -1005,12 +1005,17 @@ async def grant_early_access(
     if failed:
         raise HTTPException(502, f"Couldn't add to space(s): {failed}")
 
+    # If they were ALREADY in every target space, they were granted before
+    # (e.g. via the Monday zap, or a re-click) — skip the welcome DM so we don't
+    # double-message them. Still records the grant on the dashboard.
+    all_already = bool(results) and all(v.get("already_member") for v in results.values())
+
     # DM as the configured sender (e.g. Coralie).
     pcfg = await settings_store.get_private_chat_config(db)
     sender_email = (pcfg.get("sender_email") or "").strip().lower()
     first = (row.get("first_name") or (row.get("name") or "").split(" ")[0] or "").strip()
     dm_sent = False
-    if sender_email:
+    if sender_email and not all_already:
         dm = _early_access_dm(grant, first, prev_name, prev_url, _BONUS_CALLS_URL)
         dm_sent = await circle_api.send_direct_message(db, sender_email, member_id, dm)
 
@@ -1024,6 +1029,7 @@ async def grant_early_access(
     }})
     fresh = await db.academy_members.find_one({"_id": monday_item_id}, {"columns": 0, "columns_by_id": 0})
     return {"ok": True, "grant": grant, "spaces": results, "dm_sent": dm_sent,
+            "already_had_access": all_already,
             "item": _slim_row_for_list(fresh)}
 
 
