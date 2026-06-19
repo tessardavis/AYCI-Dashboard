@@ -45,6 +45,7 @@ Scheduled: every 15 minutes via apscheduler.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -53,6 +54,7 @@ from typing import Optional
 import httpx
 
 from connectors import MONDAY_URL, _monday_headers, TIMEOUT
+import webhooks_outbound
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +237,20 @@ async def full_sync(db) -> dict:
     errors = 0
     page = 0
 
+    # Mirror-emit bridge: if any zap has subscribed (Catch Hook) to a column,
+    # we diff that column against the stored value and emit a `column_changed`
+    # event when Monday-side data changes — so a Monday "Specific Column Value
+    # Changed" trigger zap can move onto the dashboard's outbound webhook. When
+    # nothing is subscribed (the usual case during transition) this is a no-op:
+    # we don't even widen the per-row projection. Pinned (dashboard-owned)
+    # fields are skipped — their Monday value is ignored anyway.
+    try:
+        sub_cols = await webhooks_outbound.active_subscription_columns(db)
+    except Exception as e:
+        logger.info(f"[academy-mirror] subscription-column probe skipped: {e}")
+        sub_cols = set()
+    pending_emits: list[tuple[dict, dict]] = []  # (post-write row, {col: new_value})
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         # Cap at 100 pages × 100 rows = 10k students. Board is currently ~3.5k.
         for _ in range(100):
@@ -279,10 +295,14 @@ async def full_sync(db) -> dict:
                 seen_ids.add(row["_id"])
                 try:
                     # Load existing row's edited-fields list so we can
-                    # filter the Monday-supplied values before writing.
+                    # filter the Monday-supplied values before writing. When a
+                    # zap is subscribed to a column, also pull that column's
+                    # current value so we can detect a Monday-side change.
+                    proj = {"_id": 0, "dashboard_edited_fields": 1}
+                    for f in sub_cols:
+                        proj[f] = 1
                     existing = await db.academy_members.find_one(
-                        {"_id": row["_id"]},
-                        {"_id": 0, "dashboard_edited_fields": 1},
+                        {"_id": row["_id"]}, proj,
                     )
                     edited = set(((existing or {}).get("dashboard_edited_fields") or []))
                     # Always write the column dicts + sync metadata.
@@ -306,6 +326,20 @@ async def full_sync(db) -> dict:
                         upsert=True,
                     )
                     total += 1
+
+                    # Detect Monday-side changes on subscribed columns. Only
+                    # for rows that already existed (skip first-time inserts —
+                    # those are new students, handled by signup/intake zaps),
+                    # only non-pinned columns we actually wrote, and only when
+                    # the value genuinely changed.
+                    if sub_cols and existing is not None:
+                        changed = {
+                            f: row[f]
+                            for f in sub_cols
+                            if f not in edited and f in row and existing.get(f) != row[f]
+                        }
+                        if changed:
+                            pending_emits.append((row, changed))
                 except Exception as e:
                     logger.info(f"[academy-mirror] upsert failed for {row['_id']}: {e}")
                     errors += 1
@@ -313,6 +347,25 @@ async def full_sync(db) -> dict:
             cursor = page_data.get("cursor")
             if not cursor:
                 break
+
+    # Fire the mirror-emit bridge for any Monday-side column changes detected
+    # this sync. Best-effort + batched after the write loop so slow Zapier
+    # catch-hooks never stall the sync. The dispatcher itself only POSTs to
+    # columns with active subscribers.
+    if pending_emits:
+        try:
+            await asyncio.gather(
+                *[
+                    webhooks_outbound.notify_column_changes(
+                        db, item_id=r["_id"], fields_changed=ch, student=r,
+                    )
+                    for r, ch in pending_emits
+                ],
+                return_exceptions=True,
+            )
+            logger.info(f"[academy-mirror] mirror-emit bridge fired for {len(pending_emits)} rows")
+        except Exception as e:
+            logger.info(f"[academy-mirror] mirror-emit bridge skipped: {e}")
 
     # Reconcile intake-created auto: rows into their Monday-origin counterpart.
     # An auto: row exists when something wrote to a student by email before

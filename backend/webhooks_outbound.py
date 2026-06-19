@@ -119,6 +119,15 @@ async def notify_column_changes(
     return delivered
 
 
+async def active_subscription_columns(db) -> set[str]:
+    """The set of columns that currently have at least one active subscriber.
+    The mirror uses this to decide whether to bother diffing Monday-side
+    changes at all — when nothing is subscribed (the common case during
+    transition) the mirror-emit bridge is a complete no-op."""
+    cols = await db.dashboard_webhook_subscriptions.distinct("column", {"active": True})
+    return {c for c in cols if c}
+
+
 def changed_fields_diff(before: Optional[dict], after_set: dict) -> dict:
     """Return only the fields in `after_set` whose value actually differs from
     `before`. Lets the dispatcher skip no-op events (e.g. setting `tier` to
