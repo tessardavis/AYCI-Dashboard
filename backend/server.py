@@ -1906,6 +1906,87 @@ async def admin_upgrade_bonus_apply(
     return await upgrade_bonus.apply_grants(dry_run=not apply)
 
 
+@api.get("/admin/circle/test-add-to-space")
+async def admin_circle_test_add_to_space(
+    space_id: int,
+    email: str,
+    community_member_id: Optional[int] = None,
+    space_group_id: Optional[int] = None,
+    admin: dict = Depends(require_admin),
+):
+    """Diagnostic: try the likely Circle 'add member to space' request variants
+    against a REAL space + member and report each response, so we can see which
+    one Circle accepts (the grant's add_member_to_space currently gets a generic
+    "User not added to space"). NB this is NOT dry-run — a variant that works
+    actually adds the member (which is the goal). Read the `results` and tell me
+    which variant returned 2xx; I'll patch add_member_to_space to match.
+
+    Pass community_member_id (Circle member id) and space_group_id to test the
+    id-based + space-group variants too."""
+    import os
+    import circle_api
+    import httpx
+    token = (os.environ.get("CIRCLE_API_TOKEN") or "").strip()
+    if not token:
+        return {"ok": False, "error": "CIRCLE_API_TOKEN not set"}
+    email = (email or "").strip().lower()
+    token_h = {"Authorization": f"Token {token}", "Content-Type": "application/json"}
+    bearer_h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    V2 = circle_api.ADMIN_BASE                       # app.circle.so/api/admin/v2
+    V1 = "https://app.circle.so/api/v1"
+
+    results = []
+
+    async def attempt(label, method, url, headers, *, json=None, params=None):
+        try:
+            async with httpx.AsyncClient(timeout=20) as c:
+                r = await c.request(method, url, headers=headers, json=json, params=params)
+            results.append({
+                "variant": label, "method": method, "url": url,
+                "sent": json or params, "status": r.status_code,
+                "body": (r.text or "")[:400],
+            })
+        except Exception as e:
+            results.append({"variant": label, "method": method, "url": url,
+                            "sent": json or params, "error": str(e)[:300]})
+
+    # --- POST variants against the v2 space_members endpoint (current path) ---
+    await attempt("v2 space_members {space_id,email}", "POST", f"{V2}/space_members", token_h,
+                  json={"space_id": space_id, "email": email})
+    if community_member_id:
+        await attempt("v2 space_members {space_id,community_member_id}", "POST", f"{V2}/space_members", token_h,
+                      json={"space_id": space_id, "community_member_id": community_member_id})
+    await attempt("v2 space_members {space_id,user_email}", "POST", f"{V2}/space_members", token_h,
+                  json={"space_id": space_id, "user_email": email})
+    # Bearer auth variant (in case v2 wants Bearer not Token)
+    await attempt("v2 space_members {space_id,email} BEARER", "POST", f"{V2}/space_members", bearer_h,
+                  json={"space_id": space_id, "email": email})
+    # --- v1 endpoint ---
+    await attempt("v1 space_members {space_id,email}", "POST", f"{V1}/space_members", token_h,
+                  json={"space_id": space_id, "email": email})
+    if community_member_id:
+        await attempt("v1 space_members {space_id,community_member_id}", "POST", f"{V1}/space_members", token_h,
+                      json={"space_id": space_id, "community_member_id": community_member_id})
+    # --- nested path variant ---
+    await attempt("v2 spaces/{id}/space_members {email}", "POST", f"{V2}/spaces/{space_id}/space_members", token_h,
+                  json={"email": email})
+    # --- space GROUP membership (maybe required before a space add) ---
+    if space_group_id:
+        await attempt("v2 space_group_members {space_group_id,email}", "POST", f"{V2}/space_group_members", token_h,
+                      json={"space_group_id": space_group_id, "email": email})
+        if community_member_id:
+            await attempt("v2 space_group_members {space_group_id,community_member_id}", "POST", f"{V2}/space_group_members", token_h,
+                          json={"space_group_id": space_group_id, "community_member_id": community_member_id})
+    # --- GET the current space_members list to confirm the endpoint shape ---
+    await attempt("GET v2 space_members?space_id", "GET", f"{V2}/space_members", token_h,
+                  params={"space_id": space_id})
+
+    winners = [r for r in results if isinstance(r.get("status"), int) and 200 <= r["status"] < 300]
+    return {"ok": True, "space_id": space_id, "email": email,
+            "winning_variants": [w["variant"] for w in winners],
+            "results": results}
+
+
 @api.get("/admin/google-calendar/config")
 async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     """Surface what's needed to wire the AYCI Interviews calendar: the
