@@ -1,37 +1,65 @@
-# HANDOFF — session 19 Jun 2026
+# HANDOFF — session 21 Jun 2026
 
-Pick-up notes after a big session. Everything below is **committed + pushed**;
-Render auto-deploys `main`, so the live app already reflects it.
+Pick-up notes. Everything below is **committed + pushed** to `main`; Render
+auto-deploys the backend and Vercel auto-deploys the frontend, so the live app
+already reflects it. Working tree is clean.
 
-## TL;DR
-Calendly booking zaps migrated off Monday; upgrade-bonus detection built + applied;
-the early-access **grant button is fixed end-to-end** (single-space add via Circle
-**Admin v1**); a Circle-cache staleness bug fixed; and the **Oksana → Coralie**
-handover is all but done. Remaining work is **external** (Zapier/Circle/dashboard UI),
-not code.
+## Use this on another computer
 
-## Shipped this session (code, live on Render)
-- **Early-access grant button fixed** — `circle_api.add_member_to_space` now uses Circle's
-  **Admin v1** `POST /api/v1/space_members {space_id,email}` with **`CIRCLE_ADMIN_V1_TOKEN`**
-  (Admin v2 only does whole-space-*group* adds = over-grant). Grant = single-space add + DM,
-  records the grant, skips the DM if already a member. Confirmed working end-to-end.
-- **Upgrade-bonus detection** (`upgrade_bonus.py`) — scans Stripe for launch upgrade purchases,
-  grants a bonus 1:1, folds into the over-allowance check. **Applied: 7 students** (Justyna etc.).
-  Admin: `GET /api/admin/upgrade-bonus/audit?refresh=true` then `/apply?apply=true`.
-- **Over-allowance** — now counts a manual `extra_bonus_calls` + auto upgrade-bonus grants, so a
-  legit 2nd bonus call no longer false-flags.
-- **Circle cache bug** — Students list read an in-process 30-min cache the "Refresh Circle cache"
-  button didn't reset; now reloads when the snapshot's `cached_at` changes (fixes "get on board
-  first" lingering after a refresh).
-- **Calendly zaps off Monday** — Round Robin (18/18b/18c), 15-min (15/16/16b), Mock (14/14b/14c);
-  `book-call` + `update-by-email` hardened (combined-identity match, graceful no-match, uniform schema).
-- **Mirror-emit bridge** — the Monday mirror now emits `column_changed` so Monday-trigger zaps can
-  move to Catch Hooks.
-- **Private video reply (Coralie handover, Option A)** — `routes/private_videos.py` posts as the
-  configured sender (Coralie) first, falling back through the coaches to whoever's in the room.
-- **Circle add-to-space diagnostic** — `GET /api/admin/circle/test-add-to-space` (how we found the v1 fix).
+**Just to USE the dashboard (no setup):** open the live app in any browser and
+log in — nothing to install.
+- Frontend: **https://ayci-dashboard-nfiw.vercel.app**
+- Backend API: https://ayci-dashboard.onrender.com (`/docs` for the API)
+- Login: your admin email + the production password.
+
+**To continue DEVELOPING on another computer:**
+1. `git clone git@github.com:tessardavis/AYCI-Dashboard.git && cd AYCI-Dashboard`
+2. **Carry over the 3 secret files** — they're gitignored (real secrets) so
+   `git clone` will NOT bring them. Copy them from this machine to the same
+   paths on the new one:
+   - `backend/.env`
+   - `frontend/.env`  (just `REACT_APP_BACKEND_URL`)
+   - `backend/google_service_account.json`
+   (Alternatively, all backend secret *values* also live in the Render
+   dashboard → service → Environment.)
+3. Backend: `cd backend && pip install -r requirements.txt && uvicorn server:app --reload`
+   (Python 3.12; entrypoint is `server:app`.)
+4. Frontend: `cd frontend && npm install && npm start` (craco; `npm run build` to verify a prod build).
+5. You don't need to run anything locally to ship — pushing to `main`
+   auto-deploys both halves. A brief 502 during the Render bounce is normal.
+
+## Shipped this session (code, live)
+Performance + one feature, all committed/pushed (`985e59e`, `83efa88`,
+`5e16013`, `5865e67`):
+- **Circle cache kept permanently warm** — the 1.7MB members doc is cached
+  in-process for 30 min; after idle the next person paid a ~5-10s cold Atlas
+  read on Students DB / Lookup / name-search. Added a 20-min keep-warm
+  scheduler job (`server.py`) so the window never lapses (only a fresh
+  deploy/restart is cold, and startup warm covers that).
+- **Students DB** — the two per-load aggregations (videos-used,
+  refunds-by-email) are cached in-process ~60s.
+- **Indexes added** (`server.py` startup) — `refunds(student_email/status/
+  refunded_at)`, `private_video_submissions(email)`.
+- **Lookup** — alternate-email retries (calendly/stripe/circle/tally) now run
+  concurrently instead of serially.
+- **Frontend stale-while-revalidate** — new `frontend/src/lib/swrCache.js`;
+  Students DB, Refunds, and Private Videos paint last-loaded rows instantly
+  from localStorage, then refresh in the background. Reusable for any board.
+- **Private Videos board** — list query now projects the heavy embedded
+  transcript text OUT (computes `has_transcript` server-side; full text is
+  fetched on demand) and **excludes Done rows by default** (only fetched when
+  the "show Done" toggle is on or a Done status filter is set). Team-member
+  lookup cached ~60s.
+- **Editable "videos used"** (the request) — new field in the Students DB Edit
+  modal. Stored as an *adjustment* (delta over the live submission count), so a
+  manually-set figure **keeps incrementing** as new private-video feedback
+  arrives. Set 5 today → a new submission tomorrow shows 6. The cell shows a ✎
+  marker; clear the field to revert to pure auto-counting. Backend:
+  `videos_used_set` (input) → `videos_used_adjustment` (stored) in
+  `routes/students_db.py`.
 
 ## Open to-dos (all external — do from any machine)
+*(carried over from 19 Jun — still valid)*
 1. **Oksana → Coralie zap handover** — see `ZAPIER_OKSANA_HANDOVER.md`. Done: 72, 46, 47, 53, 17,
    8b, full Student-Wins family (First + FU1/2/3). **Left: 47b (if active), 54 (Grid, low priority),
    and a final Circle-app filter sweep.** Deadline = before Oksana's Circle account is deactivated.
@@ -59,6 +87,8 @@ not code.
   `1944718` (Bonus Live Sessions).
 - **Private chat config** (Settings → Private chat config): sender = Coralie; all 4 coaches verified on
   valid Circle emails (Coralie/Becky `becky.platt2@nhs.net`/Arub `arubyousuf89@gmail.com`/Tessa).
+- **The 1.7MB Circle members doc** drives many endpoints; never `find_one({"_id":"all"})` per request —
+  use `student_lookup._get_name_index(db)` (now kept warm by the 20-min keep-warm job).
 - **Auto-commit + push** convention; Render redeploys on push (brief 502 during the bounce is normal).
 
 ## Where the detail lives
