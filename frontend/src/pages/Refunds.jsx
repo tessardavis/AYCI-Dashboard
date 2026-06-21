@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Search, Trash2, DownloadCloud } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/swrCache";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 
@@ -50,9 +51,10 @@ function fmtDate(iso) {
 export default function Refunds() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [rows, setRows] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: paint last-loaded board instantly, refresh in bg.
+  const [rows, setRows] = useState(() => readCache("refunds")?.data?.items || []);
+  const [summary, setSummary] = useState(() => readCache("refunds")?.data?.summary || null);
+  const [loading, setLoading] = useState(() => !readCache("refunds"));
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -67,8 +69,11 @@ export default function Refunds() {
         apiClient.get("/refunds", { params: { limit: 5000 } }),
         apiClient.get("/refunds/summary"),
       ]);
-      setRows(list.data.items || []);
-      setSummary(sum.data || null);
+      const items = list.data.items || [];
+      const summaryData = sum.data || null;
+      setRows(items);
+      setSummary(summaryData);
+      writeCache("refunds", { items, summary: summaryData });
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load refunds");
     } finally {
@@ -77,7 +82,8 @@ export default function Refunds() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  // Cache hit → background refresh (keep showing cached rows); cold → blocking.
+  useEffect(() => { load(readCache("refunds") != null); }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

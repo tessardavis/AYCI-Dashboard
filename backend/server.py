@@ -27,6 +27,7 @@ import launches as launches_mod
 import at_risk as at_risk_mod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 # --- Shared infrastructure --------------------------------------------------
 from db import client, db
@@ -997,6 +998,17 @@ async def on_startup():
         await db.academy_members.create_index("interview_date", sparse=True)
         await db.academy_members.create_index([("synced_at", -1)])
 
+        # Refunds board — list filters by status, sorts by refunded_at, and the
+        # Students DB badges refunds by student_email. Without these the board
+        # list, the no-filter /refunds/summary scan, and the per-load Students
+        # DB refunds aggregation all COLLSCAN.
+        await db.refunds.create_index("student_email", sparse=True)
+        await db.refunds.create_index("status", sparse=True)
+        await db.refunds.create_index([("refunded_at", -1)])
+        # private_video_submissions — Students DB aggregates "videos used" per
+        # email on every load; index the group key so it's not a full scan.
+        await db.private_video_submissions.create_index("email", sparse=True)
+
         # url_shortlinks: idempotent shorten() relies on unique long_url;
         # /v/{code} redirect lookup hits unique code. Drop any pre-self-
         # hosted rows (is.gd era — they stored `short_url` instead of
@@ -1151,6 +1163,24 @@ async def on_startup():
         _daily_phase_breakdown_refresh,
         CronTrigger(hour=5, minute=25, timezone=tz),
         id="daily_phase_breakdown_refresh",
+        replace_existing=True,
+    )
+
+    # Keep the in-process Circle member index hot. It's cached for 30 min, but
+    # after 30 min of inactivity the NEXT person to open Students DB / Lookup /
+    # name-search pays the ~5-10s cold read of the 1.7MB members doc from Atlas.
+    # Re-touch it every 20 min so the cache window never lapses during the day.
+    # (The touch is sub-ms when warm; only reloads if the daily 05:00 rebuild
+    # changed cached_at.) Fire-and-forget so a slow read can't stall the loop.
+    async def _keepwarm_name_index():
+        try:
+            await lookup._get_name_index(db)
+        except Exception as e:
+            logger.warning(f"[keepwarm] Name-search index re-warm failed: {e}")
+    scheduler.add_job(
+        _keepwarm_name_index,
+        IntervalTrigger(minutes=20, timezone=tz),
+        id="keepwarm_name_index",
         replace_existing=True,
     )
 

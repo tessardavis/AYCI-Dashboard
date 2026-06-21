@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, Search, X, Save, RefreshCw } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/swrCache";
 import { tallyPrefillUrl } from "@/lib/tally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ const EDITABLE_FIELDS = [
   { key: "private_chat_url", label: "Private chat URL" },
   { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
+  { key: "videos_used_override", label: "Videos used (manual override — leave blank to auto-count submissions)", type: "number" },
   { key: "boost_and_go", label: "Boost & Go", type: "select", options: ["", "B&G", "B&G Plus"] },
   { key: "coach_notes", label: "Notes", type: "textarea" },
 ];
@@ -54,8 +56,9 @@ function isBandG(boost) {
 }
 
 export default function StudentsDB() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: paint last-loaded rows instantly, refresh in bg.
+  const [rows, setRows] = useState(() => readCache("students-db")?.data || []);
+  const [loading, setLoading] = useState(() => !readCache("students-db"));
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("");
@@ -75,7 +78,9 @@ export default function StudentsDB() {
     setRefreshing(true);
     try {
       const { data } = await apiClient.get("/students-db", { params: { limit: 10000 } });
-      setRows(data.items || []);
+      const items = data.items || [];
+      setRows(items);
+      writeCache("students-db", items);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load students");
     } finally {
@@ -516,13 +521,15 @@ export default function StudentsDB() {
                   <td className="px-3 py-2 text-[12px]">
                     {(() => {
                       const used = r.videos_used || 0;
+                      const manual = r.videos_used_overridden;
                       const atLimit = r.video_allowance != null && r.video_allowance !== "" && used >= Number(r.video_allowance);
+                      const limitNote = r.video_allowance != null && r.video_allowance !== "" ? `${used} used of ${r.video_allowance}` : `${used} submitted`;
                       return (
                         <span
                           className={atLimit ? "text-amber-700 font-semibold" : "text-slate-600"}
-                          title={r.video_allowance != null && r.video_allowance !== "" ? `${used} used of ${r.video_allowance}` : `${used} submitted`}
+                          title={manual ? `${used} — manually set (Edit to change)` : limitNote}
                         >
-                          {used}
+                          {used}{manual && <span className="ml-0.5 text-slate-400" title="Manually set">✎</span>}
                         </span>
                       );
                     })()}

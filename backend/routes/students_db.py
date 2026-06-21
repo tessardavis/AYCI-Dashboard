@@ -37,6 +37,56 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["students-db"])
 
 
+# The Students DB cross-system maps (videos-used + refunds-by-email) are the
+# same for every viewer and barely change between back-to-back loads. Cache
+# them in-process for a short window so a reload — or several coaches opening
+# the board at once — doesn't re-run two collection aggregations every time.
+# 60s staleness on a badge count is fine; no explicit invalidation needed.
+_AGG_CACHE_TTL_SECONDS = 60.0
+_agg_cache: dict = {"videos": None, "videos_at": 0.0, "refunds": None, "refunds_at": 0.0}
+
+
+async def _videos_used_counts() -> dict[str, int]:
+    """email (lowercased) -> count of private-video submissions, cached ~60s."""
+    import time as _t
+    now = _t.monotonic()
+    if _agg_cache["videos"] is not None and (now - _agg_cache["videos_at"]) < _AGG_CACHE_TTL_SECONDS:
+        return _agg_cache["videos"]
+    counts: dict[str, int] = {}
+    async for g in db.private_video_submissions.aggregate(
+        [{"$group": {"_id": "$email", "n": {"$sum": 1}}}]
+    ):
+        em = (g.get("_id") or "")
+        if em:
+            counts[str(em).strip().lower()] = g.get("n", 0)
+    _agg_cache["videos"] = counts
+    _agg_cache["videos_at"] = now
+    return counts
+
+
+async def _refund_by_email() -> dict[str, dict]:
+    """email (lowercased) -> {count, total}, cached ~60s."""
+    import time as _t
+    now = _t.monotonic()
+    if _agg_cache["refunds"] is not None and (now - _agg_cache["refunds_at"]) < _AGG_CACHE_TTL_SECONDS:
+        return _agg_cache["refunds"]
+    by_email: dict[str, dict] = {}
+    async for g in db.refunds.aggregate([
+        {"$group": {"_id": "$student_email",
+                    "count": {"$sum": 1},
+                    "total": {"$sum": {"$ifNull": ["$amount", 0]}}}}
+    ]):
+        em = (g.get("_id") or "")
+        if em:
+            by_email[str(em).strip().lower()] = {
+                "count": g.get("count", 0),
+                "total": round(g.get("total", 0) or 0, 2),
+            }
+    _agg_cache["refunds"] = by_email
+    _agg_cache["refunds_at"] = now
+    return by_email
+
+
 # CURRENT private products that get set up (private chat + allowance). Used for
 # the "needs setup" flag. Deliberately a positive allow-list so deprecated/old
 # tiers (Platinum, Academy/Upgrade 1:1, Gold/Platinum Legacy Upgrade) are NOT
@@ -276,7 +326,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "_id", "name", "first_name", "surname", "email", "circle_email", "other_emails",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
         "interview_type", "private_chat_url", "private_chat_status",
-        "boost_and_go", "video_allowance",
+        "boost_and_go", "video_allowance", "videos_used_override",
         "setup_not_needed", "setup_not_needed_reason", "coach_notes",
         "private_chat_last_error",
         "kajabi_interview_date", "early_access_grant", "early_access_granted_at",
@@ -346,36 +396,19 @@ async def list_students(
         .limit(min(limit, 10000))
     )
     # How many private videos each student has actually submitted (their
-    # "used" count) — one aggregation over the submissions collection, keyed by
-    # the (lowercased) email it was submitted under.
+    # "used" count) and refunds, both keyed by the (lowercased) email — cached
+    # in-process ~60s (see helpers) so reloads don't re-aggregate each time.
+    # Drives the videos-used badge and the "Refunded" badge + filter; full
+    # refund detail lives on the Refunds board.
     used_counts: dict[str, int] = {}
     try:
-        async for g in db.private_video_submissions.aggregate(
-            [{"$group": {"_id": "$email", "n": {"$sum": 1}}}]
-        ):
-            em = (g.get("_id") or "")
-            if em:
-                used_counts[str(em).strip().lower()] = g.get("n", 0)
+        used_counts = await _videos_used_counts()
     except Exception as e:
         logger.info(f"[students-db] videos-used aggregate skipped: {e}")
 
-    # Refunds, keyed by the (lowercased) email the refund was recorded under.
-    # One aggregation → a per-email {count, total} map so we can badge rows
-    # without a query each. Drives the "Refunded" badge + filter; full detail
-    # lives on the Refunds board.
     refund_by_email: dict[str, dict] = {}
     try:
-        async for g in db.refunds.aggregate([
-            {"$group": {"_id": "$student_email",
-                        "count": {"$sum": 1},
-                        "total": {"$sum": {"$ifNull": ["$amount", 0]}}}}
-        ]):
-            em = (g.get("_id") or "")
-            if em:
-                refund_by_email[str(em).strip().lower()] = {
-                    "count": g.get("count", 0),
-                    "total": round(g.get("total", 0) or 0, 2),
-                }
+        refund_by_email = await _refund_by_email()
     except Exception as e:
         logger.info(f"[students-db] refunds aggregate skipped: {e}")
 
@@ -445,7 +478,17 @@ async def list_students(
                     member = next((circle_email_index[e] for e in emails if e in circle_email_index), None)
                     mtags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
                     slim["in_cohort_on_circle"] = bool(ctag and ctag in mtags)
-        slim["videos_used"] = sum(used_counts.get(e, 0) for e in emails)
+        # "Used" defaults to the actual submission count across the student's
+        # emails, but a coach can pin a manual figure (videos_used_override) —
+        # e.g. a session used outside the system, or a duplicate to discount.
+        # When set, it wins; the badge marks it as a manual figure.
+        _used_override = r.get("videos_used_override")
+        if isinstance(_used_override, int):
+            slim["videos_used"] = _used_override
+            slim["videos_used_overridden"] = True
+        else:
+            slim["videos_used"] = sum(used_counts.get(e, 0) for e in emails)
+            slim["videos_used_overridden"] = False
         rcount = sum((refund_by_email.get(e) or {}).get("count", 0) for e in emails)
         rtotal = round(sum((refund_by_email.get(e) or {}).get("total", 0) for e in emails), 2)
         slim["has_refund"] = rcount > 0
@@ -1210,6 +1253,7 @@ EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email", "other_emails",
     "tier", "cohort_joined", "interview_date", "kajabi_interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
+    "videos_used_override",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
     "extra_bonus_calls",
 }
@@ -1234,6 +1278,7 @@ class StudentPatch(BaseModel):
     private_chat_url: Optional[str] = None
     private_chat_status: Optional[str] = None
     video_allowance: Optional[int] = None
+    videos_used_override: Optional[int] = None  # manual "used" count; null = revert to actual submission count
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None
     coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)

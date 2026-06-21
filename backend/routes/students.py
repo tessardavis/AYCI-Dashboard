@@ -131,10 +131,15 @@ async def _run_lookup_fanout(
                     return r
             return current
 
-        calendly_safe = await _retry("calendly", calendly_safe, lambda ae: lookup.calendly_lookup(ae))
-        stripe_safe = await _retry("stripe", stripe_safe, lambda ae: lookup.stripe_lookup(ae))
-        circle_safe = await _retry("circle", circle_safe, lambda ae: lookup.circle_lookup(db, ae))
-        tally_safe = await _retry("tally", tally_safe, lambda ae: tally.lookup_student(db, ae))
+        # Run the four platform retries concurrently — they're independent, so
+        # there's no reason to pay calendly+stripe+circle+tally serially when a
+        # student has alternate emails (the common mismatch case).
+        calendly_safe, stripe_safe, circle_safe, tally_safe = await asyncio.gather(
+            _retry("calendly", calendly_safe, lambda ae: lookup.calendly_lookup(ae)),
+            _retry("stripe", stripe_safe, lambda ae: lookup.stripe_lookup(ae)),
+            _retry("circle", circle_safe, lambda ae: lookup.circle_lookup(db, ae)),
+            _retry("tally", tally_safe, lambda ae: tally.lookup_student(db, ae)),
+        )
 
     drive_link = None
     drive_summary = None
