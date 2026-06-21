@@ -144,11 +144,22 @@ async def _apply_student_override(db, email: str, values: dict) -> int:
 
 
 # --------------------------------------------------- Decorators (legacy shape)
+_team_cache: dict = {"by_id": None, "at": 0.0}
+
+
 async def _team_members_by_id(db) -> dict:
-    """{team_member_id: {id, name, role_title}} — used to decorate assignee."""
+    """{team_member_id: {id, name, role_title}} — used to decorate assignee.
+    Cached in-process ~60s: the team list barely changes, but the list
+    endpoint (+ its 60s auto-refresh) used to re-scan team_members every call."""
+    import time as _t
+    now = _t.monotonic()
+    if _team_cache["by_id"] is not None and (now - _team_cache["at"]) < 60.0:
+        return _team_cache["by_id"]
     out = {}
     async for m in db.team_members.find({}, {"_id": 0, "id": 1, "name": 1, "role_title": 1}):
         out[m["id"]] = m
+    _team_cache["by_id"] = out
+    _team_cache["at"] = now
     return out
 
 
@@ -199,8 +210,14 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         "interview_type": row.get("interview_type"),
         # AI transcript availability — full text fetched via separate endpoint
         # so the list response stays small. has_transcript drives the
-        # Transcript chip in the row UI.
-        "has_transcript": bool((row.get("transcript") or {}).get("text")),
+        # Transcript chip in the row UI. The list query computes this flag
+        # server-side and projects the (heavy) transcript text OUT, so prefer
+        # the precomputed flag; fall back to the embedded text for callers
+        # (single-row update paths) that pass a full row.
+        "has_transcript": bool(
+            row["has_transcript"] if "has_transcript" in row
+            else (row.get("transcript") or {}).get("text")
+        ),
         # assignee — return the team_member id + name (was Monday person id + name in legacy)
         "assignee_id": row.get("assignee_team_member_id"),
         "assignee_name": (assignee or {}).get("name"),
@@ -225,9 +242,17 @@ async def list_submissions(db, *, force: bool = False) -> dict:
     != "done") so by the time a coach opens an Edit modal the transcode is
     already finished. Idempotent — pv_cache.prepare bails fast if the file
     is already cached."""
-    rows = await db.private_video_submissions.find(
-        {}, {"_id": 0}
-    ).to_list(2000)
+    # Project the heavy embedded transcript text OUT of the list read — it's
+    # only needed as a yes/no chip (full text is fetched on demand via the
+    # /transcript endpoint). Every Done row carries one and Done rows pile up
+    # forever, so pulling them all was the bulk of the read + payload. Compute
+    # has_transcript server-side instead and drop the text.
+    rows = await db.private_video_submissions.aggregate([
+        {"$addFields": {
+            "has_transcript": {"$gt": [{"$strLenCP": {"$ifNull": ["$transcript.text", ""]}}, 0]}
+        }},
+        {"$project": {"_id": 0, "transcript": 0}},
+    ]).to_list(2000)
 
     def _sort_key(r):
         s = r.get("status") or "new"

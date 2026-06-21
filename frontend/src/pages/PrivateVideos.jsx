@@ -11,6 +11,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info, User } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail, API } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/swrCache";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
@@ -60,9 +61,10 @@ function pickAutoAssignee(users, currentUser) {
 
 export default function PrivateVideos() {
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: paint last-loaded rows instantly, refresh in bg.
+  const [items, setItems] = useState(() => readCache("private-videos")?.data?.items || []);
+  const [users, setUsers] = useState(() => readCache("private-videos")?.data?.users || []);
+  const [loading, setLoading] = useState(() => !readCache("private-videos"));
   const [refreshing, setRefreshing] = useState(false);
   const [syncingMonday, setSyncingMonday] = useState(false);
   const [recompressing, setRecompressing] = useState(false);
@@ -71,7 +73,7 @@ export default function PrivateVideos() {
   const [statusFilter, setStatusFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [editing, setEditing] = useState(null); // currently-edited row
-  const [fetchedAt, setFetchedAt] = useState(null);
+  const [fetchedAt, setFetchedAt] = useState(() => readCache("private-videos")?.data?.fetchedAt || null);
   // Hide "Done" by default — clears the active backlog so the team only
   // sees what still needs attention. Toggleable.
   const [showDone, setShowDone] = useState(false);
@@ -83,9 +85,12 @@ export default function PrivateVideos() {
         apiClient.get(`/private-videos${force ? "?force=true" : ""}`, { timeout: 60000 }),
         apiClient.get("/private-videos/users", { timeout: 30000 }),
       ]);
-      setItems(list.items || []);
+      const newItems = list.items || [];
+      const newUsers = u.users || [];
+      setItems(newItems);
       setFetchedAt(list.fetched_at);
-      setUsers(u.users || []);
+      setUsers(newUsers);
+      writeCache("private-videos", { items: newItems, users: newUsers, fetchedAt: list.fetched_at });
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load private-tier videos");
     } finally {
