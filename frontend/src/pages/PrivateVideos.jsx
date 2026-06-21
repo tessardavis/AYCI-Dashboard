@@ -78,11 +78,23 @@ export default function PrivateVideos() {
   // sees what still needs attention. Toggleable.
   const [showDone, setShowDone] = useState(false);
 
-  const load = async (force = false) => {
+  // Whether the current view needs Done rows at all. Done is hidden by
+  // default and excluded server-side; we only fetch it when the coach asks
+  // (the "show Done" toggle, or a Done status filter). The ref lets the 60s
+  // auto-refresh closure read the live value without re-subscribing.
+  const needDone = showDone || statusFilter === "Done";
+  const needDoneRef = useRef(needDone);
+  useEffect(() => { needDoneRef.current = needDone; }, [needDone]);
+
+  const load = async (force = false, includeDone = needDoneRef.current) => {
     setRefreshing(true);
     try {
+      const params = [];
+      if (force) params.push("force=true");
+      if (includeDone) params.push("include_done=true");
+      const qs = params.length ? `?${params.join("&")}` : "";
       const [{ data: list }, { data: u }] = await Promise.all([
-        apiClient.get(`/private-videos${force ? "?force=true" : ""}`, { timeout: 60000 }),
+        apiClient.get(`/private-videos${qs}`, { timeout: 60000 }),
         apiClient.get("/private-videos/users", { timeout: 30000 }),
       ]);
       const newItems = list.items || [];
@@ -90,7 +102,11 @@ export default function PrivateVideos() {
       setItems(newItems);
       setFetchedAt(list.fetched_at);
       setUsers(newUsers);
-      writeCache("private-videos", { items: newItems, users: newUsers, fetchedAt: list.fetched_at });
+      // Only cache the lean active-queue view so the instant paint on next
+      // visit isn't the full Done backlog (which is hidden by default anyway).
+      if (!includeDone) {
+        writeCache("private-videos", { items: newItems, users: newUsers, fetchedAt: list.fetched_at });
+      }
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load private-tier videos");
     } finally {
@@ -108,6 +124,14 @@ export default function PrivateVideos() {
     // moved ahead (rare, since Tally is now the source for new rows).
     load();
   }, []);
+
+  // When the coach asks to see Done (toggle on, or filters to Done status),
+  // fetch the Done rows the default load skipped. Turning it back off needs no
+  // refetch — the client filter hides them and the next refresh drops them.
+  useEffect(() => {
+    if (needDone) load(false, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needDone]);
 
   // Auto-refresh the row list every 60s so new Tally submissions appear
   // without the coach needing to hit Refresh. Quiet — uses load() with no

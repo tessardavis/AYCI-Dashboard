@@ -180,9 +180,10 @@ async def refetch_video(item_id: str, admin: dict = Depends(require_admin)):
 @router.get("")
 async def list_submissions(
     force: bool = False,  # legacy param, kept so existing frontend URLs work
+    include_done: bool = False,  # Done rows are excluded by default (UI hides them)
     user: dict = Depends(require_board("private_videos")),
 ):
-    return await pv_store.list_submissions(db, force=force)
+    return await pv_store.list_submissions(db, force=force, include_done=include_done)
 
 
 # Status endpoint the frontend polls while we download + transcode the

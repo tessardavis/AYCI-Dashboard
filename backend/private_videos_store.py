@@ -235,8 +235,13 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
 
 
 # ------------------------------------------------------------- Read
-async def list_submissions(db, *, force: bool = False) -> dict:
-    """Return every submission, sorted New → Working → Done, then submitted desc.
+async def list_submissions(db, *, force: bool = False, include_done: bool = False) -> dict:
+    """Return submissions, sorted New → Working → Done, then submitted desc.
+
+    By default Done rows are EXCLUDED — they're hidden in the UI anyway and
+    accumulate forever, so fetching them on every load (incl. the 60s
+    auto-refresh) was pure waste. Pass include_done=True to fetch them (the
+    "show Done" toggle / a Done status filter).
 
     Side effect: pre-warm the video cache for the top active rows (status
     != "done") so by the time a coach opens an Edit modal the transcode is
@@ -244,10 +249,11 @@ async def list_submissions(db, *, force: bool = False) -> dict:
     is already cached."""
     # Project the heavy embedded transcript text OUT of the list read — it's
     # only needed as a yes/no chip (full text is fetched on demand via the
-    # /transcript endpoint). Every Done row carries one and Done rows pile up
-    # forever, so pulling them all was the bulk of the read + payload. Compute
-    # has_transcript server-side instead and drop the text.
+    # /transcript endpoint). Compute has_transcript server-side and drop the
+    # text. Combined with excluding Done rows, the read + payload stay small.
+    match: dict = {} if include_done else {"status": {"$ne": "done"}}
     rows = await db.private_video_submissions.aggregate([
+        {"$match": match},
         {"$addFields": {
             "has_transcript": {"$gt": [{"$strLenCP": {"$ifNull": ["$transcript.text", ""]}}, 0]}
         }},
