@@ -33,7 +33,7 @@ const EDITABLE_FIELDS = [
   { key: "private_chat_url", label: "Private chat URL" },
   { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
-  { key: "videos_used_override", label: "Videos used (manual override — leave blank to auto-count submissions)", type: "number" },
+  { key: "videos_used_set", label: "Videos used (set the current count — new submissions still add on top; clear to auto-count only)", type: "number" },
   { key: "boost_and_go", label: "Boost & Go", type: "select", options: ["", "B&G", "B&G Plus"] },
   { key: "coach_notes", label: "Notes", type: "textarea" },
 ];

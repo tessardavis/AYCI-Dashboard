@@ -326,7 +326,7 @@ def _slim_row_for_list(row: dict) -> dict:
         "_id", "name", "first_name", "surname", "email", "circle_email", "other_emails",
         "tier", "cohort_joined", "interview_date", "speciality", "hospital",
         "interview_type", "private_chat_url", "private_chat_status",
-        "boost_and_go", "video_allowance", "videos_used_override",
+        "boost_and_go", "video_allowance",
         "setup_not_needed", "setup_not_needed_reason", "coach_notes",
         "private_chat_last_error",
         "kajabi_interview_date", "early_access_grant", "early_access_granted_at",
@@ -478,17 +478,23 @@ async def list_students(
                     member = next((circle_email_index[e] for e in emails if e in circle_email_index), None)
                     mtags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
                     slim["in_cohort_on_circle"] = bool(ctag and ctag in mtags)
-        # "Used" defaults to the actual submission count across the student's
-        # emails, but a coach can pin a manual figure (videos_used_override) —
-        # e.g. a session used outside the system, or a duplicate to discount.
-        # When set, it wins; the badge marks it as a manual figure.
-        _used_override = r.get("videos_used_override")
-        if isinstance(_used_override, int):
-            slim["videos_used"] = _used_override
+        # "Used" = live submission count across the student's emails PLUS a
+        # manual adjustment a coach can set (videos_used_adjustment) — e.g. a
+        # session used outside the system, or a duplicate to discount. Storing
+        # a delta (not an absolute) means the figure KEEPS incrementing as new
+        # private-video feedback comes in: set it to 5 today and a new
+        # submission tomorrow shows 6. The badge marks rows with an adjustment.
+        _live_used = sum(used_counts.get(e, 0) for e in emails)
+        _used_adj = r.get("videos_used_adjustment")
+        if isinstance(_used_adj, int) and _used_adj != 0:
+            slim["videos_used"] = max(_live_used + _used_adj, 0)
             slim["videos_used_overridden"] = True
         else:
-            slim["videos_used"] = sum(used_counts.get(e, 0) for e in emails)
+            slim["videos_used"] = _live_used
             slim["videos_used_overridden"] = False
+        # Echoed back so the Edit modal can prefill the field with the current
+        # figure; the PATCH handler converts an edited value into a new delta.
+        slim["videos_used_set"] = slim["videos_used"]
         rcount = sum((refund_by_email.get(e) or {}).get("count", 0) for e in emails)
         rtotal = round(sum((refund_by_email.get(e) or {}).get("total", 0) for e in emails), 2)
         slim["has_refund"] = rcount > 0
@@ -1253,7 +1259,7 @@ EDITABLE_FIELDS = {
     "name", "first_name", "surname", "email", "circle_email", "other_emails",
     "tier", "cohort_joined", "interview_date", "kajabi_interview_date", "speciality", "hospital",
     "interview_type", "private_chat_url", "private_chat_status", "video_allowance",
-    "videos_used_override",
+    "videos_used_set",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
     "extra_bonus_calls",
 }
@@ -1278,7 +1284,7 @@ class StudentPatch(BaseModel):
     private_chat_url: Optional[str] = None
     private_chat_status: Optional[str] = None
     video_allowance: Optional[int] = None
-    videos_used_override: Optional[int] = None  # manual "used" count; null = revert to actual submission count
+    videos_used_set: Optional[int] = None  # desired "used" figure; backend converts to a delta over the live count (null = clear the adjustment)
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None
     coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)
@@ -1316,6 +1322,21 @@ async def update_student(
     for k in ("email", "circle_email"):
         if k in set_fields and set_fields[k] is not None:
             set_fields[k] = set_fields[k].strip().lower() or None
+
+    # "Videos used" is edited as an absolute figure but stored as a DELTA over
+    # the live submission count, so it keeps incrementing as new feedback comes
+    # in. Convert the desired value → adjustment = desired - live (null clears).
+    if "videos_used_set" in set_fields:
+        desired = set_fields.pop("videos_used_set")
+        if desired is None:
+            set_fields["videos_used_adjustment"] = None
+        else:
+            try:
+                used_counts = await _videos_used_counts()
+            except Exception:
+                used_counts = {}
+            live = sum(used_counts.get(e, 0) for e in _row_emails(existing))
+            set_fields["videos_used_adjustment"] = int(desired) - live
 
     now = datetime.now(timezone.utc)
     update_set: dict[str, Any] = dict(set_fields)
