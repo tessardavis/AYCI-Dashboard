@@ -52,7 +52,11 @@ COL_INTERVIEW_TYPE = "color_mkr7wahg"  # Status: "Locum" / "Substantive"
 # private call/video allowance), so we don't classify them as Private Plus
 # in Upcoming Interviews or the Private Tier Utilisation board.
 PRIVATE_PLUS_LABELS = {"Academy Private Plus", "Upgrade Private Plus"}
-VIP_LABELS = {"VIP", "Platinum"}
+# "Upgrade VIP" / "Academy VIP" are the same product as "VIP" — without them an
+# Upgrade-VIP student normalises to None and silently drops out of this widget
+# (and Upcoming Interviews' VIP grouping). Mirror the "Upgrade …" Private Plus
+# variant above. NB: matched case-sensitively here against the raw Monday label.
+VIP_LABELS = {"VIP", "Platinum", "Upgrade VIP", "Academy VIP"}
 
 # Allowances
 ALLOWANCES = {

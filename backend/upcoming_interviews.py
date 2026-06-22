@@ -250,7 +250,11 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         is_bg = _is_active_bg(boost)
 
         _PP_LABELS = {"academy private plus", "upgrade private plus", "private plus"}
-        _VIP_LABELS = {"vip", "platinum"}
+        # "Upgrade VIP" / "Academy VIP" are the same product as "VIP" — they MUST
+        # be here or the student reads "Upgrade VIP" instead of "VIP" and drops
+        # out of the VIP-keyed Private Tier Utilisation widget. Mirror the
+        # "upgrade …" variants that _PP_LABELS already carries for Private Plus.
+        _VIP_LABELS = {"vip", "platinum", "upgrade vip", "academy vip"}
         _t_low = tier.strip().lower()
         if _t_low in _PP_LABELS:
             tier_group = "Private Plus"

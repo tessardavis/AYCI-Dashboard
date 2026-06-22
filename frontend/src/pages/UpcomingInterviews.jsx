@@ -370,7 +370,7 @@ export default function UpcomingInterviews() {
             ) : (
               <ul className="space-y-3">
                 {data.private.map((s) => (
-                  <PrivateCard key={s.id} student={s} today={data.today} />
+                  <PrivateCard key={s.id} student={s} today={data.today} onChanged={load} />
                 ))}
               </ul>
             )}
@@ -390,7 +390,7 @@ export default function UpcomingInterviews() {
               ) : (
                 <ul className="space-y-2">
                   {data.academy.map((s) => (
-                    <AcademyRow key={s.id} student={s} today={data.today} />
+                    <AcademyRow key={s.id} student={s} today={data.today} onChanged={load} />
                   ))}
                 </ul>
               )}
@@ -1004,7 +1004,77 @@ function MiniStat({ label, value, accent, big, sublabel, testid }) {
   );
 }
 
-function AcademyRow({ student, today }) {
+// ----------------------------------------------------------- InterviewDateEditor
+// Click the date to edit it straight in the dashboard. Saves to the mirror and
+// pins it so the Monday sync can't overwrite it — the supported path for dates
+// set outside the Tally form. `onChanged` reloads the list after a save.
+function InterviewDateEditor({ student, today, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(student.interview_date || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async (newVal) => {
+    setSaving(true);
+    try {
+      await apiClient.patch(
+        `/interviews/${student.id}/interview-date`,
+        { interview_date: newVal || null },
+        { timeout: 30000 },
+      );
+      toast.success(newVal ? "Interview date updated" : "Interview date cleared");
+      setEditing(false);
+      onChanged?.();
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't update the interview date");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setValue(student.interview_date || ""); setEditing(true); }}
+        className="text-right group"
+        title="Click to edit the interview date"
+        data-testid={`edit-interview-date-${student.id}`}
+      >
+        <div className="text-sm font-semibold text-[var(--ayci-ink)] group-hover:text-[var(--ayci-teal)] border-b border-dashed border-transparent group-hover:border-[var(--ayci-teal)]">
+          {fmtDate(student.interview_date)}
+        </div>
+        <div className="text-xs text-[var(--ayci-teal)]">{daysUntil(student.interview_date, today)}</div>
+      </button>
+    );
+  }
+
+  return (
+    <div className="text-right flex flex-col items-end gap-1" data-testid={`interview-date-editor-${student.id}`}>
+      <input
+        type="date"
+        value={value}
+        disabled={saving}
+        autoFocus
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && value) save(value); if (e.key === "Escape") setEditing(false); }}
+        className="border border-[var(--ayci-border)] rounded px-1.5 py-0.5 text-sm"
+        data-testid={`interview-date-input-${student.id}`}
+      />
+      <div className="flex gap-2 text-xs">
+        <button type="button" disabled={saving || !value} onClick={() => save(value)}
+          className="text-[var(--ayci-teal)] font-semibold disabled:opacity-40">Save</button>
+        {student.interview_date && (
+          <button type="button" disabled={saving} onClick={() => save("")}
+            className="text-rose-600 disabled:opacity-40">Clear</button>
+        )}
+        <button type="button" disabled={saving} onClick={() => setEditing(false)}
+          className="text-[var(--ayci-ink-muted)]">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function AcademyRow({ student, today, onChanged }) {
   const prefetch = usePrefetchLookup();
   return (
     <li
@@ -1063,15 +1133,12 @@ function AcademyRow({ student, today }) {
         </div>
         <PastCoaches coaches={student.past_coaches} />
       </div>
-      <div className="text-right">
-        <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>
-        <div className="text-xs text-[var(--ayci-teal)]">{daysUntil(student.interview_date, today)}</div>
-      </div>
+      <InterviewDateEditor student={student} today={today} onChanged={onChanged} />
     </li>
   );
 }
 
-function PrivateCard({ student, today }) {
+function PrivateCard({ student, today, onChanged }) {
   const prefetch = usePrefetchLookup();
   const { calls_30min: calls, mock_interviews: mocks, bonus_calls: bonus, videos } = student;
   return (
@@ -1145,10 +1212,7 @@ function PrivateCard({ student, today }) {
           </div>
           <PastCoaches coaches={student.past_coaches} />
         </div>
-        <div className="text-right">
-          <div className="text-sm font-semibold text-[var(--ayci-ink)]">{fmtDate(student.interview_date)}</div>
-          <div className="text-xs text-[var(--ayci-teal)]">{daysUntil(student.interview_date, today)}</div>
-        </div>
+        <InterviewDateEditor student={student} today={today} onChanged={onChanged} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
