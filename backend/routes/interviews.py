@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 import upcoming_interviews as upcoming
 import launches as launches_mod
@@ -10,6 +11,11 @@ from db import db
 from deps import require_board
 
 router = APIRouter(prefix="/api", tags=["interviews"])
+
+
+class InterviewDatePayload(BaseModel):
+    # ISO YYYY-MM-DD, or null / empty string to clear the date.
+    interview_date: str | None = None
 
 
 @router.get("/interviews/upcoming")
@@ -85,6 +91,71 @@ async def upcoming_interviews(
         "academy": academy,
         "private": data["private"],
     }
+
+
+@router.patch("/interviews/{student_id}/interview-date")
+async def set_interview_date(
+    student_id: str,
+    payload: InterviewDatePayload,
+    user: dict = Depends(require_board("interviews")),
+):
+    """Set (or clear) a student's interview date directly in the dashboard.
+
+    Writes straight to the academy_members mirror and PINS `interview_date` in
+    `dashboard_edited_fields`, so the 15-minute Monday sync can no longer
+    overwrite it — the dashboard becomes the source of truth for this date.
+    This is the supported path for dates set outside the Tally form (which the
+    Tally reconcile can't see). Pass interview_date=null/"" to clear.
+    """
+    new_date = (payload.interview_date or "").strip()[:10] or None
+    if new_date is not None:
+        try:
+            datetime.fromisoformat(new_date)
+        except ValueError:
+            raise HTTPException(400, "interview_date must be ISO YYYY-MM-DD")
+
+    row = await db.academy_members.find_one(
+        {"_id": student_id},
+        {"_id": 1, "name": 1, "interview_date": 1, "dashboard_edited_fields": 1},
+    )
+    if not row:
+        raise HTTPException(404, "Student not found in the dashboard")
+
+    now = datetime.now(timezone.utc)
+    # Pin interview_date so academy_members_mirror.full_sync won't clobber it
+    # (interview_date is already in mirror.PROTECTED_FIELDS).
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"interview_date"})
+    editor = (user.get("email") or user.get("name") or "unknown") if isinstance(user, dict) else "unknown"
+    await db.academy_members.update_one(
+        {"_id": student_id},
+        {"$set": {
+            "interview_date": new_date,
+            "interview_date_source": "dashboard",
+            "interview_date_prev": row.get("interview_date"),
+            "interview_date_reconciled_at": now,
+            "dashboard_edited_fields": pinned,
+            "dashboard_edited_at": now,
+            "dashboard_edited_by": f"dashboard-edit:{editor}",
+        }},
+    )
+
+    # Bust every cached Upcoming Interviews window so the change shows at once
+    # (key is "upcoming_interviews:<wider>"; SWR otherwise serves it for 30 min).
+    await db["fn_cache"].delete_many({"_id": {"$regex": "^upcoming_interviews:"}})
+
+    # Best-effort: keep the AYCI Interviews calendar in step, same as the
+    # Tally reconcile does. Inert unless the calendar is configured.
+    try:
+        import google_calendar
+        if google_calendar.is_configured() and new_date:
+            full = await db.academy_members.find_one({"_id": student_id})
+            if full:
+                await google_calendar.ensure_interview_event(db, full)
+    except Exception:
+        pass
+
+    return {"ok": True, "student_id": student_id, "interview_date": new_date,
+            "previous": row.get("interview_date")}
 
 
 @router.get("/interviews/private-tier-utilisation")
