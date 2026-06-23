@@ -572,31 +572,19 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
       </td>
       <td className="px-3 py-2.5">
         <div className="font-semibold text-[var(--ayci-ink)] flex items-center gap-2 flex-wrap">
-          {item.private_chat ? (
+          {item.email ? (
             <a
-              href={item.private_chat}
+              href={`/students?email=${encodeURIComponent(item.email)}`}
               target="_blank"
               rel="noreferrer"
               className="text-[var(--ayci-ink)] hover:text-sky-700 hover:underline decoration-sky-300"
-              title="Open this student's Circle Group DM"
+              title="Open this student's lookup card"
               data-testid={`pv-name-link-${item.id}`}
             >
               {studentName}
             </a>
           ) : (
             <span>{studentName}</span>
-          )}
-          {item.email && (
-            <a
-              href={`/students?email=${encodeURIComponent(item.email)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-slate-400 hover:text-sky-700"
-              title="Open student lookup card"
-              data-testid={`pv-student-lookup-link-${item.id}`}
-            >
-              <User className="w-3.5 h-3.5" />
-            </a>
           )}
           {hasCount && (
             <span
