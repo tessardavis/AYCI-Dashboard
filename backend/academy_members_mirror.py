@@ -182,6 +182,10 @@ PROTECTED_FIELDS = {
     # Mock interview + 1:1 status fields (used by Calendly zaps 14, 18)
     "mock_interview_status",
     "mock_interview_1", "mock_interview_2", "gold_call", "platinum_call",
+    # Bonus call (round-robin) booking status — dashboard-owned. Written by the
+    # Calendly webhook (calendly_webhook.py) when a student books the AYCI Bonus
+    # Call; replaces the old Monday "Bonus Call" column. Value: "Booked - <host>".
+    "bonus_call",
     "mock_interview_cohort_before_april",
     "call_1", "call_2", "call_3", "call_4",
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",

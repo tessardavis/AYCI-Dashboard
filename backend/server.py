@@ -2226,6 +2226,7 @@ from routes import (  # noqa: E402  -- routers depend on `api` being defined
     scheduler as routes_scheduler,
     students_db as routes_students_db,
     refunds as routes_refunds,
+    calendly as routes_calendly,
 )
 for _r in (
     routes_team.router, routes_rocks.router, routes_scorecard.router,
@@ -2236,6 +2237,7 @@ for _r in (
     routes_wati.router, routes_private_videos.router, routes_today_calls.router,
     routes_circle.router, routes_interview_eve.router, routes_scheduler.router,
     routes_students_db.router, routes_refunds.router,
+    routes_calendly.router,
 ):
     app.include_router(_r)
 

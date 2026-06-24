@@ -87,6 +87,19 @@ async def convertkit_list_tags() -> list[dict]:
         return [{"id": t["id"], "name": t["name"]} for t in r.json().get("tags", [])]
 
 
+async def convertkit_add_tag_to_subscriber(email: str, tag_id: int) -> dict:
+    """Add a Kit (ConvertKit) tag to a subscriber by email. Idempotent — Kit
+    no-ops if the subscriber already carries the tag. Returns the Kit
+    subscription payload. Raises on a non-2xx response so callers can log it."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+        r = await c.post(
+            f"{CONVERTKIT_V3}/tags/{tag_id}/subscribe",
+            json={"api_secret": _ck_secret(), "email": email},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def convertkit_weekly_subscribers(params: dict, start_iso: str, end_iso: str) -> float:
     """Total active subscribers created in window."""
     start = start_iso[:10]
