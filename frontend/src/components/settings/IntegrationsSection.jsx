@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2, MessagesSquare } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2, MessagesSquare, Calendar } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -34,6 +34,95 @@ export default function IntegrationsSection({ isAdmin }) {
       <CircleDaysWebhookCard isAdmin={isAdmin} />
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
       <ZapierCircleReplyCard isAdmin={isAdmin} />
+      <CalendlyBonusCallCard isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+/**
+ * One-click switch-on for the Calendly bonus-call automation (replaces the
+ * Zapier "Bonus Call Booked" zap). Connecting registers a Calendly webhook
+ * subscription + stores its signing key — see backend/routes/calendly.py.
+ */
+function CalendlyBonusCallCard({ isAdmin }) {
+  const [state, setState] = useState({ loading: true, connected: false, callback: "" });
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const { data } = await apiClient.get("/admin/calendly/status");
+      setState({ loading: false, connected: !!data?.connected, callback: data?.callback || "" });
+    } catch (err) {
+      setState({ loading: false, connected: false, callback: "" });
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Failed to load Calendly status");
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const connect = async () => {
+    if (!isAdmin) return;
+    setBusy(true);
+    try {
+      const { data } = await apiClient.post("/admin/calendly/register-webhook", {}, { timeout: 30000 });
+      if (data?.ok) {
+        toast.success("Calendly connected — bonus-call bookings now flow into the dashboard");
+        await load();
+      } else {
+        toast.error(data?.error || "Couldn't connect Calendly");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't connect Calendly");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
+      data-testid="calendly-bonus-call-card"
+    >
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 shrink-0">
+          <Calendar className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Calendly bonus call
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            When someone books the AYCI Bonus Call, the dashboard tags them in Kit
+            (stops their reminder emails), records the booking, and posts to
+            #fulfillment-team — no Zapier. Connect once to switch it on.
+          </p>
+        </div>
+      </div>
+
+      {state.loading ? (
+        <div className="flex items-center gap-2 text-sm text-[var(--ayci-ink-muted)]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Checking status…
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2 text-sm">
+            <span className={`inline-block w-2 h-2 rounded-full ${state.connected ? "bg-emerald-500" : "bg-slate-300"}`} />
+            <span className={state.connected ? "text-emerald-700 font-semibold" : "text-[var(--ayci-ink-muted)]"}>
+              {state.connected ? "Connected" : "Not connected"}
+            </span>
+          </div>
+          <Button onClick={connect} disabled={!isAdmin || busy} data-testid="calendly-connect-btn">
+            {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            {state.connected ? "Re-connect" : "Connect Calendly"}
+          </Button>
+        </div>
+      )}
+
+      {state.connected && state.callback && (
+        <p className="text-xs text-[var(--ayci-ink-muted)] mt-3 break-all">
+          Receiving bookings at <code className="bg-slate-100 px-1 rounded">{state.callback}</code>
+        </p>
+      )}
     </div>
   );
 }

@@ -96,6 +96,21 @@ async def register_calendly_webhook(admin: dict = Depends(require_admin)):
     return {"ok": True, "callback": callback, "subscription": resource}
 
 
+@router.get("/admin/calendly/status")
+async def calendly_status(admin: dict = Depends(require_admin)):
+    """Whether the bonus-call webhook has been registered (drives the
+    Settings → Integrations "Connect Calendly" card)."""
+    doc = await db.app_settings.find_one(
+        {"id": "calendly_webhook"},
+        {"_id": 0, "callback": 1, "subscription_uri": 1, "signing_key": 1},
+    ) or {}
+    return {
+        "connected": bool(doc.get("signing_key")),
+        "callback": doc.get("callback"),
+        "subscription_uri": doc.get("subscription_uri"),
+    }
+
+
 @router.get("/admin/calendly/webhooks")
 async def list_calendly_webhooks(admin: dict = Depends(require_admin)):
     """List current org webhook subscriptions (diagnostic / cleanup)."""
