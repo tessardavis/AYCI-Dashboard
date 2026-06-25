@@ -47,6 +47,7 @@ export default function IntegrationsSection({ isAdmin }) {
 function CalendlyBonusCallCard({ isAdmin }) {
   const [state, setState] = useState({ loading: true, connected: false, callback: "" });
   const [busy, setBusy] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   const load = async () => {
     try {
@@ -75,6 +76,27 @@ function CalendlyBonusCallCard({ isAdmin }) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't connect Calendly");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const backfill = async () => {
+    if (!isAdmin) return;
+    setBackfilling(true);
+    try {
+      const { data } = await apiClient.post("/admin/calendly/backfill-bonus-tags", {}, { timeout: 120000 });
+      if (data?.ok) {
+        toast.success(
+          `Backfill done — tagged ${data.tagged} of ${data.unique_emails} past bookers` +
+          (data.recorded ? ` · ${data.recorded} recorded` : "") +
+          (data.not_found ? ` · ${data.not_found} not in dashboard` : "")
+        );
+      } else {
+        toast.error(data?.error || "Backfill failed");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Backfill failed");
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -111,10 +133,22 @@ function CalendlyBonusCallCard({ isAdmin }) {
               {state.connected ? "Connected" : "Not connected"}
             </span>
           </div>
-          <Button onClick={connect} disabled={!isAdmin || busy} data-testid="calendly-connect-btn">
-            {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            {state.connected ? "Re-connect" : "Connect Calendly"}
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={backfill}
+              disabled={!isAdmin || backfilling}
+              title="Tag everyone who has already booked a bonus call (catches bookings missed while the zaps were off)"
+              data-testid="calendly-backfill-btn"
+            >
+              {backfilling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Tag past bookings
+            </Button>
+            <Button onClick={connect} disabled={!isAdmin || busy} data-testid="calendly-connect-btn">
+              {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              {state.connected ? "Re-connect" : "Connect Calendly"}
+            </Button>
+          </div>
         </div>
       )}
 

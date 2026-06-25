@@ -18,7 +18,9 @@ import hashlib
 import hmac
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import httpx
 
 import connectors
 import slack_dm
@@ -150,3 +152,105 @@ async def handle_invitee_created(db, payload: dict) -> dict:
         )
     logger.info(f"[calendly] bonus-call processed: {result}")
     return result
+
+
+async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120) -> dict:
+    """One-shot catch-up: tag every AYCI Bonus Call booker (past + upcoming, in
+    the window) with the current cohort's "1:1 Call Booked" Kit tag and record
+    `bonus_call` on their row — for bookings missed while the Zapier zaps were
+    off. Covers Anoop AND Charlotte (the round-robin pool). Idempotent (Kit
+    no-ops if already tagged). Deliberately does NOT Slack — that would spam
+    #fulfillment-team with old bookings."""
+    headers = connectors._calendly_headers()
+    base = connectors.CALENDLY_BASE
+    now = datetime.now(timezone.utc)
+
+    def _fmt(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+    summary = {"events_scanned": 0, "bonus_events": 0, "invitees": 0,
+               "unique_emails": 0, "tagged": 0, "recorded": 0, "not_found": 0,
+               "errors": 0}
+
+    tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX)
+    booked_tag = tag_ids[0] if tag_ids else None
+    summary["booked_tag"] = booked_tag
+
+    emails: dict[str, str | None] = {}  # email -> host first name
+
+    async with httpx.AsyncClient(timeout=60) as c:
+        me = await c.get(f"{base}/users/me", headers=headers)
+        me.raise_for_status()
+        org = (me.json().get("resource") or {}).get("current_organization")
+        if not org:
+            return {**summary, "error": "could not resolve organization"}
+
+        url = f"{base}/scheduled_events"
+        params = {"organization": org, "status": "active", "count": 100,
+                  "min_start_time": _fmt(now - timedelta(days=days_back)),
+                  "max_start_time": _fmt(now + timedelta(days=days_fwd)),
+                  "sort": "start_time:asc"}
+        while url:
+            r = await c.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            body = r.json()
+            for ev in body.get("collection", []):
+                summary["events_scanned"] += 1
+                if BONUS_EVENT_MATCH not in (ev.get("name") or "").lower():
+                    continue
+                summary["bonus_events"] += 1
+                host = None
+                for m in (ev.get("event_memberships") or []):
+                    nm = m.get("user_name") or m.get("user_email")
+                    if nm:
+                        host = nm.split()[0]
+                        break
+                inv_url = f"{ev.get('uri')}/invitees"
+                inv_params = {"count": 100, "status": "active"}
+                while inv_url:
+                    ir = await c.get(inv_url, headers=headers, params=inv_params)
+                    ir.raise_for_status()
+                    ib = ir.json()
+                    for inv in ib.get("collection", []):
+                        summary["invitees"] += 1
+                        em = (inv.get("email") or "").strip().lower()
+                        if em and em not in emails:
+                            emails[em] = host
+                    inv_url = (ib.get("pagination") or {}).get("next_page")
+                    inv_params = None  # next_page is a full, param-encoded URL
+            url = (body.get("pagination") or {}).get("next_page")
+            params = None
+
+    summary["unique_emails"] = len(emails)
+
+    for em, host in emails.items():
+        if booked_tag:
+            try:
+                await connectors.convertkit_add_tag_to_subscriber(em, booked_tag)
+                summary["tagged"] += 1
+            except Exception as e:
+                summary["errors"] += 1
+                logger.warning(f"[calendly-backfill] Kit tag failed {em}: {e}")
+        try:
+            row = await db.academy_members.find_one({"$or": [
+                {"email": em},
+                {"circle_email": em},
+                {"other_emails": {"$regex": re.escape(em), "$options": "i"}},
+            ]})
+            if row:
+                pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"bonus_call"})
+                await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+                    "bonus_call": f"Booked - {host}" if host else "Booked",
+                    "dashboard_edited_fields": pinned,
+                    "dashboard_edited_at": datetime.now(timezone.utc),
+                    "dashboard_edited_by": "calendly-bonus-call-backfill",
+                }})
+                summary["recorded"] += 1
+            else:
+                summary["not_found"] += 1
+        except Exception as e:
+            summary["errors"] += 1
+            logger.warning(f"[calendly-backfill] row update failed {em}: {e}")
+
+    logger.info(f"[calendly-backfill] {summary}")
+    return summary
