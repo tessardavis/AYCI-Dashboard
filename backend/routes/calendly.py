@@ -96,6 +96,24 @@ async def register_calendly_webhook(admin: dict = Depends(require_admin)):
     return {"ok": True, "callback": callback, "subscription": resource}
 
 
+@router.post("/admin/calendly/backfill-bonus-tags")
+async def backfill_bonus_tags(admin: dict = Depends(require_admin)):
+    """Catch up bookings missed while the Zapier zaps were off: tag every past/
+    upcoming AYCI Bonus Call booker (Anoop + Charlotte) with the current cohort's
+    '1:1 Call Booked' Kit tag and record bonus_call. Idempotent. Uses
+    CALENDLY_TOKEN directly, so it works whether or not the live webhook is set."""
+    if not os.environ.get("CALENDLY_TOKEN"):
+        raise HTTPException(400, "CALENDLY_TOKEN not set")
+    try:
+        result = await calendly_webhook.backfill_bonus_call_tags(db)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Calendly: {e.response.text[:200]}")
+    except Exception as e:
+        logger.exception("[calendly] backfill error")
+        raise HTTPException(500, f"backfill failed: {str(e)[:200]}")
+    return {"ok": True, **result}
+
+
 @router.get("/admin/calendly/status")
 async def calendly_status(admin: dict = Depends(require_admin)):
     """Whether the bonus-call webhook has been registered (drives the
