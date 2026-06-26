@@ -455,12 +455,13 @@ function PrivateChatDoc() {
       </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI>
-          <strong>Automatically (primary)</strong> - Zapier creates the chat when the student joins Circle
-          with the current cohort tag. This is the dependable path. Three zaps cover the audiences:
+          <strong>Automatically (primary)</strong> - Zapier creates the chat when the student joins the
+          cohort. This is the dependable path. Separate zaps cover the audiences:
           <ul className="list-disc pl-5 space-y-1 mt-1">
             <LI>VIP &amp; Private Plus members - <a href="https://zapier.com/editor/356003238/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a> (and the "In Between" join variant)</LI>
             <LI>Legacy Upgrades - <a href="https://zapier.com/editor/356048959/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
             <LI>VIP &amp; Private Plus (standard join) - <a href="https://zapier.com/editor/370426888/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
+            <LI><strong>Boost &amp; Go</strong> (its own zap - 4 paths: B&amp;G / B&amp;G Plus × Presentation) - <a href="https://zapier.com/editor/341446766/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
           </ul>
         </LI>
         <LI>
@@ -471,6 +472,13 @@ function PrivateChatDoc() {
           shows the reason (e.g. their Circle DMs are off, or a Circle hiccup) rather than doing nothing.
         </LI>
       </ul>
+
+      <P>
+        <em>Boost &amp; Go is a separate track:</em> B&amp;G students are tagged in Kit by their own{" "}
+        <a href="https://zapier.com/editor/262763852/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">Boost &amp; Go Sales zap</a> (not the Private Plus / VIP
+        Sales Zap), and their chat is created by the Boost &amp; Go chat zap above - not the VIP/Private
+        Plus zaps.
+      </P>
 
       <H>The welcome message</H>
       <P>
