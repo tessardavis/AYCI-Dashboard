@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { BookOpen, MessageCircle, Gift, CheckCircle2, Clock } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
-import { apiClient } from "@/lib/api";
+import { apiClient, formatApiErrorDetail } from "@/lib/api";
 
 // In-dashboard process docs the whole team can read. Add a process by adding an
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
@@ -76,21 +76,82 @@ export default function Processes() {
             {Body ? <Body /> : <p className="text-[var(--ayci-ink-muted)]">Coming soon.</p>}
           </article>
 
-          {/* Ask-Claude placeholder - wired up once the API key is added. */}
-          <div className="bg-white border border-dashed border-[var(--ayci-border)] rounded-xl p-5 flex items-start gap-3" data-testid="processes-ask-placeholder">
-            <div className="w-9 h-9 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-700 shrink-0">
-              <MessageCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="font-display font-bold text-[var(--ayci-ink)]">Ask about the processes</div>
-              <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5">
-                Coming soon - a chat box here will let the team ask questions and get answers
-                drawn from these process docs. Switches on once the Claude API key is added.
-              </p>
-            </div>
-          </div>
+          <ProcessesChat />
         </div>
       </div>
+    </div>
+  );
+}
+
+// "Ask about the processes" - grounded Q&A over the process docs (Claude).
+function ProcessesChat() {
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState([]);
+
+  const ask = async (e) => {
+    e?.preventDefault?.();
+    const question = q.trim();
+    if (!question || busy) return;
+    setQ("");
+    setBusy(true);
+    setLog((l) => [...l, { q: question, a: null }]);
+    try {
+      const { data } = await apiClient.post("/processes/ask", { question }, { timeout: 45000 });
+      setLog((l) => l.map((row, i) => (i === l.length - 1 ? { ...row, a: data.answer } : row)));
+    } catch (err) {
+      const msg = formatApiErrorDetail(err.response?.data?.detail) || "Couldn't get an answer - try again.";
+      setLog((l) => l.map((row, i) => (i === l.length - 1 ? { ...row, a: msg, error: true } : row)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[var(--ayci-border)] rounded-xl p-5" data-testid="processes-ask">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-9 h-9 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-700 shrink-0">
+          <MessageCircle className="w-5 h-5" />
+        </div>
+        <div>
+          <div className="font-display font-bold text-[var(--ayci-ink)]">Ask about the processes</div>
+          <p className="text-xs text-[var(--ayci-ink-muted)]">Answers come only from the documented processes.</p>
+        </div>
+      </div>
+
+      {log.length > 0 && (
+        <div className="space-y-3 mb-3 max-h-96 overflow-y-auto">
+          {log.map((row, i) => (
+            <div key={i}>
+              <div className="text-sm font-semibold text-[var(--ayci-ink)]">{row.q}</div>
+              <div className={`text-sm mt-1 whitespace-pre-wrap ${row.error ? "text-rose-600" : "text-[var(--ayci-ink-muted)]"}`}>
+                {row.a == null
+                  ? <span className="inline-flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> thinking…</span>
+                  : row.a}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={ask} className="flex items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="e.g. How does a student become eligible for a bonus call?"
+          className="flex-1 border border-[var(--ayci-border)] rounded-lg px-3 py-2 text-sm"
+          data-testid="processes-ask-input"
+        />
+        <button
+          type="submit"
+          disabled={busy || !q.trim()}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--ayci-teal)] text-white text-sm font-semibold disabled:opacity-50"
+          data-testid="processes-ask-send"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          Ask
+        </button>
+      </form>
     </div>
   );
 }
