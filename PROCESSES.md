@@ -251,6 +251,11 @@ When a student books any of these calls, the dashboard automatically:
 Reschedules update the date automatically. If a student doesn't show up, the coach opens that
 student's **Student Lookup** card and marks that call a **no-show**.
 
+On the same card the team can also **log a call that wasn't booked through Calendly** ("Log a call" -
+counts as one of their eligible calls) and **grant extra allowance** above the tier default with the
+**+ / -** buttons next to a call type (e.g. give a VIP a 3rd coach call). The override is stored per
+student (`private_call_allowance`) and pinned against the sync.
+
 ## Reminders to book
 
 **Coralie** tracks who has interviews coming up and checks in with private-tier students to make sure

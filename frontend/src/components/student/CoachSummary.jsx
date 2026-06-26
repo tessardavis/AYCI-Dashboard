@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Phone, Video, Award, Briefcase, Calendar, CheckCircle2, Gift, Loader2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Phone, Video, Award, Briefcase, Calendar, CheckCircle2, Gift, Loader2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -324,21 +324,31 @@ const privateStatusTone = (status) =>
       : /attend|done/i.test(status || "") ? "bg-emerald-50 text-emerald-700 border-emerald-200"
         : "bg-sky-50 text-sky-700 border-sky-200";
 
-// Private-tier (Private Plus / VIP) call allowance: per-kind booked/remaining +
-// each booking with a coach action to mark Attended / No-show.
+const PRIVATE_KIND_OPTIONS = [
+  { key: "tessa_30", label: "30-min call with Tessa" },
+  { key: "coach_30", label: "30-min coach call" },
+  { key: "mock_60", label: "60-min mock interview" },
+];
+const PRIVATE_KIND_ORDER = ["tessa_30", "coach_30", "mock_60"];
+
+// Private-tier (Private Plus / VIP) call allowance: per-kind booked/remaining,
+// each booking with a coach action to mark Attended / No-show, a +/- stepper to
+// grant or remove extra allowance above the tier default, and an "Add a call"
+// form to log a call that wasn't booked through Calendly. Local state updates
+// optimistically so the view reflects changes without a full re-lookup.
 function PrivateCallsBlock({ summary, email }) {
   const [overrides, setOverrides] = useState({}); // invitee_uri -> new status
+  const [extra, setExtra] = useState({});         // kind -> extra-allowance delta added this session
+  const [added, setAdded] = useState([]);         // calls logged manually this session
   const [busy, setBusy] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ kind: "coach_30", coach: "", date: "", status: "Attended" });
 
   const setStatus = async (uri, status) => {
     if (!email || !uri) return;
     setBusy(uri);
     try {
-      await apiClient.post(
-        "/private-call/set-status",
-        { email, invitee_uri: uri, status },
-        { timeout: 30000 }
-      );
+      await apiClient.post("/private-call/set-status", { email, invitee_uri: uri, status }, { timeout: 30000 });
       setOverrides((o) => ({ ...o, [uri]: status }));
       toast.success(`Marked ${status}`);
     } catch (e) {
@@ -348,7 +358,72 @@ function PrivateCallsBlock({ summary, email }) {
     }
   };
 
-  const kinds = Object.entries(summary.by_kind || {});
+  const grant = async (kind, delta) => {
+    if (!email) return;
+    setBusy(`grant:${kind}`);
+    try {
+      await apiClient.post("/private-call/grant", { email, kind, delta }, { timeout: 30000 });
+      setExtra((e) => ({ ...e, [kind]: (e[kind] || 0) + delta }));
+      toast.success(delta > 0 ? "Extra call granted" : "Extra call removed");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't update allowance");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const logCall = async () => {
+    if (!email) return;
+    setBusy("log");
+    try {
+      const { data } = await apiClient.post(
+        "/private-call/log",
+        { email, kind: form.kind, coach: form.coach || null, date: form.date || null, status: form.status },
+        { timeout: 30000 }
+      );
+      setAdded((a) => [...a, data.entry]);
+      setShowForm(false);
+      setForm({ kind: "coach_30", coach: "", date: "", status: "Attended" });
+      toast.success("Call logged");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't log the call");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Merge the server summary with this session's optimistic changes.
+  const view = useMemo(() => {
+    const out = {};
+    for (const [kind, k] of Object.entries(summary.by_kind || {})) {
+      out[kind] = { label: k.label, base: k.allowance - (k.extra || 0), serverExtra: k.extra || 0, calls: [...(k.calls || [])] };
+    }
+    const ensure = (kind) => {
+      if (!out[kind]) {
+        const opt = PRIVATE_KIND_OPTIONS.find((o) => o.key === kind);
+        out[kind] = { label: opt?.label || kind, base: 0, serverExtra: 0, calls: [] };
+      }
+      return out[kind];
+    };
+    Object.keys(extra).forEach((kind) => ensure(kind));
+    added.forEach((c) => ensure(c.kind).calls.push(c));
+
+    const rows = Object.entries(out).map(([kind, o]) => {
+      const shownExtra = Math.max(0, o.serverExtra + (extra[kind] || 0));
+      const allowance = o.base + shownExtra;
+      const active = o.calls.filter((c) => !/no.?show|cancel/i.test(overrides[c.invitee_uri] || c.status || ""));
+      return {
+        kind, label: o.label, allowance, shownExtra,
+        booked: active.length, remaining: Math.max(0, allowance - active.length),
+        calls: o.calls.slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+      };
+    });
+    rows.sort((a, b) => ((PRIVATE_KIND_ORDER.indexOf(a.kind) + 1 || 99) - (PRIVATE_KIND_ORDER.indexOf(b.kind) + 1 || 99)));
+    const totalAllow = rows.reduce((s, r) => s + r.allowance, 0);
+    const totalBooked = rows.reduce((s, r) => s + r.booked, 0);
+    return { rows, totalAllow, totalBooked, totalRemaining: Math.max(0, totalAllow - totalBooked) };
+  }, [summary, extra, added, overrides]);
+
   return (
     <div className="mt-3 rounded-lg border border-[var(--ayci-border)] bg-slate-50/60 p-3" data-testid="private-calls">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -356,27 +431,52 @@ function PrivateCallsBlock({ summary, email }) {
           Private Tier calls
         </span>
         <span className="text-[10px] text-[var(--ayci-ink-muted)]">
-          {summary.total_booked}/{summary.total_allowance} booked
-          {summary.total_remaining > 0 ? ` · ${summary.total_remaining} remaining` : ""}
+          {view.totalBooked}/{view.totalAllow} booked
+          {view.totalRemaining > 0 ? ` · ${view.totalRemaining} remaining` : ""}
         </span>
       </div>
       <div className="space-y-2">
-        {kinds.map(([kind, k]) => (
-          <div key={kind}>
+        {view.rows.map((r) => (
+          <div key={r.kind}>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-[var(--ayci-ink)]">{k.label}</span>
+              <span className="text-xs font-semibold text-[var(--ayci-ink)]">{r.label}</span>
               <span className="text-[10px] text-[var(--ayci-ink-muted)]">
-                {k.booked}/{k.allowance} booked{k.remaining > 0 ? ` · ${k.remaining} left` : ""}
+                {r.booked}/{r.allowance} booked{r.remaining > 0 ? ` · ${r.remaining} left` : ""}
+                {r.shownExtra > 0 ? ` · +${r.shownExtra} extra` : ""}
               </span>
+              {email && (
+                <span className="inline-flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => grant(r.kind, 1)}
+                    disabled={busy === `grant:${r.kind}`}
+                    title="Grant one extra call of this type"
+                    className="inline-flex items-center justify-center w-4 h-4 rounded border border-[var(--ayci-border)] text-[var(--ayci-teal)] hover:bg-white disabled:opacity-50"
+                  >
+                    {busy === `grant:${r.kind}` ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Plus className="w-2.5 h-2.5" />}
+                  </button>
+                  {r.shownExtra > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => grant(r.kind, -1)}
+                      disabled={busy === `grant:${r.kind}`}
+                      title="Remove an extra call"
+                      className="inline-flex items-center justify-center w-4 h-4 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-white disabled:opacity-50"
+                    >
+                      <Minus className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
-            {(k.calls || []).map((c) => {
+            {r.calls.map((c) => {
               const status = overrides[c.invitee_uri] || c.status;
               return (
-                <div key={c.invitee_uri || `${kind}-${c.date}`} className="flex items-center gap-2 flex-wrap mt-1 pl-1">
+                <div key={c.invitee_uri || `${r.kind}-${c.date}`} className="flex items-center gap-2 flex-wrap mt-1 pl-1">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] uppercase tracking-wider font-semibold ${privateStatusTone(status)}`}>
                     <Phone className="w-3 h-3" /> {status}
                     <span className="normal-case font-normal opacity-80">
-                      {c.date ? `· ${fmtShort(c.date)}` : ""}{c.coach ? ` · ${c.coach}` : ""}
+                      {c.date ? `· ${fmtShort(c.date)}` : ""}{c.coach ? ` · ${c.coach}` : ""}{c.manual ? " · logged" : ""}
                     </span>
                   </span>
                   {c.invitee_uri && !/cancel/i.test(status) && (
@@ -409,6 +509,72 @@ function PrivateCallsBlock({ summary, email }) {
           </div>
         ))}
       </div>
+
+      {email && (
+        <div className="mt-3 pt-2 border-t border-[var(--ayci-border)]">
+          {!showForm ? (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--ayci-teal)] hover:underline"
+              data-testid="private-add-call"
+            >
+              <Plus className="w-3 h-3" /> Log a call (not booked via Calendly)
+            </button>
+          ) : (
+            <div className="space-y-2" data-testid="private-add-call-form">
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={form.kind}
+                  onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+                  className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1"
+                >
+                  {PRIVATE_KIND_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+                <input
+                  type="text"
+                  value={form.coach}
+                  onChange={(e) => setForm((f) => ({ ...f, coach: e.target.value }))}
+                  placeholder="Coach"
+                  className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1 w-24"
+                />
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1"
+                />
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                  className="text-xs border border-[var(--ayci-border)] rounded px-2 py-1"
+                >
+                  {["Attended", "Booked", "No-show", "Done"].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={logCall}
+                  disabled={busy === "log"}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded bg-[var(--ayci-teal)] text-white disabled:opacity-50"
+                  data-testid="private-add-call-submit"
+                >
+                  {busy === "log" ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  Log call
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="text-[11px] px-2 py-1 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

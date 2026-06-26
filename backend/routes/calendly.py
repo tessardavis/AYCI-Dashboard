@@ -282,6 +282,63 @@ class PrivateCallStatusBody(BaseModel):
 
 
 _PRIVATE_STATUSES = {"Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done"}
+_PRIVATE_KINDS = {"coach_30", "tessa_30", "mock_60"}
+
+
+async def _find_student_by_email(email: str):
+    email = (email or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    row = await db.academy_members.find_one({"$or": [
+        {"email": email}, {"circle_email": email},
+        {"other_emails": {"$regex": re.escape(email), "$options": "i"}}]})
+    if not row:
+        raise HTTPException(404, f"No student found for {email}")
+    return row
+
+
+class LogPrivateCallBody(BaseModel):
+    email: str
+    kind: str
+    coach: str | None = None
+    date: str | None = None
+    status: str | None = "Attended"
+
+
+@router.post("/private-call/log")
+async def log_private_call(body: LogPrivateCallBody,
+                           user: dict = Depends(require_board("students"))):
+    """Log a private-tier call that wasn't booked via Calendly (counts as one of
+    the student's eligible calls). Defaults to Attended."""
+    kind = (body.kind or "").strip()
+    if kind not in _PRIVATE_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(_PRIVATE_KINDS)}")
+    status = (body.status or "Attended").strip()
+    if status not in _PRIVATE_STATUSES:
+        raise HTTPException(400, f"status must be one of {sorted(_PRIVATE_STATUSES)}")
+    row = await _find_student_by_email(body.email)
+    entry = await calendly_webhook.add_manual_private_call(
+        db, row, kind, body.coach, body.date, status)
+    return {"ok": True, "entry": entry}
+
+
+class GrantAllowanceBody(BaseModel):
+    email: str
+    kind: str
+    delta: int = 1
+
+
+@router.post("/private-call/grant")
+async def grant_private_allowance(body: GrantAllowanceBody,
+                                  user: dict = Depends(require_board("students"))):
+    """Adjust a student's extra (above-tier) allowance for one call kind, e.g.
+    grant a VIP a 3rd coach call. delta is usually +1 or -1."""
+    kind = (body.kind or "").strip()
+    if kind not in _PRIVATE_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(_PRIVATE_KINDS)}")
+    row = await _find_student_by_email(body.email)
+    extra = await calendly_webhook.adjust_private_allowance(db, row, kind, int(body.delta))
+    return {"ok": True, "extra": extra}
 
 
 @router.post("/private-call/set-status")

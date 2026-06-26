@@ -46,13 +46,13 @@ def _normalise(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", s.lower())).strip()
 
 
-def _private_calls_summary(tier, calls):
+def _private_calls_summary(tier, calls, extra=None):
     """Allowance view of a student's private-tier (Private Plus / VIP) calls.
     Lazy import keeps student_lookup free of a calendly_webhook import cycle.
-    Returns None for non-private-tier students."""
+    Returns None for students with no private-tier allowance or calls."""
     try:
         from calendly_webhook import summarize_private_calls
-        s = summarize_private_calls(tier, calls)
+        s = summarize_private_calls(tier, calls, extra)
         return s if s.get("eligible") else None
     except Exception:
         return None
@@ -529,7 +529,8 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         # the raw list (set by the Calendly webhook + coaches).
                         "tier": row.get("tier"),
                         "private_calls": _private_calls_summary(
-                            row.get("tier"), row.get("private_calls")),
+                            row.get("tier"), row.get("private_calls"),
+                            row.get("private_call_allowance")),
                     },
                     "error": None,
                     "source": "mongo_mirror",

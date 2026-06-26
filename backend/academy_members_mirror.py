@@ -192,6 +192,9 @@ PROTECTED_FIELDS = {
     # the Calendly webhook (calendly_webhook.py) when a student books one of the
     # private-tier events. Allowance is derived from `tier`. See PROCESSES.md #2.
     "private_calls",
+    # Per-student extra (above-tier) private-call allowance override, set by a
+    # team member ({kind: extra_count}, e.g. {"coach_30": 1}).
+    "private_call_allowance",
     "mock_interview_cohort_before_april",
     "call_1", "call_2", "call_3", "call_4",
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
