@@ -132,6 +132,7 @@ function CalendlyBonusCallCard({ isAdmin }) {
   const [state, setState] = useState({ loading: true, connected: false, callback: "" });
   const [busy, setBusy] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [privBackfilling, setPrivBackfilling] = useState(false);
 
   const load = async () => {
     try {
@@ -184,6 +185,26 @@ function CalendlyBonusCallCard({ isAdmin }) {
     }
   };
 
+  const backfillPrivate = async () => {
+    if (!isAdmin) return;
+    setPrivBackfilling(true);
+    try {
+      const { data } = await apiClient.post("/admin/calendly/backfill-private-calls", {}, { timeout: 120000 });
+      if (data?.ok) {
+        toast.success(
+          `Private-tier backfill done - recorded ${data.recorded} bookings across ${data.private_events} events` +
+          (data.not_found ? ` · ${data.not_found} not in dashboard` : "")
+        );
+      } else {
+        toast.error(data?.error || "Backfill failed");
+      }
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Backfill failed");
+    } finally {
+      setPrivBackfilling(false);
+    }
+  };
+
   return (
     <div
       className="bg-white border border-[var(--ayci-border)] rounded-xl p-5 sm:p-6"
@@ -195,12 +216,14 @@ function CalendlyBonusCallCard({ isAdmin }) {
         </div>
         <div>
           <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
-            Calendly bonus call
+            Calendly calls
           </h2>
           <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
-            When someone books the AYCI Bonus Call, the dashboard tags them in Kit
-            (stops their reminder emails), records the booking, and posts to
-            #fulfillment-team - no Zapier. Connect once to switch it on.
+            One connection covers both bonus calls and the Private Tier (Private
+            Plus / VIP) calls. When someone books, the dashboard records the
+            booking and posts to #fulfillment-team - no Zapier. Bonus-call bookers
+            are also tagged in Kit to stop their reminder emails. Connect once to
+            switch it on.
           </p>
         </div>
       </div>
@@ -226,7 +249,17 @@ function CalendlyBonusCallCard({ isAdmin }) {
               data-testid="calendly-backfill-btn"
             >
               {backfilling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Tag past bookings
+              Tag past bonus bookings
+            </Button>
+            <Button
+              variant="outline"
+              onClick={backfillPrivate}
+              disabled={!isAdmin || privBackfilling}
+              title="Record every past/upcoming Private Tier (Private Plus / VIP) call booking onto the matching student"
+              data-testid="calendly-private-backfill-btn"
+            >
+              {privBackfilling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Record past private-tier calls
             </Button>
             <Button onClick={connect} disabled={!isAdmin || busy} data-testid="calendly-connect-btn">
               {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}

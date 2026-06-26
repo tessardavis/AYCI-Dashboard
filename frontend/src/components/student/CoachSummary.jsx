@@ -70,6 +70,9 @@ export default function CoachSummary({ result }) {
   const eligibleVia = BONUS_ELIGIBILITY_SUFFIXES.find((s) => hasTagSuffix(s));
   // Booking lifecycle from the student record (set by Calendly webhook + coaches).
   const bonusCall = monday.bonus_call || {};
+  // Private-tier (Private Plus / VIP) call allowance + bookings (null if the
+  // student isn't on a private tier). Computed server-side from tier + bookings.
+  const privateCalls = monday.private_calls;
   const bonusStatusTone =
     /no.?show|cancel/i.test(bonusCall.status || "") ? "bg-rose-50 text-rose-700 border-rose-200"
       : /reschedul/i.test(bonusCall.status || "") ? "bg-amber-50 text-amber-700 border-amber-200"
@@ -199,6 +202,10 @@ export default function CoachSummary({ result }) {
         )}
       </div>
 
+      {privateCalls?.eligible && (
+        <PrivateCallsBlock summary={privateCalls} email={result?.email} />
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <CallsStat
           callsRemaining={totalCallsRemaining}
@@ -307,6 +314,101 @@ function CallsStat({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+const privateStatusTone = (status) =>
+  /no.?show|cancel/i.test(status || "") ? "bg-rose-50 text-rose-700 border-rose-200"
+    : /reschedul/i.test(status || "") ? "bg-amber-50 text-amber-700 border-amber-200"
+      : /attend|done/i.test(status || "") ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+        : "bg-sky-50 text-sky-700 border-sky-200";
+
+// Private-tier (Private Plus / VIP) call allowance: per-kind booked/remaining +
+// each booking with a coach action to mark Attended / No-show.
+function PrivateCallsBlock({ summary, email }) {
+  const [overrides, setOverrides] = useState({}); // invitee_uri -> new status
+  const [busy, setBusy] = useState(null);
+
+  const setStatus = async (uri, status) => {
+    if (!email || !uri) return;
+    setBusy(uri);
+    try {
+      await apiClient.post(
+        "/private-call/set-status",
+        { email, invitee_uri: uri, status },
+        { timeout: 30000 }
+      );
+      setOverrides((o) => ({ ...o, [uri]: status }));
+      toast.success(`Marked ${status}`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't update");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const kinds = Object.entries(summary.by_kind || {});
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--ayci-border)] bg-slate-50/60 p-3" data-testid="private-calls">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">
+          Private Tier calls
+        </span>
+        <span className="text-[10px] text-[var(--ayci-ink-muted)]">
+          {summary.total_booked}/{summary.total_allowance} booked
+          {summary.total_remaining > 0 ? ` · ${summary.total_remaining} remaining` : ""}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {kinds.map(([kind, k]) => (
+          <div key={kind}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-[var(--ayci-ink)]">{k.label}</span>
+              <span className="text-[10px] text-[var(--ayci-ink-muted)]">
+                {k.booked}/{k.allowance} booked{k.remaining > 0 ? ` · ${k.remaining} left` : ""}
+              </span>
+            </div>
+            {(k.calls || []).map((c) => {
+              const status = overrides[c.invitee_uri] || c.status;
+              return (
+                <div key={c.invitee_uri || `${kind}-${c.date}`} className="flex items-center gap-2 flex-wrap mt-1 pl-1">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] uppercase tracking-wider font-semibold ${privateStatusTone(status)}`}>
+                    <Phone className="w-3 h-3" /> {status}
+                    <span className="normal-case font-normal opacity-80">
+                      {c.date ? `· ${fmtShort(c.date)}` : ""}{c.coach ? ` · ${c.coach}` : ""}
+                    </span>
+                  </span>
+                  {c.invitee_uri && !/cancel/i.test(status) && (
+                    <span className="inline-flex gap-1">
+                      {!/attend/i.test(status) && (
+                        <button
+                          type="button"
+                          onClick={() => setStatus(c.invitee_uri, "Attended")}
+                          disabled={busy === c.invitee_uri}
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--ayci-border)] text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          {busy === c.invitee_uri ? <Loader2 className="w-3 h-3 animate-spin" /> : "Attended"}
+                        </button>
+                      )}
+                      {!/no.?show/i.test(status) && (
+                        <button
+                          type="button"
+                          onClick={() => setStatus(c.invitee_uri, "No-show")}
+                          disabled={busy === c.invitee_uri}
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--ayci-border)] text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          No-show
+                        </button>
+                      )}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
