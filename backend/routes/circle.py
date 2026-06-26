@@ -690,3 +690,20 @@ async def reset_stuck_threads(
         "modified": res.modified_count,
         "coach_email": coach_email or "(all)",
     }
+
+
+# --------------------------------------------------- Circle Admin API usage meter
+@router.get("/usage")
+async def circle_usage_status(admin: dict = Depends(require_admin)):
+    """Current billing-cycle Circle Admin API usage: total, per-endpoint
+    breakdown, last-hour / last-24h rate, and breaker state. See circle_meter."""
+    import circle_meter
+    return circle_meter.status()
+
+
+@router.post("/usage/reset-breaker")
+async def circle_usage_reset_breaker(admin: dict = Depends(require_admin)):
+    """Re-arm the Circle Admin breaker after a runaway has been fixed. (A
+    cumulative trip will re-trip if the cycle total is still over the ceiling.)"""
+    import circle_meter
+    return await circle_meter.reset_breaker(by=admin.get("email") or "admin")

@@ -968,6 +968,13 @@ async def _scheduled_sync() -> None:
 # --- Lifecycle --------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
+    # Load the Circle Admin API usage counters for the current billing cycle so
+    # the cap + breaker survive restarts (see circle_meter).
+    try:
+        import circle_meter
+        await circle_meter.init(db)
+    except Exception as e:
+        logger.warning(f"[startup] circle_meter init failed: {e}")
     try:
         await db.users.create_index("email", unique=True)
         # Without this compound index every Cohort Leaderboard request
