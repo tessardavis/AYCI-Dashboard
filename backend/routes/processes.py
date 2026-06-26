@@ -68,11 +68,26 @@ the right student (which saves that email to their Other emails so it matches in
 future). If the same person has two ConvertKit subscribers, consolidate them in
 Kit so they don't get double emails.
 
-EACH COHORT: The team sets up the new cohort's Kit tags, their email automations,
-and a fresh round-robin Calendly event each launch (confirm coach dates with Arub;
-usually 50-70 calls). The dashboard adapts automatically - it finds the current
-cohort's tags by pattern and matches the Calendly event by the words "bonus call",
-so no dashboard change is needed per cohort.
+SETTING UP A NEW COHORT (the team does Kit + Calendly; the dashboard needs no change):
+  1. [Arub] Create the cohort's Kit tags: "Purchase - Live webinar",
+     "Legacy Video Launch Day 1 Upgrade", "Legacy Video Launch Last Day Upgrade",
+     "Cart Close Signup", and "Ad Hoc Bonus Call".
+  2. [Tessa/Megan] The Kit automation that emails the booking link - ideally ONE
+     automation with all five tags as entry points. Update the booking link and
+     the cohort name in the email copy.
+  3. [Megan] Ensure the "Bonus Call Reminders" sequence has all five tags as entry
+     points (currently only Live Webinar gets reminders - the others should too).
+  4. [Arub/Megan] Create a fresh round-robin "AYCI Bonus call - <cohort>" Calendly
+     event with coach availability (Onboarding Week to before the next one).
+  5. Dashboard: nothing to change - it auto-detects the new tags + event. Keep
+     Calendly connected (Settings > Integrations).
+  6. End of cohort: read the snapshot (eligible/booked/no-show/rescheduled) on the
+     Cohort Dashboard or Processes board; share with Tessa then coaches.
+
+OPEN ITEMS being sorted (if asked): the Ad Hoc tag needs a Kit automation to send
+its booking link; the four booking-link automations should be consolidated into
+one (with the Ad Hoc tag added); the booking-link emails currently show the wrong
+cohort name; reminders need extending beyond Live Webinar signups.
 """
 
 

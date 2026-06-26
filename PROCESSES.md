@@ -115,10 +115,31 @@ A student sometimes books under an email that isn't their main record email.
 - It finds the **current cohort's** tags by pattern (eligibility tags + `1:1 Call Booked`).
 - It matches the Calendly event by the words **"bonus call"** in the event name.
 
-## End-of-cohort summary 🔨
+## New-cohort setup (the per-launch plan)
 
-A summary of: eligible, booked, no-showed, rescheduled, and rolled-over - shared with Tessa, then with
-the coaches. *(A simple cohort summary/report will produce these numbers.)*
+The team sets up the Kit + Calendly side; the **dashboard needs no changes** (it finds the new cohort's
+tags by suffix and matches the Calendly event by the words "bonus call").
+
+1. **Kit tags [Arub]** - create the cohort's tags: `Purchase - Live webinar`, `Legacy Video Launch Day 1 Upgrade`, `Legacy Video Launch Last Day Upgrade`, `Cart Close Signup`, and `Ad Hoc Bonus Call`.
+2. **Booking-link automation [Tessa/Megan]** - the Kit automation that emails the booking link, ideally **one** automation with all five tags as entry points. Update the booking link + the cohort name in the email.
+3. **Reminders [Megan]** - ensure the "Bonus Call Reminders" sequence has **all five** tags as entry points (not just Live Webinar).
+4. **Calendly [Arub/Megan]** - fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with coach availability (Onboarding Week → before the next one); confirm coaches + dates with Arub.
+5. **Dashboard** - nothing to change. Keep Calendly connected (Settings → Integrations).
+6. **End of cohort** - read the snapshot below on the Cohort Dashboard / Processes board; share with Tessa then coaches.
+
+## End-of-cohort summary ✅
+
+A live snapshot of **eligible / booked / attended / no-show / rescheduled** shows at the top of this
+process and on the **Cohort Dashboard** (`/api/bonus-call/summary`). Share with Tessa, then the coaches.
+
+## Open tasks & to-clarify
+
+- **[Tessa / Arub - Kit]** Ad-hoc booking link: the dashboard tags ad-hoc students `Ad Hoc Bonus Call`, but no Kit automation yet emails them the booking link off that tag. Set one up (or add the tag to the consolidated automation below).
+- **[Tessa - decision]** Consolidate the four booking-link Kit automations into **one** with all four purchase tags **+ the Ad Hoc tag** as entry points (one booking link + one email to maintain).
+- **[Kit - fix]** The four booking-link emails currently show the **wrong cohort name** - fix before next send.
+- **[Megan - Kit]** Booking reminders currently only include Live Webinar signups - add Legacy Day 1, Legacy Last Day, Cart Close, and Ad Hoc as entry points.
+- **[Arub]** Add the `Ad Hoc Bonus Call` tag to the new-cohort Kit-tag checklist.
+- **[Megan]** Agree a deadline for coach bonus-call availability ahead of each cohort, and a frequency for checking the booking calendar.
 
 ---
 
