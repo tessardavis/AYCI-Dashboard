@@ -84,21 +84,48 @@ def _normalize_tier(tier) -> str | None:
     return None
 
 
-def _classify_private_event(name: str) -> str | None:
-    """Classify a Calendly event NAME into a private-tier call kind, or None.
-    Matched by substring so it survives small renames. Bonus calls are handled
-    elsewhere, so they're excluded here."""
-    n = (name or "").lower()
-    if BONUS_EVENT_MATCH in n:
+def _classify_private_event(name: str, slug: str | None = None) -> str | None:
+    """Classify a Calendly event into a private-tier call kind, or None. Keys off
+    the event-type SLUG when available (stable IDs: ayci-1-1-30-min -> coach_30,
+    ayci-vip-30-min -> tessa_30, ayci-1-1-60-min -> mock_60) plus the display
+    name as a fallback, so it survives a rename of either. Bonus calls are
+    handled elsewhere, so they're excluded here."""
+    hay = f"{slug or ''} {name or ''}".lower()
+    if BONUS_EVENT_MATCH in hay or "bonus" in hay:
         return None
-    has_1on1 = "1:1" in n or "1-1" in n or "1 to 1" in n
-    if "vip" in n and "30" in n:
+    has_1on1 = "1:1" in hay or "1-1" in hay or "1 to 1" in hay
+    if "vip" in hay and "30" in hay:
         return "tessa_30"
-    if "60" in n and (has_1on1 or "mock" in n):
+    if "60" in hay and (has_1on1 or "mock" in hay):
         return "mock_60"
-    if "30" in n and has_1on1:
+    if "30" in hay and has_1on1:
         return "coach_30"
     return None
+
+
+# Event-type URI -> slug, resolved once per process (event types are stable).
+_EVENT_SLUG_CACHE: dict[str, str] = {}
+
+
+async def _resolve_event_slug(event_type_uri: str) -> str | None:
+    """Resolve a Calendly event-type URI to its slug (best-effort, cached). The
+    webhook payload only carries the event-type URI + display name, not the slug;
+    the slug is the stable identifier we'd rather classify on."""
+    if not event_type_uri:
+        return None
+    if event_type_uri in _EVENT_SLUG_CACHE:
+        return _EVENT_SLUG_CACHE[event_type_uri]
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(event_type_uri, headers=connectors._calendly_headers())
+            r.raise_for_status()
+            slug = (r.json().get("resource") or {}).get("slug")
+            if slug:
+                _EVENT_SLUG_CACHE[event_type_uri] = slug
+            return slug
+    except Exception as e:
+        logger.warning(f"[calendly] event-type slug resolve failed: {e}")
+        return None
 
 
 def summarize_private_calls(tier, calls: list | None) -> dict:
@@ -193,10 +220,11 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
-        kind = _classify_private_event(event_name)
+        slug = await _resolve_event_slug(ev.get("event_type") or "")
+        kind = _classify_private_event(event_name, slug)
         if kind:
             return await handle_private_created(db, payload, kind)
-        return {"skipped": "not_tracked", "event": event_name}
+        return {"skipped": "not_tracked", "event": event_name, "slug": slug}
 
     email = (payload.get("email") or "").strip().lower()
     if not email:
@@ -309,10 +337,11 @@ async def handle_invitee_canceled(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
-        kind = _classify_private_event(event_name)
+        slug = await _resolve_event_slug(ev.get("event_type") or "")
+        kind = _classify_private_event(event_name, slug)
         if kind:
             return await handle_private_canceled(db, payload, kind)
-        return {"skipped": "not_tracked", "event": event_name}
+        return {"skipped": "not_tracked", "event": event_name, "slug": slug}
 
     email = (payload.get("email") or "").strip().lower()
     if not email:
@@ -679,7 +708,8 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
             body = r.json()
             for ev in body.get("collection", []):
                 summary["events_scanned"] += 1
-                kind = _classify_private_event(ev.get("name") or "")
+                slug = await _resolve_event_slug(ev.get("event_type") or "")
+                kind = _classify_private_event(ev.get("name") or "", slug)
                 if not kind:
                     continue
                 summary["private_events"] += 1

@@ -390,6 +390,45 @@ async def calendly_status(admin: dict = Depends(require_admin)):
     }
 
 
+@router.get("/admin/calendly/event-types")
+async def calendly_event_types(admin: dict = Depends(require_admin)):
+    """Diagnostic: list the org's active Calendly event types with how the
+    dashboard classifies each booking (bonus_call / coach_30 / tessa_30 /
+    mock_60 / untracked). Use this to confirm the private-tier events are
+    matched correctly - 'untracked' on a call event means a booking on it
+    won't be logged."""
+    if not os.environ.get("CALENDLY_TOKEN"):
+        raise HTTPException(400, "CALENDLY_TOKEN not set")
+    out = []
+    async with httpx.AsyncClient(timeout=30) as c:
+        me = await c.get(f"{connectors.CALENDLY_BASE}/users/me",
+                         headers=connectors._calendly_headers())
+        me.raise_for_status()
+        org = (me.json().get("resource") or {}).get("current_organization")
+        url = f"{connectors.CALENDLY_BASE}/event_types"
+        params = {"organization": org, "count": 100, "active": "true"}
+        while url:
+            r = await c.get(url, headers=connectors._calendly_headers(), params=params)
+            r.raise_for_status()
+            body = r.json()
+            for et in body.get("collection", []):
+                name = et.get("name") or ""
+                slug = et.get("slug") or ""
+                is_bonus = calendly_webhook.BONUS_EVENT_MATCH in name.lower()
+                kind = None if is_bonus else calendly_webhook._classify_private_event(name, slug)
+                out.append({
+                    "name": name,
+                    "slug": slug,
+                    "duration": et.get("duration"),
+                    "scheduling_url": et.get("scheduling_url"),
+                    "classified_as": "bonus_call" if is_bonus else (kind or "untracked"),
+                })
+            url = (body.get("pagination") or {}).get("next_page")
+            params = None
+    out.sort(key=lambda e: (e["classified_as"] == "untracked", e["name"]))
+    return {"event_types": out, "labels": calendly_webhook.PRIVATE_KIND_LABELS}
+
+
 @router.get("/admin/calendly/webhooks")
 async def list_calendly_webhooks(admin: dict = Depends(require_admin)):
     """List current org webhook subscriptions (diagnostic / cleanup)."""
