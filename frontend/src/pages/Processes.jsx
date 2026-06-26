@@ -205,6 +205,11 @@ function BonusCallsDoc() {
         (currently <strong>Anoop &amp; Charlotte</strong>) and should be used before the next cohort
         starts.
       </P>
+      <P>
+        <strong>Booking link (June '26):</strong>{" "}
+        <a href="https://calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26</a>
+        {" "}<em>- a fresh round-robin event is created each cohort, so this link must be updated each launch (in the doc and in the Kit booking-link automation).</em>
+      </P>
 
       <H>Who's eligible</H>
       <P>A student is eligible if they hold any of these ConvertKit tags (the cohort prefix changes each launch):</P>

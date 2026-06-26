@@ -28,6 +28,10 @@ where it lives, and what the team needs to do. One section per process.
 when they signed up. Booked via a round-robin Calendly event shared by the bonus-call coaches
 (currently **Anoop & Charlotte**). They should use it before the next cohort starts.
 
+**Booking link (June '26):** https://calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26 - a fresh
+round-robin event is created each cohort, so **update this link each launch** (here + in the Kit
+booking-link automation).
+
 ## Who's eligible?
 
 A student is eligible if they hold **any** of these ConvertKit tags (shown for the JUN-26 cohort;
