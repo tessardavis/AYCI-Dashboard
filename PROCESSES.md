@@ -320,15 +320,20 @@ is editable in **Settings → Integrations → Private chat setup**.
 Two paths. **The Zapier zaps are the primary, reliable creator**; the dashboard "Create chat" button is a
 manual fallback (it can occasionally fail on Circle's side, so it's not yet the sole route).
 
-- **Automatically (primary)** via Zapier when the student joins Circle with the current cohort tag - the
-  dependable path. Three zaps:
+- **Automatically (primary)** via Zapier when the student joins the cohort - the dependable path.
+  Separate zaps cover the audiences:
   - VIP & Private Plus members (+ "In Between" join variant): https://zapier.com/editor/356003238/published
   - Legacy Upgrades: https://zapier.com/editor/356048959/published
   - VIP & Private Plus (standard join): https://zapier.com/editor/370426888/published
+  - **Boost & Go** (its own zap - 4 paths: B&G / B&G Plus × Presentation): https://zapier.com/editor/341446766/published
 - **Manually (fallback)** via the dashboard - the **"Create chat"** button in Students DB (and the "Needs
   setup" list), for backlog or anyone the zaps missed. It adds the coaches + student, posts the welcome
   message, records the URL, and checks first that no chat already exists (safe to press). It now shows the
   outcome - if it fails it tells you why (Circle DMs off, a Circle hiccup, etc.) rather than doing nothing.
+
+**Boost & Go is a separate track:** B&G students are tagged in Kit by their own Boost & Go Sales zap
+(https://zapier.com/editor/262763852/published) - not the Private Plus / VIP Sales Zap - and their chat
+is created by the Boost & Go chat zap above, not the VIP/Private Plus zaps.
 
 ## The welcome message
 
