@@ -14,11 +14,12 @@ import secrets
 
 import httpx
 from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel
 
 import calendly_webhook
 import connectors
 from db import db
-from deps import require_admin
+from deps import require_admin, require_board
 
 router = APIRouter(prefix="/api", tags=["calendly"])
 logger = logging.getLogger(__name__)
@@ -108,6 +109,33 @@ async def register_calendly_webhook(admin: dict = Depends(require_admin)):
     )
     logger.info(f"[calendly] webhook registered: {resource.get('uri')} → {callback}")
     return {"ok": True, "callback": callback, "subscription": resource}
+
+
+class MarkEligibleBody(BaseModel):
+    email: str
+
+
+@router.post("/bonus-call/mark-eligible")
+async def mark_bonus_eligible(body: MarkEligibleBody,
+                              user: dict = Depends(require_board("students"))):
+    """Mark a student eligible for a bonus call: apply the current cohort's
+    'Ad Hoc Bonus Call' Kit tag (which triggers Kit's booking-link email).
+    The tag is resolved newest-first, so it tracks the cohort automatically."""
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    tag_ids = await connectors._resolve_ayci_cohort_tags(calendly_webhook.AD_HOC_TAG_SUFFIX)
+    if not tag_ids:
+        raise HTTPException(
+            400, "No 'Ad Hoc Bonus Call' tag found for the current cohort in Kit - create it first"
+        )
+    try:
+        await connectors.convertkit_add_tag_to_subscriber(email, tag_ids[0])
+    except Exception as e:
+        raise HTTPException(502, f"Kit tagging failed: {str(e)[:150]}")
+    logger.info(f"[bonus-call] marked eligible (ad-hoc): {email} tag={tag_ids[0]}")
+    return {"ok": True, "email": email, "tag_id": tag_ids[0],
+            "via": calendly_webhook.AD_HOC_TAG_SUFFIX}
 
 
 @router.post("/admin/calendly/backfill-bonus-tags")

@@ -1,4 +1,19 @@
-import { Phone, Video, Award, Briefcase, Calendar, CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import { Phone, Video, Award, Briefcase, Calendar, CheckCircle2, Gift, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { apiClient, formatApiErrorDetail } from "@/lib/api";
+
+// Holding any of these Kit tags (current cohort, matched by suffix) = eligible
+// for a bonus call. Mirrors backend calendly_webhook.ELIGIBILITY_TAG_SUFFIXES.
+const BONUS_ELIGIBILITY_SUFFIXES = [
+  "Purchase - Live webinar",
+  "Legacy Video Launch Day 1 Upgrade",
+  "Legacy Video Launch Last Day Upgrade",
+  "Cart Close Signup",
+  "Ad Hoc Bonus Call",
+];
+const BONUS_BOOKED_SUFFIX = "1:1 Call Booked";
 
 const fmtDate = (iso) => {
   if (!iso) return "-";
@@ -42,6 +57,34 @@ export default function CoachSummary({ result }) {
   const tallyType = result?.tally?.type;
   const tallyCount = result?.tally?.history_count || 0;
 
+  // Bonus-call eligibility, read off the student's ConvertKit tags.
+  const kitTags = result?.convertkit?.data?.tags || [];
+  const hasTagSuffix = (suf) => {
+    const s = suf.toLowerCase();
+    return kitTags.some((t) => {
+      const n = (t.name || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return n.endsWith("] " + s) || n === s;
+    });
+  };
+  const bonusBooked = hasTagSuffix(BONUS_BOOKED_SUFFIX);
+  const eligibleVia = BONUS_ELIGIBILITY_SUFFIXES.find((s) => hasTagSuffix(s));
+  const [markedNow, setMarkedNow] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const eligible = bonusBooked || !!eligibleVia || markedNow;
+
+  const markEligible = async () => {
+    setMarking(true);
+    try {
+      await apiClient.post("/bonus-call/mark-eligible", { email: result?.email }, { timeout: 30000 });
+      toast.success("Marked eligible - tagged 'Ad Hoc Bonus Call' in Kit");
+      setMarkedNow(true);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't mark eligible");
+    } finally {
+      setMarking(false);
+    }
+  };
+
   const totalCallsRemaining =
     (calls?.available || 0) + (mocks?.available || 0) + (bonus?.available || 0);
   const totalCallsUsed =
@@ -80,6 +123,42 @@ export default function CoachSummary({ result }) {
           <span className="text-[10px] text-[var(--ayci-ink-muted)]">
             · {tallyCount} prior interview{tallyCount > 1 ? "s" : ""}
           </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap" data-testid="bonus-call-eligibility">
+        <span className="text-[10px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">
+          Bonus call
+        </span>
+        {bonusBooked ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] uppercase tracking-wider font-semibold">
+            <Gift className="w-3 h-3" /> Booked
+          </span>
+        ) : eligible ? (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] uppercase tracking-wider font-semibold"
+            title={eligibleVia ? `Eligible via "${eligibleVia}" Kit tag` : "Marked eligible (ad hoc)"}
+          >
+            <Gift className="w-3 h-3" /> Eligible
+            <span className="normal-case font-normal opacity-80">· {eligibleVia || "ad hoc"}</span>
+          </span>
+        ) : (
+          <>
+            <span className="text-[10px] text-[var(--ayci-ink-muted)]">Not eligible</span>
+            {result?.email && (
+              <button
+                type="button"
+                onClick={markEligible}
+                disabled={marking}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--ayci-border)] text-[10px] uppercase tracking-wider font-semibold text-[var(--ayci-teal)] hover:bg-slate-50 disabled:opacity-50"
+                data-testid="mark-bonus-eligible"
+                title="Tag this student 'Ad Hoc Bonus Call' in Kit so they get the booking link"
+              >
+                {marking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Gift className="w-3 h-3" />}
+                Mark eligible (ad hoc)
+              </button>
+            )}
+          </>
         )}
       </div>
 
