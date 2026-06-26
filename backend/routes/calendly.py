@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 import calendly_webhook
 import connectors
+import launches as launches_mod
 from db import db
 from deps import require_admin, require_board
 
@@ -138,6 +139,38 @@ async def mark_bonus_eligible(body: MarkEligibleBody,
     logger.info(f"[bonus-call] marked eligible (ad-hoc): {email} tag={tag_ids[0]}")
     return {"ok": True, "email": email, "tag_id": tag_ids[0],
             "via": calendly_webhook.AD_HOC_TAG_SUFFIX}
+
+
+async def _compute_bonus_summary() -> dict:
+    """End-of-cohort snapshot: eligibility (from this cohort's Kit tags) + the
+    booking-status breakdown (from student records)."""
+    by_status: dict = {}
+    async for r in db.academy_members.aggregate([
+        {"$match": {"bonus_call_status": {"$nin": [None, ""]}}},
+        {"$group": {"_id": "$bonus_call_status", "n": {"$sum": 1}}},
+    ]):
+        by_status[r["_id"]] = r["n"]
+
+    eligible = None
+    try:
+        emails: set = set()
+        for suf in calendly_webhook.ELIGIBILITY_TAG_SUFFIXES:
+            tag_ids = await connectors._resolve_ayci_cohort_tags(suf)
+            if tag_ids:
+                emails |= await connectors._ck_tag_emails(tag_ids[0])
+        eligible = len(emails)
+    except Exception as e:
+        logger.warning(f"[bonus-call] eligible count failed: {e}")
+
+    return {"eligible": eligible, "by_status": by_status, "tracked": sum(by_status.values())}
+
+
+@router.get("/bonus-call/summary")
+async def bonus_call_summary(user: dict = Depends(require_board("students"))):
+    """Cached 30 min - the Kit eligibility count paginates a few tags."""
+    return await launches_mod._stale_while_revalidate(
+        db, "bonus_call_summary", ttl_min=30, compute_fn=_compute_bonus_summary,
+    )
 
 
 class LinkBookingBody(BaseModel):

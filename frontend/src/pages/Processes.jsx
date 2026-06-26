@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BookOpen, MessageCircle, Gift, CheckCircle2, Clock } from "lucide-react";
+
+import { apiClient } from "@/lib/api";
 
 // In-dashboard process docs the whole team can read. Add a process by adding an
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
@@ -127,9 +129,48 @@ function Figure({ src, alt, caption }) {
   );
 }
 
+// Live "this cohort" snapshot at the top of the Bonus calls doc. Hidden for
+// anyone without students-board access (the endpoint 403s -> we just don't show).
+function BonusCallSummary() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    apiClient.get("/bonus-call/summary").then(({ data }) => setData(data)).catch(() => {});
+  }, []);
+  if (!data) return null;
+  const s = data.by_status || {};
+  const ORDER = ["Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done", "Eligible"];
+  const chips = [
+    ...ORDER.filter((k) => s[k]).map((k) => [k, s[k]]),
+    ...Object.entries(s).filter(([k]) => !ORDER.includes(k)),
+  ];
+  return (
+    <div className="mb-5 rounded-lg border border-[var(--ayci-border)] bg-slate-50 p-4" data-testid="bonus-summary">
+      <div className="text-[11px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)] mb-2">
+        This cohort - snapshot
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        {data.eligible != null && (
+          <span className="text-sm mr-1">
+            <strong className="text-lg text-[var(--ayci-ink)]">{data.eligible}</strong> eligible
+          </span>
+        )}
+        {chips.map(([k, n]) => (
+          <span key={k} className="text-xs px-2 py-1 rounded-full bg-white border border-[var(--ayci-border)]">
+            {k}: <strong>{n}</strong>
+          </span>
+        ))}
+        {data.tracked === 0 && (
+          <span className="text-xs text-[var(--ayci-ink-muted)]">No bookings recorded yet this cohort.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BonusCallsDoc() {
   return (
     <div data-testid="process-bonus-calls">
+      <BonusCallSummary />
       <div className="flex items-center gap-2 mb-1">
         <Gift className="w-5 h-5 text-[var(--ayci-teal)]" />
         <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Bonus calls</h1>
