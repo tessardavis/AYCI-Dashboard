@@ -273,6 +273,108 @@ async def backfill_bonus_tags(admin: dict = Depends(require_admin)):
     return {"ok": True, **result}
 
 
+# ----------------------------- Private Tier calls -------------------------
+
+class PrivateCallStatusBody(BaseModel):
+    email: str
+    invitee_uri: str
+    status: str
+
+
+_PRIVATE_STATUSES = {"Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done"}
+
+
+@router.post("/private-call/set-status")
+async def set_private_call_status_endpoint(body: PrivateCallStatusBody,
+                                           user: dict = Depends(require_board("students"))):
+    """Coach action: set the outcome (Attended / No-show / etc.) of one private-
+    tier call on a student, keyed by the booking's invitee_uri."""
+    status = (body.status or "").strip()
+    if status not in _PRIVATE_STATUSES:
+        raise HTTPException(400, f"status must be one of {sorted(_PRIVATE_STATUSES)}")
+    email = (body.email or "").strip().lower()
+    if not email or not (body.invitee_uri or "").strip():
+        raise HTTPException(400, "email and invitee_uri required")
+    row = await db.academy_members.find_one({"$or": [
+        {"email": email}, {"circle_email": email},
+        {"other_emails": {"$regex": re.escape(email), "$options": "i"}}]})
+    if not row:
+        raise HTTPException(404, f"No student found for {email}")
+    ok = await calendly_webhook.set_private_call_status(db, row, body.invitee_uri, status)
+    if not ok:
+        raise HTTPException(404, "No matching call on that student")
+    logger.info(f"[private-call] {email} call {body.invitee_uri} -> {status}")
+    return {"ok": True, "status": status}
+
+
+@router.post("/admin/calendly/backfill-private-calls")
+async def backfill_private_calls_endpoint(admin: dict = Depends(require_admin)):
+    """Catch up private-tier (Private Plus / VIP) bookings: scan past/upcoming
+    Calendly events, classify the private-tier ones, and record each on the
+    matching student's private_calls array. Idempotent. No Slack, no Kit tag."""
+    if not os.environ.get("CALENDLY_TOKEN"):
+        raise HTTPException(400, "CALENDLY_TOKEN not set")
+    try:
+        result = await calendly_webhook.backfill_private_calls(db)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Calendly: {e.response.text[:200]}")
+    except Exception as e:
+        logger.exception("[calendly] private backfill error")
+        raise HTTPException(500, f"backfill failed: {str(e)[:200]}")
+    return {"ok": True, **result}
+
+
+async def _compute_private_summary() -> dict:
+    """Roll-up of private-tier call bookings across all students, broken down by
+    call kind, coach, tier, month, and status. 'active' excludes Cancelled /
+    No-show. Drives the data-tracking summary."""
+    rows = []
+    async for r in db.academy_members.aggregate([
+        {"$match": {"private_calls": {"$exists": True, "$ne": []}}},
+        {"$unwind": "$private_calls"},
+        {"$group": {"_id": {
+            "kind": "$private_calls.kind",
+            "coach": "$private_calls.coach",
+            "tier": "$tier",
+            "status": "$private_calls.status",
+            "month": {"$substr": [{"$ifNull": ["$private_calls.date", ""]}, 0, 7]},
+        }, "n": {"$sum": 1}}},
+    ]):
+        rows.append((r["_id"], r["n"]))
+
+    by_kind, by_coach, by_tier, by_status, by_month = {}, {}, {}, {}, {}
+    active = 0
+    for k, n in rows:
+        st = k.get("status") or "?"
+        by_status[st] = by_status.get(st, 0) + n
+        if st in ("Cancelled", "No-show"):
+            continue
+        active += n
+        kind = k.get("kind") or "?"
+        coach = k.get("coach") or "?"
+        tier = calendly_webhook._normalize_tier(k.get("tier")) or "?"
+        mo = k.get("month") or "?"
+        by_kind[kind] = by_kind.get(kind, 0) + n
+        by_coach[coach] = by_coach.get(coach, 0) + n
+        by_tier[tier] = by_tier.get(tier, 0) + n
+        by_month[mo] = by_month.get(mo, 0) + n
+
+    students = await db.academy_members.count_documents(
+        {"private_calls": {"$elemMatch": {"status": {"$nin": ["Cancelled", "No-show"]}}}})
+    return {"active_calls": active, "students_with_calls": students,
+            "by_kind": by_kind, "by_coach": by_coach, "by_tier": by_tier,
+            "by_status": by_status, "by_month": by_month,
+            "kind_labels": calendly_webhook.PRIVATE_KIND_LABELS}
+
+
+@router.get("/private-call/summary")
+async def private_call_summary(user: dict = Depends(get_current_user)):
+    """Cached 15 min - aggregates the private_calls arrays across all students."""
+    return await launches_mod._stale_while_revalidate(
+        db, "private_call_summary", ttl_min=15, compute_fn=_compute_private_summary,
+    )
+
+
 @router.get("/admin/calendly/status")
 async def calendly_status(admin: dict = Depends(require_admin)):
     """Whether the bonus-call webhook has been registered (drives the

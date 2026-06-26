@@ -46,6 +46,18 @@ def _normalise(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", s.lower())).strip()
 
 
+def _private_calls_summary(tier, calls):
+    """Allowance view of a student's private-tier (Private Plus / VIP) calls.
+    Lazy import keeps student_lookup free of a calendly_webhook import cycle.
+    Returns None for non-private-tier students."""
+    try:
+        from calendly_webhook import summarize_private_calls
+        s = summarize_private_calls(tier, calls)
+        return s if s.get("eligible") else None
+    except Exception:
+        return None
+
+
 # In-process cache for the Circle members list used by name_search. The Mongo
 # document is ~1.7MB and the cross-region read from Atlas takes several
 # seconds - well over the 8s frontend timeout on the autocomplete endpoint.
@@ -512,6 +524,12 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                             "coach": row.get("bonus_call_coach"),
                             "rescheduled_from": row.get("bonus_call_rescheduled_from"),
                         },
+                        # Private-tier (Private Plus / VIP) 1:1 call allowance +
+                        # bookings. tier drives the allowance; private_calls is
+                        # the raw list (set by the Calendly webhook + coaches).
+                        "tier": row.get("tier"),
+                        "private_calls": _private_calls_summary(
+                            row.get("tier"), row.get("private_calls")),
                     },
                     "error": None,
                     "source": "mongo_mirror",
