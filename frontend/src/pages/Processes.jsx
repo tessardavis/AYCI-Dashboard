@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { BookOpen, MessageCircle, Gift, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
+import BonusCallSummary from "@/components/BonusCallSummary";
 
 // In-dashboard process docs the whole team can read. Add a process by adding an
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
@@ -190,48 +191,10 @@ function Figure({ src, alt, caption }) {
   );
 }
 
-// Live "this cohort" snapshot at the top of the Bonus calls doc. Hidden for
-// anyone without students-board access (the endpoint 403s -> we just don't show).
-function BonusCallSummary() {
-  const [data, setData] = useState(null);
-  useEffect(() => {
-    apiClient.get("/bonus-call/summary").then(({ data }) => setData(data)).catch(() => {});
-  }, []);
-  if (!data) return null;
-  const s = data.by_status || {};
-  const ORDER = ["Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done", "Eligible"];
-  const chips = [
-    ...ORDER.filter((k) => s[k]).map((k) => [k, s[k]]),
-    ...Object.entries(s).filter(([k]) => !ORDER.includes(k)),
-  ];
-  return (
-    <div className="mb-5 rounded-lg border border-[var(--ayci-border)] bg-slate-50 p-4" data-testid="bonus-summary">
-      <div className="text-[11px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)] mb-2">
-        This cohort - snapshot
-      </div>
-      <div className="flex flex-wrap gap-2 items-center">
-        {data.eligible != null && (
-          <span className="text-sm mr-1">
-            <strong className="text-lg text-[var(--ayci-ink)]">{data.eligible}</strong> eligible
-          </span>
-        )}
-        {chips.map(([k, n]) => (
-          <span key={k} className="text-xs px-2 py-1 rounded-full bg-white border border-[var(--ayci-border)]">
-            {k}: <strong>{n}</strong>
-          </span>
-        ))}
-        {data.tracked === 0 && (
-          <span className="text-xs text-[var(--ayci-ink-muted)]">No bookings recorded yet this cohort.</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function BonusCallsDoc() {
   return (
     <div data-testid="process-bonus-calls">
-      <BonusCallSummary />
+      <BonusCallSummary className="mb-5" />
       <div className="flex items-center gap-2 mb-1">
         <Gift className="w-5 h-5 text-[var(--ayci-teal)]" />
         <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Bonus calls</h1>
@@ -293,6 +256,33 @@ function BonusCallsDoc() {
         automatically and matches the Calendly event by the words "bonus call", so no dashboard change is
         needed per cohort.
       </P>
+
+      <H>Open tasks & to-clarify</H>
+      <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 my-2">
+        <ul className="list-disc pl-5 space-y-2 text-sm text-[var(--ayci-ink)]">
+          <li><strong>[Tessa / Arub - Kit]</strong> Ad-hoc booking link: the dashboard tags ad-hoc students <Tag>Ad Hoc Bonus Call</Tag>, but there's no Kit automation yet that emails them the booking link off that tag. Set one up (or add the tag as an entry point to the consolidated automation below) so ad-hoc people actually get the link.</li>
+          <li><strong>[Tessa - decision]</strong> Consolidate the four booking-link Kit automations (Live Webinar / Legacy Day 1 / Legacy Last Day / Cart Close) into <em>one</em> automation with all four purchase tags <em>plus</em> the Ad Hoc tag as entry points. Cleaner: one booking link + one email to maintain each launch.</li>
+          <li><strong>[Kit - fix]</strong> The four booking-link emails currently show the <em>wrong cohort name</em>. Fix before the next send (consolidating to one automation makes this a one-place fix).</li>
+          <li><strong>[Megan - Kit]</strong> Booking reminders ("Bonus Call Reminders (Megan)") currently only include Live Webinar signups. Add Legacy Day 1, Legacy Last Day, Cart Close, and Ad Hoc as entry points so they get reminders too.</li>
+          <li><strong>[Arub]</strong> Add the <Tag>Ad Hoc Bonus Call</Tag> tag to the list of Kit tags set up for each new cohort.</li>
+          <li><strong>[Megan]</strong> Agree (a) a deadline for coaches' bonus-call availability to be set on Calendly ahead of each cohort, and (b) a frequency for checking the booking calendar's availability.</li>
+        </ul>
+      </div>
+
+      <H>Setting up for a new cohort</H>
+      <P>
+        Each launch, the team sets up the Kit + Calendly side. The dashboard itself needs <strong>no
+        changes</strong> - it finds the new cohort's tags by suffix and matches the Calendly event by the
+        words "bonus call".
+      </P>
+      <ol className="list-decimal pl-5 space-y-1.5 mb-3">
+        <LI><strong>Kit tags [Arub]:</strong> create the cohort's tags - <Tag>Purchase - Live webinar</Tag>, <Tag>Legacy Video Launch Day 1 Upgrade</Tag>, <Tag>Legacy Video Launch Last Day Upgrade</Tag>, <Tag>Cart Close Signup</Tag>, and <Tag>Ad Hoc Bonus Call</Tag>.</LI>
+        <LI><strong>Booking-link automation [Tessa/Megan]:</strong> the Kit automation that emails the booking link - ideally one automation with all five tags as entry points. Update the booking link and the cohort name in the email copy.</LI>
+        <LI><strong>Reminders [Megan]:</strong> ensure the "Bonus Call Reminders" sequence has all five eligibility tags as entry points (not just Live Webinar).</LI>
+        <LI><strong>Calendly [Arub/Megan]:</strong> create a fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with the coaches' availability (Onboarding Week to before the next Onboarding Week). Confirm coaches + dates with Arub.</LI>
+        <LI><strong>Dashboard:</strong> nothing to change. Keep Calendly connected (Settings → Integrations). It auto-detects the new tags + event.</LI>
+        <LI><strong>End of cohort:</strong> read the snapshot (eligible / booked / no-show / rescheduled) on the Cohort Dashboard, share with Tessa, then the coaches.</LI>
+      </ol>
     </div>
   );
 }

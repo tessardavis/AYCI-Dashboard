@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
+import BonusCallSummary from "@/components/BonusCallSummary";
 
 const DEFAULT_COHORT = "June 26";
 
@@ -87,6 +88,8 @@ export default function CohortDashboard() {
           </>
         }
       />
+
+      <BonusCallSummary />
 
       {loading && !data && (
         <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">

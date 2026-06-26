@@ -22,7 +22,7 @@ import calendly_webhook
 import connectors
 import launches as launches_mod
 from db import db
-from deps import require_admin, require_board
+from deps import require_admin, require_board, get_current_user
 
 router = APIRouter(prefix="/api", tags=["calendly"])
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ async def _compute_bonus_summary() -> dict:
 
 
 @router.get("/bonus-call/summary")
-async def bonus_call_summary(user: dict = Depends(require_board("students"))):
+async def bonus_call_summary(user: dict = Depends(get_current_user)):
     """Cached 30 min - the Kit eligibility count paginates a few tags."""
     return await launches_mod._stale_while_revalidate(
         db, "bonus_call_summary", ttl_min=30, compute_fn=_compute_bonus_summary,
