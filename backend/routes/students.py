@@ -114,7 +114,11 @@ async def _run_lookup_fanout(
     # student's circle_email + any recorded `other_emails` - and merge in a hit.
     md = (monday_safe or {}).get("data") or {}
     alt_emails: list[str] = []
-    for raw in [md.get("circle_email")] + re.split(r"[,\s;]+", md.get("other_emails") or ""):
+    # Try ALL of the student's known emails (primary, Circle, and any recorded
+    # "other emails") - minus the one already searched. Including the PRIMARY is
+    # what fixes searching by a student's Circle/alt email and still pulling their
+    # calls/Tally that sit under their signup email.
+    for raw in [md.get("email"), md.get("circle_email")] + re.split(r"[,\s;]+", md.get("other_emails") or ""):
         e = (raw or "").strip().lower()
         if e and "@" in e and e != email and e not in alt_emails:
             alt_emails.append(e)

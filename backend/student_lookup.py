@@ -501,6 +501,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         "private_chat_url": row.get("private_chat_url"),
                         # Alt emails so the lookup can retry Calendly/Stripe under
                         # them (students often book/pay with a different email).
+                        "email": row.get("email"),
                         "circle_email": row.get("circle_email"),
                         "other_emails": row.get("other_emails"),
                         # Bonus-call booking lifecycle (set by the Calendly webhook

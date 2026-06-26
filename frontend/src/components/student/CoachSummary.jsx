@@ -74,6 +74,13 @@ export default function CoachSummary({ result }) {
     /no.?show|cancel/i.test(bonusCall.status || "") ? "bg-rose-50 text-rose-700 border-rose-200"
       : /reschedul/i.test(bonusCall.status || "") ? "bg-amber-50 text-amber-700 border-amber-200"
         : "bg-emerald-50 text-emerald-700 border-emerald-200";
+  // Every email on file (primary + Circle + other), so the team sees all the
+  // addresses this student is known by - not just the one that was searched.
+  const linkedEmails = [...new Set(
+    [monday.email, monday.circle_email, ...((monday.other_emails || "").split(/[,;]/))]
+      .map((e) => (e || "").trim().toLowerCase())
+      .filter((e) => e && e.includes("@"))
+  )];
   const [markedNow, setMarkedNow] = useState(false);
   const [marking, setMarking] = useState(false);
   const eligible = bonusBooked || !!eligibleVia || markedNow;
@@ -131,6 +138,17 @@ export default function CoachSummary({ result }) {
           </span>
         )}
       </div>
+
+      {linkedEmails.length > 1 && (
+        <div className="flex items-start gap-2 mb-3 text-[11px] text-[var(--ayci-ink-muted)]" data-testid="linked-emails">
+          <span className="uppercase tracking-wider font-subhead shrink-0 mt-0.5">Emails</span>
+          <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+            {linkedEmails.map((e) => (
+              <span key={e} className="bg-slate-50 border border-[var(--ayci-border)] rounded px-1.5 py-0.5">{e}</span>
+            ))}
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap" data-testid="bonus-call-eligibility">
         <span className="text-[10px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">
