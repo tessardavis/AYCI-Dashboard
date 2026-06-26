@@ -145,12 +145,14 @@ the coaches. *(A simple cohort summary/report will produce these numbers.)*
 | Record coach on booking | ✅ Live |
 | Connect Calendly + Backfill past bookings | ✅ Live |
 | Auto-match across primary/Circle/Other emails | ✅ Live |
-| Record booking **date** | 🔨 |
-| Eligibility flag (read 4 purchase tags + ad-hoc) | 🔨 |
-| "Mark eligible (ad-hoc)" button → `Ad Hoc Bonus Call` tag | 🔨 |
-| No-show tracking | 🔨 |
-| Reschedule capture (old → new) | 🔨 |
-| Unmatched bookings → Link to student | 🔨 |
-| Duplicate-ConvertKit-subscriber flag | 🔨 |
-| No-show / reschedule shown on the student record | 🔨 |
+| Record booking **date** + coach | ✅ Live |
+| Eligibility flag (4 purchase tags + ad-hoc) | ✅ Live |
+| "Mark eligible (ad-hoc)" button (Lookup + Students DB) | ✅ Live |
+| No-show / attended / done - settable by hand | ✅ Live |
+| Reschedule + cancellation capture (old → new) | ✅ Live |
+| Booking status/date/coach shown on the student record | ✅ Live |
+| Unmatched bookings → Link to student | ✅ Live |
+| Duplicate-ConvertKit-subscriber flag (in Slack alert) | ✅ Live |
+| Match-all-emails in Student Lookup (the Henry case) | 🔨 |
 | End-of-cohort summary | 🔨 |
+| "Ask about the processes" Claude chat (needs API key) | 🔨 |
