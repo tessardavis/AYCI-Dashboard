@@ -204,6 +204,8 @@ Students on the **Private Plus** and **VIP** tiers get a set of free 1:1 coachin
 their package. They can use them **any time** - there is no expiry (people were previously told 12
 months, but they keep their allowance for as long as they need).
 
+**Walkthrough video:** https://www.loom.com/share/9d9aa53be0d648159fe25bbf809d268e
+
 ## Who gets what
 
 - **Private Plus** - 1 x 30-minute coach call.

@@ -204,12 +204,9 @@ function CalendlyBonusCallCard({ isAdmin }) {
     if (!isAdmin) return;
     setPrivBackfilling(true);
     try {
-      const { data } = await apiClient.post("/admin/calendly/backfill-private-calls", {}, { timeout: 120000 });
+      const { data } = await apiClient.post("/admin/calendly/backfill-private-calls", {}, { timeout: 30000 });
       if (data?.ok) {
-        toast.success(
-          `Private-tier backfill done - recorded ${data.recorded} bookings across ${data.private_events} events` +
-          (data.not_found ? ` · ${data.not_found} not in dashboard` : "")
-        );
+        toast.success("Private-tier backfill started - it scans the year-round calendar, so it'll post a summary to #fulfillment-team in a minute or two.");
       } else {
         toast.error(data?.error || "Backfill failed");
       }
