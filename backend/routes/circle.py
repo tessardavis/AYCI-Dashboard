@@ -1,4 +1,4 @@
-"""Circle community webhook routes — receives DMs from Circle Workflows and
+"""Circle community webhook routes - receives DMs from Circle Workflows and
 hands them to the AI bot for triage/reply."""
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _verify_signature(raw_body: bytes, signature: str | None) -> bool:
     Configured at workflow setup time in Circle's UI as `X-Circle-Signature`."""
     secret = os.environ.get("CIRCLE_DM_WEBHOOK_SECRET") or ""
     if not secret:
-        # No secret configured — accept any call (dev mode). In production
+        # No secret configured - accept any call (dev mode). In production
         # the admin should set CIRCLE_DM_WEBHOOK_SECRET in .env so unsigned
         # requests are rejected.
         return True
@@ -39,11 +39,11 @@ def _verify_signature(raw_body: bytes, signature: str | None) -> bool:
 @router.post("/dm-webhook")
 async def circle_dm_webhook(request: Request, background: BackgroundTasks):
     """Called by the Circle Workflow on every inbound DM to a coach.
-    Returns `{reply_text, escalated, ai_resolved, ticket_id}` — Circle's
+    Returns `{reply_text, escalated, ai_resolved, ticket_id}` - Circle's
     next workflow step references `{{ webhook.response.reply_text }}` to send
     the reply from the coach's own account.
 
-    No auth — Circle Workflows can't pass session cookies. Signed via
+    No auth - Circle Workflows can't pass session cookies. Signed via
     `X-Circle-Signature` HMAC instead (see _verify_signature)."""
     raw = await request.body()
     if not _verify_signature(raw, request.headers.get("X-Circle-Signature")):
@@ -158,7 +158,7 @@ async def list_circle_spaces(
     refresh: bool = False,
     user: dict = Depends(get_current_user),
 ):
-    """Flat directory of every Circle space — `{id, slug, name}` — used by
+    """Flat directory of every Circle space - `{id, slug, name}` - used by
     the Settings → Coach Spaces dropdown so admins can pick by name instead
     of looking up numeric IDs by hand. Cached in Mongo for 6h since spaces
     rarely change; pass `?refresh=true` to force a fresh fetch."""
@@ -217,7 +217,7 @@ async def bot_status(
       - `search`: case-insensitive substring match on `student_name`
       - `state`: one of active / human_takeover / escalated / tag_excluded
       - `recent_days`: only return threads with activity in the last N days
-        (default 7 — keeps the Watched-threads list useful at first paint;
+        (default 7 - keeps the Watched-threads list useful at first paint;
         pass 0 to show ALL threads). Applies to the LIST only; the global
         state-totals tiles always reflect every thread.
       - `limit`: max threads to return (default 200, max 1000)
@@ -232,7 +232,7 @@ async def bot_status(
     if search:
         s = search.strip()
         if s:
-            # Anchor on safe regex chars only — escape user input.
+            # Anchor on safe regex chars only - escape user input.
             import re as _re
             q["student_name"] = {"$regex": _re.escape(s), "$options": "i"}
     if recent_days and recent_days > 0:
@@ -283,7 +283,7 @@ async def bot_config_update(body: BotConfigUpdate, user: dict = Depends(require_
 async def bot_poll_now(user: dict = Depends(require_board("bot"))):
     """Force a single poll cycle for testing without waiting for the cron.
 
-    Non-blocking — the poll runs in a background task and we return
+    Non-blocking - the poll runs in a background task and we return
     immediately. The client should refresh the bot status after ~10-30s to
     see new replies / escalations. A full poll across 5 coaches and 500+
     active threads can take 1-3 minutes; blocking the HTTP request that
@@ -300,13 +300,13 @@ async def bot_poll_now(user: dict = Depends(require_board("bot"))):
             logger.warning(f"[poll-now] failed: {e}")
 
     asyncio.create_task(_run())
-    return {"ok": True, "started": True, "message": "Polling started in background — refresh in 30s"}
+    return {"ok": True, "started": True, "message": "Polling started in background - refresh in 30s"}
 
 
 @router.post("/bot/reset-thread/{thread_uuid}")
 async def bot_reset_thread(thread_uuid: str, user: dict = Depends(require_board("bot"))):
     """Drop the state doc for a thread so the bot re-engages on the next poll
-    (seeds fresh — doesn't reply to backlog, only to new messages)."""
+    (seeds fresh - doesn't reply to backlog, only to new messages)."""
     import circle_dm_poll
     ok = await circle_dm_poll.reset_thread(db, thread_uuid)
     return {"ok": ok}
@@ -359,7 +359,7 @@ async def bot_diagnose(
     }
     # Optional deep probe: hit Circle's /messages endpoint directly for
     # EVERY coach so we can see status code + raw body shape per coach.
-    # Triggered by ?probe=1 — kept off by default since it's chatty.
+    # Triggered by ?probe=1 - kept off by default since it's chatty.
     if probe:
         import httpx
         out["probes"] = []
@@ -386,7 +386,7 @@ async def bot_diagnose(
                 entry["error"] = str(e)
             out["probes"].append(entry)
     for admin_email in cfg["coach_emails"]:
-        # Per-coach diagnostic — surface every failure mode so we can tell
+        # Per-coach diagnostic - surface every failure mode so we can tell
         # auth failures apart from "Circle's chat_rooms endpoint just
         # returned an empty list this minute".
         token = await circle_api._get_access_token(db, admin_email)
@@ -452,9 +452,9 @@ async def reply_to_circle_ticket(
     meta = t.get("circle_dm_meta") or {}
     thread_uuid = meta.get("thread_uuid")
     if not thread_uuid:
-        raise HTTPException(400, "Ticket missing circle_dm_meta.thread_uuid — can't route back to Circle")
+        raise HTTPException(400, "Ticket missing circle_dm_meta.thread_uuid - can't route back to Circle")
 
-    # Which admin to post as? The thread's actual watching coach — NOT
+    # Which admin to post as? The thread's actual watching coach - NOT
     # always cfg.coach_emails[0]. Tessa can't post in Oksana's DM threads
     # and vice versa: Circle's Headless API binds each access token to the
     # specific admin's chat room participation. Look up the thread state
@@ -480,7 +480,7 @@ async def reply_to_circle_ticket(
         raise HTTPException(
             502,
             f"Circle rejected the message (posting as {admin_email}). "
-            "Most likely the wrong admin account — check that this DM thread "
+            "Most likely the wrong admin account - check that this DM thread "
             "is actually visible in {admin_email}'s Circle inbox."
         )
 
@@ -635,11 +635,11 @@ async def bot_thread_trace(
 
     Pass either:
       - `thread_uuid` (optionally `coach_email` to scope the lookup), OR
-      - `student_search` — substring-matches the other-participant name
+      - `student_search` - substring-matches the other-participant name
         across all configured coaches, picks the most recently active.
 
     Designed for debugging "the bot didn't reply to X" with zero side
-    effects — no Circle POSTs, no LLM calls, no state writes.
+    effects - no Circle POSTs, no LLM calls, no state writes.
     """
     import circle_dm_poll
     if not (thread_uuid or student_search):
@@ -655,7 +655,7 @@ async def reset_stuck_threads(
     coach_email: str | None = None,
     user: dict = Depends(require_board("bot")),
 ):
-    """Re-arm threads that got stuck in `human_takeover` — used to recover
+    """Re-arm threads that got stuck in `human_takeover` - used to recover
     from cross-environment polling races (where preview's bot reply was
     interpreted as a human admin reply by production's bot, and vice versa).
 
@@ -663,7 +663,7 @@ async def reset_stuck_threads(
     so the next poll picks up incoming messages cleanly. Pass `coach_email`
     to scope to a single coach; omit to reset every coach's stuck threads.
 
-    Idempotent — safe to re-run. Does NOT touch threads in `escalated` or
+    Idempotent - safe to re-run. Does NOT touch threads in `escalated` or
     `tag_excluded` state (those are intentional)."""
     q: dict = {"state": "human_takeover"}
     if coach_email:

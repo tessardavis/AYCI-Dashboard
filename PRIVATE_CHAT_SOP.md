@@ -1,29 +1,29 @@
-# SOP — Private Chats (troubleshooting guide for the team)
+# SOP - Private Chats (troubleshooting guide for the team)
 
 _For Coralie & Megan. How to keep every private-tier student's coach chat set up,
 spot who's been missed, handle "DMs off" and dual-email cases, and know when to
 escalate. Last updated 2026-06-16._
 
 > **30-second background.** Every **private-tier student** (Private Plus, VIP,
-> Boost & Go, Boost & Go Plus) should have a **coach group chat** in Circle —
+> Boost & Go, Boost & Go Plus) should have a **coach group chat** in Circle -
 > where they get video feedback and ask questions. New chats are created **from the
 > dashboard** (Settings → Integrations → **Private chat setup**) with the coaches
-> **Tessa, Arub, Coralie, Becky** (Coralie sends the opener — **no Oksana**). This
+> **Tessa, Arub, Coralie, Becky** (Coralie sends the opener - **no Oksana**). This
 > SOP is how you catch the ones that slipped through and fix them.
 
 ---
 
-## A. Daily / weekly check — who's been missed?
+## A. Daily / weekly check - who's been missed?
 
-**Fastest scan — Students (DB):**
+**Fastest scan - Students (DB):**
 1. Left menu → **Students (DB)**.
 2. Click the **"⚠ Needs setup"** filter.
 3. Every current private-tier / Boost & Go student missing their chat (or video
-   allowance) shows here with a **⚠ Setup** badge and **"— missing"** under Private chat.
+   allowance) shows here with a **⚠ Setup** badge and **"- missing"** under Private chat.
 
-**Authoritative check — the Circle audit** (catches anyone the quick scan can miss):
+**Authoritative check - the Circle audit** (catches anyone the quick scan can miss):
 1. **Settings → Integrations → Private chat setup**.
-2. Scroll to **"Backlog audit — no group chat in Circle" → Run audit**.
+2. Scroll to **"Backlog audit - no group chat in Circle" → Run audit**.
 3. It checks Circle directly and lists every eligible student **not in any coach
    group chat**, each with a **Create chat** button.
 
@@ -46,12 +46,12 @@ In **Private chat setup**:
 - Coach config incomplete (every coach needs a Circle email + one set as sender).
 
 > **Never worry about duplicates.** Creating from the dashboard only ever makes a
-> chat for someone who has **none** — it checks all coaches first, so it won't spawn
+> chat for someone who has **none** - it checks all coaches first, so it won't spawn
 > a second thread, and video replies keep going to the existing chat.
 
 ---
 
-## C. Troubleshooting flow — "X should have a chat but doesn't"
+## C. Troubleshooting flow - "X should have a chat but doesn't"
 
 Work down this list (it's the exact order to check):
 
@@ -64,12 +64,12 @@ Open their row (Edit). **Tier** must be Private Plus / VIP / Boost & Go (or **Bo
 & Go** dropdown set). A plain **Academy** student doesn't get a coach chat.
 ⚠️ **Tier-label gotcha:** the tier must be a value the dashboard recognises. If a
 student is clearly private-tier but **doesn't appear in Needs setup or Ready to
-create at all**, the tier text may be an unrecognised variant — **tell Tessa/Claude
+create at all**, the tier text may be an unrecognised variant - **tell Tessa/Claude
 the exact tier string** (e.g. it once read "Private Plus" instead of "Academy
 Private Plus" and made students invisible).
 
 **3. Are their Circle DMs off?** (most common real blocker)
-- If their row shows an orange **"Awaiting DMs"** status, that's it — a chat can't be
+- If their row shows an orange **"Awaiting DMs"** status, that's it - a chat can't be
   created until they turn DMs on.
 - If you're not sure, just click **Create chat**. If it fails because DMs are off,
   they get flagged **Awaiting DMs**.
@@ -98,7 +98,7 @@ chat creation is attempted and fails**:
 - Students (DB) → **Needs setup** → anyone with the orange **"Awaiting DMs"** badge
   has been confirmed DMs-off (chase them to enable DMs, then create).
 - To proactively find them: run **Create chat** for each student in "Ready to
-  create" — the ones whose DMs are off will fail and get the **Awaiting DMs** flag,
+  create" - the ones whose DMs are off will fail and get the **Awaiting DMs** flag,
   which both confirms it and puts them on the chase list.
 
 ---
@@ -107,7 +107,7 @@ chat creation is attempted and fails**:
 
 Escalate with the **student's name + email + the exact on-screen message** if:
 - A clearly private-tier student **never appears** in Needs setup or Ready to
-  create (likely a tier-label issue — a code fix).
+  create (likely a tier-label issue - a code fix).
 - **Create chat** errors with anything other than "not on Circle" / DMs-off.
 - The same student keeps losing their chat or getting duplicates.
 - The audit shows a **large batch** missing at once (may be an upstream issue worth
@@ -119,7 +119,7 @@ Escalate with the **student's name + email + the exact on-screen message** if:
 
 | You want to… | Where | What you do |
 |---|---|---|
-| See who still needs a chat (fast) | Students (DB) → **⚠ Needs setup** | ⚠ Setup badge · "— missing" |
+| See who still needs a chat (fast) | Students (DB) → **⚠ Needs setup** | ⚠ Setup badge · "- missing" |
 | Confirm who has no chat in Circle | Private chat setup → **Run audit** | the no-chat list + Create |
 | Create a chat | Private chat setup → **Create chat** | chat made + welcome posted + linked |
 | Handle DMs-off | Students (DB) → **Awaiting DMs** badge | ask them to enable DMs → Create → clear status |
@@ -128,6 +128,6 @@ Escalate with the **student's name + email + the exact on-screen message** if:
 
 ## Good to know
 - New chats are **Coralie-sent, no Oksana**. Existing chats can't have people
-  removed (Circle limitation), so old chats may still show Oksana — that's expected.
+  removed (Circle limitation), so old chats may still show Oksana - that's expected.
 - Access: these pages are **admin / students-board** only. If you can't see them,
   ask Tessa to add the board (Settings → Users).

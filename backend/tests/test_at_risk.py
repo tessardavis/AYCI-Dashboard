@@ -1,5 +1,5 @@
 """
-Iteration 5 backend regression — Students-at-Risk endpoint + existing endpoints.
+Iteration 5 backend regression - Students-at-Risk endpoint + existing endpoints.
 
 Tests:
   * GET /api/students/at-risk schema, auth-protection, refresh kick-off
@@ -138,9 +138,9 @@ class TestAtRiskRefresh:
         elapsed = time.time() - t0
         assert r.status_code == 200, f"{r.status_code}: {r.text[:300]}"
         # Should not block on the full Stripe scan
-        assert elapsed < 25, f"refresh=true blocked for {elapsed:.1f}s — should be background"
+        assert elapsed < 25, f"refresh=true blocked for {elapsed:.1f}s - should be background"
         body = r.json()
-        # Either fresh cache or computing/stale flag — but always valid shape
+        # Either fresh cache or computing/stale flag - but always valid shape
         assert "students" in body and "total_at_risk" in body
 
 
@@ -153,7 +153,7 @@ class TestExistingEndpointsRegression:
         r = auth_session.get(f"{BASE_URL}/api/launches", timeout=20)
         assert r.status_code == 200
         body = r.json()
-        # Could be a list or an object with 'launches' — both forms are acceptable
+        # Could be a list or an object with 'launches' - both forms are acceptable
         assert isinstance(body, (list, dict))
 
     def test_launches_active_pace(self, auth_session):

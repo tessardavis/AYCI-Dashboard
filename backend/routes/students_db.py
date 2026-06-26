@@ -1,5 +1,5 @@
 """
-CRUD over the Academy Members Mongo mirror — the data set that eventually
+CRUD over the Academy Members Mongo mirror - the data set that eventually
 fully replaces the Monday Academy Members board.
 
 Reads pull from db.academy_members (the 15-min mirror). Writes update the
@@ -39,8 +39,8 @@ router = APIRouter(prefix="/api", tags=["students-db"])
 
 # The Students DB cross-system maps (videos-used + refunds-by-email) are the
 # same for every viewer and barely change between back-to-back loads. Cache
-# them in-process for a short window so a reload — or several coaches opening
-# the board at once — doesn't re-run two collection aggregations every time.
+# them in-process for a short window so a reload - or several coaches opening
+# the board at once - doesn't re-run two collection aggregations every time.
 # 60s staleness on a badge count is fine; no explicit invalidation needed.
 _AGG_CACHE_TTL_SECONDS = 60.0
 _agg_cache: dict = {"videos": None, "videos_at": 0.0, "refunds": None, "refunds_at": 0.0}
@@ -90,7 +90,7 @@ async def _refund_by_email() -> dict[str, dict]:
 # CURRENT private products that get set up (private chat + allowance). Used for
 # the "needs setup" flag. Deliberately a positive allow-list so deprecated/old
 # tiers (Platinum, Academy/Upgrade 1:1, Gold/Platinum Legacy Upgrade) are NOT
-# flagged — confirmed with Tessa 2026-06-06.
+# flagged - confirmed with Tessa 2026-06-06.
 _CURRENT_PRIVATE_TIERS = {
     "academy private plus", "upgrade private plus", "private plus",
     "vip", "upgrade vip",
@@ -104,9 +104,9 @@ def _is_current_private_tier(tier: Optional[str]) -> bool:
 
 
 def _b_and_g_active(boost: Optional[str]) -> bool:
-    """The 'Boost + Go' column carries customer states — B&G / B&G Plus /
+    """The 'Boost + Go' column carries customer states - B&G / B&G Plus /
     B&G - Presentation / B&G Plus - Presentation, plus 'Upgraded' (they did
-    buy B&G; confirmed by Tessa) — and sales-pipeline states (Offer Due/Made/
+    buy B&G; confirmed by Tessa) - and sales-pipeline states (Offer Due/Made/
     Declined) which are NOT paying customers."""
     b = (boost or "").strip().lower()
     return "b&g" in b or b == "upgraded"
@@ -122,7 +122,7 @@ _VIDEO_ALLOWANCE_BY_TIER = {
 
 def expected_video_allowance(tier: Optional[str], boost: Optional[str]) -> Optional[int]:
     """Expected private video allowance, or None if the tier/B&G doesn't have a
-    defined allowance (e.g. base Academy, or 1:1/Platinum — not yet specified)."""
+    defined allowance (e.g. base Academy, or 1:1/Platinum - not yet specified)."""
     t = (tier or "").strip().lower()
     if t in _VIDEO_ALLOWANCE_BY_TIER:
         return _VIDEO_ALLOWANCE_BY_TIER[t]
@@ -158,21 +158,21 @@ def _allowance_flag(row: dict) -> Optional[str]:
 def _private_chat_blocked(row: dict) -> bool:
     """A non-empty `private_chat_status` is a pending note (e.g. "Awaiting DMs",
     written by the chat zap when the student has DMs switched off). Its presence
-    means setup is blocked/pending — surface the student in "Needs setup" even if
+    means setup is blocked/pending - surface the student in "Needs setup" even if
     a (dead) chat URL exists. Cleared once the chat is actually working."""
     return bool((row.get("private_chat_status") or "").strip())
 
 
 def _needs_private_chat_setup(row: dict) -> bool:
     """True for a private-tier / active Boost & Go student who still needs
-    setting up — i.e. missing their private chat link, blocked on a pending
+    setting up - i.e. missing their private chat link, blocked on a pending
     status (e.g. awaiting DMs), OR missing their video allowance. (A
     wrong-but-present allowance is a 'mismatch', surfaced separately, not
     auto-changed.)"""
     if row.get("setup_not_needed"):
-        return False  # manually dismissed — intentionally fine to leave empty
+        return False  # manually dismissed - intentionally fine to leave empty
     if _is_boss(row):
-        return False  # landed their job — finished with us, no setup needed
+        return False  # landed their job - finished with us, no setup needed
     if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
         return False
     no_chat = not (row.get("private_chat_url") or "").strip()
@@ -190,7 +190,7 @@ for _i, _m in enumerate(
 def _parse_loose_date(text: str, default_year: int) -> Optional[date]:
     """Best-effort parse of a free-text interview date. Handles ISO
     (2026-07-19), d/m or d/m/y, '19th July [2026]', 'July 19'. Returns a date
-    or None for vague text ('soon', 'July', 'TBC') — None means 'show the raw
+    or None for vague text ('soon', 'July', 'TBC') - None means 'show the raw
     text and let a human judge', never a wrong guess. `default_year` (the
     cohort cutoff's year) fills in a missing year."""
     if not text:
@@ -253,7 +253,7 @@ _EA_CACHE_TTL_MIN = 30
 
 async def _early_access_email_cohort(db) -> dict:
     """{lowercased email: cohort_label} for students eligible for the
-    early-interview catch-up flag — anyone in a cohort's 'Cohort - New' or
+    early-interview catch-up flag - anyone in a cohort's 'Cohort - New' or
     'In Between' ConvertKit tag (new signups + in-between joiners; NOT legacy
     who've already done the course). Mapped to the cohort whose tag they're in,
     so in-between joiners (not marked that cohort on Monday) still resolve to
@@ -283,7 +283,7 @@ async def _early_access_email_cohort(db) -> dict:
                     emails = await cohort_mod._ck_tag_emails(int(tid))
                 except Exception as e:
                     logger.info(f"[early-access] CK tag {tid} fetch failed: {e}")
-                    complete = False  # partial — don't trust/cache this run
+                    complete = False  # partial - don't trust/cache this run
                     continue
                 for em in emails:
                     out[(em or "").strip().lower()] = label
@@ -299,7 +299,7 @@ async def _early_access_email_cohort(db) -> dict:
         # partial list (that's what made the count flicker). Serve the last good
         # cached map; fall back to the partial only if we've never cached one.
         prev = (doc or {}).get("map")
-        logger.warning("[early-access] partial Kit fetch — keeping previous cached map")
+        logger.warning("[early-access] partial Kit fetch - keeping previous cached map")
         return prev if prev else out
     except Exception as e:
         logger.warning(f"[early-access] email-cohort refresh failed: {e}")
@@ -307,8 +307,8 @@ async def _early_access_email_cohort(db) -> dict:
 
 
 def _row_emails(row: dict) -> list[str]:
-    """All known emails for a student — primary `email`, `circle_email`, and any
-    `other_emails` (comma/space separated) — lowercased + deduped. Used so every
+    """All known emails for a student - primary `email`, `circle_email`, and any
+    `other_emails` (comma/space separated) - lowercased + deduped. Used so every
     cross-system match (Circle, refunds, videos, early-access) treats a student's
     multiple addresses as ONE identity (the combined-identity model)."""
     out: list[str] = []
@@ -356,7 +356,7 @@ async def list_students(
     Filters:
       q              substring match against name + email (case-insensitive)
       tier           exact tier text (e.g. "Platinum"). Mongo regex if you
-                     need a prefix-style filter — coaches send full strings
+                     need a prefix-style filter - coaches send full strings
                      today though.
       cohort         exact cohort text (e.g. "April 26")
       has_interview  true → only rows with a non-empty interview_date
@@ -373,7 +373,7 @@ async def list_students(
         query["$or"] = [{"interview_date": None}, {"interview_date": {"$exists": False}}]
     if q:
         rx = {"$regex": q, "$options": "i"}
-        # Don't smash the broader query with $or — use $and to keep filters
+        # Don't smash the broader query with $or - use $and to keep filters
         existing_or = query.pop("$or", None)
         text_or = [
             {"name": rx},
@@ -390,13 +390,13 @@ async def list_students(
         db.academy_members
         .find(query, {"columns_by_id": 0, "columns": 0})  # heavy fields excluded
         .sort([("interview_date", 1), ("name", 1)])
-        # Cap high enough to return the whole board in one page — the slim
+        # Cap high enough to return the whole board in one page - the slim
         # projection keeps rows small. The old 2000 cap silently dropped
         # students past it (board is ~2.1k), so they couldn't be searched.
         .limit(min(limit, 10000))
     )
     # How many private videos each student has actually submitted (their
-    # "used" count) and refunds, both keyed by the (lowercased) email — cached
+    # "used" count) and refunds, both keyed by the (lowercased) email - cached
     # in-process ~60s (see helpers) so reloads don't re-aggregate each time.
     # Drives the videos-used badge and the "Refunded" badge + filter; full
     # refund detail lives on the Refunds board.
@@ -449,14 +449,14 @@ async def list_students(
     async for r in cursor:
         slim = _slim_row_for_list(r)
         # Match every cross-system signal against ALL of the student's emails
-        # (primary + circle + other_emails) — combined-identity model.
+        # (primary + circle + other_emails) - combined-identity model.
         emails = _row_emails(r)
         # Only meaningful for rows the team still has to action.
         if slim.get("needs_setup") and circle_email_index:
             slim["on_circle"] = any(e in circle_email_index for e in emails)
         # Early-interview triage flag (course catch-up access). Inclusion = the
         # student is in their cohort's Kit 'Cohort - New' or 'In Between' tag
-        # (new June signups + in-between joiners — NOT legacy who've done the
+        # (new June signups + in-between joiners - NOT legacy who've done the
         # course) AND their interview is on/before that cohort's cutoff. NOT
         # gated on the Circle tag: we want to SEE them even before they're on
         # Circle so we can chase them on board. The GRANT is what requires the
@@ -471,7 +471,7 @@ async def list_students(
                     slim["early_interview_flag"] = _early_interview_flag(src, cut)
                     slim["early_access_cutoff"] = cut
                     # Are they in the cohort on Circle yet (= can we grant now)?
-                    # Display-only — does NOT gate visibility; the grant itself
+                    # Display-only - does NOT gate visibility; the grant itself
                     # enforces it. Lets the to-allocate list show 'ready to
                     # grant' vs 'get them on board first'.
                     ctag = cohort_circle_tags.get(ea_label.strip().lower())
@@ -479,7 +479,7 @@ async def list_students(
                     mtags = [str(t).strip().lower() for t in ((member or {}).get("member_tags") or [])]
                     slim["in_cohort_on_circle"] = bool(ctag and ctag in mtags)
         # "Used" = live submission count across the student's emails PLUS a
-        # manual adjustment a coach can set (videos_used_adjustment) — e.g. a
+        # manual adjustment a coach can set (videos_used_adjustment) - e.g. a
         # session used outside the system, or a duplicate to discount. Storing
         # a delta (not an absolute) means the figure KEEPS incrementing as new
         # private-video feedback comes in: set it to 5 today and a new
@@ -537,7 +537,7 @@ async def allowance_audit(user: dict = Depends(require_board("students"))):
 @router.post("/students-db/apply-expected-allowances")
 async def apply_expected_allowances(user: dict = Depends(require_board("students"))):
     """Set video_allowance = expected for every student whose allowance is
-    MISSING (only). Never overwrites a present value — mismatches are left for
+    MISSING (only). Never overwrites a present value - mismatches are left for
     review. Pins video_allowance as dashboard-owned so the sync won't clobber."""
     now = datetime.now(timezone.utc)
     applied = []
@@ -566,7 +566,7 @@ async def revert_applied_allowances(user: dict = Depends(require_board("students
     """Undo a recent apply-expected-allowances: for rows this user set in the
     last 6h where video_allowance still equals the expected value, clear it
     back to empty and un-pin it (so it shows as 'missing' again, exactly as
-    before). Only touches the auto-applied ones — never manual edits to other
+    before). Only touches the auto-applied ones - never manual edits to other
     values."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
     actor = user.get("email") or user.get("id")
@@ -585,7 +585,7 @@ async def revert_applied_allowances(user: dict = Depends(require_board("students
             continue
         exp = expected_video_allowance(r.get("tier"), r.get("boost_and_go"))
         if exp is None or r.get("video_allowance") != exp:
-            continue  # not an untouched auto-applied value — leave it
+            continue  # not an untouched auto-applied value - leave it
         new_protected = sorted(set(r.get("dashboard_edited_fields") or []) - {"video_allowance"})
         await db.academy_members.update_one(
             {"_id": r["_id"]},
@@ -610,7 +610,7 @@ async def intake_recent(
 ):
     """Diagnostic: which students arrived via the Zapier `intake` endpoint.
 
-    Confidence check before retiring the Monday "Create Item" steps — open
+    Confidence check before retiring the Monday "Create Item" steps - open
     this in the browser and confirm recent real signups are landing in the
     dashboard directly.
 
@@ -632,7 +632,7 @@ async def intake_recent(
 
     # Everything intake has touched in the window, newest first. Keyed off the
     # durable `intake_seen_at` stamp (carried onto the Monday row at reconcile),
-    # NOT dashboard_edited_by — that marker dies with the auto: row, so it would
+    # NOT dashboard_edited_by - that marker dies with the auto: row, so it would
     # miss every already-reconciled signup.
     cursor = (
         db.academy_members
@@ -662,7 +662,7 @@ async def intake_recent(
             "created_at": ca.isoformat() if isinstance(ca, datetime) else ca,
         })
 
-    # All-time unreconciled auto rows (not just the window) — a straggler that
+    # All-time unreconciled auto rows (not just the window) - a straggler that
     # never found a Monday row would otherwise hide once it ages out.
     pending_total = await db.academy_members.count_documents(
         {"_id": {"$regex": "^auto:"}}
@@ -698,17 +698,17 @@ async def circle_email_gaps(
     setup-dismissed) whose `circle_email` is blank, then tries to find them in
     the cached Circle member list. Buckets each:
 
-      - `likely_mismatch`  — a strong NAME match exists in Circle under a
+      - `likely_mismatch`  - a strong NAME match exists in Circle under a
         DIFFERENT email (and their Kajabi email isn't in Circle). The dual-email
-        case: almost certainly the same person — copy the Circle email onto
+        case: almost certainly the same person - copy the Circle email onto
         `circle_email` to link them. Surfaced with both emails + match score.
-      - `email_in_circle`  — their Kajabi email IS a Circle member, we just
+      - `email_in_circle`  - their Kajabi email IS a Circle member, we just
         never copied it to `circle_email`. Benign (lookups already match on
         either email) but trivially fixable.
-      - `not_on_circle`    — no name or email hit. Genuinely not on Circle yet,
+      - `not_on_circle`    - no name or email hit. Genuinely not on Circle yet,
         so a chat legitimately can't be created.
 
-    Read-only diagnostic — writes nothing."""
+    Read-only diagnostic - writes nothing."""
     import student_lookup as lookup
 
     # All Circle member emails, for the cheap "is their Kajabi email on Circle"
@@ -725,7 +725,7 @@ async def circle_email_gaps(
 
     async for r in db.academy_members.find({}, {"columns": 0, "columns_by_id": 0}):
         # Same population the "needs setup" flag cares about, minus the chat/
-        # allowance test — here the gate is specifically a blank circle_email.
+        # allowance test - here the gate is specifically a blank circle_email.
         if r.get("setup_not_needed") or _is_boss(r):
             continue
         if not (_is_current_private_tier(r.get("tier")) or _b_and_g_active(r.get("boost_and_go"))):
@@ -748,7 +748,7 @@ async def circle_email_gaps(
             email_in_circle.append(base)
             continue
 
-        # No email hit — try a fuzzy name match against the Circle cache.
+        # No email hit - try a fuzzy name match against the Circle cache.
         hits = await lookup.name_search(db, r.get("name") or "", limit=1) if r.get("name") else []
         top = hits[0] if hits else None
         if top and (top.get("match_score") or 0) >= 80 and (top.get("email") or "").strip():
@@ -803,7 +803,7 @@ async def set_private_chat_config(request: Request, admin: dict = Depends(requir
 
 @router.get("/students-db/private-chat/preview")
 async def private_chat_preview(user: dict = Depends(require_board("students"))):
-    """Dry run — private-tier students who'd get a chat, matched on either
+    """Dry run - private-tier students who'd get a chat, matched on either
     email. Writes nothing."""
     import private_chat_setup
     return await private_chat_setup.preview(db)
@@ -836,17 +836,17 @@ async def private_chat_maintenance(
     recent_days: Optional[int] = None,
     x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
 ):
-    """Pure-DB backlog + flag maintenance — NO Circle reads (so it never hits the
+    """Pure-DB backlog + flag maintenance - NO Circle reads (so it never hits the
     Circle rate-limit/timeout that breaks the link-existing scan).
 
       - `missing_url`: eligible (current private tier OR active B&G) students with no
-        private_chat_url — the backlog of chats created before the zaps wrote URLs back.
+        private_chat_url - the backlog of chats created before the zaps wrote URLs back.
       - `missing_url_recent`: subset whose monday_created_at (proxy for "joined") is
-        within `recent_days` — the likely-genuine gaps (e.g. chats that failed during
+        within `recent_days` - the likely-genuine gaps (e.g. chats that failed during
         the Coralie-in-list bug). Only returned when `?recent_days=N` is set.
       - `stale_awaiting`: students still carrying an 'Awaiting DMs'-style
         private_chat_status (left over from the now-deleted DMs-off zap branch).
-      - `other_status`: students with some OTHER non-empty status — surfaced, NOT
+      - `other_status`: students with some OTHER non-empty status - surfaced, NOT
         cleared, so nothing meaningful is wiped silently.
       - `?clear_awaiting=true` blanks the status ONLY on the stale_awaiting set.
 
@@ -901,7 +901,7 @@ async def private_chat_maintenance(
 @router.post("/students-db/{monday_item_id}/create-private-chat")
 async def create_private_chat(monday_item_id: str, user: dict = Depends(require_board("students"))):
     """Manual trigger: create ONE student's coach group chat (guarded against
-    duplicates). Runs in the BACKGROUND and returns immediately — the create does
+    duplicates). Runs in the BACKGROUND and returns immediately - the create does
     several Circle calls (incl. the all-coaches dedup scan) and was exceeding the
     proxy timeout, hanging the button. The outcome lands on the student's row
     (chat URL written, or 'Awaiting DMs' flagged); the UI re-fetches the preview
@@ -913,7 +913,7 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
         try:
             res = await private_chat_setup.create_for_student(db, monday_item_id)
             # Record any non-success outcome (other than DMs-off, which writes its
-            # own status) so nothing fails silently — surfaced as private_chat_last_error.
+            # own status) so nothing fails silently - surfaced as private_chat_last_error.
             if res and not res.get("ok") and res.get("skipped") != "awaiting_dms":
                 note = res.get("error") or res.get("skipped") or "create did not complete"
                 await db.academy_members.update_one({"_id": monday_item_id}, {"$set": {
@@ -949,7 +949,7 @@ def _early_access_dm(grant: str, first_name: str, prev_name: str,
         f"You can now watch the live session recordings here:\n{prev_url}"
     )
     bonus_line = (
-        "You've been given access to our Bonus Live Sessions — the Sunday group coaching "
+        "You've been given access to our Bonus Live Sessions - the Sunday group coaching "
         f"calls we run between cohorts. You can join them here:\n{bonus_url}"
     )
     parts = [f"Hi {fn},", ""]
@@ -993,7 +993,7 @@ async def grant_early_access(
     import settings_store
     import circle_api
     configs = await settings_store.get_cohort_configs(db)
-    # In-between joiners aren't marked the cohort on Monday — resolve their
+    # In-between joiners aren't marked the cohort on Monday - resolve their
     # cohort from the Kit-tag eligibility map so they get the right config;
     # fall back to Monday's Cohort Joined.
     ea_map = await _early_access_email_cohort(db)
@@ -1010,9 +1010,9 @@ async def grant_early_access(
     prev_url = cfg.get("prev_cohort_curriculum_url") or ""
     prev_name = cfg.get("prev_cohort_name") or "the previous"
     if grant in ("previous", "both") and not prev_space:
-        raise HTTPException(400, f"No previous-cohort space configured for cohort '{label}' — set it in Settings → Cohort.")
+        raise HTTPException(400, f"No previous-cohort space configured for cohort '{label}' - set it in Settings → Cohort.")
     if grant in ("bonus", "both") and not bonus_space:
-        raise HTTPException(400, f"No bonus-calls space configured for cohort '{label}' — set it in Settings → Cohort.")
+        raise HTTPException(400, f"No bonus-calls space configured for cohort '{label}' - set it in Settings → Cohort.")
 
     # Resolve the student's Circle member from the cached member index. We need
     # their email for the Admin space-add and their member id for the 1:1 DM.
@@ -1040,7 +1040,7 @@ async def grant_early_access(
         raise HTTPException(
             400,
             f"{row.get('name') or 'This student'} isn't in the {label} cohort on Circle yet "
-            f"(no '{cfg.get('circle_tag')}' tag) — grant access once they've joined the cohort.",
+            f"(no '{cfg.get('circle_tag')}' tag) - grant access once they've joined the cohort.",
         )
     # Prefer the member's own Circle email if present, else the email we matched on.
     space_email = (member.get("email") or matched_email or "").strip().lower()
@@ -1055,7 +1055,7 @@ async def grant_early_access(
         raise HTTPException(502, f"Couldn't add to space(s): {failed}")
 
     # If they were ALREADY in every target space, they were granted before
-    # (e.g. via the Monday zap, or a re-click) — skip the welcome DM so we don't
+    # (e.g. via the Monday zap, or a re-click) - skip the welcome DM so we don't
     # double-message them. Still records the grant on the dashboard.
     all_already = bool(results) and all(v.get("already_member") for v in results.values())
 
@@ -1151,12 +1151,12 @@ async def private_chat_link_existing(apply: bool = False, refresh: bool = False,
                 except Exception:
                     pass
         _asyncio.create_task(_run())
-        return {"status": f"scan started (apply={apply}) — re-open this URL with NO params in ~60s for the result"}
+        return {"status": f"scan started (apply={apply}) - re-open this URL with NO params in ~60s for the result"}
     cached = await db.cache.find_one({"_id": "private_chat_link_existing"}, {"_id": 0})
     if not cached:
-        # Don't auto-kick here — repeated reloads would spawn parallel scans and
+        # Don't auto-kick here - repeated reloads would spawn parallel scans and
         # hammer Circle. Ask for an explicit ?refresh=true.
-        return {"status": "no result cached yet — open this URL with ?refresh=true once, wait ~60s, then reload with no params"}
+        return {"status": "no result cached yet - open this URL with ?refresh=true once, wait ~60s, then reload with no params"}
     ca = cached.get("cached_at")
     return {"cached_at": ca.isoformat() if hasattr(ca, "isoformat") else ca, **(cached.get("result") or {})}
 
@@ -1167,8 +1167,8 @@ async def private_chat_debug_coaches(admin: dict = Depends(require_admin)):
     sequentially mint a Headless session and read page 1 of their group chats,
     reporting the outcome per coach (no email / token mint failed / HTTP status
     / how many group chats). Cheap (1 page each) and gentle (sequential), so it
-    pins down WHY the bulk scan returns 'couldn't read any coach group chats' —
-    auth failure vs 429 throttle vs genuinely empty — without the heavy 30-page
+    pins down WHY the bulk scan returns 'couldn't read any coach group chats' -
+    auth failure vs 429 throttle vs genuinely empty - without the heavy 30-page
     fan-out."""
     import settings_store
     import circle_api
@@ -1204,7 +1204,7 @@ async def private_chat_debug_coaches(admin: dict = Depends(require_admin)):
                 entry["has_next_page"] = bool(body.get("has_next_page"))
                 # Diagnostic: what does a record actually look like, and what
                 # kind values exist? (We were filtering on chat_room_kind=="group"
-                # and getting 0 — find the real field/value.)
+                # and getting 0 - find the real field/value.)
                 kinds: dict = {}
                 for x in recs:
                     for kf in ("chat_room_kind", "kind", "room_kind", "type"):
@@ -1232,7 +1232,7 @@ async def private_chat_auto_create(limit: int = 25, admin: dict = Depends(requir
     (eligible, on Circle, template set, no chat), flag DMs-off as 'Awaiting DMs',
     and report the judgement cases (no template / not on Circle) for the team.
     Idempotent + guarded. This is the dashboard-native replacement for the Monday
-    zaps 46/47/53 — run it on demand to verify, then enable
+    zaps 46/47/53 - run it on demand to verify, then enable
     PRIVATE_CHAT_AUTOCREATE_ENABLED + turn those zaps OFF."""
     import private_chat_setup
     return await private_chat_setup.auto_create_ready_chats(db, limit=limit)
@@ -1252,7 +1252,7 @@ async def get_student(
 
 
 # Editable fields from the dashboard. Anything outside this list returns
-# a 400 — explicit allowlist prevents accidental edits to fields that
+# a 400 - explicit allowlist prevents accidental edits to fields that
 # upstream automations control (e.g. someone PATCHing video_allowance
 # when Stripe is supposed to own that).
 EDITABLE_FIELDS = {
@@ -1267,7 +1267,7 @@ EDITABLE_FIELDS = {
 
 class StudentPatch(BaseModel):
     """Each call PATCHes a small subset of fields. Any field present is
-    treated as an edit — set explicitly to `null` to clear it."""
+    treated as an edit - set explicitly to `null` to clear it."""
     name: Optional[str] = None
     first_name: Optional[str] = None
     surname: Optional[str] = None
@@ -1288,7 +1288,7 @@ class StudentPatch(BaseModel):
     setup_not_needed: Optional[bool] = None
     setup_not_needed_reason: Optional[str] = None
     coach_notes: Optional[str] = None  # free-text team notes (dashboard-only)
-    boost_and_go: Optional[str] = None  # e.g. "B&G" / "B&G Plus" — for dual-email fixes
+    boost_and_go: Optional[str] = None  # e.g. "B&G" / "B&G Plus" - for dual-email fixes
     extra_bonus_calls: Optional[int] = None  # dashboard-native extra 1:1 bonus-call entitlement (e.g. signup + upgrade) added to over-allowance
 
     class Config:
@@ -1354,7 +1354,7 @@ async def update_student(
 
     fresh = await db.academy_members.find_one({"_id": monday_item_id})
 
-    # Outbound webhook fan-out — fire only for columns whose value actually
+    # Outbound webhook fan-out - fire only for columns whose value actually
     # changed (skip no-op writes). Fire-and-forget so the response isn't
     # blocked on downstream zaps.
     diff = webhooks_outbound.changed_fields_diff(existing, set_fields)
@@ -1419,7 +1419,7 @@ async def update_student_by_email(
 ):
     """Find a student by email (or circle_email) and update fields.
 
-    Returns 404 if no match — zaps' existing Slack-alert fallback paths
+    Returns 404 if no match - zaps' existing Slack-alert fallback paths
     can branch on that response. Returns 400 if any field is not in the
     automation allowlist."""
     _check_webhook_secret(x_webhook_secret)
@@ -1437,7 +1437,7 @@ async def update_student_by_email(
             400, f"Fields not writable by automation: {sorted(bad)}"
         )
 
-    # Combined-identity match: primary, circle, OR any listed alt email — so a
+    # Combined-identity match: primary, circle, OR any listed alt email - so a
     # booking/update keyed on an address the student used elsewhere resolves.
     row = await db.academy_members.find_one(
         {"$or": [
@@ -1478,7 +1478,7 @@ async def update_student_by_email(
         f"id={row['_id']} fields={list(set_fields.keys())}"
     )
 
-    # Outbound webhook fan-out — diff vs the pre-write row.
+    # Outbound webhook fan-out - diff vs the pre-write row.
     diff = webhooks_outbound.changed_fields_diff(row, set_fields)
     if diff:
         fresh = await db.academy_members.find_one({"_id": row["_id"]})
@@ -1571,7 +1571,7 @@ async def book_call(
         )
     email_l = email.strip().lower()
 
-    # Combined-identity match: primary, circle, OR any listed alt email — so a
+    # Combined-identity match: primary, circle, OR any listed alt email - so a
     # booking made under a different address still resolves to the one record.
     email_rx = re.escape(email_l)
     row = await db.academy_members.find_one(
@@ -1678,7 +1678,7 @@ async def book_call(
 # state before deciding what to write (e.g. the 1:1 Round Robin AI step that
 # picks which call slot to fill). Writes nothing.
 
-# Heavy fields never returned to a webhook caller — the full Monday column
+# Heavy fields never returned to a webhook caller - the full Monday column
 # dumps are large and not useful to a zap.
 _HEAVY_FIELDS = {"columns", "columns_by_id"}
 
@@ -1697,7 +1697,7 @@ async def lookup_student_by_email(
 
     Returns the row's scalar fields (heavy Monday column dumps excluded).
     For each title in `columns`, the current Monday text value is returned
-    under `columns[title]` — lets a zap read a column the mirror doesn't
+    under `columns[title]` - lets a zap read a column the mirror doesn't
     promote to a scalar yet (e.g. call slots) during the safety-net week.
 
     404 on no match, mirroring update-by-email so a zap's existing
@@ -1728,7 +1728,7 @@ async def lookup_student_by_email(
         if soft:
             # Soft mode: 200 with found=false instead of 404, so a Zapier
             # Webhooks step can branch on `found` (via Paths) without the step
-            # erroring and halting the zap — needed by zaps with a designed
+            # erroring and halting the zap - needed by zaps with a designed
             # "not on board → Slack alert" branch (e.g. New Circle member).
             return {"ok": True, "found": False, "email": email_l}
         raise HTTPException(404, f"No student found for email={email_l}")
@@ -1878,7 +1878,7 @@ async def intake_student(
         Return action="created".
 
     The endpoint deliberately does NOT branch on offer name or do tier
-    lookups itself — the zap (or future intake-routing logic) supplies
+    lookups itself - the zap (or future intake-routing logic) supplies
     `fields.tier` directly. Keeps this endpoint a thin primitive.
 
     Accepts both nested (`{email, fields:{...}, source}`) and flat
@@ -1911,8 +1911,8 @@ async def intake_student(
     if source:
         set_fields["source"] = source
 
-    # Merge into an existing record if this email matches ANY known address —
-    # primary, circle, OR one listed in other_emails — so a signup under a
+    # Merge into an existing record if this email matches ANY known address -
+    # primary, circle, OR one listed in other_emails - so a signup under a
     # second email updates the same student instead of creating a duplicate
     # (combined-identity model). other_emails is a delimited string, so match
     # the address as a whole token within it.
@@ -1937,7 +1937,7 @@ async def intake_student(
     update_set["intake_seen_at"] = now
 
     if existing:
-        # Update — preserve dashboard_edited_fields audit
+        # Update - preserve dashboard_edited_fields audit
         new_protected = set(existing.get("dashboard_edited_fields") or [])
         # Only the scalar columns go in the protected set, not the
         # intake-only metadata fields.
@@ -1957,7 +1957,7 @@ async def intake_student(
             "fields": sorted(set_fields.keys()),
         }
 
-    # Insert — new row with dashboard-generated id
+    # Insert - new row with dashboard-generated id
     new_id = f"auto:{uuid.uuid4()}"
     insert_doc: dict[str, Any] = dict(set_fields)
     insert_doc["_id"] = new_id
@@ -1996,7 +1996,7 @@ async def intake_student(
 
 # ----------------------------------------------- Webhook subscription admin
 # Manage the subscribers that listen for column-change events. Authenticated
-# (dashboard user only) — these are equivalent to changing a Monday zap
+# (dashboard user only) - these are equivalent to changing a Monday zap
 # trigger.
 #
 # NOTE: these live under /api/webhook-subscriptions, NOT /api/students-db/...,
@@ -2028,7 +2028,7 @@ def _serialise_subscription(doc: dict) -> dict:
 async def list_webhook_columns(
     user: dict = Depends(require_admin),
 ):
-    """The columns a subscription may listen on — the automation-writable
+    """The columns a subscription may listen on - the automation-writable
     field allowlist (PROTECTED_FIELDS). Populates the create-form dropdown."""
     return {"columns": sorted(PROTECTED_FIELDS)}
 

@@ -9,7 +9,7 @@ Every coaching session works the same way:
 
 > **Student books in Calendly → a Zapier zap fires → it POSTs to the dashboard → the dashboard marks the matching "slot" on that student's record.**
 
-Those slots (Call 1–4, mock, 15-min, bonus) are the student's *entitlements*. The
+Those slots (Call 1-4, mock, 15-min, bonus) are the student's *entitlements*. The
 dashboard counts booked-vs-allowed, which powers the over-allowance alerts. So each
 zap's whole job is: *"a call got booked → tick the matching box for that student."*
 
@@ -17,7 +17,7 @@ zap's whole job is: *"a call got booked → tick the matching box for that stude
 
 | Session | Calendly event | Zaps (one per coach) | Dashboard field written |
 |---|---|---|---|
-| **1:1 prep call (30 min)** | `AYCI 1:1 (30 min)` — **round robin** | 18 / 18b / 18c "Round Robin" | next free **Call 1–4** = `Booked - <coach>` |
+| **1:1 prep call (30 min)** | `AYCI 1:1 (30 min)` - **round robin** | 18 / 18b / 18c "Round Robin" | next free **Call 1-4** = `Booked - <coach>` |
 | **Mock interview (60 min)** | each coach's own *Mock Interview* event | 14 / 14b / 14c "Mock interview" | **mock_interview_1** = `Booked - <coach>` |
 | **15-min debrief** | each coach's own *Debrief / 15-min* event | 15 / 16 / 16b "15 minute call booked" | **fifteen_minute_call** = `Booked` |
 | **Testimonial** | `AYCI Testimonial Call` | 19b *(not migrated yet)* | post-cohort metric |
@@ -28,17 +28,17 @@ zap's whole job is: *"a call got booked → tick the matching box for that stude
 
 ### 1. Round-robin vs personal events
 
-- **Round robin** — only the **30-min 1:1** uses this. It's **one shared Calendly event**
+- **Round robin** - only the **30-min 1:1** uses this. It's **one shared Calendly event**
   (`AYCI 1:1 (30 min)`, link `calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min`) that
   auto-assigns each booking to one coach in a pool. It's a **team/managed event**, so it
-  **doesn't appear on any individual coach's Event Types page** — only a Calendly
+  **doesn't appear on any individual coach's Event Types page** - only a Calendly
   Admin/Owner sees it (under team/managed events). Pool = **Becky, Anoop, Charlotte**.
-- **Personal** — mocks and 15-min debriefs. Each coach has their **own** Calendly
+- **Personal** - mocks and 15-min debriefs. Each coach has their **own** Calendly
   event/link. Nothing shared.
 
 ### 2. Why everything comes in threes (Becky / Anoop / Charlotte)
 
-Zapier connects to Calendly **per coach account** — there's no single org-wide trigger.
+Zapier connects to Calendly **per coach account** - there's no single org-wide trigger.
 So every session type needs **one zap per coach**, each listening to that coach's
 bookings. For the round-robin, the three zaps each catch the bookings Calendly assigned
 to *their* coach. That's why you see trios everywhere.
@@ -50,12 +50,12 @@ to *their* coach. That's why you see trios everywhere.
 3. The booking lands on **Anoop's** Calendly → his `Invitee Created` trigger fires the
    **Round Robin (Anoop)** zap.
 4. The zap POSTs `{email, coach: "Anoop"}` to `…/api/students-db/book-call`.
-5. The dashboard fills that student's **next free Call 1–4 slot** with `Booked - Anoop`,
+5. The dashboard fills that student's **next free Call 1-4 slot** with `Booked - Anoop`,
    and returns which slot. If all 4 are already booked (or the email matches no student),
    it alerts #fulfillment-team instead.
 
 All three coaches' round-robin bookings carry the **same** Calendly event
-(`AYCI 1:1 (30 min)`) — Calendly just records which coach was assigned. So **each coach's
+(`AYCI 1:1 (30 min)`) - Calendly just records which coach was assigned. So **each coach's
 zap must be triggered on `AYCI 1:1 (30 min)`** (their connection only surfaces the
 bookings assigned to them). If a coach's trigger is set to a *personal* event instead, it
 won't fire for round-robin bookings.
@@ -75,7 +75,7 @@ Confirmed 2026-06-19: **Anoop, Charlotte, Becky**.
 ⚠️ This event does **not** appear on the normal grouped "Event Types" page (it has no
 owner profile). To open it: use the booking link `calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min`
 → manage, or **Admin Management** (owner-only). Once open, the hosts are listed on the
-event detail panel — add/remove there to change the pool.
+event detail panel - add/remove there to change the pool.
 
 **If you change the pool, you must also keep the zaps in sync:** each coach in the pool
 needs their own "1:1 Round Robin" zap (Calendly *Invitee Created* on `AYCI 1:1 (30 min)`
@@ -89,5 +89,5 @@ Pulled from the Calendly API: the link is the managed round-robin event type
 Recent 18 bookings distributed to **Becky (12) + Anoop (6)**; Charlotte 0 recently but in
 the pool. **Open item:** confirm each coach's zap step-1 Event Type = `AYCI 1:1 (30 min)`
 (Becky's is firing; Anoop/Charlotte to confirm with Megan). There's also an
-`AYCI 1:1 (60 min)` event (15 recent bookings) — possibly a second round-robin (VIP 1:1s)
+`AYCI 1:1 (60 min)` event (15 recent bookings) - possibly a second round-robin (VIP 1:1s)
 with **no book-call zap yet**; confirm whether 60-min 1:1s should count against allowance.

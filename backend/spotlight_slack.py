@@ -52,7 +52,7 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
     name = session.get("name") or "Spotlight session"
     starts_at_iso = session.get("starts_at") or ""
     now_utc = now or datetime.now(timezone.utc)
-    uk_label = "—"
+    uk_label = "-"
     relative = "(time unknown)"
     try:
         start_dt = datetime.fromisoformat(starts_at_iso.replace("Z", "+00:00"))
@@ -74,11 +74,11 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
 
     if not students:
         return {
-            "text": f"Spotlight reminder: {name} starts in 30 min — no submissions.",
+            "text": f"Spotlight reminder: {name} starts in 30 min - no submissions.",
             "blocks": [
                 {"type": "section", "text": {"type": "mrkdwn", "text": header}},
                 {"type": "context", "elements": [
-                    {"type": "mrkdwn", "text": ":white_check_mark: No spotlight signups for this one — open mic if you want."},
+                    {"type": "mrkdwn", "text": ":white_check_mark: No spotlight signups for this one - open mic if you want."},
                 ]},
             ],
         }
@@ -105,7 +105,7 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
             else:
                 meta.append(":grey_question: not eligible")
         meta_str = (" · " + " · ".join(meta)) if meta else ""
-        lines.append(f"{i}. *{name_label}* — _{topic}_{meta_str}")
+        lines.append(f"{i}. *{name_label}* - _{topic}_{meta_str}")
 
     if len(students) > 8:
         lines.append(f"_…and {len(students) - 8} more_")
@@ -138,7 +138,7 @@ def _format_session_blocks(session: dict, *, now: Optional[datetime] = None) -> 
 async def _post_to_slack(payload: dict) -> dict:
     url = _webhook_url()
     if not url:
-        logger.warning("[spotlight-slack] SLACK_WEBHOOK_URL not set — skipping reminder.")
+        logger.warning("[spotlight-slack] SLACK_WEBHOOK_URL not set - skipping reminder.")
         return {"sent": False, "reason": "SLACK_WEBHOOK_URL not configured"}
     try:
         async with httpx.AsyncClient(timeout=20) as c:
@@ -201,7 +201,7 @@ async def check_and_send_reminders(db, *, lookahead_min: int = 35, lookback_min:
         if result.get("sent"):
             sent += 1
         else:
-            # Send failed — roll back the claim so the next tick can retry.
+            # Send failed - roll back the claim so the next tick can retry.
             await db.spotlight_reminders_sent.delete_one({"session_id": s.get("id")})
             logger.warning(f"[spotlight-slack] failed to send for session {s.get('id')}: {result}")
     return {"checked": len(sessions), "sent": sent, "skipped": skipped}

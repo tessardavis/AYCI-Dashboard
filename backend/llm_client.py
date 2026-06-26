@@ -1,7 +1,7 @@
 """
 Thin async wrapper around the Anthropic Python SDK.
 
-Replaces what we used to get from `emergentintegrations.llm.chat.LlmChat` —
+Replaces what we used to get from `emergentintegrations.llm.chat.LlmChat` -
 that was Emergent's proxy. Now we go direct to Anthropic.
 
 Configuration: set ANTHROPIC_API_KEY (an `sk-ant-…` value created at
@@ -25,7 +25,7 @@ from anthropic import AsyncAnthropic
 
 logger = logging.getLogger(__name__)
 
-# Default model — overridable per-call.
+# Default model - overridable per-call.
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 
 _client: Optional[AsyncAnthropic] = None
@@ -58,7 +58,7 @@ async def complete(
     client = get_client()
     if client is None:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY not configured — cannot call Claude."
+            "ANTHROPIC_API_KEY not configured - cannot call Claude."
         )
     response = await client.messages.create(
         model=model,

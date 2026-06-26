@@ -1,4 +1,4 @@
-"""Wati WhatsApp Business — webhook + admin endpoints."""
+"""Wati WhatsApp Business - webhook + admin endpoints."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -77,7 +77,7 @@ async def webhook(request: Request):
     try:
         return await wati.handle_webhook(db, payload)
     except Exception as e:
-        # Never 500 — Wati would aggressively retry. Log and ack.
+        # Never 500 - Wati would aggressively retry. Log and ack.
         return {"action": "error", "error": str(e)}
 
 
@@ -97,7 +97,7 @@ async def reply(
     if not body:
         raise HTTPException(400, "body required")
     if not wati.is_configured():
-        raise HTTPException(400, "Wati not configured — admin must set WATI_BASE_URL + WATI_ACCESS_TOKEN")
+        raise HTTPException(400, "Wati not configured - admin must set WATI_BASE_URL + WATI_ACCESS_TOKEN")
     try:
         return await wati.send_session_message(db, ticket_id, body)
     except ValueError as e:

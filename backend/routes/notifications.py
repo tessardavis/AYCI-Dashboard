@@ -22,6 +22,6 @@ async def slack_test_send(
     admin: dict = Depends(require_admin),
 ):
     """Admin-only: send the SLA digest to Slack right now (manual trigger).
-    Respects today's atomic daily-claim guard by default — call with
+    Respects today's atomic daily-claim guard by default - call with
     `?force=true` to bypass it (e.g. when iterating on the digest copy)."""
     return await sla_notifications.send_sla_digest(db, force=force)

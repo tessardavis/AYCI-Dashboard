@@ -1,5 +1,5 @@
 """
-Circle Community DM Bot — receives student DMs to coaches via Circle workflows,
+Circle Community DM Bot - receives student DMs to coaches via Circle workflows,
 generates an AI reply (or escalation), and creates a support ticket when the
 team needs to step in.
 
@@ -72,7 +72,7 @@ def _walk(payload: dict, keys: list[str]) -> Optional[str]:
                 v = sub.get(k)
                 if isinstance(v, str) and v.strip():
                     return v.strip()
-            # Two levels deep — Circle wraps things in {data: {member: {...}}}
+            # Two levels deep - Circle wraps things in {data: {member: {...}}}
             for sub2 in sub.values():
                 if isinstance(sub2, dict):
                     for k in keys:
@@ -136,7 +136,7 @@ def _extract_dm_fields(payload: dict) -> tuple[str, str, str, str]:
 
 
 def _is_sensitive(text: str) -> tuple[bool, Optional[str]]:
-    """Return (escalate, reason). Hard escalation rules — no AI judgment."""
+    """Return (escalate, reason). Hard escalation rules - no AI judgment."""
     if not text:
         return False, None
     low = text.lower()
@@ -159,7 +159,7 @@ async def _generate_reply(
     from llm_client import get_client, complete
 
     if get_client() is None:
-        # Fail open — if the LLM is down, escalate every DM rather than ignore.
+        # Fail open - if the LLM is down, escalate every DM rather than ignore.
         return {"reply": _holding_reply(sender_name, coach_name), "resolved": False}
 
     system = (
@@ -170,9 +170,9 @@ async def _generate_reply(
         "`NEEDS_HUMAN` and nothing else, and the team will pick it up.\n\n"
         f"=== COACH PLAYBOOK ===\n{playbook}\n=== END PLAYBOOK ===\n\n"
         "When you DO answer, write as if you ARE the coach. The student does NOT "
-        "need to know the reply is automated — never mention that, never call "
+        "need to know the reply is automated - never mention that, never call "
         "yourself a bot, never use the phrase 'auto-response'. Be warm, friendly "
-        "and encouraging — like a real coach who knows them well.\n\n"
+        "and encouraging - like a real coach who knows them well.\n\n"
         "Rules:\n"
         "1. If the playbook does not clearly cover the question, output `NEEDS_HUMAN`.\n"
         f"2. If you DO answer: start with 'Hi {sender_name}, ' followed by a warm "
@@ -188,8 +188,8 @@ async def _generate_reply(
         "4. If the message is just hello / a greeting / very short with no "
         "question, output `NEEDS_HUMAN`.\n"
         "5. Plain text only, no markdown, no headers.\n"
-        "6. Never use em-dashes (—) or en-dashes (–). Use a regular hyphen "
-        "(-), comma, or full stop instead. This is a hard rule — the team "
+        "6. Never use em-dashes (-) or en-dashes (-). Use a regular hyphen "
+        "(-), comma, or full stop instead. This is a hard rule - the team "
         "has flagged that the AI 'voice' should not include them."
     )
 
@@ -273,8 +273,8 @@ async def _slack_notify_coralie_urgent(db, *, sender_name, coach_name, message, 
         public_base = (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
         link = f"{public_base}/tickets" if public_base else "Open the Tickets board"
         text = (
-            f":rotating_light: *Urgent Circle DM* — student messaged {coach_name}\n"
-            f"*{sender_name}* — _{message[:200]}{'…' if len(message) > 200 else ''}_\n"
+            f":rotating_light: *Urgent Circle DM* - student messaged {coach_name}\n"
+            f"*{sender_name}* - _{message[:200]}{'…' if len(message) > 200 else ''}_\n"
             f"Ticket auto-created (#{ticket_id[:8]}). {link}"
         )
         await slack_dm.dm_user(db, "coralie@medicalinterviewprep.com", text)
@@ -288,7 +288,7 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
     Workflow's next step ("Send a direct message") will use via
     `{{ webhook.response.reply_text }}`.
 
-    `background` is FastAPI's BackgroundTasks — anything that can wait
+    `background` is FastAPI's BackgroundTasks - anything that can wait
     until after the HTTP response (Slack pings, secondary writes) goes here.
 
     Circle's "Send to webhook" action sends a minimal payload by default:
@@ -334,7 +334,7 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
         if body:
             message = body
     if not message:
-        # No body to act on — could be a Circle test fire (empty `data`), or
+        # No body to act on - could be a Circle test fire (empty `data`), or
         # we couldn't reach the Headless API. Create a "team should pick this
         # up" ticket if we at least know who DM'd whom, otherwise just
         # acknowledge so Circle's workflow can proceed.
@@ -345,13 +345,13 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
         ticket_id = await _create_ticket_from_dm(
             db, sender_name=sender_name, sender_email=sender_email,
             coach_name=coach_name,
-            message=("(message body not available — open Circle to read)" if not message else message),
+            message=("(message body not available - open Circle to read)" if not message else message),
             ai_reply=reply, escalation_reason="no_message_body",
         )
         background.add_task(
             _slack_notify_coralie_urgent, db,
             sender_name=sender_name, coach_name=coach_name,
-            message="(message body not available — open Circle to read)",
+            message="(message body not available - open Circle to read)",
             ticket_id=ticket_id,
         )
         return {"reply_text": reply, "escalated": True, "ai_resolved": False,
@@ -362,7 +362,7 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
     sensitive, reason = _is_sensitive(message)
 
     if sensitive:
-        # Skip AI resolve — hold + ticket + Slack ping
+        # Skip AI resolve - hold + ticket + Slack ping
         reply = _holding_reply(first, coach_name)
         ticket_id = await _create_ticket_from_dm(
             db, sender_name=sender_name, sender_email=sender_email,

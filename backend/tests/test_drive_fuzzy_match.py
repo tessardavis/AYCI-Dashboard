@@ -1,5 +1,5 @@
 """
-Unit tests for google_drive._find_best_match — fuzzy student name lookup.
+Unit tests for google_drive._find_best_match - fuzzy student name lookup.
 
 Critical: the matcher must surface close-typo doc filenames (e.g. doc named
 "Annabella Jedovic" when the real student is "Annabella Jevdovic") with
@@ -53,7 +53,7 @@ def test_fuzzy_does_not_match_unrelated_name():
 
 
 def test_fuzzy_does_not_pull_doc_with_only_first_name_overlap():
-    """'Annabella Smith' should NOT pull 'Annabella Jedovic' — different surname."""
+    """'Annabella Smith' should NOT pull 'Annabella Jedovic' - different surname."""
     files = _files("Annabella Jedovic")
     m = _find_best_match("Annabella Smith", files)
     assert m is None, "Different surname should not produce a fuzzy match"

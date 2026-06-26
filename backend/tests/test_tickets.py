@@ -140,7 +140,7 @@ class TestCRUD:
                 break
         assert sent, "slack_urgent_sent never flipped after escalation"
 
-        # PATCH again with unrelated change — must NOT re-send
+        # PATCH again with unrelated change - must NOT re-send
         rp2 = admin_session.patch(f"{BASE_URL}/api/tickets/{tid}", json={"category": "tech"})
         assert rp2.status_code == 200
         time.sleep(2)

@@ -1,5 +1,5 @@
 """
-Slack bot DM helpers — sends a private message to any team member by email.
+Slack bot DM helpers - sends a private message to any team member by email.
 
 We use Slack's Web API (`chat.postMessage` + `users.lookupByEmail`) rather
 than incoming webhooks because incoming webhooks can't deliver true 1:1 DMs
@@ -9,7 +9,7 @@ Required Slack app scopes (Bot Token):
   - chat:write          (post messages)
   - users:read          (find users)
   - users:read.email    (find by email)
-  - im:write            (open DM channels — auto-granted via chat:write)
+  - im:write            (open DM channels - auto-granted via chat:write)
 
 Token storage: same DB-backed pattern as the circle-days webhook. Reads
 `app_settings.slack_bot_token.value`, falls back to env `SLACK_BOT_TOKEN`.

@@ -1,4 +1,4 @@
-"""Private-Tier Video Submissions — DB-backed routes (replaces Monday board)."""
+"""Private-Tier Video Submissions - DB-backed routes (replaces Monday board)."""
 from __future__ import annotations
 
 import logging
@@ -30,8 +30,8 @@ _CHAT_UUID_RE = re.compile(
 
 def _chat_uuid_from_url(url: str) -> Optional[str]:
     """Pull the Circle chat-room UUID out of a private_chat_url. Handles both
-    shapes we've seen — https://app.circle.so/c/messages/<uuid> and
-    https://ayci-academy.circle.so/messages/<uuid> — by matching the UUID
+    shapes we've seen - https://app.circle.so/c/messages/<uuid> and
+    https://ayci-academy.circle.so/messages/<uuid> - by matching the UUID
     anywhere in the string. Returns None if there isn't one."""
     if not url:
         return None
@@ -77,7 +77,7 @@ def _content_disposition_inline(filename: str) -> str:
 async def cache_info(admin: dict = Depends(require_admin)):
     """Admin diagnostic: where the private-video cache actually lives + how
     much is in it. Use this to confirm the Render persistent disk is wired
-    correctly — `cache_dir` should be /var/data/... and `persistent` true.
+    correctly - `cache_dir` should be /var/data/... and `persistent` true.
     If it shows /tmp/... the PRIVATE_VIDEO_CACHE_DIR env var isn't taking
     effect and every deploy wipes the cache."""
     import private_video_cache as pv_cache
@@ -87,7 +87,7 @@ async def cache_info(admin: dict = Depends(require_admin)):
 @router.get("/cache-purge")
 async def cache_purge(free_gb: float = 2.0, admin: dict = Depends(require_admin)):
     """Recover a full / over-cap cache: delete orphaned *.partial downloads and
-    LRU-evict until at least `free_gb` of headroom is under the cap. Safe —
+    LRU-evict until at least `free_gb` of headroom is under the cap. Safe -
     evicted transcodes just re-download on next open. Use this when videos fail
     with "Video preparation failed" and cache-info shows current_bytes near the
     cap / low disk_free_bytes."""
@@ -174,7 +174,7 @@ async def refetch_video(item_id: str, admin: dict = Depends(require_admin)):
         {"$set": {"prep_failed": False}, "$unset": {"prep_last_error": "", "prep_last_failed_at": ""}},
     )
     _asyncio.create_task(pv_cache.prepare(item_id, src, priority="interactive", force=True))
-    return {"ok": True, "item_id": item_id, "action": "clean re-fetch scheduled — reload the video in ~30-60s"}
+    return {"ok": True, "item_id": item_id, "action": "clean re-fetch scheduled - reload the video in ~30-60s"}
 
 
 @router.get("")
@@ -206,14 +206,14 @@ async def video_status(
     # Already known-corrupt → don't re-attempt; tell the UI to show re-record.
     if row.get("prep_failed"):
         return {"status": "failed", "reason": row.get("prep_last_error") or "The video upload appears corrupt."}
-    # Always kick off prepare — it's idempotent and ensures both download
+    # Always kick off prepare - it's idempotent and ensures both download
     # AND transcode get scheduled even for files that downloaded earlier
     # but were never transcoded.
     import asyncio
     asyncio.create_task(pv_cache.prepare(item_id, src))
     status = pv_cache.get_status(item_id)
     if status == "failed":
-        # Crossed the failure threshold this run — persist so it survives a
+        # Crossed the failure threshold this run - persist so it survives a
         # restart and shows in admin views, and stop the re-download loop.
         reason = pv_cache.prep_failure_reason(item_id) or "The video upload appears corrupt."
         await db.private_video_submissions.update_one(
@@ -227,7 +227,7 @@ async def video_status(
 # Proxy the Tally-hosted video through our backend so we can serve it with
 # proper HTTP Range support. Tally's CDN returns 200 for Range requests
 # (full body) and uses chunked transfer (no Content-Length), which makes
-# iOS Safari refuse to play `<video>` inline — it requires 206 Partial
+# iOS Safari refuse to play `<video>` inline - it requires 206 Partial
 # Content + a known total size to seek/play. We cache each video to local
 # disk on first access (one-time ~30s for a 400 MB file) and serve every
 # subsequent read straight from disk where Range support is native.
@@ -271,10 +271,10 @@ async def stream_video(
             timeout=75.0,
         )
     except _asyncio.TimeoutError:
-        logger.info(f"[private-videos] proxy wait exceeded for {item_id} — still transcoding")
+        logger.info(f"[private-videos] proxy wait exceeded for {item_id} - still transcoding")
         raise HTTPException(
             503,
-            "Video is still being prepared — refresh in 30-60s.",
+            "Video is still being prepared - refresh in 30-60s.",
             headers={"Retry-After": "30"},
         )
     except Exception as e:
@@ -310,7 +310,7 @@ async def stream_video(
 
     # Cap open-ended Range responses (`bytes=N-`) at 16 MB. Chrome's media
     # demuxer aborts when it receives a 206 response larger than ~50 MB in
-    # a single shot — chunking the response into multiple Range requests
+    # a single shot - chunking the response into multiple Range requests
     # is what every CDN does. After this chunk, Chrome will automatically
     # request `bytes=N-` for the next window. 16 MB halves the number of
     # round-trips vs the old 8 MB cap, which meaningfully tightens
@@ -346,7 +346,7 @@ async def stream_video(
 async def assignable_users(
     user: dict = Depends(require_board("private_videos")),
 ):
-    """Returns the assignee dropdown — now uses our internal team_members
+    """Returns the assignee dropdown - now uses our internal team_members
     rather than Monday users. Same shape as before so the frontend works."""
     return {"users": await pv_store.get_team_users(db)}
 
@@ -426,7 +426,7 @@ async def update_submission(
 
 @router.delete("/{item_id}")
 async def delete_submission(item_id: str, admin: dict = Depends(require_admin)):
-    """Hard-delete a private video submission. Admin only — used for cleaning
+    """Hard-delete a private video submission. Admin only - used for cleaning
     up diagnostic/test rows."""
     res = await db.private_video_submissions.delete_one({"id": item_id})
     if res.deleted_count == 0:
@@ -458,7 +458,7 @@ async def tally_webhook(request: Request):
     try:
         return await pv_store.ingest_tally_submission(db, payload)
     except Exception as e:
-        # Never 500 — Tally would aggressively retry. Log and ack.
+        # Never 500 - Tally would aggressively retry. Log and ack.
         logger.exception(f"[private-videos] tally webhook error: {e}")
         return {"ok": False, "error": str(e)}
 
@@ -467,7 +467,7 @@ async def tally_webhook(request: Request):
 @router.post("/migrate-from-monday")
 async def migrate_from_monday(admin: dict = Depends(require_admin)):
     """One-off migration: pull all 462 rows from Monday board 5083952249 and
-    upsert into MongoDB. Idempotent — safe to re-run."""
+    upsert into MongoDB. Idempotent - safe to re-run."""
     return await pv_store.migrate_from_monday(db)
 
 
@@ -475,7 +475,7 @@ async def migrate_from_monday(admin: dict = Depends(require_admin)):
 async def sync_from_monday(user: dict = Depends(require_board("private_videos"))):
     """Pull new + updated submissions from the Monday board. Refreshes only
     the Tally-source fields (name / email / video URL / question /
-    submission counter) — never overwrites status / assignee / reply_link
+    submission counter) - never overwrites status / assignee / reply_link
     / replied_at, because the team now sends replies through the dashboard
     (which Monday doesn't know about), and a stray sync would otherwise
     flip Done rows back to New."""
@@ -545,9 +545,9 @@ async def _build_send_to_circle_payload(
     marks Done) and /send-to-circle-preview (which just returns this).
 
     Assignee handling:
-      - override_assignee=False (Preview path) — auto-assign current user
+      - override_assignee=False (Preview path) - auto-assign current user
         ONLY if the row has no assignee yet. Respects modal-set assignment.
-      - override_assignee=True (Send path) — always set assignee to the
+      - override_assignee=True (Send path) - always set assignee to the
         current user, overriding any existing value. Whoever clicks Send
         gets credited; the message body says their name.
 
@@ -561,7 +561,7 @@ async def _build_send_to_circle_payload(
       - payload          the full JSON we'd POST to Zapier
       - destination      the student's Circle Group DM URL (private_chat_url)
       - student_name / first_name / coach_name / sub_num / total / topic /
-        video_url / reply_url / tier — for the UI to show in the preview
+        video_url / reply_url / tier - for the UI to show in the preview
     """
     row = await db.private_video_submissions.find_one({"id": item_id}, {"_id": 0})
     if not row:
@@ -577,7 +577,7 @@ async def _build_send_to_circle_payload(
     zapier_url = await _get_zapier_url()
 
     # Set the assignee. On the Send path (override_assignee=True) whoever
-    # clicks Send becomes the assignee — overrides any previous value so the
+    # clicks Send becomes the assignee - overrides any previous value so the
     # Done queue + the message body reflect the actual sender. On the
     # Preview path we only auto-assign when the row was empty so we don't
     # silently overwrite a coach's manual choice in the modal.
@@ -698,7 +698,7 @@ async def _build_send_to_circle_payload(
     #     for migrated rows)
     #   - All native row data inline (so the zap can be rewired to read
     #     student_email / voicenote_url / etc. directly instead of
-    #     re-querying Monday — needed for Tally-ingested rows where the
+    #     re-querying Monday - needed for Tally-ingested rows where the
     #     pulseId doesn't exist on Monday).
     now_iso = datetime.now(timezone.utc).isoformat()
     payload = {
@@ -713,7 +713,7 @@ async def _build_send_to_circle_payload(
             "columnTitle": "Send reply (via Circle)",
             "value": {"clicks": 1, "changedAt": now_iso},
         },
-        # Native fields (inline; preferred — works for both migrated + native rows)
+        # Native fields (inline; preferred - works for both migrated + native rows)
         "submission_id": row.get("id"),
         "student_email": row.get("email"),
         "student_name": student_name,
@@ -731,7 +731,7 @@ async def _build_send_to_circle_payload(
         "assignee_name": assignee_name,
         "coach_name": coach_name,
         "tier": tier,
-        # Pre-formatted Circle DM body — Zapier just relays this so the
+        # Pre-formatted Circle DM body - Zapier just relays this so the
         # template lives in code (one place) and we can iterate quickly.
         "message_text": message_text,
         "message": message_text,  # alias
@@ -761,8 +761,8 @@ async def send_to_circle_preview(
     item_id: str,
     user: dict = Depends(require_board("private_videos")),
 ):
-    """Return exactly what /send-to-circle would deliver — rendered message +
-    the destination Circle DM (the recorded private_chat_url) — WITHOUT sending
+    """Return exactly what /send-to-circle would deliver - rendered message +
+    the destination Circle DM (the recorded private_chat_url) - WITHOUT sending
     or marking the row Done. Used by the dashboard's Preview button so the coach
     can verify recipient + content before posting."""
     built = await _build_send_to_circle_payload(item_id, current_user=user)
@@ -791,11 +791,11 @@ async def send_to_circle_preview(
         "payload": built["payload"],
         "warnings": [
             w for w in [
-                None if chat_uuid else "No private chat link on file — Send will fail. Set up this student's private chat first.",
-                None if sender_email else "No sending coach configured — Send will fail. Set the sender in Settings → Private chat config.",
-                None if built["row"].get("assignee_team_member_id") else "No coach assigned — message will say 'Your AYCI coach' instead of your name. Pick an assignee in the form above before sending.",
-                None if built["tally_video_url"] else "No student video URL on this row — message won't include the student's original video",
-                None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance — 'submission X of Y' line will be omitted",
+                None if chat_uuid else "No private chat link on file - Send will fail. Set up this student's private chat first.",
+                None if sender_email else "No sending coach configured - Send will fail. Set the sender in Settings → Private chat config.",
+                None if built["row"].get("assignee_team_member_id") else "No coach assigned - message will say 'Your AYCI coach' instead of your name. Pick an assignee in the form above before sending.",
+                None if built["tally_video_url"] else "No student video URL on this row - message won't include the student's original video",
+                None if built["submission_number"] and built["total_allowance"] else "No submission count / allowance - 'submission X of Y' line will be omitted",
             ] if w
         ],
     }
@@ -807,7 +807,7 @@ async def send_to_circle(
     user: dict = Depends(require_board("private_videos")),
 ):
     """Post the coach's voicenote reply DIRECTLY into the student's existing
-    private chat — the exact room recorded as their `private_chat_url` — using
+    private chat - the exact room recorded as their `private_chat_url` - using
     the same direct-to-room post the welcome message uses
     (`circle_api.post_dm_message`). On success, stamp `replied_at = now` and
     flip status → Done.
@@ -815,10 +815,10 @@ async def send_to_circle(
     Why direct-to-UUID and NOT via Zapier / a participant list: Circle keys a
     group chat on its exact member set, so resolving the room by rebuilding the
     roster lands in a different (or duplicate) room whenever the roster is off
-    by one — e.g. the go-forward sender Coralie present vs absent. That was the
+    by one - e.g. the go-forward sender Coralie present vs absent. That was the
     bug: video replies posted to a Coralie-less duplicate room instead of the
     recorded chat. The recorded link is the single source of truth, so we post
-    straight to it — which works for both existing students (link already on
+    straight to it - which works for both existing students (link already on
     file) and new ones (setup records the link first)."""
     built = await _build_send_to_circle_payload(
         item_id, current_user=user, override_assignee=True,
@@ -830,7 +830,7 @@ async def send_to_circle(
     if not chat_uuid:
         raise HTTPException(
             400,
-            "No private chat link on file for this student — set up their "
+            "No private chat link on file for this student - set up their "
             "private chat first, then resend.",
         )
 
@@ -839,7 +839,7 @@ async def send_to_circle(
     # then the other configured coaches. We post as the FIRST one Circle accepts.
     # Circle requires the sender to be a MEMBER of the room, so:
     #   - new chats (created with Coralie) post as Coralie;
-    #   - existing Oksana-era chats — where Coralie isn't a member — fall back to
+    #   - existing Oksana-era chats - where Coralie isn't a member - fall back to
     #     a coach who IS in that thread.
     # Either way the reply lands in the student's EXISTING thread (no new thread),
     # and it survives Oksana being deactivated. Coach emails in the config must be
@@ -856,7 +856,7 @@ async def send_to_circle(
     if not candidates:
         raise HTTPException(
             400,
-            "No sending coach configured — set the sender + coaches in Settings → "
+            "No sending coach configured - set the sender + coaches in Settings → "
             "Private chat config before sending.",
         )
 
@@ -876,7 +876,7 @@ async def send_to_circle(
             502,
             f"Couldn't post into the student's private chat (room {chat_uuid}) as "
             f"any configured sender ({', '.join(candidates)}). None is a member of "
-            f"that room, or their Circle token expired — check the link and that a "
+            f"that room, or their Circle token expired - check the link and that a "
             f"coach in this thread is listed (with their Circle email) in Settings → "
             f"Private chat config.",
         )

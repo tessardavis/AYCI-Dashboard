@@ -8,7 +8,7 @@ Wraps any async scheduler job in `run_audited(db, job_id, fn)` so that:
   - Failures (exceptions raised inside `fn`) post a Slack alert via
     SLACK_WEBHOOK_URL and re-raise.
   - Successes optionally post a one-line Slack heartbeat with the result
-    summary — useful for daily jobs where you want confirmation it fired.
+    summary - useful for daily jobs where you want confirmation it fired.
 
 Indexed lookups: callers query `db.scheduler_runs.find({"job_id": X}).sort("started_at", -1)`.
 """
@@ -35,7 +35,7 @@ def _webhook_url() -> Optional[str]:
 async def _slack_post(text: str) -> None:
     url = _webhook_url()
     if not url:
-        logger.info("[scheduler-audit] SLACK_WEBHOOK_URL not set — skipping Slack ping")
+        logger.info("[scheduler-audit] SLACK_WEBHOOK_URL not set - skipping Slack ping")
         return
     try:
         async with httpx.AsyncClient(timeout=_SLACK_TIMEOUT) as c:
@@ -58,7 +58,7 @@ async def run_audited(
 
     On exception: writes status='failed' with the error, pings Slack, re-raises.
     On success: writes status='ok' with the result. Success is silent by
-    default — the dashboard surfaces the audit history. Set
+    default - the dashboard surfaces the audit history. Set
     `announce_success=True` for jobs where you want a Slack heartbeat every
     run. `announce_summary_keys` controls which keys from a dict result get
     included in the heartbeat.
@@ -119,7 +119,7 @@ async def run_audited(
         else:
             summary = str(result)[:200]
         await _slack_post(
-            f":white_check_mark: Scheduler job *{job_id}* ran in {duration_ms} ms — {summary}"
+            f":white_check_mark: Scheduler job *{job_id}* ran in {duration_ms} ms - {summary}"
         )
 
     return result

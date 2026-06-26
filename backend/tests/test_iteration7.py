@@ -1,5 +1,5 @@
 """
-Iteration 7 — Private Tier Utilisation + Student Lookup name-fallback fix.
+Iteration 7 - Private Tier Utilisation + Student Lookup name-fallback fix.
 
 Tests:
   1) GET /api/interviews/private-tier-utilisation?days=14 shape + auth + caching
@@ -49,7 +49,7 @@ def test_utilisation_requires_auth(anon_session):
         f"{BASE_URL}/api/interviews/private-tier-utilisation?days=14",
         timeout=20,
     )
-    # Must block — 401 (no creds) or 403 (no board)
+    # Must block - 401 (no creds) or 403 (no board)
     assert r.status_code in (401, 403), f"expected 401/403, got {r.status_code}"
 
 
@@ -136,7 +136,7 @@ def test_utilisation_caching_is_fast_second_call(admin_session):
     )
     elapsed = time.time() - t0
     assert r2.status_code == 200
-    assert elapsed < 3.0, f"warm call took {elapsed:.2f}s — cache not working"
+    assert elapsed < 3.0, f"warm call took {elapsed:.2f}s - cache not working"
 
 
 # ---------- student lookup name-fallback bug fix ---------------------------

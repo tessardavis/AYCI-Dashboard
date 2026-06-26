@@ -1,5 +1,5 @@
 """
-Unit tests for interview_date_reconcile._latest_tally_date — the rule that
+Unit tests for interview_date_reconcile._latest_tally_date - the rule that
 decides which Tally submission's date becomes authoritative.
 
 Critical: "most recent SUBMISSION wins" (by submitted_at), NOT "soonest/latest
@@ -29,7 +29,7 @@ def test_picks_most_recent_submission_even_if_earlier_date():
 
 
 def test_order_in_list_does_not_matter():
-    # Same data, reversed list order — still keyed off submitted_at.
+    # Same data, reversed list order - still keyed off submitted_at.
     history = [
         _sub("2026-07-09", "2026-06-08T10:00:00Z"),
         _sub("2026-09-01", "2026-05-01T10:00:00Z"),

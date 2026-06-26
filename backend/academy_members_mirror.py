@@ -35,7 +35,7 @@ Schema (db.academy_members, keyed by Monday item_id):
   }
 
 Indexes:
-  - email (sparse, unique-ish — Monday occasionally has dupes so non-unique)
+  - email (sparse, unique-ish - Monday occasionally has dupes so non-unique)
   - circle_email (sparse)
   - interview_date (for Upcoming Interviews range queries)
   - synced_at (for stale-row checks)
@@ -115,7 +115,7 @@ def _extract_row(item: dict) -> dict:
 
     def col_text_title_contains(*terms: str) -> Optional[str]:
         """Find a column whose TITLE contains all `terms` (case-insensitive).
-        Used for the 'Kajabi Interview Date' column — matched by title so we
+        Used for the 'Kajabi Interview Date' column - matched by title so we
         don't have to hardcode its id."""
         for title, c in columns_by_title.items():
             tl = (title or "").lower()
@@ -157,7 +157,7 @@ def _extract_row(item: dict) -> dict:
 
 # Fields that, once a coach has edited them in the dashboard, the
 # 15-min Monday sync must NOT overwrite. Tracked per-row in
-# `dashboard_edited_fields` — listing a field name there pins it to the
+# `dashboard_edited_fields` - listing a field name there pins it to the
 # dashboard value. When we eventually retire Monday, this will be the
 # full schema; for now coaches add fields as they edit them.
 PROTECTED_FIELDS = {
@@ -169,7 +169,7 @@ PROTECTED_FIELDS = {
     "videos_submitted",
     # Fields not yet extracted by the mirror but tracked on the row when
     # automations (Zapier) write them. Adding new ones here is the standard
-    # path for migrating a zap — the mirror won't extract or clobber these,
+    # path for migrating a zap - the mirror won't extract or clobber these,
     # and dashboard_edited_fields keeps them safe regardless.
     "intro_post",
     "milestone_1", "milestone_2", "milestone_3", "milestone_4", "milestone_5",
@@ -182,7 +182,7 @@ PROTECTED_FIELDS = {
     # Mock interview + 1:1 status fields (used by Calendly zaps 14, 18)
     "mock_interview_status",
     "mock_interview_1", "mock_interview_2", "gold_call", "platinum_call",
-    # Bonus call (round-robin) booking status — dashboard-owned. Written by the
+    # Bonus call (round-robin) booking status - dashboard-owned. Written by the
     # Calendly webhook (calendly_webhook.py) when a student books the AYCI Bonus
     # Call; replaces the old Monday "Bonus Call" column. Value: "Booked - <host>".
     "bonus_call", "bonus_call_coach", "bonus_call_date", "bonus_call_status",
@@ -192,9 +192,9 @@ PROTECTED_FIELDS = {
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
     # 15-minute call status (Calendly zaps 15/16). Monday labels: Eligible | Booked.
     "fifteen_minute_call",
-    # Boss Badge status (zap 8c — substantive success form). Monday label: Yes.
+    # Boss Badge status (zap 8c - substantive success form). Monday label: Yes.
     "boss_badge",
-    # Kajabi add-on purchases (order bump + upsells). Dashboard-owned — NOT on
+    # Kajabi add-on purchases (order bump + upsells). Dashboard-owned - NOT on
     # Monday. Set "Yes" by the Kajabi purchase-capture zap (via update-by-email),
     # keyed to the offer the student bought. The toolkit site reads these via
     # GET/POST /api/toolkit/access to gate material access.
@@ -213,7 +213,7 @@ async def full_sync(db) -> dict:
     Stale rows (members removed from the board since the last sync) are
     deleted afterward so we don't keep ghosts around.
 
-    Coach edits made via the dashboard are protected — for any field
+    Coach edits made via the dashboard are protected - for any field
     name listed in a row's `dashboard_edited_fields` array, this sync
     does NOT overwrite. Lets us migrate to dashboard-only edits one
     field at a time without losing changes mid-transition.
@@ -244,11 +244,11 @@ async def full_sync(db) -> dict:
 
     # Mirror-emit bridge: if any zap has subscribed (Catch Hook) to a column,
     # we diff that column against the stored value and emit a `column_changed`
-    # event when Monday-side data changes — so a Monday "Specific Column Value
+    # event when Monday-side data changes - so a Monday "Specific Column Value
     # Changed" trigger zap can move onto the dashboard's outbound webhook. When
     # nothing is subscribed (the usual case during transition) this is a no-op:
     # we don't even widen the per-row projection. Pinned (dashboard-owned)
-    # fields are skipped — their Monday value is ignored anyway.
+    # fields are skipped - their Monday value is ignored anyway.
     try:
         sub_cols = await webhooks_outbound.active_subscription_columns(db)
     except Exception as e:
@@ -293,7 +293,7 @@ async def full_sync(db) -> dict:
             if not items:
                 break
 
-            # Upsert this batch — but skip any fields the dashboard has
+            # Upsert this batch - but skip any fields the dashboard has
             # claimed via dashboard_edited_fields.
             for it in items:
                 row = _extract_row(it)
@@ -333,7 +333,7 @@ async def full_sync(db) -> dict:
                     total += 1
 
                     # Detect Monday-side changes on subscribed columns. Only
-                    # for rows that already existed (skip first-time inserts —
+                    # for rows that already existed (skip first-time inserts -
                     # those are new students, handled by signup/intake zaps),
                     # only non-pinned columns we actually wrote, and only when
                     # the value genuinely changed.
@@ -388,7 +388,7 @@ async def full_sync(db) -> dict:
     # Remove rows that no longer exist on Monday (member archived / deleted).
     deleted = 0
     if seen_ids and not errors:
-        # Only purge if the sync ran cleanly — never wipe rows because of a
+        # Only purge if the sync ran cleanly - never wipe rows because of a
         # half-failed sync. Exclude rows that originated in the dashboard
         # (auto: ids), which won't appear in the Monday feed but are
         # legitimate.
@@ -418,7 +418,7 @@ async def full_sync(db) -> dict:
     return summary
 
 
-# Identity / structural fields the Monday row stays authoritative for — never
+# Identity / structural fields the Monday row stays authoritative for - never
 # carried (or pinned) from an auto: row during reconciliation, even if the
 # intake write happened to mark them edited.
 _RECONCILE_SKIP_FIELDS = {
@@ -432,12 +432,12 @@ async def _reconcile_auto_rows(db) -> int:
     An `auto:` row is created by the intake endpoint when a student is written
     to by email before their Monday row exists (e.g. a new student buys a
     Kajabi add-on at checkout). Once the Monday row has synced, this carries
-    the auto: row's dashboard-owned fields (e.g. `addon_*`) onto it — pinned in
-    `dashboard_edited_fields` so the next sync won't clobber them — and deletes
+    the auto: row's dashboard-owned fields (e.g. `addon_*`) onto it - pinned in
+    `dashboard_edited_fields` so the next sync won't clobber them - and deletes
     the auto: row. Returns the number of rows merged.
 
     Leaves an auto: row in place if no Monday counterpart exists yet (genuinely
-    dashboard-only student) — it'll reconcile on a later sync."""
+    dashboard-only student) - it'll reconcile on a later sync."""
     merged = 0
     cursor = db.academy_members.find({"_id": {"$regex": "^auto:"}})
     async for auto_row in cursor:
@@ -449,7 +449,7 @@ async def _reconcile_auto_rows(db) -> int:
             "$or": [{"email": {"$in": emails}}, {"circle_email": {"$in": emails}}],
         })
         if not monday_row:
-            continue  # no Monday row yet — leave it for a later sync
+            continue  # no Monday row yet - leave it for a later sync
 
         owned = set(auto_row.get("dashboard_edited_fields") or []) - _RECONCILE_SKIP_FIELDS
         carry = {f: auto_row.get(f) for f in owned if f in auto_row}

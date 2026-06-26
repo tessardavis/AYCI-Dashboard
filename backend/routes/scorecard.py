@@ -145,8 +145,8 @@ async def scorecard_export_csv(
     """CSV export of the weekly scorecard.
 
     Query params:
-      - scope=year   (default) — every recorded week for every metric
-      - scope=recent — last `weeks` weeks (default 8) only
+      - scope=year   (default) - every recorded week for every metric
+      - scope=recent - last `weeks` weeks (default 8) only
     Each row: Category, Metric, Goal, Format, then one column per week.
     """
     if scope not in ("year", "recent"):

@@ -1,4 +1,4 @@
-"""Scheduler audit routes — view recent runs of any wrapped cron job.
+"""Scheduler audit routes - view recent runs of any wrapped cron job.
 
 Lets us answer 'did the 19:00 interview-eve job fire last night?' without
 having to dig through Render logs. Records live in db.scheduler_runs and

@@ -37,7 +37,7 @@ Q_QUESTIONS = "qGLl7O"       # What questions did you get?
 Q_RESCHEDULED = "VQgDJy"
 Q_FULLNAME = "bjJMre"
 
-CACHE_TTL_MIN = 24 * 60  # 24 hours — interview submissions trickle in, no need to refresh more often
+CACHE_TTL_MIN = 24 * 60  # 24 hours - interview submissions trickle in, no need to refresh more often
 
 
 def _tally_headers() -> dict:
@@ -149,7 +149,7 @@ async def lookup_student(db, email: str) -> dict:
 
 async def lookup_emails_bulk(db, emails: list[str]) -> dict[str, dict]:
     """
-    Bulk version — fetches submissions ONCE then groups by email.
+    Bulk version - fetches submissions ONCE then groups by email.
     Returns {email_lowercase: {type, history_count, history}}.
     """
     submissions = await get_cached_submissions(db)

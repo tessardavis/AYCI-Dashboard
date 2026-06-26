@@ -80,7 +80,7 @@ async def mute_wording(db, text: str, *, added_by: Optional[str] = None) -> dict
                 {"$set": {"status": "closed", "updated_at": now, "closed_reason": "muted_wording"}},
             )
             closed += 1
-    logger.info(f"[wati] muted wording '{norm}' by {added_by} — closed {closed} existing")
+    logger.info(f"[wati] muted wording '{norm}' by {added_by} - closed {closed} existing")
     return {"ok": True, "wording": norm, "closed_existing": closed}
 
 
@@ -96,7 +96,7 @@ async def unmute_wording(db, wording: str) -> dict:
 
 # Statuses that allow a NEW inbound reply to keep streaming into the same
 # ticket without creating a fresh one. Resolved tickets are included so a
-# follow-up auto-reopens the original conversation. `closed` is excluded —
+# follow-up auto-reopens the original conversation. `closed` is excluded -
 # closed = archived for good, so the next reply spins up a fresh ticket.
 OPEN_STATUSES = {"open", "in_progress", "waiting"}
 REOPENABLE_STATUSES = OPEN_STATUSES | {"resolved"}
@@ -130,7 +130,7 @@ def _now_iso() -> str:
 
 
 def _normalise_phone(raw: str) -> str:
-    """Strip everything but digits — Wati uses E.164 minus the leading +."""
+    """Strip everything but digits - Wati uses E.164 minus the leading +."""
     if not raw:
         return ""
     return "".join(ch for ch in str(raw) if ch.isdigit())
@@ -268,7 +268,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         pass
 
     # Only act on inbound user messages. Wati's terminology varies by version
-    # — accept all known received-from-customer variants. We deliberately
+    # - accept all known received-from-customer variants. We deliberately
     # IGNORE other events (sessionMessageSent, statusUpdate, etc.) but log them.
     inbound_events = {
         "message", "messageReceived", "messageReceived_v2",
@@ -288,7 +288,7 @@ async def handle_webhook(db, payload: dict) -> dict:
     timestamp = payload.get("timestamp") or payload.get("created")
     operator_email = (payload.get("operatorEmail") or "").strip()
 
-    # Media metadata — Wati flat payloads include these keys when type != text
+    # Media metadata - Wati flat payloads include these keys when type != text
     media_id = (
         payload.get("mediaId") or payload.get("media_id")
         or (payload.get("data") or {}).get("id") if isinstance(payload.get("data"), dict) else None
@@ -326,7 +326,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         return {"action": "duplicate", "message_id": msg_id}
 
     # Ignore outbound (operator) events that some Wati setups also fire as
-    # `message` — these have an operatorEmail and `owner=true`.
+    # `message` - these have an operatorEmail and `owner=true`.
     owner_flag = payload.get("owner")
     if owner_flag is True or (owner_flag == "true") or operator_email:
         logger.info(f"[wati] ignored outbound wa={wa_id} owner={owner_flag} operator={operator_email}")
@@ -340,7 +340,7 @@ async def handle_webhook(db, payload: dict) -> dict:
         except (TypeError, ValueError):
             pass
 
-    # WhatsApp opt-out keyword — student is unsubscribing, not asking for
+    # WhatsApp opt-out keyword - student is unsubscribing, not asking for
     # support. Wati's BSP handles the underlying opt-out flagging; we just
     # skip ticket creation/append so the support queue doesn't fill with
     # these. Case-insensitive, tolerant to trailing punctuation/whitespace.
@@ -348,10 +348,10 @@ async def handle_webhook(db, payload: dict) -> dict:
         logger.info(f"[wati] ignored STOP opt-out wa={wa_id} msg_id={msg_id}")
         return {"action": "ignored", "reason": "STOP opt-out keyword"}
 
-    body_text = text or media_caption or f"[{msg_type} message — no text body]"
+    body_text = text or media_caption or f"[{msg_type} message - no text body]"
 
     # Muted wording? (boilerplate launch-period replies a team member marked as
-    # ignore-able.) Skip entirely — no ticket, no reopen. Track a count.
+    # ignore-able.) Skip entirely - no ticket, no reopen. Track a count.
     if await is_wording_muted(db, body_text):
         await db.wati_muted_wordings.update_one(
             {"wording": _norm_wording(body_text)},
@@ -425,7 +425,7 @@ async def handle_webhook(db, payload: dict) -> dict:
     ticket = {
         "id": str(uuid.uuid4()),
         "student_name": sender_name or wa_id,
-        "student_email": "",  # Wati doesn't provide email — surface waId instead
+        "student_email": "",  # Wati doesn't provide email - surface waId instead
         "subject": short_subject,
         "description": body_text,
         "status": "open",
@@ -625,7 +625,7 @@ async def reconcile_open_tickets(db) -> dict:
             except Exception as e:
                 logger.warning(f"[wati-reconcile] self-heal failed for {wa}: {e}")
 
-            # Pace requests — Wati rate-limits (HTTP 429) on bursts, which was
+            # Pace requests - Wati rate-limits (HTTP 429) on bursts, which was
             # turning the whole sweep red. A short delay before each call plus a
             # bounded backoff-retry on 429 keeps us under the limit while still
             # finishing comfortably inside the 5-min schedule.
@@ -659,7 +659,7 @@ async def reconcile_open_tickets(db) -> dict:
                 ) or []
                 break
             if items is None:
-                continue  # errored / exhausted retries — already recorded
+                continue  # errored / exhausted retries - already recorded
 
             seen_ids = set(t.get("wati_message_ids") or [])
             # Also check note-level message ids to be safe
@@ -672,7 +672,7 @@ async def reconcile_open_tickets(db) -> dict:
 
             for m in items:
                 if m.get("owner") is True or m.get("owner") == "true":
-                    continue  # outbound (operator) — already recorded when we sent it
+                    continue  # outbound (operator) - already recorded when we sent it
                 # Only text + named media. Skip status-update sentinels (type 0/1, no text).
                 mtype = (m.get("type") or "").lower() if isinstance(m.get("type"), str) else None
                 text = (m.get("text") or "").strip()
@@ -692,7 +692,7 @@ async def reconcile_open_tickets(db) -> dict:
                     "id": str(uuid.uuid4()),
                     "author_id": "_whatsapp",
                     "author_name": f"{t.get('student_name') or wa} (WhatsApp · reconciled)",
-                    "body": text or f"[{mtype} message — fetched via reconcile]",
+                    "body": text or f"[{mtype} message - fetched via reconcile]",
                     "created_at": str(created),
                     "internal": True,
                     "wati_message_id": mid,
@@ -707,7 +707,7 @@ async def reconcile_open_tickets(db) -> dict:
                             "status": "open",
                         },
                         # `$max` guarantees we only move the inbound timestamp
-                        # forward — items can arrive in any order from Wati,
+                        # forward - items can arrive in any order from Wati,
                         # so $set would otherwise regress the value.
                         "$max": {"wati_last_inbound_at": str(created)},
                     },

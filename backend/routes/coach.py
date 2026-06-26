@@ -138,7 +138,7 @@ async def coach_activity_over_allowance_ack(
 async def coach_activity_over_allowance_acks(
     user: dict = Depends(require_board("coach_activity")),
 ):
-    """Recent over-allowance acknowledgements (newest first) — used for the
+    """Recent over-allowance acknowledgements (newest first) - used for the
     audit-trail footer on the widget."""
     rows = await db.over_allowance_acks.find(
         {}, {"_id": 0},
@@ -182,7 +182,7 @@ async def _diagnose_post_comments(post_id: int) -> dict:
         email = coach_act._comment_author_email(cm)
         canon = coach_act._coach_canonical(name, email)
         # Circle returns rich_text_body as a structured dict (tiptap doc) on
-        # voice-note + emoji-heavy comments — strip out the fallback text so
+        # voice-note + emoji-heavy comments - strip out the fallback text so
         # we don't try to slice a dict.
         body_text = (
             cm.get("body")
@@ -318,7 +318,7 @@ async def coach_activity_debug_fetch_failures(
 ):
     """List every post in a space whose /comments fetch currently fails,
     plus the underlying Circle response (status code + body preview).
-    Use this to figure out why fetch_failed_count is non-zero — is it a
+    Use this to figure out why fetch_failed_count is non-zero - is it a
     pattern (old posts, certain authors, certain post types)?"""
     import httpx
     import coach_activity as coach_act

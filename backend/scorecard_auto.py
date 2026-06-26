@@ -163,7 +163,7 @@ async def compute_hours_private_calls(db, week_start: date, week_end: date) -> d
                 host = (membs[0].get("user_name") or "").lower()
                 if not any(c_name in host for c_name in COACH_NAMES_LC):
                     continue
-                # Skip the weekly "testimonial" type — counted separately
+                # Skip the weekly "testimonial" type - counted separately
                 evt = (ev.get("name") or "").lower()
                 if "testimonial" in evt:
                     continue
@@ -355,12 +355,12 @@ async def compute_results_received(db, week_start: date, week_end: date) -> dict
 # ---------- Results From This Week's Interviews ------------------------------
 async def compute_results_from_this_weeks_interviews(db, week_start: date, week_end: date) -> dict:
     """% of students whose interview happened this week (Monday `Interview Date`)
-    who have ALSO submitted a Tally result form (with a result answer) — at any
+    who have ALSO submitted a Tally result form (with a result answer) - at any
     time, not just this week. Complements `compute_results_received` (which is
     submission-date based)."""
     import tally_lookup
 
-    # Step 1 — get the list of interviewee emails for this week from Monday.
+    # Step 1 - get the list of interviewee emails for this week from Monday.
     start_str = week_start.isoformat()
     end_str = week_end.isoformat()
     q = """
@@ -417,7 +417,7 @@ async def compute_results_from_this_weeks_interviews(db, week_start: date, week_
             "denominator": 0,
         }
 
-    # Step 2 — pull cached Tally submissions and find which interviewee emails
+    # Step 2 - pull cached Tally submissions and find which interviewee emails
     # have submitted a result answer (at any time).
     submissions = await tally_lookup.get_cached_submissions(db)
     submitted_emails: set[str] = set()
@@ -443,7 +443,7 @@ async def compute_results_from_this_weeks_interviews(db, week_start: date, week_
 
 
 # ---------- Active Academy Members --------------------------------------------
-# Circle tags applied via gamification — coach maintains these manually on
+# Circle tags applied via gamification - coach maintains these manually on
 # each member. Match-on-presence (any of these tags = active for that
 # milestone). Uses the active cohort tag (set per launch) to find members.
 
@@ -527,7 +527,7 @@ async def compute_active_members(db, week_start: date, week_end: date) -> dict:
     for m in members:
         tag_objects = m.get("member_tags") or m.get("tags") or []
         tags = [(t.get("name") or "").lower() for t in tag_objects]
-        # Match on substring — handles "🏵️ Apr '26" and any other emoji prefix
+        # Match on substring - handles "🏵️ Apr '26" and any other emoji prefix
         if any(cohort_tag_lc in t for t in tags):
             cohort_members.append({"name": m.get("name"), "tags": tags})
 

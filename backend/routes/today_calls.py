@@ -1,4 +1,4 @@
-"""Today's Calls — REST endpoints."""
+"""Today's Calls - REST endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 

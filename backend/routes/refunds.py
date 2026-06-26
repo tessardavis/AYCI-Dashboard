@@ -1,5 +1,5 @@
 """
-Refunds board — Coralie's space to track refunds, reasons and outcomes.
+Refunds board - Coralie's space to track refunds, reasons and outcomes.
 
 Source of truth is Stripe: a refund issued in Stripe flows in via a Zapier
 "Stripe → New Refund" trigger that POSTs to `/api/refunds/ingest` with the
@@ -219,7 +219,7 @@ async def backfill_from_stripe(
 ):
     """Pull historical refunds straight from Stripe and upsert them. Expands
     the charge (and its customer) so we get the email for student matching.
-    Idempotent — dedups on stripe_refund_id, so safe to re-run. `days`
+    Idempotent - dedups on stripe_refund_id, so safe to re-run. `days`
     optionally limits to the last N days; omitted = all time."""
     import httpx
     from connectors import _stripe_list_all, TIMEOUT
@@ -243,7 +243,7 @@ async def backfill_from_stripe(
 
     created = updated = skipped = matched = 0
     for r in refunds:
-        # Only real (succeeded) refunds — skip pending/failed/canceled.
+        # Only real (succeeded) refunds - skip pending/failed/canceled.
         if r.get("status") and r.get("status") != "succeeded":
             skipped += 1
             continue

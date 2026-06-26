@@ -1,4 +1,4 @@
-"""Iteration 3 tests — cohort summary (Kit tags + intros) + drive summary."""
+"""Iteration 3 tests - cohort summary (Kit tags + intros) + drive summary."""
 import os
 import pytest
 import requests
@@ -48,7 +48,7 @@ def test_cohort_summary_april26(client):
 
 # --- Drive summary ---------------------------------------------------------
 def test_drive_summary_vip_student(client):
-    """Anna Walsh is VIP tier — should find a doc (even if we can't read it)."""
+    """Anna Walsh is VIP tier - should find a doc (even if we can't read it)."""
     r = client.get(f"{BASE_URL}/api/students/drive-summary",
                    params={"email": "anna.swalsh@btinternet.com",
                            "name": "Anna Walsh"},

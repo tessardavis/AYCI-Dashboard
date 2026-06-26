@@ -9,7 +9,7 @@ Two correctness requirements pinned forever:
 
 2. **Fresh-student bypass**: when a thread is first observed AND the
    inline last_message is a *student* message younger than 10 minutes,
-   the bot must NOT swallow it — it should minimally-seed state and fall
+   the bot must NOT swallow it - it should minimally-seed state and fall
    through to the normal reply path. This fixes the "I sent a test DM
    and got nothing" UX.
 
@@ -232,7 +232,7 @@ async def _scenario_escalated_thread_forwards_followup_to_ticket():
         upsert=True,
     )
 
-    follow_up_body = "Just to add — it's actually about the September interview"
+    follow_up_body = "Just to add - it's actually about the September interview"
     follow_up_id = 5002
     fetched = [
         _msg(mid=5000, sender_id=STUDENT_ID, body="initial",
@@ -322,7 +322,7 @@ async def _scenario_eve_score_captured_before_lookback_guard():
     uuid = "first-sight-test-eve-race"
     now = datetime.now(timezone.utc)
     eve_dm_body = "Hi! On a scale of 1 to 10, how supported do you feel?"
-    coach_manual = "Just thinking of you — let me know how it goes!"
+    coach_manual = "Just thinking of you - let me know how it goes!"
 
     # Seed an eve-DM-style thread state mirroring what interview_eve_dm
     # writes on send: state=active, sent_bodies=[eve body], reference to
@@ -371,7 +371,7 @@ async def _scenario_eve_score_captured_before_lookback_guard():
         ))
         # Fetched window contains: eve-DM (admin, in sent_bodies),
         # student "9" (student reply), coach manual follow-up (admin, NOT
-        # in sent_bodies — pre-fix this would trigger human_takeover and
+        # in sent_bodies - pre-fix this would trigger human_takeover and
         # lose the score).
         messages = [
             _msg(mid=4001, sender_id=ADMIN_ID, body=eve_dm_body,
@@ -401,7 +401,7 @@ async def _scenario_eve_score_captured_before_lookback_guard():
             )
         assert "interview_eve_score_recorded" in res, (
             f"score should be captured even with a coach-manual reply "
-            f"present — got {res}"
+            f"present - got {res}"
         )
         assert res["score"] == 9
 
@@ -423,7 +423,7 @@ async def _scenario_trust_takeover_trigger():
     body+id to `sent_bodies`/`sent_message_ids` and re-arm the thread."""
     import circle_dm_poll as _p
     uuid = "first-sight-test-trust"
-    body = "Hi there — replying from a different env's bot run"
+    body = "Hi there - replying from a different env's bot run"
     await db.circle_dm_threads.update_one(
         {"id": f"thread:{uuid}"},
         {"$set": {
@@ -457,7 +457,7 @@ async def _scenario_trust_takeover_trigger():
     assert 99999 in (state.get("sent_message_ids") or [])
     assert state.get("trust_takeover_at")
 
-    # Idempotency / guard: calling again should refuse — thread is no
+    # Idempotency / guard: calling again should refuse - thread is no
     # longer in human_takeover.
     res2 = await _p.trust_takeover_trigger(db, uuid)
     assert res2["ok"] is False

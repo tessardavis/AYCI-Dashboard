@@ -1,10 +1,10 @@
 """
-Support Tickets — Customer Service ticket system.
+Support Tickets - Customer Service ticket system.
 
 Sources:
 - Manual entry from the dashboard
 - Tally form ingestion (form id `D4BW1N` "AYCI Support Desk")
-- Inbox auto-pull (Phase 2 — Gmail/Outlook)
+- Inbox auto-pull (Phase 2 - Gmail/Outlook)
 
 Behaviour:
 - Per-priority SLA (urgent=4h, high=24h, medium=48h, low=120h). Tickets older
@@ -14,8 +14,8 @@ Behaviour:
 - Notes thread per ticket (team-internal by default).
 
 Mongo collections:
-- `tickets`           — the ticket records
-- `ticket_sync_state` — last Tally sync watermark (`{_id: "tally", last_submitted_at}`)
+- `tickets`           - the ticket records
+- `ticket_sync_state` - last Tally sync watermark (`{_id: "tally", last_submitted_at}`)
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ async def _post_slack_urgent(ticket: dict) -> bool:
     """Post an Urgent-ticket alert to Slack. Returns True on success."""
     url = _slack_webhook_url()
     if not url:
-        logger.info("[tickets] Skipping Slack urgent — no SLACK_WEBHOOK_URL set")
+        logger.info("[tickets] Skipping Slack urgent - no SLACK_WEBHOOK_URL set")
         return False
 
     student = ticket.get("student_name") or ticket.get("student_email") or "Unknown"
@@ -121,7 +121,7 @@ async def _post_slack_urgent(ticket: dict) -> bool:
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"🚨 Urgent support ticket — {student}", "emoji": True},
+            "text": {"type": "plain_text", "text": f"🚨 Urgent support ticket - {student}", "emoji": True},
         },
         {
             "type": "section",
@@ -137,7 +137,7 @@ async def _post_slack_urgent(ticket: dict) -> bool:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"```{desc}```"}})
 
     payload = {
-        "text": f"🚨 Urgent support ticket — {student}: {subject}",
+        "text": f"🚨 Urgent support ticket - {student}: {subject}",
         "blocks": blocks,
     }
     try:
@@ -199,7 +199,7 @@ async def _post_slack_new_tally_ticket(ticket: dict, circle_profile_url: Optiona
     ticket_link = f"{base_url}/tickets" if base_url else None
 
     fields = [
-        {"type": "mrkdwn", "text": f"*Email*\n{email or '—'}"},
+        {"type": "mrkdwn", "text": f"*Email*\n{email or '-'}"},
         {"type": "mrkdwn", "text": f"*Category*\n{category}"},
     ]
     if circle_profile_url:
@@ -210,7 +210,7 @@ async def _post_slack_new_tally_ticket(ticket: dict, circle_profile_url: Optiona
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"🎫 New support ticket — {student}", "emoji": True},
+            "text": {"type": "plain_text", "text": f"🎫 New support ticket - {student}", "emoji": True},
         },
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*{subject}*"}},
         {"type": "section", "fields": fields},
@@ -219,7 +219,7 @@ async def _post_slack_new_tally_ticket(ticket: dict, circle_profile_url: Optiona
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"```{desc}```"}})
 
     payload = {
-        "text": f"🎫 New support ticket — {student}: {subject}",
+        "text": f"🎫 New support ticket - {student}: {subject}",
         "blocks": blocks,
     }
     try:
@@ -258,14 +258,14 @@ async def maybe_send_assignment_dm(
     if not member or not (member.get("email") or "").strip():
         logger.info(f"[ticket-dm] no email for team member {assignee_team_id}")
         return
-    # If the assignee is the user who triggered the change, skip — they
+    # If the assignee is the user who triggered the change, skip - they
     # already know they assigned it to themselves.
     if actor_user_id:
         actor = await db.users.find_one(
             {"id": actor_user_id}, {"_id": 0, "team_member_id": 1}
         )
         if actor and actor.get("team_member_id") == assignee_team_id:
-            logger.info(f"[ticket-dm] self-assign by {actor_user_id} — skipping DM")
+            logger.info(f"[ticket-dm] self-assign by {actor_user_id} - skipping DM")
             return
 
     import slack_dm
@@ -283,7 +283,7 @@ async def maybe_send_assignment_dm(
     student = ticket.get("student_name") or "Unknown student"
     subject = (ticket.get("subject") or "(no subject)")[:120]
     text = (
-        f":ticket: *Ticket assigned to you* — {source_label} · {priority_label}\n"
+        f":ticket: *Ticket assigned to you* - {source_label} · {priority_label}\n"
         f"*{subject}*\n"
         f"From: {student}\n"
         f"{link_line}"
@@ -416,7 +416,7 @@ async def _fetch_tally_attachments(db, file_refs: list[dict]) -> list[dict]:
 
 async def sync_tally(db) -> dict:
     """Pull new submissions from the AYCI Support Desk Tally form and create
-    tickets for any not yet ingested. Idempotent — uses `source_ref` (Tally
+    tickets for any not yet ingested. Idempotent - uses `source_ref` (Tally
     submission id) as the dedup key. Also consults `ticket_source_dedup` so
     refs from previously-deleted tickets don't re-import."""
     submissions = await _tally_fetch_submissions(TALLY_SUPPORT_FORM_ID)

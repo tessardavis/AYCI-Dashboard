@@ -1,5 +1,5 @@
 """
-Google Calendar client for the "AYCI Interviews" calendar — keeps exactly one
+Google Calendar client for the "AYCI Interviews" calendar - keeps exactly one
 interview event per student at their authoritative (Tally-reconciled) date.
 See ~/.claude/plans/fluffy-discovering-cake.md (Part 2).
 
@@ -10,7 +10,7 @@ Mirrors google_drive.py's service-account loader. INERT until:
     events".
 Until then is_configured() is False and ensure_interview_event() is a no-op.
 
-Events are matched/deduped by `location == "ID: <monday_item_id>"` — verified
+Events are matched/deduped by `location == "ID: <monday_item_id>"` - verified
 live: Zapier Zap 20 writes the student's Monday item id (= mirror row `_id`)
 into the event location. Events are all-day, titled "<name> - <type> interview".
 """
@@ -65,13 +65,13 @@ async def selftest() -> dict:
     'Make changes to events'."""
     if not is_configured():
         return {"ok": False, "can_write": False,
-                "detail": "not configured — GOOGLE_INTERVIEWS_CALENDAR_ID or credentials missing"}
+                "detail": "not configured - GOOGLE_INTERVIEWS_CALENDAR_ID or credentials missing"}
     cal_id = _calendar_id()
 
     def _sync() -> str:
         svc = _calendar_service()
         ev = svc.events().insert(calendarId=cal_id, body={
-            "summary": "[dashboard calendar self-test — safe to ignore]",
+            "summary": "[dashboard calendar self-test - safe to ignore]",
             "start": {"date": "2099-01-01"},
             "end": {"date": "2099-01-02"},
         }).execute()

@@ -1,5 +1,5 @@
 """
-Onboarding Gap — students who paid but haven't been added to the cohort's
+Onboarding Gap - students who paid but haven't been added to the cohort's
 Circle spaces yet.
 
 For a given launch (e.g. APR-26):
@@ -156,7 +156,7 @@ async def _fetch_new_signup_customers(
         elif "academy" in d:
             tier_hint = "Academy"
         else:
-            tier_hint = "—"
+            tier_hint = "-"
         by_cust[cust] = {
             "customer_id": cust,
             "email": email,
@@ -168,7 +168,7 @@ async def _fetch_new_signup_customers(
             "amount_gbp": round(amount / 100.0, 2),
             "description": desc,
         }
-    # Drop entries with no email — we can't cross-ref them to Monday anyway,
+    # Drop entries with no email - we can't cross-ref them to Monday anyway,
     # but include them in the "needs investigation" bucket.
     return list(by_cust.values())
 

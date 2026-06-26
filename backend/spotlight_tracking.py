@@ -2,10 +2,10 @@
 Spotlight tracking: record who was actually spotlighted in each session.
 
 Statuses (per Tessa 03-May):
-  - spotlighted            — did a full spotlight coaching on them
-  - didnt_attend           — signed up but was a no-show
-  - skipped                — explicitly passed over (ran out of time)
-  - not_submitted_correctly — their tally form had issues (wrong cycle, duplicate, etc.)
+  - spotlighted            - did a full spotlight coaching on them
+  - didnt_attend           - signed up but was a no-show
+  - skipped                - explicitly passed over (ran out of time)
+  - not_submitted_correctly - their tally form had issues (wrong cycle, duplicate, etc.)
 
 Data model (`spotlight_records` collection, no `_id` in responses):
 {

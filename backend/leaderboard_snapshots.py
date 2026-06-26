@@ -1,5 +1,5 @@
 """
-Daily leaderboard snapshot — so we can compute week-over-week deltas and
+Daily leaderboard snapshot - so we can compute week-over-week deltas and
 surface "biggest climbers" in each cohort.
 
 Snapshots live in `leaderboard_snapshots`:
@@ -34,7 +34,7 @@ def _today_uk_str() -> str:
 
 
 async def snapshot_cohort(db, cohort: str = "Apr '26") -> int:
-    """Write today's snapshot rows for all members of `cohort`. Idempotent —
+    """Write today's snapshot rows for all members of `cohort`. Idempotent -
     re-running in the same day updates the existing rows rather than
     duplicating them. Returns number of rows written."""
     rows = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
@@ -89,7 +89,7 @@ async def get_week_over_week(
     return an empty dict for that member (delta unknown, not 0).
 
     Pass `current_rows` (output of `get_top_leaderboard`) to skip the extra
-    fetch when the caller already has it — saves a ~1.7MB Mongo read."""
+    fetch when the caller already has it - saves a ~1.7MB Mongo read."""
     today = datetime.now(UK_TZ).date()
     cutoff_date = (today - timedelta(days=days)).isoformat()
     rows = db.leaderboard_snapshots.find(

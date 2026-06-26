@@ -303,7 +303,7 @@ async def launch_phase_breakdown(
             "name": launch.get("name"), "phases": [],
         },
         "previous": [],
-        "message": "First-time scan running in the background — refresh in 2-3 minutes.",
+        "message": "First-time scan running in the background - refresh in 2-3 minutes.",
     }
 
 

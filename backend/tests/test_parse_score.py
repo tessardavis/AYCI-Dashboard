@@ -25,7 +25,7 @@ def test_parse_score_ascii_digits():
 
 
 def test_parse_score_unicode_digits():
-    """Superscripts, keycaps, full-width — all should normalise to ASCII."""
+    """Superscripts, keycaps, full-width - all should normalise to ASCII."""
     assert parse_score("⁹") == 9          # U+2079 superscript nine
     assert parse_score("⁸") == 8          # U+2078 superscript eight
     assert parse_score("¹⁰") == 10        # superscript ten

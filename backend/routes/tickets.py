@@ -1,4 +1,4 @@
-"""Support Tickets — REST endpoints + Tally webhook + sync."""
+"""Support Tickets - REST endpoints + Tally webhook + sync."""
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -56,7 +56,7 @@ async def list_tickets(
         ]
 
     # Project away the heavy `notes` array (full reply/note history per
-    # ticket — kB to 10s of kB per active ticket, not rendered in the list
+    # ticket - kB to 10s of kB per active ticket, not rendered in the list
     # view) and the full `attachments` array contents. The Kanban card only
     # needs the attachment count, which we re-attach below as a scalar.
     # Detail endpoint (GET /tickets/{id}) is unchanged and still returns
@@ -67,7 +67,7 @@ async def list_tickets(
         "attachments": 0,
     }
 
-    # Parallelise the two Mongo reads — tickets list + this user's view
+    # Parallelise the two Mongo reads - tickets list + this user's view
     # timestamps. Previously sequential, ~doubled the cross-region Atlas
     # round-trip cost on every page open.
     rows, views = await asyncio.gather(
@@ -153,7 +153,7 @@ async def get_ticket(ticket_id: str, user: dict = Depends(require_board("tickets
     )
     # Clear the Circle-activity unread badge: opening the ticket counts as
     # the team having seen the forwarded student replies. Global (not
-    # per-user) — once any coach opens it, the badge clears for everyone,
+    # per-user) - once any coach opens it, the badge clears for everyone,
     # which matches how the team works (the first responder owns it).
     if (t.get("unread_circle_count") or 0) > 0:
         await db.tickets.update_one(
@@ -264,7 +264,7 @@ async def update_ticket(
     fresh = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
 
     # Send Slack DM if assignee changed (and is now someone). Skip if the user
-    # is assigning to themselves — they already know.
+    # is assigning to themselves - they already know.
     if (
         data.assignee_id is not None
         and update.get("assignee_id")
@@ -288,7 +288,7 @@ async def delete_note(
     note_id: str,
     user: dict = Depends(require_board("tickets")),
 ):
-    """Delete a single note from a ticket — handy for cleaning up duplicate
+    """Delete a single note from a ticket - handy for cleaning up duplicate
     inbound replies (e.g. when reconciliation races with webhook delivery)."""
     t = await db.tickets.find_one({"id": ticket_id}, {"_id": 0, "notes": 1})
     if not t:
@@ -422,7 +422,7 @@ async def tally_sync(user: dict = Depends(require_board("tickets"))):
 async def tally_webhook(request: Request, background: BackgroundTasks):
     """Public webhook endpoint for Tally to POST new submissions to.
     Uses Tally's webhook payload shape: `{eventType, data: {fields: [...]}}`.
-    No auth — Tally signs with its own secret if configured (out of scope for
+    No auth - Tally signs with its own secret if configured (out of scope for
     Phase 1; rely on the form ID match instead)."""
     try:
         payload = await request.json()
@@ -432,7 +432,7 @@ async def tally_webhook(request: Request, background: BackgroundTasks):
     data = payload.get("data") or {}
     form_id = data.get("formId") or payload.get("formId")
     if form_id != tickets_mod.TALLY_SUPPORT_FORM_ID:
-        # Silently ignore — webhook may be configured for a different form.
+        # Silently ignore - webhook may be configured for a different form.
         return {"ignored": True, "form_id": form_id}
 
     # Tally webhook shape: data.fields = [{key/label/value/...}]
@@ -458,7 +458,7 @@ async def tally_webhook(request: Request, background: BackgroundTasks):
 
     ticket = tickets_mod._ticket_from_tally_submission(sub)
     if not ticket:
-        raise HTTPException(400, "Could not build ticket — missing email")
+        raise HTTPException(400, "Could not build ticket - missing email")
     pending_files = ticket.pop("_pending_tally_files", [])
     if pending_files:
         ticket["attachments"] = await tickets_mod._fetch_tally_attachments(db, pending_files)

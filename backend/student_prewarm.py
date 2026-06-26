@@ -2,7 +2,7 @@
 
 Runs at 05:30 UK daily. Coaches open private-tier students 10x more often
 than Academy ones (private coaching sessions, weekly 1:1s, group sessions,
-prep calls, etc.) — warming the cache means the first open of the day is
+prep calls, etc.) - warming the cache means the first open of the day is
 instant instead of a 3-8s parallel fan-out across Monday/Circle/Stripe/
 ConvertKit/Calendly/Tally.
 

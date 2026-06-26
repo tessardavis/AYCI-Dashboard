@@ -3,7 +3,7 @@ External-source connectors for the AYCI scorecard.
 
 Each connector is: async def pull(params: dict, start_iso: str, end_iso: str) -> float
 
-`start_iso` / `end_iso` are ISO 8601 strings in UTC bounding a Monday 00:00 – Sunday 23:59 week.
+`start_iso` / `end_iso` are ISO 8601 strings in UTC bounding a Monday 00:00 - Sunday 23:59 week.
 """
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ async def convertkit_list_tags() -> list[dict]:
 
 
 async def convertkit_add_tag_to_subscriber(email: str, tag_id: int) -> dict:
-    """Add a Kit (ConvertKit) tag to a subscriber by email. Idempotent — Kit
+    """Add a Kit (ConvertKit) tag to a subscriber by email. Idempotent - Kit
     no-ops if the subscriber already carries the tag. Returns the Kit
     subscription payload. Raises on a non-2xx response so callers can log it."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
@@ -134,7 +134,7 @@ async def _resolve_ayci_cohort_tags(suffix: str, carry_over: int = 0) -> list[in
     "Waitlist - All", "Waitlist - Website"). Case-insensitive, ignores
     whitespace differences.
 
-    `carry_over` is the number of previous cohorts to also include — useful
+    `carry_over` is the number of previous cohorts to also include - useful
     for waitlist signup conversion metrics where late converters from the
     previous cohort still count. `0` = newest cohort only.
 
@@ -195,7 +195,7 @@ async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_is
       • If a subscriber appears on multiple tags during the window, we keep
         their *earliest* timestamp (matching the AYCI Waitlist CRM spreadsheet).
       • Mass re-tag bursts (>= BURST_THRESHOLD subscriptions sharing the same
-        minute timestamp on a single tag) are stripped — those are
+        minute timestamp on a single tag) are stripped - those are
         launch-automation imports or sheet/CSV bulk-tags rather than organic
         waitlist joins.
     """
@@ -203,7 +203,7 @@ async def convertkit_weekly_tag_subscribers(params: dict, start_iso: str, end_is
 
     # Resolve tag list (singular `tag_id`, plural `tag_ids`, `tag_name`,
     # or `tag_pattern` which auto-detects the newest "[AYCI <MONTH-YY>]
-    # <suffix>" cohort tag — see _resolve_ayci_cohort_tags below).
+    # <suffix>" cohort tag - see _resolve_ayci_cohort_tags below).
     tag_ids: list[int] = []
     if params.get("tag_ids"):
         tag_ids = [int(t) for t in params["tag_ids"] if t]
@@ -287,7 +287,7 @@ async def convertkit_weekly_broadcast_ctr(params: dict, start_iso: str, end_iso:
             sent_at = b.get("published_at") or b.get("sent_at") or b.get("send_at")
             if not sent_at:
                 continue
-            # normalise to ISO — ConvertKit returns e.g. "2024-01-15T10:00:00.000Z"
+            # normalise to ISO - ConvertKit returns e.g. "2024-01-15T10:00:00.000Z"
             if sent_at < start_iso or sent_at > end_iso:
                 continue
             bid = b["id"]
@@ -561,7 +561,7 @@ async def _stripe_classify_charges(start_iso: str, end_iso: str) -> dict:
             all_pence += amount_net
             cust = ch.get("customer")
             if not cust:
-                # one-off charge without a customer — treat as signup
+                # one-off charge without a customer - treat as signup
                 signup_pence += amount_net
                 continue
             if cust not in checked_customer_prior:
@@ -794,7 +794,7 @@ async def tally_form_submissions_this_week(params: dict, start_iso: str, end_iso
 async def tally_interviews_by_answer_date(params: dict, start_iso: str, end_iso: str) -> float:
     """
     Count Tally submissions whose ANSWER to a specific date question falls in
-    the target week — regardless of when the submission was actually made.
+    the target week - regardless of when the submission was actually made.
 
     params: {
       "form_id": "nGyGj2",
@@ -1115,7 +1115,7 @@ async def calendly_events_hours_this_week(params: dict, start_iso: str, end_iso:
     return round(total_seconds / 3600.0, 2)
 
 
-# ------------------------------------------------------------------ Circle — posts in a space
+# ------------------------------------------------------------------ Circle - posts in a space
 async def circle_list_spaces_with_posts() -> list[dict]:
     # Re-use list_spaces
     return await circle_list_spaces()

@@ -1,7 +1,7 @@
 """
 Pydantic data models for the AYCI Team Dashboard.
 
-Pure data classes — no DB calls, no FastAPI dependencies. Imported by both
+Pure data classes - no DB calls, no FastAPI dependencies. Imported by both
 the main server module and any route modules under /app/backend/routes.
 """
 from __future__ import annotations

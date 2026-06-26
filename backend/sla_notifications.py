@@ -31,7 +31,7 @@ def _webhook_url() -> Optional[str]:
 async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
     """Decide whether the digest should run today.
 
-    The digest fires only while a cohort is actually running — i.e. today is
+    The digest fires only while a cohort is actually running - i.e. today is
     inside at least one coach space's [start, end] window. A space counts as
     "in window" when today is on/after its start AND on/before its end:
       - missing start → treat as already started (legacy / open-ended start)
@@ -47,7 +47,7 @@ async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
         import settings_store
         cfg = await settings_store.get_coach_spaces(db)
     except Exception:
-        return True  # fail open — never silently kill the digest on a settings read error
+        return True  # fail open - never silently kill the digest on a settings read error
 
     def _parse(v):
         try:
@@ -71,7 +71,7 @@ async def _is_cohort_active(db, today: Optional[date] = None) -> bool:
         if started and not_ended:
             return True  # at least one space is currently in its cohort window
     if not any_configured:
-        return True  # nothing configured anywhere — legacy fail-open
+        return True  # nothing configured anywhere - legacy fail-open
     return False  # dates configured, but today is outside every window
 
 
@@ -93,13 +93,13 @@ async def build_sla_digest_payload(db) -> dict:
 
     if not sources:
         return {
-            "text": f"AYCI Coach SLA Digest — {today}: All clear, no posts >48 h unanswered.",
+            "text": f"AYCI Coach SLA Digest - {today}: All clear, no posts >48 h unanswered.",
             "blocks": [
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*AYCI Coach SLA Digest — {today}*\n:white_check_mark: All clear — no posts >48 h unanswered.",
+                        "text": f"*AYCI Coach SLA Digest - {today}*\n:white_check_mark: All clear - no posts >48 h unanswered.",
                     },
                 }
             ],
@@ -111,7 +111,7 @@ async def build_sla_digest_payload(db) -> dict:
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"AYCI Coach SLA Digest — {today}",
+                "text": f"AYCI Coach SLA Digest - {today}",
             },
         },
         {
@@ -133,17 +133,17 @@ async def build_sla_digest_payload(db) -> dict:
             url = it.get("url") or "#"
             author = it.get("author") or "Unknown"
             name = (it.get("name") or "(untitled)")[:80]
-            lines.append(f"• <{url}|{name}> — {author} · {hrs} h")
+            lines.append(f"• <{url}|{name}> - {author} · {hrs} h")
         blocks.append(
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*{label}* — {len(items)} flagged\n" + "\n".join(lines),
+                    "text": f"*{label}* - {len(items)} flagged\n" + "\n".join(lines),
                 },
             }
         )
-    return {"text": f"AYCI Coach SLA Digest — {total} unanswered posts", "blocks": blocks}
+    return {"text": f"AYCI Coach SLA Digest - {total} unanswered posts", "blocks": blocks}
 
 
 async def send_sla_digest(db, *, force: bool = False) -> dict:
@@ -156,15 +156,15 @@ async def send_sla_digest(db, *, force: bool = False) -> dict:
     """
     url = _webhook_url()
     if not url:
-        logger.warning("[slack] SLACK_WEBHOOK_URL not set — skipping daily digest.")
+        logger.warning("[slack] SLACK_WEBHOOK_URL not set - skipping daily digest.")
         return {"sent": False, "reason": "SLACK_WEBHOOK_URL not configured"}
 
-    # Outside the cohort window? Don't fire — was producing daily "All clear"
+    # Outside the cohort window? Don't fire - was producing daily "All clear"
     # noise in #coaching-spotlight between cohorts. Admin sets / clears the
     # end date in Settings → Coach Spaces. `force=True` (admin test) still
     # sends so we can verify Slack wiring out-of-cohort.
     if not force and not await _is_cohort_active(db):
-        logger.info("[slack] SLA digest skipped — outside cohort window")
+        logger.info("[slack] SLA digest skipped - outside cohort window")
         return {"sent": False, "reason": "outside_cohort_window"}
 
     today_key = f"sla_digest:{datetime.now(timezone.utc).date().isoformat()}"
@@ -176,7 +176,7 @@ async def send_sla_digest(db, *, force: bool = False) -> dict:
             upsert=True,
         )
         if claim.upserted_id is None:
-            logger.info(f"[slack] SLA digest already sent today ({today_key}) — skipping")
+            logger.info(f"[slack] SLA digest already sent today ({today_key}) - skipping")
             return {"sent": False, "reason": "already_sent_today", "claim_key": today_key}
 
     try:

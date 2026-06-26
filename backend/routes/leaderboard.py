@@ -32,7 +32,7 @@ async def cohort_leaderboard(
             return cached
 
     # Live compute. Build the full ranked list ONCE and pass it into the
-    # helpers — each call to get_top_leaderboard does a ~1.7MB Mongo fetch.
+    # helpers - each call to get_top_leaderboard does a ~1.7MB Mongo fetch.
     full = await leaderboard.get_top_leaderboard(db, cohort_tag=cohort, limit=500)
     deltas = await leaderboard_snapshots.get_week_over_week(
         db, cohort, days=7, current_rows=full,

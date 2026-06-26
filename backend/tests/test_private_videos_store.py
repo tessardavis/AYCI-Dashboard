@@ -120,7 +120,7 @@ def test_tally_webhook_ignores_no_email():
 
 def test_patch_assignee(admin):
     listed = admin.get(f"{BASE_URL}/api/private-videos").json()
-    assert listed["items"], "no items in DB to patch — run migration first"
+    assert listed["items"], "no items in DB to patch - run migration first"
     item = listed["items"][0]
     users = admin.get(f"{BASE_URL}/api/private-videos/users").json()["users"]
     becky = next(u for u in users if u["name"] == "Becky Platt")
@@ -175,8 +175,8 @@ def test_send_to_circle_400_no_reply_link(admin):
 
 def test_zapier_webhook_setting_validation(admin):
     """Validate that the Zapier webhook URL endpoint enforces the right format.
-    Doesn't overwrite an existing configured URL — just tests the validator."""
-    # Reject non-Zapier URL — returns 200 with ok:false (so the UI can toast)
+    Doesn't overwrite an existing configured URL - just tests the validator."""
+    # Reject non-Zapier URL - returns 200 with ok:false (so the UI can toast)
     r = admin.post(
         f"{BASE_URL}/api/private-videos/zapier-webhook",
         json={"url": "https://evil.test/post"},

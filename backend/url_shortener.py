@@ -2,7 +2,7 @@
 In-house URL shortener for outbound coach messages.
 
 Tally video URLs land at storage.tally.so with multi-hundred-character access
-tokens — pasting those into a Circle DM looks awful. We mint a short code,
+tokens - pasting those into a Circle DM looks awful. We mint a short code,
 cache it in Mongo, and serve a 302 redirect from /v/{code} on the backend.
 
 Was previously backed by is.gd; that silently failed often enough that the
@@ -12,7 +12,7 @@ external dependency.
 Schema (db.url_shortlinks):
   {
     code: "abc123",          # short code (8 chars, base62-ish)
-    long_url: "https://...", # the target — unique index on this
+    long_url: "https://...", # the target - unique index on this
     created_at: ISODate,
   }
 
@@ -40,7 +40,7 @@ SHORTLINK_ORIGIN = os.environ.get(
 ).rstrip("/")
 
 _ALPHABET = string.ascii_letters + string.digits  # 62 chars
-_CODE_LEN = 8  # 62^8 ≈ 2e14 — plenty
+_CODE_LEN = 8  # 62^8 ≈ 2e14 - plenty
 
 
 def _new_code() -> str:
@@ -50,7 +50,7 @@ def _new_code() -> str:
 async def shorten(db, long_url: str) -> str:
     """Return a short URL for `long_url`, or the original URL on failure.
 
-    Idempotent per long URL — repeated calls return the same short URL.
+    Idempotent per long URL - repeated calls return the same short URL.
     Cached in db.url_shortlinks (unique index on long_url)."""
     if not long_url or not isinstance(long_url, str):
         return long_url or ""
@@ -79,7 +79,7 @@ async def shorten(db, long_url: str) -> str:
             })
             return f"{SHORTLINK_ORIGIN}/v/{code}"
         except Exception as e:
-            # Likely duplicate key on `code` — retry. If on `long_url`,
+            # Likely duplicate key on `code` - retry. If on `long_url`,
             # another writer beat us; re-read the cached value.
             if "duplicate key" in str(e).lower():
                 cached = await db.url_shortlinks.find_one(

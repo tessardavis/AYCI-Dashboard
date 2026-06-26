@@ -58,7 +58,7 @@ async def _stale_while_revalidate(
             ca = ca.replace(tzinfo=timezone.utc)
         is_fresh = ca > fresh_cutoff
         # Day-sensitive payloads (anything that labels rows "Today" / "Tomorrow")
-        # must be discarded outright when the UTC date rolls over — otherwise
+        # must be discarded outright when the UTC date rolls over - otherwise
         # yesterday's "Today" sticks around until the TTL expires.
         if is_fresh and day_sensitive and ca.date() != now.date():
             is_fresh = False
@@ -84,12 +84,12 @@ async def _stale_while_revalidate(
         return await _refresh()
 
     if cached and not is_fresh:
-        # Stale — return cached, kick off a background refresh (deduped by key)
+        # Stale - return cached, kick off a background refresh (deduped by key)
         if key not in _BG_TASKS:
             _BG_TASKS[key] = asyncio.create_task(_refresh())
         return cached["payload"]
 
-    # No cache — must compute synchronously
+    # No cache - must compute synchronously
     return await _refresh()
 
 
@@ -214,7 +214,7 @@ async def fetch_registrations(code: str, start_iso: str, end_iso: str) -> dict:
                 continue
             day = ca.date().isoformat()
             if is_all:
-                # Authoritative "All" tag — used for total + per-day total
+                # Authoritative "All" tag - used for total + per-day total
                 all_tag_total += 1
                 all_tag_emails.add(sub["email"])
                 all_tag_by_day[day] = all_tag_by_day.get(day, 0) + 1
@@ -332,7 +332,7 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
     # classified by whether they had prior paid charges before launch start.
     customers_new: set[str] = set()
     customers_legacy: set[str] = set()
-    # Per-tier unique customer dedup — each customer counted once per tier
+    # Per-tier unique customer dedup - each customer counted once per tier
     # they bought into during the launch (so a customer who bought Academy
     # AND Private Plus upgrade contributes to both tiers, but only once each).
     tier_customers: dict[str, set[str]] = {}
@@ -343,7 +343,7 @@ async def fetch_sales(start_iso: str, end_iso: str) -> dict:
         desc = (ch.get("description") or "").strip()
         tier = _classify_tier(desc, has_prior, amount, upgrade_min_pence)
         if tier is None:
-            continue  # renewal — exclude
+            continue  # renewal - exclude
         if tier in EXCLUDED_TIERS:
             continue  # Boost & Go excluded from launch revenue/sales metrics
         day = datetime.fromtimestamp(ch.get("created", 0), tz=timezone.utc).date().isoformat()
@@ -466,7 +466,7 @@ def _classify_tier(
 
 
 def _classify_product(description: str) -> str:
-    """Legacy product classifier — kept for backward compatibility with older
+    """Legacy product classifier - kept for backward compatibility with older
     callers that still expect a product label.
     """
     d = (description or "").lower()
@@ -682,7 +682,7 @@ def _bucket_into_phases(
     Each calendar day is assigned to EXACTLY ONE phase: the latest phase whose
     `start.date()` is on or before that day. This avoids the double-counting
     that occurs when two phases share a boundary day (e.g. early_access ends
-    19 Apr 07:59 and flash_sale starts 19 Apr 08:00 — the day 19 Apr would
+    19 Apr 07:59 and flash_sale starts 19 Apr 08:00 - the day 19 Apr would
     have been counted in both phases under the old date-range overlap check).
     """
     # Pre-parse phase windows, sorted by start

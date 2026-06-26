@@ -76,7 +76,7 @@ def member_badge_score(member_tags: list) -> int:
 
 
 def member_badges(member_tags: list) -> list[str]:
-    """Return the individual badge names — tags minus the excluded set.
+    """Return the individual badge names - tags minus the excluded set.
     Sorted alphabetically for consistent UI rendering."""
     out: list[str] = []
     for t in member_tags or []:

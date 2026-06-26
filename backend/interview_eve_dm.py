@@ -11,7 +11,7 @@ board), asking:
 Students reply with a number (e.g. "7"). The existing polling bot
 recognises the reply (`circle_dm_poll`), parses the score, saves it on
 the `interview_eve_dms` record, and if the score is ≤5 fires a Slack
-alert — to the private-tier channel for private-tier students, or to the
+alert - to the private-tier channel for private-tier students, or to the
 coach-chat channel for everyone else.
 """
 from __future__ import annotations
@@ -279,7 +279,7 @@ async def send_interview_eve_dms(db) -> dict:
 # ---------------------------------------------------------------- Score parsing
 _SCORE_RE = re.compile(r"\b(10|[1-9])\b")
 # High-confidence rating forms where the number is glued to "/10" / "out of 10"
-# and a plain word-boundary search would miss it — e.g. "9ish/10", "8/10",
+# and a plain word-boundary search would miss it - e.g. "9ish/10", "8/10",
 # "7 to 7.5/10" (→ 7), "8 out of 10". Decimals are floored to the integer.
 _RATING_RE = re.compile(r"(\d{1,2})(?:\.\d+)?\s*(?:ish)?\s*(?:/|out of)\s*10\b", re.IGNORECASE)
 
@@ -290,8 +290,8 @@ def parse_score(text: str) -> Optional[int]:
       "7"           → 7
       "i'd say 4"   → 4
       "maybe 8 today" → 8
-      "⁹"          → 9    (Unicode superscript — auto-normalised)
-      "9️⃣"          → 9    (keycap emoji — auto-normalised)
+      "⁹"          → 9    (Unicode superscript - auto-normalised)
+      "9️⃣"          → 9    (keycap emoji - auto-normalised)
     Multi-digit numbers (e.g. "11am") don't match because we require word
     boundaries around the 1-10 digit. Long replies (>30 chars) only count
     if they contain a rating-like keyword.
@@ -311,7 +311,7 @@ def parse_score(text: str) -> Optional[int]:
     t = t.replace("\u20e3", "").replace("\ufe0f", "")
     t = t.strip()
     low = t.lower()
-    # High-confidence "<n>/10" / "out of 10" forms first — these carry their own
+    # High-confidence "<n>/10" / "out of 10" forms first - these carry their own
     # rating context, so they're safe even in long replies and catch glued
     # variants ("9ish/10") the standalone search below misses.
     rm = _RATING_RE.search(t)

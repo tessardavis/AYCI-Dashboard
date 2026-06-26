@@ -1,8 +1,8 @@
 """Helpers for Circle.so Admin/Headless API lookups used by the DM bot.
 
 Auth model:
-  • CIRCLE_API_TOKEN — Admin API v2 token, used for member lookups by ID.
-  • CIRCLE_HEADLESS_TOKEN — Headless parent token. Exchanged for per-member
+  • CIRCLE_API_TOKEN - Admin API v2 token, used for member lookups by ID.
+  • CIRCLE_HEADLESS_TOKEN - Headless parent token. Exchanged for per-member
     access tokens via POST /api/v1/headless/auth_token (Bearer + email).
     Per-member access_tokens are short-lived; we cache them in MongoDB
     `app_settings.circle_headless_tokens` keyed by community_member_id and
@@ -59,7 +59,7 @@ async def _request_with_backoff(c: httpx.AsyncClient, method: str, url: str,
         if r.status_code not in _RETRY_STATUSES or attempt == _MAX_RETRIES - 1:
             return r
         wait = _retry_after_seconds(r) or float(2 ** attempt)
-        logger.info(f"[circle-api] {label or url} {r.status_code} — backoff {wait}s (attempt {attempt + 1})")
+        logger.info(f"[circle-api] {label or url} {r.status_code} - backoff {wait}s (attempt {attempt + 1})")
         await asyncio.sleep(wait)
     return r
 
@@ -182,7 +182,7 @@ async def fetch_latest_dm_message(db, admin_email: str, sender_id: int) -> Optio
     """Fetch the most recent DM message body from `sender_id` to the admin
     identified by `admin_email`. Returns None if Headless API is
     unconfigured, the access-token exchange failed, or no matching thread
-    was found — caller falls back to a "passed to team" holding reply.
+    was found - caller falls back to a "passed to team" holding reply.
     """
     access_token = await _get_access_token(db, admin_email)
     if not access_token:
@@ -304,7 +304,7 @@ async def list_dm_threads(db, admin_email: str, per_page: int = 30) -> list[dict
     out: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as c:
         # 2 pages × 100 = 200 most-recently-active chat rooms per coach.
-        # That's plenty — beyond ~200 they're all stale and rarely get a
+        # That's plenty - beyond ~200 they're all stale and rarely get a
         # new student message. Keeps poll cycles under ~30s for 5 coaches.
         for page in range(1, 3):
             try:
@@ -340,7 +340,7 @@ async def list_group_chats(db, admin_email: str, max_pages: int = 30) -> list[di
     """All GROUP chat rooms `admin_email` is in, paged fully (up to max_pages ×
     100). Returns `[{uuid, name, participant_ids: [int]}]`. Used by the
     "no group chat" audit to find which private-tier students already have a
-    coach chat — since every private chat includes the coaches, one coach's
+    coach chat - since every private chat includes the coaches, one coach's
     group-chat list covers them all.
 
     NB: `other_participants_preview` may be truncated for large rooms, so the
@@ -367,7 +367,7 @@ async def list_group_chats(db, admin_email: str, max_pages: int = 30) -> list[di
             body = r.json()
             for rec in body.get("records") or []:
                 # Circle's headless /messages reports group rooms as
-                # chat_room_kind == "group_chat" (NOT "group" — that value
+                # chat_room_kind == "group_chat" (NOT "group" - that value
                 # never appears, which silently returned 0 group chats and
                 # made the link-existing scan look rate-limited).
                 if rec.get("chat_room_kind") != "group_chat":
@@ -423,7 +423,7 @@ async def post_dm_message(
     Circle's Headless chat API requires the body in their tiptap-rich-text
     shape (`rich_text_body`); a plain `body` string is rejected with
     `Missing parameter: rich_text_body`. We build the minimal tiptap doc
-    that covers our use case — single paragraph, plain text, line breaks as
+    that covers our use case - single paragraph, plain text, line breaks as
     `hardBreak` nodes.
     """
     access_token = await _get_access_token(db, admin_email)
@@ -453,7 +453,7 @@ async def add_member_to_space(db, space_id: int, email: str) -> dict:
 
     Uses the **Admin v1** API (`POST /api/v1/space_members {space_id, email}`)
     with `CIRCLE_ADMIN_V1_TOKEN`. The Admin v2 `space_members` endpoint we tried
-    first only ever 422'd ("User not added to space") — on v2 the only thing
+    first only ever 422'd ("User not added to space") - on v2 the only thing
     that works is `space_group_members`, which adds to the whole GROUP (an
     over-grant). v1 does a true single-space add (confirmed 2026-06-19). This is
     the same path the Zapier "Add Member to Space" step uses for the
@@ -461,7 +461,7 @@ async def add_member_to_space(db, space_id: int, email: str) -> dict:
 
     Returns {ok, status, error}. Idempotent: v1 returns 200 with
     `{"success": false, "message": "User already added to space."}` for an
-    existing member — treated as success."""
+    existing member - treated as success."""
     email = (email or "").strip().lower()
     if not space_id or not email:
         return {"ok": False, "error": "missing space_id or email"}
@@ -535,7 +535,7 @@ async def create_group_chat(
     Same Headless `POST /messages` find-or-create endpoint as the 1:1 helper in
     interview_eve_dm, with kind="group" + a name + multiple member ids.
 
-    NB: Circle keys a group room on its exact member set — calling this with a
+    NB: Circle keys a group room on its exact member set - calling this with a
     different roster makes a NEW room, it does NOT mutate an existing one. The
     caller MUST guard against duplicates (we only ever call this for a student
     with no recorded private_chat_url and no existing coach chat). The exact

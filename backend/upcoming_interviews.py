@@ -1,5 +1,5 @@
 """
-Upcoming Interviews — Monday.com Academy Members board lookup.
+Upcoming Interviews - Monday.com Academy Members board lookup.
 
 Returns students whose Interview Date falls inside [today, today + days].
 Academy vs non-Academy students are returned separately because the UI
@@ -28,7 +28,7 @@ COL_EMAIL = "email_mkqxv0j0"
 COL_SPECIALITY = "dropdown_mkqxk94m"
 COL_HOSPITAL = "text_mkrqzraa"
 COL_PRIVATE_CHAT_LINK = "text_mky9xzew"
-COL_COHORT_JOINED = None  # optional extra — not needed
+COL_COHORT_JOINED = None  # optional extra - not needed
 
 # Allowance status columns (30-min calls, 60-min mocks, bonus calls, etc.)
 # Every column here represents ONE call/mock slot.
@@ -146,7 +146,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
 
     Mongo-first: when a db handle is supplied AND the academy_members
     mirror has rows, read from it (sub-100ms). Otherwise fall through to
-    live Monday GraphQL — used by callers without db, and as a safety
+    live Monday GraphQL - used by callers without db, and as a safety
     net if the mirror is empty (right after deploy, before the first
     sync completes).
     """
@@ -170,7 +170,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
             )
 
     if not items:
-        # Live Monday fallback — either no db, mirror not yet populated,
+        # Live Monday fallback - either no db, mirror not yet populated,
         # or Mongo errored. Same query as before.
         query = """
         query ($boardId: ID!, $dates: CompareValue!, $limit: Int!, $cursor: String) {
@@ -243,14 +243,14 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         # in another. PRIVATE_PLUS_LABELS / VIP_LABELS are the source of truth
         # in `private_tier_utilisation.py`; we mirror them here. Silver/Gold
         # are legacy product names and now behave as plain Academy.
-        # Boost & Go status is a SEPARATE column from Tier — a student can read
+        # Boost & Go status is a SEPARATE column from Tier - a student can read
         # "Silver" in Tier but be an active Boost & Go member. Prefer the
         # authoritative dashboard scalar; fall back to the Monday column.
         boost = (it.get("boost_and_go") or _txt(COL_BOOST_AND_GO) or "").strip()
         is_bg = _is_active_bg(boost)
 
         _PP_LABELS = {"academy private plus", "upgrade private plus", "private plus"}
-        # "Upgrade VIP" / "Academy VIP" are the same product as "VIP" — they MUST
+        # "Upgrade VIP" / "Academy VIP" are the same product as "VIP" - they MUST
         # be here or the student reads "Upgrade VIP" instead of "VIP" and drops
         # out of the VIP-keyed Private Tier Utilisation widget. Mirror the
         # "upgrade …" variants that _PP_LABELS already carries for Private Plus.
@@ -263,7 +263,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         elif is_bg:
             tier_group = "Boost & Go"  # so a "Silver"-tier B&G reads sensibly
         else:
-            tier_group = tier  # Academy 1:1, etc. — keep as-is
+            tier_group = tier  # Academy 1:1, etc. - keep as-is
 
         base = {
             "id": it.get("id"),
@@ -278,15 +278,15 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         }
 
         # Is this an Academy-only student? Tier dropdown can list multiple values
-        # (e.g. "Academy, Boost & Go Plus") — if ANYTHING other than plain "Academy"
+        # (e.g. "Academy, Boost & Go Plus") - if ANYTHING other than plain "Academy"
         # is listed, route them to private.
-        # An empty Tier dropdown is treated as plain Academy (team's default — many
+        # An empty Tier dropdown is treated as plain Academy (team's default - many
         # Academy students never have the dropdown explicitly set).
         # Silver/Gold are legacy product names; students on those tiers today
         # are effectively Academy and should stay in the Academy pane.
         _ACADEMY_EQUIV = {"academy", "silver", "gold"}
         tier_parts = [t.strip().lower() for t in tier.split(",") if t.strip()]
-        # An active Boost & Go student is never "pure academy" — they belong in
+        # An active Boost & Go student is never "pure academy" - they belong in
         # the private/B&G pane even if their Tier column says Silver/Gold/Academy.
         is_pure_academy = (not is_bg) and (
             (not tier_parts) or all(tp in _ACADEMY_EQUIV for tp in tier_parts)
@@ -341,7 +341,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
                     (t.get("history") or [{}])[0] if t.get("history") else None
                 )
         except Exception:
-            # Tally enrichment is optional — silently skip on error
+            # Tally enrichment is optional - silently skip on error
             pass
 
     # Enrich with Calendly past coaches (who has the student spoken to before?)
@@ -366,7 +366,7 @@ async def fetch_upcoming_interviews(db=None, days: int = 14) -> dict:
         "window": {"start": start_str, "end": end_str, "days": days},
         "academy": academy,
         "private": private,
-        "source": source,  # "mongo_mirror" or "monday_live" — diagnostic only
+        "source": source,  # "mongo_mirror" or "monday_live" - diagnostic only
     }
 
 
@@ -450,7 +450,7 @@ async def _fetch_past_coaches_one(client: httpx.AsyncClient, org: str, email: st
     by_host: dict[str, dict] = {}
     page_token: str | None = None
     pages = 0
-    while pages < 4:  # cap at 200 events per student — plenty
+    while pages < 4:  # cap at 200 events per student - plenty
         q: dict[str, Any] = {
             "organization": org,
             "invitee_email": target,
