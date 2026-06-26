@@ -133,6 +133,21 @@ function CalendlyBonusCallCard({ isAdmin }) {
   const [busy, setBusy] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [privBackfilling, setPrivBackfilling] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [eventTypes, setEventTypes] = useState(null);
+
+  const verifyEvents = async () => {
+    if (!isAdmin) return;
+    setChecking(true);
+    try {
+      const { data } = await apiClient.get("/admin/calendly/event-types", { timeout: 30000 });
+      setEventTypes(data?.event_types || []);
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load event types");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -261,6 +276,16 @@ function CalendlyBonusCallCard({ isAdmin }) {
               {privBackfilling ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Record past private-tier calls
             </Button>
+            <Button
+              variant="outline"
+              onClick={verifyEvents}
+              disabled={!isAdmin || checking}
+              title="List the live Calendly event types and how the dashboard classifies bookings on each"
+              data-testid="calendly-verify-events-btn"
+            >
+              {checking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Verify event mapping
+            </Button>
             <Button onClick={connect} disabled={!isAdmin || busy} data-testid="calendly-connect-btn">
               {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
               {state.connected ? "Re-connect" : "Connect Calendly"}
@@ -273,6 +298,37 @@ function CalendlyBonusCallCard({ isAdmin }) {
         <p className="text-xs text-[var(--ayci-ink-muted)] mt-3 break-all">
           Receiving bookings at <code className="bg-slate-100 px-1 rounded">{state.callback}</code>
         </p>
+      )}
+
+      {eventTypes && (
+        <div className="mt-4 border-t border-[var(--ayci-border)] pt-3" data-testid="calendly-event-mapping">
+          <div className="text-[11px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)] mb-2">
+            Event mapping ({eventTypes.length} active events)
+          </div>
+          {eventTypes.length === 0 ? (
+            <p className="text-xs text-[var(--ayci-ink-muted)]">No active event types found.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {eventTypes.map((e) => {
+                const tracked = e.classified_as !== "untracked";
+                return (
+                  <li key={e.slug || e.name} className="flex items-center justify-between gap-3 text-sm flex-wrap">
+                    <span className="text-[var(--ayci-ink)]">
+                      {e.name}
+                      <code className="ml-2 text-[11px] bg-slate-100 px-1 rounded text-[var(--ayci-ink-muted)]">{e.slug}</code>
+                    </span>
+                    <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full border ${tracked ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-[var(--ayci-ink-muted)] border-[var(--ayci-border)]"}`}>
+                      {e.classified_as}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className="text-[11px] text-[var(--ayci-ink-muted)] mt-2">
+            <code>untracked</code> on a real call event means bookings on it won't be logged - tell me and I'll adjust the matcher.
+          </p>
+        </div>
       )}
     </div>
   );
