@@ -53,8 +53,8 @@ dashboard, so it has no zap.
 
 | Tag | Applied by | Link |
 |---|---|---|
-| `Purchase - Live webinar` | Zapier (Kajabi purchase) | _[link to add]_ |
-| `Legacy Video Launch Day 1 Upgrade` + `… Last Day Upgrade` | Zapier zap "Legacy Video Launch Upgrade Bonus Kit Tags" | _[link to add]_ |
+| `Purchase - Live webinar` | Zapier (Kajabi purchase) | https://zapier.com/editor/356253725/published |
+| `Legacy Video Launch Day 1 Upgrade` + `… Last Day Upgrade` | Zapier zap "Legacy Video Launch Upgrade Bonus Kit Tags" | https://zapier.com/editor/365778218/published |
 | `Cart Close Signup` | Zapier zap "Cart Close Bonus Call - Kit tag" | https://zapier.com/editor/365778815 |
 | `Ad Hoc Bonus Call` | **The dashboard** (Mark eligible button) | _no zap_ |
 
