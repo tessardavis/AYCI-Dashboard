@@ -321,8 +321,11 @@ def _circle_headers() -> dict:
 
 
 async def circle_list_spaces() -> list[dict]:
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
-        r = await c.get(f"{CIRCLE_BASE}/spaces", headers=_circle_headers(), params={"per_page": 100})
+    import circle_meter
+    if True:
+        r = await circle_meter.circle_admin_request(
+            "GET", f"{CIRCLE_BASE}/spaces", headers=_circle_headers(),
+            params={"per_page": 100}, timeout=TIMEOUT, endpoint="spaces")
         r.raise_for_status()
         body = r.json()
         records = body.get("records") or body.get("data", {}).get("spaces") or body.get("spaces") or []
@@ -330,11 +333,14 @@ async def circle_list_spaces() -> list[dict]:
 
 
 async def _circle_fetch_all_members(client: httpx.AsyncClient, sort: str = "created_at", order: str = "desc", max_pages: int = 100) -> list[dict]:
+    import circle_meter
     out: list[dict] = []
     page = 1
     while page <= max_pages:
         params: dict[str, Any] = {"per_page": 100, "page": page, "sort": sort, "order": order}
-        r = await client.get(f"{CIRCLE_BASE}/community_members", headers=_circle_headers(), params=params)
+        r = await circle_meter.circle_admin_request(
+            "GET", f"{CIRCLE_BASE}/community_members", headers=_circle_headers(),
+            params=params, timeout=TIMEOUT, endpoint="community_members")
         r.raise_for_status()
         body = r.json()
         records = body.get("records") or body.get("data") or []
@@ -359,13 +365,16 @@ async def circle_weekly_new_non_academy(params: dict, start_iso: str, end_iso: s
     (defaults to "Circle Member"). Paginates newest-first and stops once we
     pass the window.
     """
+    import circle_meter
     tag_name = (params or {}).get("non_academy_tag", "Circle Member")
     count = 0
     page = 1
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+    if True:
         while page <= 100:
             q = {"per_page": 100, "page": page, "sort": "created_at", "order": "desc"}
-            r = await c.get(f"{CIRCLE_BASE}/community_members", headers=_circle_headers(), params=q)
+            r = await circle_meter.circle_admin_request(
+                "GET", f"{CIRCLE_BASE}/community_members", headers=_circle_headers(),
+                params=q, timeout=TIMEOUT, endpoint="community_members")
             r.raise_for_status()
             body = r.json()
             recs = body.get("records") or body.get("data") or []
@@ -1134,17 +1143,19 @@ async def circle_space_posts_this_week(params: dict, start_iso: str, end_iso: st
     params: {"space_id": 996901}
     Counts posts in a specific Circle space with created_at inside the window.
     """
+    import circle_meter
     space_id = params.get("space_id")
     if not space_id:
         raise ValueError("Circle posts connector needs space_id")
     count = 0
     page = 1
-    async with httpx.AsyncClient(timeout=TIMEOUT) as c:
+    if True:
         while page <= 100:
-            r = await c.get(
-                f"{CIRCLE_BASE}/posts",
+            r = await circle_meter.circle_admin_request(
+                "GET", f"{CIRCLE_BASE}/posts",
                 headers=_circle_headers(),
                 params={"space_id": int(space_id), "per_page": 100, "page": page, "sort": "created_at", "order": "desc"},
+                timeout=TIMEOUT, endpoint="posts",
             )
             r.raise_for_status()
             body = r.json()

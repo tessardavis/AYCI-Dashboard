@@ -28,6 +28,7 @@ from typing import Any, Optional
 import httpx
 
 from connectors import CIRCLE_BASE, _circle_headers, MONDAY_URL, _monday_headers, TIMEOUT
+import circle_meter
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +137,11 @@ async def _circle_list_posts_in_space(client: httpx.AsyncClient, space_id: int) 
     out: list[dict] = []
     page = 1
     while page <= 50:
-        r = await client.get(
-            f"{CIRCLE_BASE}/posts",
+        r = await circle_meter.circle_admin_request(
+            "GET", f"{CIRCLE_BASE}/posts",
             headers=_circle_headers(),
             params={"space_id": int(space_id), "per_page": 100, "page": page},
+            timeout=TIMEOUT, endpoint="posts",
         )
         r.raise_for_status()
         body = r.json()
@@ -188,10 +190,11 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
         last_err: Exception | None = None
         for attempt in range(_MAX_RETRY_ATTEMPTS):
             try:
-                r = await client.get(
-                    f"{CIRCLE_BASE}/comments",
+                r = await circle_meter.circle_admin_request(
+                    "GET", f"{CIRCLE_BASE}/comments",
                     headers=_circle_headers(),
                     params={"post_id": int(post_id), "per_page": 100, "page": page},
+                    timeout=TIMEOUT, endpoint="comments",
                 )
                 if r.status_code == 200:
                     break

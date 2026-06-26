@@ -124,26 +124,31 @@ async def _get_access_token(db, admin_email: str) -> Optional[str]:
 
 async def fetch_member(member_id: int | str) -> dict | None:
     """Return basic member info + tags: {name, email, first_name, profile_url, tags}."""
-    async with httpx.AsyncClient(timeout=15) as c:
-        try:
-            r = await c.get(f"{ADMIN_BASE}/community_members/{member_id}", headers=_admin_headers())
-            r.raise_for_status()
-        except Exception as e:
-            logger.warning(f"[circle-api] fetch_member({member_id}) failed: {e}")
-            return None
-        d = r.json()
-        name = (d.get("name")
-                or " ".join(filter(None, [d.get("first_name"), d.get("last_name")])).strip()
-                or d.get("public_uid"))
-        tags = [t.get("name") for t in (d.get("member_tags") or []) if t.get("name")]
-        return {
-            "id": d.get("id"),
-            "name": name,
-            "first_name": d.get("first_name") or (name or "").split(" ")[0],
-            "email": (d.get("email") or "").lower(),
-            "profile_url": d.get("profile_url"),
-            "tags": tags,
-        }
+    import circle_meter
+    try:
+        # Essential: reactive to inbound DMs / coach lookups, low volume (6h cached
+        # by fetch_member_cached) - exempt from the breaker but still counted.
+        r = await circle_meter.circle_admin_request(
+            "GET", f"{ADMIN_BASE}/community_members/{member_id}",
+            headers=_admin_headers(), timeout=15,
+            endpoint="community_members", essential=True)
+        r.raise_for_status()
+    except Exception as e:
+        logger.warning(f"[circle-api] fetch_member({member_id}) failed: {e}")
+        return None
+    d = r.json()
+    name = (d.get("name")
+            or " ".join(filter(None, [d.get("first_name"), d.get("last_name")])).strip()
+            or d.get("public_uid"))
+    tags = [t.get("name") for t in (d.get("member_tags") or []) if t.get("name")]
+    return {
+        "id": d.get("id"),
+        "name": name,
+        "first_name": d.get("first_name") or (name or "").split(" ")[0],
+        "email": (d.get("email") or "").lower(),
+        "profile_url": d.get("profile_url"),
+        "tags": tags,
+    }
 
 
 async def fetch_member_cached(db, member_id: int | str, max_age_hours: int = 6) -> dict | None:
@@ -469,12 +474,16 @@ async def add_member_to_space(db, space_id: int, email: str) -> dict:
     if not token:
         return {"ok": False, "error": "CIRCLE_ADMIN_V1_TOKEN not configured "
                 "(need an Admin v1 token for single-space adds)"}
-    async with httpx.AsyncClient(timeout=20) as c:
+    import circle_meter
+    if True:
         try:
-            r = await c.post(
-                f"{ADMIN_V1_BASE}/space_members",
+            # Essential: a coach manually granting space access (user-facing,
+            # rare) - exempt from the breaker but counted.
+            r = await circle_meter.circle_admin_request(
+                "POST", f"{ADMIN_V1_BASE}/space_members",
                 headers={"Authorization": f"Token {token}", "Content-Type": "application/json"},
-                json={"space_id": int(space_id), "email": email},
+                json={"space_id": int(space_id), "email": email}, timeout=20,
+                endpoint="space_members", essential=True,
             )
             txt = (r.text or "")[:300]
             try:
