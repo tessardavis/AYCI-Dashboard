@@ -13,11 +13,12 @@ where it lives, and what the team needs to do. One section per process.
 
 1. [Bonus calls](#1-bonus-calls) - *draft for review*
 2. [Private Tier calls](#2-private-tier-calls) - *draft for review*
-3. Reminder statuses - _to be documented_
-4. Boss badge / Win shared - _to be documented_
-5. Testimonial status - _to be documented_
-6. Interview reminders - _to be documented_
-7. Refund status - _to be documented_
+3. [Private chat](#3-private-chat) - *draft for review*
+4. Reminder statuses - _to be documented_
+5. Boss badge / Win shared - _to be documented_
+6. Testimonial status - _to be documented_
+7. Interview reminders - _to be documented_
+8. Refund status - _to be documented_
 
 ---
 
@@ -300,3 +301,80 @@ post, and check coach availability is set on all the booking links.
 | Reschedule + cancellation capture | ✅ Live |
 | Backfill past private-tier bookings | ✅ Live |
 | Summary by tier / call type / coach | ✅ Live |
+
+---
+
+# 3. Private chat
+
+Every **Private Plus**, **VIP** and active **Boost & Go** student gets a **private group chat on Circle**
+with the coaching team - where they ask questions, get video feedback, and find the links they need.
+
+## Who's in the chat
+
+The student + the coaches: **Tessa, Arub, Coralie, Becky**. (Oksana is no longer added to new chats;
+older chats keep whoever was in them - you can't remove people from a Circle group DM.) The coach list
+is editable in **Settings → Integrations → Private chat setup**.
+
+## How a chat gets created
+
+Two paths, both live right now:
+
+- **Automatically** via Zapier when the student joins Circle with the current cohort tag - three zaps:
+  - VIP & Private Plus members (+ "In Between" join variant): https://zapier.com/editor/356003238/published
+  - Legacy Upgrades: https://zapier.com/editor/356048959/published
+  - VIP & Private Plus (standard join): https://zapier.com/editor/370426888/published
+- **Manually** via the dashboard - the **"Create chat"** button in Students DB (and the "Needs setup" list).
+  It adds the coaches + student, posts the welcome message, records the URL, and checks first that no chat
+  already exists (safe to press).
+
+## The welcome message
+
+Posted from **Coralie**. Content is set on the dashboard in **Settings → Integrations → Private chat
+setup** - a separate template per tier (Private Plus / VIP / Boost & Go) with placeholders like
+`{first_name}` and `{video_allowance}`, including the call booking link(s) and the video-answer link.
+If a tier has no template set, the chat won't be created (so the wrong message can't go out).
+
+## Where the chat is tracked
+
+The chat URL is stored on the student's record as their **private chat link** (Student Lookup + Students
+DB). Some older zap-created chats never wrote their URL back; the dashboard can recover those by scanning
+Circle and recording the link.
+
+## Needs setup
+
+Any private-tier / Boost & Go student **without** a chat link shows in **Students DB → "Needs setup"**:
+- press **"Create chat"** to create it; or
+- paste an existing chat's URL into the record (Edit) by hand.
+
+A new private-tier / Boost & Go student who lands without a chat also fires a **Slack heads-up in
+#fulfillment-team for Coralie** (see Private Tier calls / the needs-setup alert).
+
+## If their Circle DMs are off
+
+Circle won't create a group chat for someone with DMs switched off. The dashboard flags them
+`Awaiting DMs` (they stay in "Needs setup"). **No automatic retry** - once they turn DMs back on, press
+**"Create chat"** again.
+
+## Heads-up: dual emails
+
+Chat creation matches the student to their Circle member by email. If their **Circle email differs from
+their purchase / Kajabi email**, the match can fail - keep their **Circle email / "Other emails"** up to
+date if a chat won't create for someone who's clearly on Circle.
+
+## Each cohort
+
+The three zaps must fire on the **new cohort's tag** each launch (and Coralie's welcome-message links
+should be checked). The dashboard side needs no change.
+
+### Behind the scenes (for whoever maintains the dashboard)
+
+- **Create:** `POST /api/students-db/{id}/create-private-chat` → `private_chat_setup.create_for_student`
+  (background). Adds coaches + student via the Circle Headless API, posts the welcome message, stores
+  `private_chat_url` + `private_chat_circle_uuid` (pinned).
+- **Config:** coach list + per-tier `welcome_templates` + sender live in `app_settings` id `private_chat`
+  (Settings → Integrations → Private chat setup; `POST /api/students-db/private-chat/config`).
+- **DMs-off:** Circle error is classified in `private_chat_setup.py`; sets `private_chat_status="Awaiting DMs"`.
+- **Recover URLs:** `GET /api/students-db/private-chat/link-existing` scans Circle for chats with no URL recorded.
+- **Needs-setup alert:** `routes/students_db.private_chat_setup_alerts` (15-min sweep) → #fulfillment-team.
+- **Zaps 46/47/53** still create chats in parallel; candidates for retirement once dashboard auto-create
+  (`PRIVATE_CHAT_AUTOCREATE_ENABLED`) is switched on and proven.
