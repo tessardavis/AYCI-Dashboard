@@ -90,7 +90,9 @@ SETTING UP A NEW COHORT (the team does Kit + Calendly; the dashboard needs no ch
   3. [Megan] Ensure the "Bonus Call Reminders" sequence has all five tags as entry
      points (currently only Live Webinar gets reminders - the others should too).
   4. [Arub/Megan] Create a fresh round-robin "AYCI Bonus call - <cohort>" Calendly
-     event with coach availability (Onboarding Week to before the next one).
+     event with coach availability (Onboarding Week to before the next one). Set
+     the event's booking window so it only accepts bookings until the next cohort
+     starts (date-range / scheduling limit), so calls can't roll over.
   5. Dashboard: nothing to change - it auto-detects the new tags + event. Keep
      Calendly connected (Settings > Integrations).
   6. End of cohort: read the snapshot (eligible/booked/no-show/rescheduled) on the
