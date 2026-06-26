@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video, Webhook, Receipt, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { LineChart, Mountain, Rocket, Settings as SettingsIcon, LogOut, Search, Calendar, GraduationCap, AlertTriangle, UserCircle2, MessageCircle, Menu, X, Bell, Sparkles, Trophy, LifeBuoy, ChevronDown, Video, Webhook, Receipt, ChevronsLeft, ChevronsRight, BookOpen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
@@ -38,6 +38,14 @@ const NAV_GROUPS = [
       { to: "/launches", label: "Launch Dashboard", icon: Rocket, testid: "sidebar-nav-launches", board: "launches" },
       { to: "/at-risk", label: "Students at Risk", icon: AlertTriangle, testid: "sidebar-nav-at-risk", board: "at_risk" },
     ],
+  },
+  {
+    type: "item",
+    to: "/processes",
+    label: "Processes",
+    icon: BookOpen,
+    testid: "sidebar-nav-processes",
+    alwaysVisible: true,
   },
   {
     type: "item",
@@ -209,7 +217,9 @@ export default function AppShell() {
   // Flat list of every nav item the user can see - used in collapsed mode
   // (group headers don't make sense as icons).
   const canSeeItem = (item) =>
-    item.adminOnly ? user?.role === "admin" : userCanAccess(user, item.board);
+    item.alwaysVisible ? true
+      : item.adminOnly ? user?.role === "admin"
+        : userCanAccess(user, item.board);
 
   const flatItems = NAV_GROUPS.flatMap((node) =>
     node.type === "item"
