@@ -12,13 +12,12 @@ where it lives, and what the team needs to do. One section per process.
 ## Processes
 
 1. [Bonus calls](#1-bonus-calls) - *draft for review*
-2. 1:1 call allowances - _to be documented_
-3. Mock interview allowances - _to be documented_
-4. Reminder statuses - _to be documented_
-5. Boss badge / Win shared - _to be documented_
-6. Testimonial status - _to be documented_
-7. Interview reminders - _to be documented_
-8. Refund status - _to be documented_
+2. [Private Tier calls](#2-private-tier-calls) - *draft for review*
+3. Reminder statuses - _to be documented_
+4. Boss badge / Win shared - _to be documented_
+5. Testimonial status - _to be documented_
+6. Interview reminders - _to be documented_
+7. Refund status - _to be documented_
 
 ---
 
@@ -194,3 +193,101 @@ process and on the **Cohort Dashboard** (`/api/bonus-call/summary`). Share with 
 | Match-all-emails in Student Lookup (the Henry case) | 🔨 |
 | End-of-cohort summary | 🔨 |
 | "Ask about the processes" Claude chat (needs API key) | 🔨 |
+
+---
+
+# 2. Private Tier calls
+
+Students on the **Private Plus** and **VIP** tiers get a set of free 1:1 coaching calls as part of
+their package. They can use them **any time** - there is no expiry (people were previously told 12
+months, but they keep their allowance for as long as they need).
+
+## Who gets what
+
+- **Private Plus** - 1 x 30-minute coach call.
+- **VIP** - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls total).
+
+## Who's eligible & how it's identified
+
+When a student buys Private Plus or VIP, the **Sales Zap** tags them on Circle for the current cohort:
+
+- `[AYCI MON-YY] Cohort - Private Plus` / `... Private Plus (4-Pay)`
+- `[AYCI MON-YY] Cohort - VIP` / `... VIP (6-Pay)` / `... VIP (12-Pay)`
+
+That tier flows through to the dashboard as the student's **tier**, which sets their call allowance.
+Sales Zap (applies the Circle tier tags): https://zapier.com/editor/00000000-0000-c000-8000-000365773719/published
+
+## How they get the booking links
+
+- the onboarding email via the `[AYCI MON-YY] Onboarding (Megan)` Kit automation: https://app.kit.com/automations/1982218/edit
+- an initial post from **Coralie** in their private chat, with the same links.
+
+## The booking links & coaches
+
+**Private Plus** - 30-min coach call (Becky / Charlotte / Anoop):
+- https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+
+**VIP** - five calls across three links:
+- 2 x 30-min **with Tessa**: https://calendly.com/tessardavis/ayci-vip-30-min
+- 2 x 30-min **coach calls** (Becky) - same link as Private Plus: https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+- 1 x 60-min **mock interview** (Becky / Charlotte / Anoop): https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min
+
+## Keeping coaching availability open
+
+These links stay live all year, so availability has to be kept topped up:
+
+- set coach availability on Calendly **well ahead** of each launch;
+- availability should run **consistently throughout the year**; and
+- do **regular checks** on each link: Private Plus 30-min, VIP 60-min mock, VIP 2 x 30-min coach, VIP 2 x 30-min Tessa.
+
+## How bookings are tracked ✅ LIVE
+
+When a student books any of these calls, the dashboard automatically:
+
+- logs the call against their record - which call it was, the coach, and the date;
+- shows allowance used vs. remaining (e.g. a VIP who's booked 1 of 2 Tessa calls); and
+- posts a heads-up in `#fulfillment-team`.
+
+Reschedules update the date automatically. If a student doesn't show up, the coach opens that
+student's **Student Lookup** card and marks that call a **no-show**.
+
+## Reminders to book
+
+**Coralie** tracks who has interviews coming up and checks in with private-tier students to make sure
+they know how to book and to remind them of their remaining allowance.
+
+## Tracking the data
+
+- Monthly summary of completed 1:1 calls - by **tier**, **call type**, and **coach**.
+- Summary of how many private-tier students had interviews, and how much of their allowance they used.
+
+## Each cohort - what changes, and what doesn't
+
+The dashboard needs **no change** per cohort - it reads each student's tier and matches the Calendly
+events by name, so the same booking links carry over. Per-launch jobs: confirm the Sales Zap is tagging
+the new cohort's tier tags, update the cohort prefix in the onboarding email + Coralie's private-chat
+post, and check coach availability is set on all the booking links.
+
+---
+
+### Behind the scenes (for whoever maintains the dashboard)
+
+- **Inbound:** `POST /api/calendly/webhook` (signed) → `calendly_webhook.handle_invitee_created`.
+  Private-tier events are matched by `scheduled_event.name` and classified into three kinds:
+  `coach_30` (`ayci-1-1-30-min`), `tessa_30` (`ayci-vip-30-min`), `mock_60` (`ayci-1-1-60-min`).
+- **Record field:** `private_calls` array on `academy_members` (pinned in `dashboard_edited_fields`),
+  each entry `{kind, coach, date, status, invitee_uri, event_name}`. Allowance derived from `tier`.
+- **No Kit tag on booking** (private-tier reminders are manual, via Coralie) - unlike bonus calls.
+- **Match:** `email` / `circle_email` / `other_emails` combined-identity lookup.
+
+### Build status
+| Piece | Status |
+|---|---|
+| Document the process (board + this file + Q&A) | ✅ Live |
+| Webhook recognises the 3 private-tier events | 🔨 |
+| Log booking (kind + coach + date) to `private_calls` | 🔨 |
+| Allowance used/remaining on the student record | 🔨 |
+| No-show / attended marking per call | 🔨 |
+| Reschedule + cancellation capture | 🔨 |
+| Backfill past private-tier bookings | 🔨 |
+| Monthly summary by tier / call type / coach | 🔨 |

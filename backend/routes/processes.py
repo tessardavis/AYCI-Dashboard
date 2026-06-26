@@ -102,6 +102,66 @@ OPEN ITEMS being sorted (if asked): the Ad Hoc tag needs a Kit automation to sen
 its booking link; the four booking-link automations should be consolidated into
 one (with the Ad Hoc tag added); the booking-link emails currently show the wrong
 cohort name; reminders need extending beyond Live Webinar signups.
+
+
+# Private Tier calls
+
+WHAT IT IS: Students on the Private Plus and VIP tiers get a set of free 1:1
+coaching calls as part of their package. They can be used ANY TIME - there is no
+expiry (people were previously told 12 months, but they keep the allowance for as
+long as they need). This is separate from bonus calls.
+
+WHO GETS WHAT:
+  - Private Plus: 1 x 30-minute coach call.
+  - VIP: 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x
+    60-minute mock interview (5 calls in total).
+
+WHO IS ELIGIBLE / HOW IT'S IDENTIFIED: When a student buys Private Plus or VIP,
+the Sales Zap tags them on Circle for the current cohort:
+  - "[AYCI MON-YY] Cohort - Private Plus" / "... Private Plus (4-Pay)"
+  - "[AYCI MON-YY] Cohort - VIP" / "... VIP (6-Pay)" / "... VIP (12-Pay)"
+That tier flows through to the dashboard as the student's tier, which sets their
+call allowance. The Sales Zap that applies these Circle tier tags:
+https://zapier.com/editor/00000000-0000-c000-8000-000365773719/published
+
+HOW THEY GET THE BOOKING LINKS: in the onboarding email via the
+"[AYCI MON-YY] Onboarding (Megan)" Kit automation
+(https://app.kit.com/automations/1982218/edit), and in an initial post from
+Coralie in their private chat (same links).
+
+THE BOOKING LINKS + COACHES:
+  - Private Plus 30-min coach call (Becky / Charlotte / Anoop):
+    https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+  - VIP 2 x 30-min with Tessa: https://calendly.com/tessardavis/ayci-vip-30-min
+  - VIP 2 x 30-min coach calls (Becky) - the SAME link as Private Plus:
+    https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+  - VIP 60-min mock interview (Becky / Charlotte / Anoop):
+    https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min
+
+KEEPING AVAILABILITY OPEN: these links stay live all year, so availability has to
+be kept topped up - set coach availability on Calendly well ahead of each launch,
+keep it running consistently through the year, and do regular checks on each link
+(Private Plus 30-min, VIP 60-min mock, VIP 2x30-min coach, VIP 2x30-min Tessa).
+
+HOW BOOKINGS ARE TRACKED: when a student books any of these calls, the dashboard
+logs the call against their record (which call, coach, date), shows allowance used
+vs remaining, and posts to #fulfillment-team. Reschedules update the date
+automatically. If a student doesn't show up, the coach opens that student's
+Student Lookup card and marks that call a no-show. (Unlike bonus calls, there is
+NO Kit tag applied on booking - private-tier reminders are manual via Coralie.)
+
+REMINDERS: Coralie tracks who has interviews coming up and checks in with
+private-tier students to remind them how to book and what allowance is left.
+
+DATA: a monthly summary of completed 1:1 calls broken down by tier, call type, and
+coach; and a summary of how many private-tier students had interviews and how much
+of their allowance they used.
+
+EACH COHORT: the dashboard needs no change - it reads the tier off each student and
+matches the Calendly events by name, so the same booking links carry over. The
+per-launch jobs are: confirm the Sales Zap is tagging the new cohort's tier tags,
+update the cohort prefix in the onboarding email + Coralie's private-chat post, and
+check coach availability is set on all the booking links.
 """
 
 
