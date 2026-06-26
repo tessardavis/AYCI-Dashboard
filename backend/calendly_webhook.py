@@ -843,3 +843,67 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
 
     logger.info(f"[private-backfill] {summary}")
     return summary
+
+
+async def post_monthly_private_summary(db, channel: str = "#private-tiers", ref_date=None) -> dict:
+    """Post the PREVIOUS month's private-tier call summary to Slack - calls held,
+    broken down by call type, coach, and tier (the 'Tracking the data' monthly
+    summary). 'held' excludes No-show / Cancelled. Posted automatically on the
+    1st; also runnable on demand."""
+    ref = ref_date or datetime.now(timezone.utc)
+    pm_year = ref.year if ref.month > 1 else ref.year - 1
+    pm_month = ref.month - 1 if ref.month > 1 else 12
+    prefix = f"{pm_year:04d}-{pm_month:02d}"
+    month_label = datetime(pm_year, pm_month, 1).strftime("%B %Y")
+
+    by_type, by_coach, by_tier = {}, {}, {}
+    held = no_show = cancelled = 0
+    async for r in db.academy_members.aggregate([
+        {"$match": {"private_calls": {"$exists": True, "$ne": []}}},
+        {"$unwind": "$private_calls"},
+        {"$match": {"private_calls.date": {"$regex": f"^{prefix}"}}},
+        {"$group": {"_id": {
+            "kind": "$private_calls.kind", "coach": "$private_calls.coach",
+            "tier": "$tier", "status": "$private_calls.status"}, "n": {"$sum": 1}}},
+    ]):
+        k = r["_id"]
+        n = r["n"]
+        st = k.get("status")
+        if st == "No-show":
+            no_show += n
+            continue
+        if st == "Cancelled":
+            cancelled += n
+            continue
+        held += n
+        kind = PRIVATE_KIND_LABELS.get(k.get("kind"), k.get("kind") or "?")
+        coach = k.get("coach") or "Unknown"
+        tier = _normalize_tier(k.get("tier")) or "Other"
+        by_type[kind] = by_type.get(kind, 0) + n
+        by_coach[coach] = by_coach.get(coach, 0) + n
+        by_tier[tier] = by_tier.get(tier, 0) + n
+
+    def _fmt(d):
+        return ", ".join(f"{k} ({v})" for k, v in sorted(d.items(), key=lambda x: -x[1])) or "-"
+
+    if not (held or no_show or cancelled):
+        msg = f":bar_chart: *Private Tier calls - {month_label}*: no calls recorded."
+    else:
+        msg = (f":bar_chart: *Private Tier calls - {month_label}*\n"
+               f"*{held}* call{'s' if held != 1 else ''} held"
+               + (f" · {no_show} no-show" if no_show else "")
+               + (f" · {cancelled} cancelled" if cancelled else "") + "\n"
+               f"• By type: {_fmt(by_type)}\n"
+               f"• By coach: {_fmt(by_coach)}\n"
+               f"• By tier: {_fmt(by_tier)}")
+
+    ok = False
+    try:
+        res = await slack_dm.post_to_channel(db, channel, msg)
+        ok = bool(res.get("ok"))
+    except Exception as e:
+        logger.warning(f"[private-monthly] Slack post failed: {e}")
+    out = {"month": prefix, "held": held, "no_show": no_show, "cancelled": cancelled,
+           "posted": ok, "channel": channel}
+    logger.info(f"[private-monthly] {out}")
+    return out

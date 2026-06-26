@@ -1300,6 +1300,23 @@ async def on_startup():
         max_instances=1, coalesce=True,
     )
 
+    async def _monthly_private_summary():
+        import calendly_webhook
+        try:
+            await calendly_webhook.post_monthly_private_summary(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] monthly private-tier summary failed: {e}")
+
+    # 1st of each month, 07:00 - posts the previous month's private-tier call
+    # summary (by type / coach / tier) to #private-tiers.
+    scheduler.add_job(
+        _monthly_private_summary,
+        CronTrigger(day=1, hour=7, minute=0, timezone=tz),
+        id="monthly_private_summary",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     async def _daily_sla_digest():
         import sla_notifications
         try:
