@@ -127,7 +127,7 @@ async def mark_bonus_eligible(body: MarkEligibleBody,
     email = (body.email or "").strip().lower()
     if not email:
         raise HTTPException(400, "email required")
-    tag_ids = await connectors._resolve_ayci_cohort_tags(calendly_webhook.AD_HOC_TAG_SUFFIX)
+    tag_ids = await connectors._resolve_ayci_cohort_tags(calendly_webhook.AD_HOC_TAG_SUFFIX, exclude_future=True)
     if not tag_ids:
         raise HTTPException(
             400, "No 'Ad Hoc Bonus Call' tag found for the current cohort in Kit - create it first"
@@ -142,27 +142,43 @@ async def mark_bonus_eligible(body: MarkEligibleBody,
 
 
 async def _compute_bonus_summary() -> dict:
-    """End-of-cohort snapshot: eligibility (from this cohort's Kit tags) + the
-    booking-status breakdown (from student records)."""
+    """End-of-cohort snapshot for the RUNNING cohort:
+      - eligible: unique subscribers across this cohort's eligibility Kit tags
+      - booked:   subscribers on this cohort's "1:1 Call Booked" tag (the
+                  reliable source - set on every booking incl. backfilled ones)
+      - by_status: post-booking outcomes from the student record (Attended /
+                  No-show / Rescheduled / Cancelled / Done). Plain "Booked" is
+                  excluded here since `booked` is the headline count.
+    Tags are resolved with exclude_future=True so a pre-created next-cohort tag
+    (e.g. SEP-26) doesn't get read while JUN-26 is running.
+    """
     by_status: dict = {}
     async for r in db.academy_members.aggregate([
-        {"$match": {"bonus_call_status": {"$nin": [None, ""]}}},
+        {"$match": {"bonus_call_status": {"$nin": [None, "", "Booked"]}}},
         {"$group": {"_id": "$bonus_call_status", "n": {"$sum": 1}}},
     ]):
         by_status[r["_id"]] = r["n"]
 
-    eligible = None
-    try:
+    async def _unique_tag_emails(suffixes: list[str]) -> int:
         emails: set = set()
-        for suf in calendly_webhook.ELIGIBILITY_TAG_SUFFIXES:
-            tag_ids = await connectors._resolve_ayci_cohort_tags(suf)
+        for suf in suffixes:
+            tag_ids = await connectors._resolve_ayci_cohort_tags(suf, exclude_future=True)
             if tag_ids:
                 emails |= await connectors._ck_tag_emails(tag_ids[0])
-        eligible = len(emails)
+        return len(emails)
+
+    eligible = booked = None
+    try:
+        eligible = await _unique_tag_emails(calendly_webhook.ELIGIBILITY_TAG_SUFFIXES)
     except Exception as e:
         logger.warning(f"[bonus-call] eligible count failed: {e}")
+    try:
+        booked = await _unique_tag_emails([calendly_webhook.KIT_BOOKED_TAG_SUFFIX])
+    except Exception as e:
+        logger.warning(f"[bonus-call] booked count failed: {e}")
 
-    return {"eligible": eligible, "by_status": by_status, "tracked": sum(by_status.values())}
+    return {"eligible": eligible, "booked": booked, "by_status": by_status,
+            "tracked": booked or 0}
 
 
 @router.get("/bonus-call/summary")

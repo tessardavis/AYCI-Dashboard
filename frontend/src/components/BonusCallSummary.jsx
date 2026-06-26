@@ -15,7 +15,7 @@ export default function BonusCallSummary({ className = "" }) {
 
   if (!data) return null;
   const s = data.by_status || {};
-  const ORDER = ["Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done", "Eligible"];
+  const ORDER = ["Attended", "No-show", "Rescheduled", "Cancelled", "Done"];
   const chips = [
     ...ORDER.filter((k) => s[k]).map((k) => [k, s[k]]),
     ...Object.entries(s).filter(([k]) => !ORDER.includes(k)),
@@ -32,13 +32,18 @@ export default function BonusCallSummary({ className = "" }) {
             <strong className="text-lg text-[var(--ayci-ink)]">{data.eligible}</strong> eligible
           </span>
         )}
+        {data.booked != null && (
+          <span className="text-sm mr-1">
+            <strong className="text-lg text-[var(--ayci-ink)]">{data.booked}</strong> booked
+          </span>
+        )}
         {chips.map(([k, n]) => (
           <span key={k} className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">
             {k}: <strong>{n}</strong>
           </span>
         ))}
-        {data.tracked === 0 && (
-          <span className="text-xs text-[var(--ayci-ink-muted)]">No bookings recorded yet this cohort.</span>
+        {data.booked === 0 && (
+          <span className="text-xs text-[var(--ayci-ink-muted)]">No bonus calls booked yet this cohort.</span>
         )}
       </div>
     </div>
