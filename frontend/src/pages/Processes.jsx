@@ -226,8 +226,10 @@ function BonusCallsDoc() {
         Ad Hoc tag is applied by the dashboard, so it has no zap.
       </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
-        <LI><Tag>Purchase - Live webinar</Tag> - applied at Kajabi purchase by a Zapier zap. <em>[link to add]</em></LI>
-        <LI><Tag>Legacy Video Launch Day 1 Upgrade</Tag> + <Tag>Legacy Video Launch Last Day Upgrade</Tag> - applied by the zap "Legacy Video Launch Upgrade Bonus Kit Tags". <em>[link to add]</em></LI>
+        <LI><Tag>Purchase - Live webinar</Tag> - applied at Kajabi purchase by{" "}
+          <a href="https://zapier.com/editor/356253725/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">this Zapier zap</a>.</LI>
+        <LI><Tag>Legacy Video Launch Day 1 Upgrade</Tag> + <Tag>Legacy Video Launch Last Day Upgrade</Tag> - applied by the zap{" "}
+          <a href="https://zapier.com/editor/365778218/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">"Legacy Video Launch Upgrade Bonus Kit Tags"</a>.</LI>
         <LI><Tag>Cart Close Signup</Tag> - applied by the zap{" "}
           <a href="https://zapier.com/editor/365778815" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">"Cart Close Bonus Call - Kit tag"</a>.</LI>
         <LI><Tag>Ad Hoc Bonus Call</Tag> - applied by the <strong>dashboard</strong> (the Mark eligible button). No zap.</LI>
