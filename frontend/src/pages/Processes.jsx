@@ -210,6 +210,10 @@ function BonusCallsDoc() {
         <a href="https://calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26</a>
         {" "}<em>- a fresh round-robin event is created each cohort, so this link must be updated each launch (in the doc and in the Kit booking-link automation).</em>
       </P>
+      <P>
+        <strong>Walkthrough video:</strong>{" "}
+        <a href="https://www.loom.com/share/00eb3199d5b14c9abcc701edc101441b" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">loom.com/share/00eb3199d5b14c9abcc701edc101441b</a>
+      </P>
 
       <H>Who's eligible</H>
       <P>A student is eligible if they hold any of these ConvertKit tags (the cohort prefix changes each launch):</P>
@@ -360,7 +364,7 @@ function PrivateTierCallsDoc() {
       <P><strong>VIP</strong> - five calls across three links:</P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI>2 x 30-min <strong>with Tessa</strong> - <a href="https://calendly.com/tessardavis/ayci-vip-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/tessardavis/ayci-vip-30-min</a></LI>
-        <LI>2 x 30-min <strong>coach calls</strong> (with Becky) - the same <a href="https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min</a> link as Private Plus</LI>
+        <LI>2 x 30-min <strong>coach calls</strong> (with Becky, Anoop, or Charlotte) - the same <a href="https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min</a> link as Private Plus</LI>
         <LI>1 x 60-min <strong>mock interview</strong> (with Becky, Charlotte, or Anoop) - <a href="https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min</a></LI>
       </ul>
 
@@ -369,7 +373,7 @@ function PrivateTierCallsDoc() {
         Unlike bonus calls, these links stay live all year, so availability has to be kept topped up:
       </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
-        <LI>set coach availability on Calendly <strong>well ahead</strong> of each launch;</LI>
+        <LI>coach availability needs to be set up on Calendly <strong>each month</strong>;</LI>
         <LI>availability should run <strong>consistently throughout the year</strong>; and</LI>
         <LI>do <strong>regular checks</strong> on each booking link to confirm there's enough open: the Private Plus 30-min coach call, the VIP 60-min mock, the VIP 2 x 30-min coach calls, and the VIP 2 x 30-min Tessa calls.</LI>
       </ul>
@@ -383,7 +387,7 @@ function PrivateTierCallsDoc() {
       </ul>
       <P>
         If a student <strong>reschedules</strong>, the dashboard updates the date automatically. If a
-        student <strong>doesn't show up</strong>, the coach opens that student's <strong>Student Lookup</strong>
+        student <strong>doesn't show up</strong>, the coach opens that student's <strong>Student Lookup</strong>{" "}
         card and marks that call a <strong>no-show</strong>.
       </P>
       <P>
