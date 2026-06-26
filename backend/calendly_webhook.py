@@ -70,9 +70,31 @@ def _host_from_payload(payload: dict) -> str | None:
     return None
 
 
+async def _match_student(db, email: str):
+    """Find a student row by primary, Circle, or any 'Other emails' address."""
+    return await db.academy_members.find_one({"$or": [
+        {"email": email},
+        {"circle_email": email},
+        {"other_emails": {"$regex": re.escape(email), "$options": "i"}},
+    ]})
+
+
+async def _set_bonus_fields(db, row: dict, fields: dict) -> None:
+    """Write bonus-call fields to a student row, pinned so the Monday sync can't
+    overwrite them."""
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(fields.keys()))
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        **fields,
+        "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": datetime.now(timezone.utc),
+        "dashboard_edited_by": "calendly-bonus-call",
+    }})
+
+
 async def handle_invitee_created(db, payload: dict) -> dict:
     """Process one Calendly invitee.created payload. Safe to call more than once
-    for the same booking (deduped by invitee URI)."""
+    for the same booking (deduped by invitee URI). Handles both fresh bookings
+    and the new half of a reschedule."""
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
@@ -87,11 +109,24 @@ async def handle_invitee_created(db, payload: dict) -> dict:
         return {"skipped": "duplicate", "email": email}
 
     host = _host_from_payload(payload)
-    result = {"email": email, "event": event_name, "host": host,
-              "kit_tagged": False, "row_updated": False, "slack": False}
+    start_time = ev.get("start_time") or ""
+    call_date = start_time[:10] or None
+    when = start_time[:16].replace("T", " ")
+    is_reschedule = bool(payload.get("rescheduled")) or bool(payload.get("old_invitee"))
 
-    # 1) Kit tag — this is what stops the reminder emails. Resolve the current
-    #    cohort's "1:1 Call Booked" tag automatically (newest-first).
+    # New half of a reschedule: recover the original date from the old invitee's
+    # stored record so we can show "was X -> now Y".
+    old_date = None
+    old_uri = payload.get("old_invitee")
+    if old_uri:
+        prev = await db.calendly_events_seen.find_one({"_id": old_uri})
+        if prev:
+            old_date = prev.get("call_date") or (prev.get("start_time") or "")[:10] or None
+
+    result = {"email": email, "event": event_name, "host": host, "call_date": call_date,
+              "rescheduled": is_reschedule, "kit_tagged": False, "row_updated": False, "slack": False}
+
+    # 1) Kit tag - stops the reminder emails. Current cohort's tag, newest-first.
     try:
         tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX)
         if tag_ids:
@@ -99,28 +134,24 @@ async def handle_invitee_created(db, payload: dict) -> dict:
             result["kit_tagged"] = tag_ids[0]
         else:
             logger.warning(
-                f"[calendly] no '{KIT_BOOKED_TAG_SUFFIX}' Kit tag found — {email} not tagged"
+                f"[calendly] no '{KIT_BOOKED_TAG_SUFFIX}' Kit tag found - {email} not tagged"
             )
     except Exception as e:
         logger.warning(f"[calendly] Kit tag failed for {email}: {e}")
 
-    # 2) Record on the student row (combined-identity match), pinned so the
-    #    Monday sync can't overwrite it.
+    # 2) Record the booking on the student row (pinned).
     try:
-        row = await db.academy_members.find_one({"$or": [
-            {"email": email},
-            {"circle_email": email},
-            {"other_emails": {"$regex": re.escape(email), "$options": "i"}},
-        ]})
+        row = await _match_student(db, email)
         if row:
-            now = datetime.now(timezone.utc)
-            pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"bonus_call"})
-            await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+            fields = {
                 "bonus_call": f"Booked - {host}" if host else "Booked",
-                "dashboard_edited_fields": pinned,
-                "dashboard_edited_at": now,
-                "dashboard_edited_by": "calendly-bonus-call",
-            }})
+                "bonus_call_coach": host,
+                "bonus_call_date": call_date,
+                "bonus_call_status": "Rescheduled" if is_reschedule else "Booked",
+            }
+            if old_date:
+                fields["bonus_call_rescheduled_from"] = old_date
+            await _set_bonus_fields(db, row, fields)
             result["row_updated"] = row["_id"]
         else:
             result["row_updated"] = "student_not_found"
@@ -130,14 +161,21 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     # 3) Slack heads-up to #fulfillment-team.
     try:
         name = payload.get("name") or email
-        when = (ev.get("start_time") or "")[:16].replace("T", " ")
-        msg = (
-            f":calendar: *Bonus call booked* - {name} ({email})"
-            + (f" with *{host}*" if host else "")
-            + (f" · {when} UTC" if when else "")
-            + (" · :warning: not found in dashboard - check their email"
-               if result["row_updated"] == "student_not_found" else "")
-        )
+        if is_reschedule:
+            msg = (
+                f":arrows_counterclockwise: *Bonus call rescheduled* - {name} ({email})"
+                + (f" with *{host}*" if host else "")
+                + (f" · now {when} UTC" if when else "")
+                + (f" (was {old_date})" if old_date else "")
+            )
+        else:
+            msg = (
+                f":calendar: *Bonus call booked* - {name} ({email})"
+                + (f" with *{host}*" if host else "")
+                + (f" · {when} UTC" if when else "")
+            )
+        if result["row_updated"] == "student_not_found":
+            msg += " · :warning: not found in dashboard - check their email"
         sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
         result["slack"] = bool(sl.get("ok"))
     except Exception as e:
@@ -146,11 +184,72 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     if invitee_uri:
         await db.calendly_events_seen.update_one(
             {"_id": invitee_uri},
-            {"$set": {"_id": invitee_uri, "email": email,
-                      "at": datetime.now(timezone.utc), "result": result}},
+            {"$set": {"_id": invitee_uri, "email": email, "coach": host,
+                      "call_date": call_date, "start_time": start_time,
+                      "status": "rescheduled" if is_reschedule else "booked",
+                      "at": datetime.now(timezone.utc)}},
             upsert=True,
         )
     logger.info(f"[calendly] bonus-call processed: {result}")
+    return result
+
+
+async def handle_invitee_canceled(db, payload: dict) -> dict:
+    """Process an invitee.canceled. A reschedule fires this for the OLD slot
+    (rescheduled=True) - that half is handled by the new invitee.created, so we
+    only flag it. A genuine cancellation marks the student's bonus call Cancelled
+    and posts to Slack."""
+    ev = payload.get("scheduled_event") or {}
+    event_name = ev.get("name") or ""
+    if BONUS_EVENT_MATCH not in event_name.lower():
+        return {"skipped": "not_bonus_call", "event": event_name}
+
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        return {"skipped": "no_email"}
+
+    invitee_uri = payload.get("uri") or ""
+    if bool(payload.get("rescheduled")):
+        # The new invitee.created (carrying old_invitee) does the update + Slack;
+        # keep this record so it can read the original date, just flag it.
+        if invitee_uri:
+            await db.calendly_events_seen.update_one(
+                {"_id": invitee_uri}, {"$set": {"status": "rescheduled_away"}}
+            )
+        return {"email": email, "skipped": "reschedule_cancel_half"}
+
+    # Genuine cancellation - dedupe so a Calendly resend doesn't double-post.
+    seen = await db.calendly_events_seen.find_one({"_id": invitee_uri}) if invitee_uri else None
+    if seen and seen.get("status") == "cancelled":
+        return {"email": email, "skipped": "duplicate_cancel"}
+
+    result = {"email": email, "row_updated": False, "slack": False}
+    try:
+        row = await _match_student(db, email)
+        if row:
+            await _set_bonus_fields(db, row, {"bonus_call_status": "Cancelled"})
+            result["row_updated"] = row["_id"]
+    except Exception as e:
+        logger.warning(f"[calendly] cancel row update failed for {email}: {e}")
+
+    try:
+        name = payload.get("name") or email
+        reason = ((payload.get("cancellation") or {}).get("reason") or "").strip()
+        msg = (f":x: *Bonus call cancelled* - {name} ({email})"
+               + (f" · {reason}" if reason else ""))
+        sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
+        result["slack"] = bool(sl.get("ok"))
+    except Exception as e:
+        logger.warning(f"[calendly] cancel Slack failed for {email}: {e}")
+
+    if invitee_uri:
+        await db.calendly_events_seen.update_one(
+            {"_id": invitee_uri},
+            {"$set": {"_id": invitee_uri, "email": email, "status": "cancelled",
+                      "at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    logger.info(f"[calendly] bonus-call cancellation processed: {result}")
     return result
 
 

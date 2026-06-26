@@ -42,11 +42,15 @@ async def calendly_webhook_receiver(request: Request):
     except Exception:
         raise HTTPException(400, "invalid JSON")
 
-    if body.get("event") != "invitee.created":
-        return {"ok": True, "skipped": body.get("event")}
-
+    event = body.get("event")
+    payload = body.get("payload") or {}
     try:
-        result = await calendly_webhook.handle_invitee_created(db, body.get("payload") or {})
+        if event == "invitee.created":
+            result = await calendly_webhook.handle_invitee_created(db, payload)
+        elif event == "invitee.canceled":
+            result = await calendly_webhook.handle_invitee_canceled(db, payload)
+        else:
+            return {"ok": True, "skipped": event}
         return {"ok": True, "result": result}
     except Exception as e:
         logger.exception("[calendly] handler error")
@@ -56,9 +60,10 @@ async def calendly_webhook_receiver(request: Request):
 @router.post("/admin/calendly/register-webhook")
 async def register_calendly_webhook(admin: dict = Depends(require_admin)):
     """Create the org-scoped Calendly webhook subscription that feeds
-    /api/calendly/webhook, and store its signing key. Calendly rejects a
-    duplicate (url, scope) — if recreating, delete the old one first
-    (GET then DELETE via the Calendly UI, or extend this module)."""
+    /api/calendly/webhook (invitee.created + invitee.canceled), and store its
+    signing key. Re-running is safe: any existing subscription pointing at our
+    callback is deleted first, so "Re-connect" works without Calendly's
+    duplicate-(url, scope) error."""
     if not os.environ.get("CALENDLY_TOKEN"):
         raise HTTPException(400, "CALENDLY_TOKEN not set")
     callback = os.environ.get("CALENDLY_WEBHOOK_URL") or _DEFAULT_CALLBACK
@@ -71,12 +76,21 @@ async def register_calendly_webhook(admin: dict = Depends(require_admin)):
         org = (me.json().get("resource") or {}).get("current_organization")
         if not org:
             raise HTTPException(400, "could not resolve Calendly organization")
+
+        # Delete any prior subscription for this callback (idempotent re-connect).
+        existing = await c.get(f"{connectors.CALENDLY_BASE}/webhook_subscriptions",
+                               headers=connectors._calendly_headers(),
+                               params={"organization": org, "scope": "organization"})
+        for s in (existing.json().get("collection") or []) if existing.status_code < 300 else []:
+            if s.get("callback_url") == callback and s.get("uri"):
+                await c.delete(s["uri"], headers=connectors._calendly_headers())
+
         sub = await c.post(
             f"{connectors.CALENDLY_BASE}/webhook_subscriptions",
             headers={**connectors._calendly_headers(), "Content-Type": "application/json"},
             json={
                 "url": callback,
-                "events": ["invitee.created"],
+                "events": ["invitee.created", "invitee.canceled"],
                 "organization": org,
                 "scope": "organization",
                 "signing_key": signing_key,
