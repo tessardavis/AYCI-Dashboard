@@ -284,10 +284,10 @@ post, and check coach availability is set on all the booking links.
 | Piece | Status |
 |---|---|
 | Document the process (board + this file + Q&A) | ✅ Live |
-| Webhook recognises the 3 private-tier events | 🔨 |
-| Log booking (kind + coach + date) to `private_calls` | 🔨 |
-| Allowance used/remaining on the student record | 🔨 |
-| No-show / attended marking per call | 🔨 |
-| Reschedule + cancellation capture | 🔨 |
-| Backfill past private-tier bookings | 🔨 |
-| Monthly summary by tier / call type / coach | 🔨 |
+| Webhook recognises the 3 private-tier events | ✅ Live |
+| Log booking (kind + coach + date) to `private_calls` | ✅ Live |
+| Allowance used/remaining on the student record | ✅ Live |
+| No-show / attended marking per call | ✅ Live |
+| Reschedule + cancellation capture | ✅ Live |
+| Backfill past private-tier bookings | ✅ Live |
+| Summary by tier / call type / coach | ✅ Live |
