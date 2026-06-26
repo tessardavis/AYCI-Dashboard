@@ -171,6 +171,57 @@ matches the Calendly events by name, so the same booking links carry over. The
 per-launch jobs are: confirm the Sales Zap is tagging the new cohort's tier tags,
 update the cohort prefix in the onboarding email + Coralie's private-chat post, and
 check coach availability is set on all the booking links.
+
+
+# Private chat
+
+WHAT IT IS: Every Private Plus, VIP and active Boost & Go student gets a private
+group chat on Circle with the coaching team - where they ask questions, get video
+feedback, and find the links they need.
+
+WHO'S IN THE CHAT: the student plus the coaches Tessa, Arub, Coralie and Becky.
+(Oksana is no longer added to new chats; older chats keep whoever was in them -
+you can't remove people from a Circle group DM.) The coach list is editable in
+Settings > Integrations > Private chat setup.
+
+HOW A CHAT GETS CREATED (two paths, both live):
+  - Automatically via Zapier when the student joins Circle with the current cohort
+    tag - three zaps: VIP & Private Plus members
+    (https://zapier.com/editor/356003238/published, plus the "In Between" join
+    variant), Legacy Upgrades (https://zapier.com/editor/356048959/published), and
+    VIP & Private Plus standard join (https://zapier.com/editor/370426888/published).
+  - Manually via the dashboard "Create chat" button in Students DB (and the "Needs
+    setup" list). It adds the coaches + student, posts the welcome message, records
+    the URL, and checks first that no chat already exists (safe to press).
+
+THE WELCOME MESSAGE: posted from Coralie. Content is set on the dashboard in
+Settings > Integrations > Private chat setup - a separate template per tier
+(Private Plus / VIP / Boost & Go) with placeholders like {first_name} and
+{video_allowance}, including the call booking link(s) and the video-answer link.
+If a tier has no template set, the chat won't be created (so the wrong message
+can't go out).
+
+WHERE IT'S TRACKED: the chat URL is stored on the student's record as their
+private chat link (Student Lookup + Students DB). Some older zap-created chats
+never wrote their URL back; the dashboard can recover those by scanning Circle.
+
+NEEDS SETUP: any private-tier / Boost & Go student WITHOUT a chat link shows in
+Students DB > "Needs setup". From there, press "Create chat" to create it, or
+paste an existing chat's URL into the record (Edit) by hand. A new such student
+landing without a chat also fires a Slack heads-up in #fulfillment-team for Coralie.
+
+IF THEIR CIRCLE DMs ARE OFF: Circle won't create a group chat for someone with DMs
+switched off. The dashboard flags them "Awaiting DMs" (they stay in Needs setup).
+There is NO automatic retry - once they turn DMs back on, press "Create chat" again.
+
+DUAL EMAILS: chat creation matches the student to their Circle member by email. If
+their Circle email differs from their purchase / Kajabi email, the match can fail -
+keep their Circle email / "Other emails" up to date if a chat won't create for
+someone who's clearly on Circle.
+
+EACH COHORT (private chat): the three zaps must fire on the new cohort's tag each
+launch, and Coralie's welcome-message links should be checked. The dashboard side
+needs no change.
 """
 
 

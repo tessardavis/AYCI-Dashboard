@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, MessageCircle, Gift, Phone, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, Phone, Users, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
@@ -10,6 +10,7 @@ import PrivateCallSummary from "@/components/PrivateCallSummary";
 const PROCESSES = [
   { slug: "bonus-calls", title: "Bonus calls", status: "ready", body: BonusCallsDoc },
   { slug: "private-tier-calls", title: "Private Tier calls", status: "ready", body: PrivateTierCallsDoc },
+  { slug: "private-chat", title: "Private chat", status: "ready", body: PrivateChatDoc },
   { slug: "testimonials", title: "Testimonial status", status: "soon" },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
@@ -420,6 +421,103 @@ function PrivateTierCallsDoc() {
         jobs are: confirm the Sales Zap is tagging the new cohort's tier tags, update the cohort prefix in
         the onboarding email + Coralie's private-chat post, and check coach availability is set on all
         the booking links.
+      </P>
+    </div>
+  );
+}
+
+function PrivateChatDoc() {
+  return (
+    <div data-testid="process-private-chat">
+      <div className="flex items-center gap-2 mb-1">
+        <Users className="w-5 h-5 text-[var(--ayci-teal)]" />
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private chat</h1>
+      </div>
+      <P>
+        Every <strong>Private Plus</strong>, <strong>VIP</strong> and active <strong>Boost & Go</strong>{" "}
+        student gets a <strong>private group chat on Circle</strong> with the coaching team. It's where
+        they ask questions and get their video feedback, and it carries the links they need.
+      </P>
+
+      <H>Who's in the chat</H>
+      <P>
+        The student plus the coaches: <strong>Tessa, Arub, Coralie and Becky</strong>. (Oksana is no
+        longer added to new chats - older chats keep whoever was in them, since you can't remove people
+        from a Circle group DM.) The coach list is editable in{" "}
+        <strong>Settings → Integrations → Private chat setup</strong>.
+      </P>
+
+      <H>How a chat gets created</H>
+      <P>There are two paths, and both are live right now:</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>
+          <strong>Automatically</strong>, by Zapier when the student joins Circle with the current
+          cohort tag. Three zaps cover the audiences:
+          <ul className="list-disc pl-5 space-y-1 mt-1">
+            <LI>VIP &amp; Private Plus members - <a href="https://zapier.com/editor/356003238/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a> (and the "In Between" join variant)</LI>
+            <LI>Legacy Upgrades - <a href="https://zapier.com/editor/356048959/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
+            <LI>VIP &amp; Private Plus (standard join) - <a href="https://zapier.com/editor/370426888/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
+          </ul>
+        </LI>
+        <LI>
+          <strong>Manually</strong>, from the dashboard - the <strong>"Create chat"</strong> button on a
+          student in <strong>Students DB</strong> (and on the "Needs setup" list). The dashboard adds the
+          coaches + student, posts the welcome message, and records the chat URL. It checks first that the
+          student doesn't already have a chat, so it's safe to press.
+        </LI>
+      </ul>
+
+      <H>The welcome message</H>
+      <P>
+        An initial message is posted from <strong>Coralie</strong>. Its content is set on the dashboard
+        in <strong>Settings → Integrations → Private chat setup</strong> - there's a separate template per
+        tier (Private Plus / VIP / Boost & Go), with placeholders like <Tag>{"{first_name}"}</Tag> and{" "}
+        <Tag>{"{video_allowance}"}</Tag>, and it includes the call booking link(s) and their video-answer
+        link. (If a tier has no template set, the chat won't be created - so the wrong message can't go out.)
+      </P>
+
+      <H>Where the chat is tracked</H>
+      <P>
+        The chat URL is stored on the student's record as their <strong>private chat link</strong> (visible
+        in Student Lookup and Students DB). Some older zap-created chats never wrote their URL back; the
+        dashboard can recover those by scanning Circle and recording the link automatically.
+      </P>
+
+      <H>Needs setup</H>
+      <P>
+        Any private-tier / Boost & Go student <strong>without</strong> a chat link shows in{" "}
+        <strong>Students DB → "Needs setup"</strong>. From there:
+      </P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>press <strong>"Create chat"</strong> to create it on the spot; or</LI>
+        <LI>if a chat already exists elsewhere, paste its URL into the student's record (Edit) by hand.</LI>
+      </ul>
+      <P>
+        A new private-tier / Boost & Go student who lands without a chat also triggers a{" "}
+        <strong>Slack heads-up in #fulfillment-team for Coralie</strong>, so they're not missed.
+      </P>
+
+      <H>If their Circle DMs are switched off</H>
+      <P>
+        Circle won't let a group chat be created for someone who has direct messages turned off. When that
+        happens the dashboard flags the student <Tag>Awaiting DMs</Tag> (they stay in "Needs setup"). There's
+        <strong> no automatic retry</strong> - once the student turns their DMs back on, press{" "}
+        <strong>"Create chat"</strong> again and it'll go through.
+      </P>
+
+      <H>Heads-up: dual emails</H>
+      <P>
+        Chat creation matches the student to their Circle member by email. If their <strong>Circle email
+        differs from their purchase / Kajabi email</strong>, the match can fail and the chat won't be created
+        - so keep their <strong>Circle email / "Other emails"</strong> up to date on the record if a chat
+        won't create for someone who's clearly on Circle.
+      </P>
+
+      <H>Each cohort</H>
+      <P>
+        The three zaps need to fire on the <strong>new cohort's tag</strong> each launch (and Coralie's
+        welcome-message links should be checked). The dashboard side needs no change - it reads tier and
+        the per-tier templates, which carry over.
       </P>
     </div>
   );
