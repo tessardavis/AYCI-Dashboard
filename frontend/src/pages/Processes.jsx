@@ -448,11 +448,15 @@ function PrivateChatDoc() {
       </P>
 
       <H>How a chat gets created</H>
-      <P>There are two paths, and both are live right now:</P>
+      <P>
+        There are two paths. <strong>The Zapier zaps are the primary, reliable creator</strong> - the
+        dashboard "Create chat" button is a manual fallback (it can occasionally fail on Circle's side, so
+        don't rely on it as the only route yet).
+      </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI>
-          <strong>Automatically</strong>, by Zapier when the student joins Circle with the current
-          cohort tag. Three zaps cover the audiences:
+          <strong>Automatically (primary)</strong> - Zapier creates the chat when the student joins Circle
+          with the current cohort tag. This is the dependable path. Three zaps cover the audiences:
           <ul className="list-disc pl-5 space-y-1 mt-1">
             <LI>VIP &amp; Private Plus members - <a href="https://zapier.com/editor/356003238/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a> (and the "In Between" join variant)</LI>
             <LI>Legacy Upgrades - <a href="https://zapier.com/editor/356048959/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a></LI>
@@ -460,10 +464,11 @@ function PrivateChatDoc() {
           </ul>
         </LI>
         <LI>
-          <strong>Manually</strong>, from the dashboard - the <strong>"Create chat"</strong> button on a
-          student in <strong>Students DB</strong> (and on the "Needs setup" list). The dashboard adds the
-          coaches + student, posts the welcome message, and records the chat URL. It checks first that the
-          student doesn't already have a chat, so it's safe to press.
+          <strong>Manually (fallback)</strong> - the <strong>"Create chat"</strong> button on a student in
+          <strong> Students DB</strong> (and on the "Needs setup" list), for backlog or anyone the zaps
+          missed. It adds the coaches + student, posts the welcome message, records the URL, and checks
+          first that no chat already exists (safe to press). It now tells you the outcome - if it fails it
+          shows the reason (e.g. their Circle DMs are off, or a Circle hiccup) rather than doing nothing.
         </LI>
       </ul>
 
