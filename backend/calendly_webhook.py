@@ -14,6 +14,8 @@ Replaces the Zapier "Bonus Call Booked (Anoop's calendar)" zap. On an
 Calendly signs every delivery; we verify it with the signing key stored when the
 subscription was registered (app_settings.calendly_webhook). See routes/calendly.py.
 """
+from __future__ import annotations
+
 import hashlib
 import hmac
 import logging
@@ -49,6 +51,84 @@ ELIGIBILITY_TAG_SUFFIXES = [
     "Cart Close Signup",
     AD_HOC_TAG_SUFFIX,
 ]
+
+# --------------------------------------------------------------------------
+# Private Tier calls (Private Plus / VIP). Separate from bonus calls: no Kit
+# tag on booking (reminders are manual via Coralie). We log each booking to a
+# `private_calls` array on the student row and derive allowance from `tier`.
+# The three Calendly events back all private-tier calls (see PROCESSES.md #2):
+#   ayci-1-1-30-min  -> coach_30  (Private Plus call, or a VIP coach call)
+#   ayci-vip-30-min  -> tessa_30  (VIP, with Tessa)
+#   ayci-1-1-60-min  -> mock_60   (VIP 60-min mock interview)
+# --------------------------------------------------------------------------
+PRIVATE_KIND_LABELS = {
+    "coach_30": "30-min coach call",
+    "tessa_30": "30-min call with Tessa",
+    "mock_60": "60-min mock interview",
+}
+# Allowance per normalised tier -> how many of each kind they're entitled to.
+PRIVATE_ALLOWANCE = {
+    "Private Plus": {"coach_30": 1},
+    "VIP": {"tessa_30": 2, "coach_30": 2, "mock_60": 1},
+}
+
+
+def _normalize_tier(tier) -> str | None:
+    """Map the raw `tier` string to 'Private Plus' / 'VIP' (or None). Tolerant of
+    label variants like 'Academy Private Plus' / 'VIP (12-Pay)'."""
+    t = (tier or "").lower()
+    if "vip" in t:
+        return "VIP"
+    if "private plus" in t:
+        return "Private Plus"
+    return None
+
+
+def _classify_private_event(name: str) -> str | None:
+    """Classify a Calendly event NAME into a private-tier call kind, or None.
+    Matched by substring so it survives small renames. Bonus calls are handled
+    elsewhere, so they're excluded here."""
+    n = (name or "").lower()
+    if BONUS_EVENT_MATCH in n:
+        return None
+    has_1on1 = "1:1" in n or "1-1" in n or "1 to 1" in n
+    if "vip" in n and "30" in n:
+        return "tessa_30"
+    if "60" in n and (has_1on1 or "mock" in n):
+        return "mock_60"
+    if "30" in n and has_1on1:
+        return "coach_30"
+    return None
+
+
+def summarize_private_calls(tier, calls: list | None) -> dict:
+    """Build the allowance view for a student: per-kind allowance / booked /
+    remaining, plus the active bookings. 'booked' counts entries that aren't
+    Cancelled or No-show. Pure function - safe to call from the lookup path."""
+    norm = _normalize_tier(tier)
+    allowance = PRIVATE_ALLOWANCE.get(norm, {})
+    calls = calls or []
+    by_kind = {}
+    for kind, allow in allowance.items():
+        entries = [c for c in calls if c.get("kind") == kind]
+        active = [c for c in entries if c.get("status") not in ("Cancelled", "No-show")]
+        by_kind[kind] = {
+            "label": PRIVATE_KIND_LABELS.get(kind, kind),
+            "allowance": allow,
+            "booked": len(active),
+            "remaining": max(0, allow - len(active)),
+            "calls": sorted(entries, key=lambda c: c.get("date") or ""),
+        }
+    total_allow = sum(allowance.values())
+    total_booked = sum(v["booked"] for v in by_kind.values())
+    return {
+        "tier": norm,
+        "eligible": norm is not None,
+        "total_allowance": total_allow,
+        "total_booked": total_booked,
+        "total_remaining": max(0, total_allow - total_booked),
+        "by_kind": by_kind,
+    }
 
 
 async def _get_signing_key(db) -> str:
@@ -113,7 +193,10 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
-        return {"skipped": "not_bonus_call", "event": event_name}
+        kind = _classify_private_event(event_name)
+        if kind:
+            return await handle_private_created(db, payload, kind)
+        return {"skipped": "not_tracked", "event": event_name}
 
     email = (payload.get("email") or "").strip().lower()
     if not email:
@@ -226,7 +309,10 @@ async def handle_invitee_canceled(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
-        return {"skipped": "not_bonus_call", "event": event_name}
+        kind = _classify_private_event(event_name)
+        if kind:
+            return await handle_private_canceled(db, payload, kind)
+        return {"skipped": "not_tracked", "event": event_name}
 
     email = (payload.get("email") or "").strip().lower()
     if not email:
@@ -376,4 +462,287 @@ async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120
             logger.warning(f"[calendly-backfill] row update failed {em}: {e}")
 
     logger.info(f"[calendly-backfill] {summary}")
+    return summary
+
+
+# ============================== Private Tier calls =========================
+
+async def _record_private_call(db, row: dict, entry: dict, *, replace_uri=None) -> None:
+    """Insert/update one entry in the student's `private_calls` array (deduped by
+    invitee_uri), pinned so the Monday sync can't wipe it. On a reschedule, pass
+    the OLD invitee uri as replace_uri so the moved booking isn't duplicated."""
+    calls = list(row.get("private_calls") or [])
+    uri = entry.get("invitee_uri")
+    drop = {uri} | ({replace_uri} if replace_uri else set())
+    calls = [c for c in calls if c.get("invitee_uri") not in drop]
+    calls.append(entry)
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_calls"})
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        "private_calls": calls,
+        "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": datetime.now(timezone.utc),
+        "dashboard_edited_by": "calendly-private-call",
+    }})
+
+
+async def set_private_call_status(db, row: dict, invitee_uri: str, status: str) -> bool:
+    """Set the status (e.g. Attended / No-show / Cancelled) of one private call on
+    a student row, keyed by invitee_uri. Returns False if no call matched."""
+    calls = list(row.get("private_calls") or [])
+    changed = False
+    for c in calls:
+        if c.get("invitee_uri") == invitee_uri:
+            c["status"] = status
+            changed = True
+    if not changed:
+        return False
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_calls"})
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        "private_calls": calls,
+        "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": datetime.now(timezone.utc),
+        "dashboard_edited_by": "dashboard-private-call",
+    }})
+    return True
+
+
+async def handle_private_created(db, payload: dict, kind: str) -> dict:
+    """Process one private-tier (Private Plus / VIP) booking. Logs it to the
+    student's `private_calls` array and posts to Slack. No Kit tag (private-tier
+    reminders are manual). Handles fresh bookings and the new half of a reschedule."""
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        return {"skipped": "no_email", "kind": kind}
+    ev = payload.get("scheduled_event") or {}
+    event_name = ev.get("name") or ""
+    invitee_uri = payload.get("uri") or ""
+    if invitee_uri and await db.calendly_events_seen.find_one({"_id": invitee_uri}):
+        return {"skipped": "duplicate", "email": email, "kind": kind}
+
+    host = _host_from_payload(payload)
+    start_time = ev.get("start_time") or ""
+    call_date = start_time[:10] or None
+    when = start_time[:16].replace("T", " ")
+    is_reschedule = bool(payload.get("rescheduled")) or bool(payload.get("old_invitee"))
+
+    old_uri = payload.get("old_invitee")
+    old_date = None
+    if old_uri:
+        prev = await db.calendly_events_seen.find_one({"_id": old_uri})
+        if prev:
+            old_date = prev.get("call_date") or (prev.get("start_time") or "")[:10] or None
+
+    label = PRIVATE_KIND_LABELS.get(kind, kind)
+    result = {"email": email, "kind": kind, "event": event_name, "host": host,
+              "call_date": call_date, "rescheduled": is_reschedule,
+              "row_updated": False, "slack": False}
+
+    summary = None
+    try:
+        row = await _match_student(db, email)
+        if row:
+            entry = {"kind": kind, "coach": host, "date": call_date,
+                     "status": "Rescheduled" if is_reschedule else "Booked",
+                     "invitee_uri": invitee_uri, "event_name": event_name}
+            if old_date:
+                entry["rescheduled_from"] = old_date
+            await _record_private_call(db, row, entry, replace_uri=old_uri)
+            result["row_updated"] = row["_id"]
+            fresh = await db.academy_members.find_one(
+                {"_id": row["_id"]}, {"tier": 1, "private_calls": 1})
+            summary = summarize_private_calls(
+                (fresh or {}).get("tier"), (fresh or {}).get("private_calls"))
+            if email not in (row.get("email"), row.get("circle_email")):
+                result["dup_email_note"] = row.get("email") or row.get("circle_email")
+        else:
+            result["row_updated"] = "student_not_found"
+    except Exception as e:
+        logger.warning(f"[calendly] private-call row update failed for {email}: {e}")
+
+    try:
+        name = payload.get("name") or email
+        kinfo = (summary or {}).get("by_kind", {}).get(kind)
+        used = (f" ({kinfo['booked']}/{kinfo['allowance']} used)"
+                if kinfo and kinfo["allowance"] > 1 else "")
+        if is_reschedule:
+            msg = (f":arrows_counterclockwise: *Private Tier call rescheduled* - {name} ({email}) - {label}"
+                   + (f" with *{host}*" if host else "")
+                   + (f" · now {when} UTC" if when else "")
+                   + (f" (was {old_date})" if old_date else ""))
+        else:
+            msg = (f":telephone_receiver: *Private Tier call booked* - {name} ({email}) - {label}"
+                   + (f" with *{host}*" if host else "")
+                   + (f" · {when} UTC" if when else "") + used)
+        if result["row_updated"] == "student_not_found":
+            msg += " · :warning: not found in dashboard - check their email"
+        elif result.get("dup_email_note"):
+            msg += (f" · :warning: booked under {email} but record's main email is "
+                    f"{result['dup_email_note']} - check for a duplicate subscriber")
+        sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
+        result["slack"] = bool(sl.get("ok"))
+    except Exception as e:
+        logger.warning(f"[calendly] private-call Slack post failed for {email}: {e}")
+
+    if invitee_uri:
+        await db.calendly_events_seen.update_one(
+            {"_id": invitee_uri},
+            {"$set": {"_id": invitee_uri, "email": email, "name": payload.get("name"),
+                      "coach": host, "call_date": call_date, "start_time": start_time,
+                      "kind": kind, "private": True,
+                      "status": "rescheduled" if is_reschedule else "booked",
+                      "matched": result["row_updated"] not in (False, "student_not_found"),
+                      "at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    logger.info(f"[calendly] private-call processed: {result}")
+    return result
+
+
+async def handle_private_canceled(db, payload: dict, kind: str) -> dict:
+    """invitee.canceled for a private-tier event. A reschedule fires this for the
+    OLD slot (handled by the new invitee.created); a genuine cancel marks that
+    call Cancelled on the student row and posts to Slack."""
+    email = (payload.get("email") or "").strip().lower()
+    invitee_uri = payload.get("uri") or ""
+    if bool(payload.get("rescheduled")):
+        if invitee_uri:
+            await db.calendly_events_seen.update_one(
+                {"_id": invitee_uri}, {"$set": {"status": "rescheduled_away"}})
+        return {"email": email, "kind": kind, "skipped": "reschedule_cancel_half"}
+
+    seen = await db.calendly_events_seen.find_one({"_id": invitee_uri}) if invitee_uri else None
+    if seen and seen.get("status") == "cancelled":
+        return {"email": email, "skipped": "duplicate_cancel"}
+
+    result = {"email": email, "kind": kind, "row_updated": False, "slack": False}
+    try:
+        row = await _match_student(db, email)
+        if row:
+            ok = await set_private_call_status(db, row, invitee_uri, "Cancelled")
+            result["row_updated"] = row["_id"] if ok else "no_matching_call"
+    except Exception as e:
+        logger.warning(f"[calendly] private cancel row update failed for {email}: {e}")
+
+    try:
+        name = payload.get("name") or email
+        label = PRIVATE_KIND_LABELS.get(kind, kind)
+        reason = ((payload.get("cancellation") or {}).get("reason") or "").strip()
+        msg = (f":x: *Private Tier call cancelled* - {name} ({email}) - {label}"
+               + (f" · {reason}" if reason else ""))
+        sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
+        result["slack"] = bool(sl.get("ok"))
+    except Exception as e:
+        logger.warning(f"[calendly] private cancel Slack failed for {email}: {e}")
+
+    if invitee_uri:
+        await db.calendly_events_seen.update_one(
+            {"_id": invitee_uri},
+            {"$set": {"_id": invitee_uri, "email": email, "kind": kind, "private": True,
+                      "status": "cancelled", "at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    logger.info(f"[calendly] private-call cancellation processed: {result}")
+    return result
+
+
+async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) -> dict:
+    """One-shot catch-up: scan past + upcoming Calendly bookings in the window,
+    classify the private-tier events, and record each booking on the matching
+    student's `private_calls` array. Idempotent (deduped by invitee uri). No
+    Slack, no Kit tag."""
+    headers = connectors._calendly_headers()
+    base = connectors.CALENDLY_BASE
+    now = datetime.now(timezone.utc)
+
+    def _fmt(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+    summary = {"events_scanned": 0, "private_events": 0, "invitees": 0,
+               "recorded": 0, "not_found": 0, "errors": 0, "by_kind": {}}
+    bookings: list[dict] = []
+
+    async with httpx.AsyncClient(timeout=60) as c:
+        me = await c.get(f"{base}/users/me", headers=headers)
+        me.raise_for_status()
+        org = (me.json().get("resource") or {}).get("current_organization")
+        if not org:
+            return {**summary, "error": "could not resolve organization"}
+
+        url = f"{base}/scheduled_events"
+        params = {"organization": org, "status": "active", "count": 100,
+                  "min_start_time": _fmt(now - timedelta(days=days_back)),
+                  "max_start_time": _fmt(now + timedelta(days=days_fwd)),
+                  "sort": "start_time:asc"}
+        while url:
+            r = await c.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            body = r.json()
+            for ev in body.get("collection", []):
+                summary["events_scanned"] += 1
+                kind = _classify_private_event(ev.get("name") or "")
+                if not kind:
+                    continue
+                summary["private_events"] += 1
+                summary["by_kind"][kind] = summary["by_kind"].get(kind, 0) + 1
+                host = None
+                for m in (ev.get("event_memberships") or []):
+                    nm = m.get("user_name") or m.get("user_email")
+                    if nm:
+                        host = nm.split()[0]
+                        break
+                ev_date = (ev.get("start_time") or "")[:10] or None
+                ev_name = ev.get("name") or ""
+                inv_url = f"{ev.get('uri')}/invitees"
+                inv_params = {"count": 100, "status": "active"}
+                while inv_url:
+                    ir = await c.get(inv_url, headers=headers, params=inv_params)
+                    ir.raise_for_status()
+                    ib = ir.json()
+                    for inv in ib.get("collection", []):
+                        summary["invitees"] += 1
+                        em = (inv.get("email") or "").strip().lower()
+                        if not em:
+                            continue
+                        bookings.append({"email": em, "kind": kind, "coach": host,
+                                         "date": ev_date, "invitee_uri": inv.get("uri") or "",
+                                         "event_name": ev_name})
+                    inv_url = (ib.get("pagination") or {}).get("next_page")
+                    inv_params = None
+            url = (body.get("pagination") or {}).get("next_page")
+            params = None
+
+    by_email: dict[str, list] = {}
+    for b in bookings:
+        by_email.setdefault(b["email"], []).append(b)
+
+    for em, items in by_email.items():
+        try:
+            row = await db.academy_members.find_one({"$or": [
+                {"email": em}, {"circle_email": em},
+                {"other_emails": {"$regex": re.escape(em), "$options": "i"}}]})
+            if not row:
+                summary["not_found"] += 1
+                continue
+            calls = list(row.get("private_calls") or [])
+            existing = {c.get("invitee_uri") for c in calls}
+            for b in items:
+                if b["invitee_uri"] in existing:
+                    continue
+                calls.append({"kind": b["kind"], "coach": b["coach"], "date": b["date"],
+                              "status": "Booked", "invitee_uri": b["invitee_uri"],
+                              "event_name": b["event_name"]})
+                existing.add(b["invitee_uri"])
+                summary["recorded"] += 1
+            pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_calls"})
+            await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+                "private_calls": calls,
+                "dashboard_edited_fields": pinned,
+                "dashboard_edited_at": datetime.now(timezone.utc),
+                "dashboard_edited_by": "calendly-private-backfill",
+            }})
+        except Exception as e:
+            summary["errors"] += 1
+            logger.warning(f"[private-backfill] row update failed {em}: {e}")
+
+    logger.info(f"[private-backfill] {summary}")
     return summary

@@ -187,6 +187,11 @@ PROTECTED_FIELDS = {
     # Call; replaces the old Monday "Bonus Call" column. Value: "Booked - <host>".
     "bonus_call", "bonus_call_coach", "bonus_call_date", "bonus_call_status",
     "bonus_call_rescheduled_from",
+    # Private-tier (Private Plus / VIP) 1:1 call bookings - dashboard-owned, an
+    # array of {kind, coach, date, status, invitee_uri, event_name} written by
+    # the Calendly webhook (calendly_webhook.py) when a student books one of the
+    # private-tier events. Allowance is derived from `tier`. See PROCESSES.md #2.
+    "private_calls",
     "mock_interview_cohort_before_april",
     "call_1", "call_2", "call_3", "call_4",
     "call_1_status", "call_2_status", "call_3_status", "call_4_status",
