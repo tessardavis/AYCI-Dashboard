@@ -38,12 +38,20 @@ def _eligible(row: dict) -> bool:
 
 
 async def _match_circle_member(row: dict, by_email: dict) -> tuple[Optional[dict], Optional[str]]:
-    """Find the student's Circle member via email/circle_email (exact) or a
-    strong fuzzy name match. Returns (member, matched_via) or (None, None)."""
+    """Find the student's Circle member via email / circle_email / any "Other
+    emails" address (exact) or a strong fuzzy name match. Returns (member,
+    matched_via) or (None, None). Matching on Other emails mirrors the
+    combined-identity model used for bonus/Calendly matching - a student who
+    joined Circle under a different address than their main one still resolves."""
+    import re as _re
     for key in ("email", "circle_email"):
         e = (row.get(key) or "").strip().lower()
         if e and e in by_email:
             return by_email[e], key
+    for tok in _re.split(r"[,;\s]+", row.get("other_emails") or ""):
+        e = tok.strip().lower()
+        if e and "@" in e and e in by_email:
+            return by_email[e], "other_emails"
     name = (row.get("name") or "").strip()
     if name:
         hits = await student_lookup.name_search(db, name, limit=1)
