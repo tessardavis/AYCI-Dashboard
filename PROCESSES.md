@@ -209,13 +209,13 @@ months, but they keep their allowance for as long as they need).
 
 ## Who's eligible & how it's identified
 
-When a student buys Private Plus or VIP, the **Sales Zap** tags them on Circle for the current cohort:
+When a student buys Private Plus or VIP, the **Sales Zap** tags them in **ConvertKit** for the current cohort:
 
 - `[AYCI MON-YY] Cohort - Private Plus` / `... Private Plus (4-Pay)`
 - `[AYCI MON-YY] Cohort - VIP` / `... VIP (6-Pay)` / `... VIP (12-Pay)`
 
 That tier flows through to the dashboard as the student's **tier**, which sets their call allowance.
-Sales Zap (applies the Circle tier tags): https://zapier.com/editor/00000000-0000-c000-8000-000365773719/published
+Sales Zap (applies these Kit tier tags): https://zapier.com/editor/365773719/published
 
 ## How they get the booking links
 

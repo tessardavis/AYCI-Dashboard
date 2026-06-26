@@ -332,8 +332,8 @@ function PrivateTierCallsDoc() {
 
       <H>Who's eligible &amp; how it's identified</H>
       <P>
-        When a student buys a Private Plus or VIP package, the <strong>Sales Zap</strong> tags them on
-        Circle for the current cohort:
+        When a student buys a Private Plus or VIP package, the <strong>Sales Zap</strong> tags them in
+        <strong> ConvertKit</strong> for the current cohort:
       </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI><Tag>[AYCI MON-YY] Cohort - Private Plus</Tag> / <Tag>... Private Plus (4-Pay)</Tag></LI>
@@ -341,8 +341,8 @@ function PrivateTierCallsDoc() {
       </ul>
       <P>
         That tier flows through to the dashboard as the student's <strong>tier</strong>, which is what
-        sets their call allowance. The <strong>Sales Zap</strong> that applies the Circle tier tags is{" "}
-        <a href="https://zapier.com/editor/00000000-0000-c000-8000-000365773719/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">here</a>.
+        sets their call allowance. The <strong>Sales Zap</strong> that applies these Kit tier tags is{" "}
+        <a href="https://zapier.com/editor/365773719/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">here</a>.
       </P>
 
       <H>How they get the booking links</H>
