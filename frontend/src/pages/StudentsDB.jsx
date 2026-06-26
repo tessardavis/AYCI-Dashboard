@@ -53,6 +53,22 @@ function formatDate(iso) {
   }
 }
 
+// Translate the backend's private_chat_last_error note into plain guidance.
+function friendlyChatError(note) {
+  const n = (note || "").toLowerCase();
+  if (n.includes("welcome template"))
+    return "no welcome message is set for their tier - add one in Settings → Integrations → Private chat setup.";
+  if (n.includes("not_on_circle") || n.includes("not on circle"))
+    return "couldn't match them on Circle - check their Circle email (or 'Other emails') and that they've joined Circle.";
+  if (n.includes("existing_circle_chat") || n.includes("already"))
+    return "they already have a chat in Circle.";
+  if (n.includes("not an eligible"))
+    return "they're not a current private-tier / Boost & Go student.";
+  if (n.includes("coach config"))
+    return "coach setup is incomplete - check Settings → Integrations → Private chat setup.";
+  return note || "unknown error";
+}
+
 // An active Boost & Go customer - matches the backend rule (any "B&G…" status
 // OR "Upgraded"). Used for the tier-row ·B&G tag.
 function isBandG(boost) {
@@ -97,21 +113,43 @@ export default function StudentsDB() {
   useEffect(() => { load(); }, []);
 
   // Create a student's private chat from here (same backend action as the
-  // Settings card). Creation runs in the background (~1 min) - refresh a
-  // couple of times so the row updates (link recorded, or 'Awaiting DMs').
+  // Settings card). Creation runs in the background (~1 min); we poll the
+  // student's row and surface the OUTCOME (created / DMs off / why it failed)
+  // so a failed create no longer looks like "nothing happened".
   const createChat = async (row) => {
     setCreatingChatId(row._id);
+    const who = row.name || row.email || "the student";
+    const startedAt = Date.now();
     try {
       await apiClient.post(`/students-db/${encodeURIComponent(row._id)}/create-private-chat`);
-      toast(`Creating chat for ${row.name || row.email}… the row updates in up to ~1 min.`);
+      toast(`Creating chat for ${who}…`);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't start creating - try again.");
       setCreatingChatId(null);
       return;
     }
-    for (const ms of [10000, 15000]) {
+    let outcome = null;
+    for (const ms of [6000, 8000, 10000, 14000]) {
       await new Promise((r) => setTimeout(r, ms));
-      try { await load(); } catch { /* keep waiting */ }
+      try {
+        const { data } = await apiClient.get(`/students-db/${encodeURIComponent(row._id)}`);
+        if ((data?.private_chat_url || "").trim()) { outcome = { kind: "ok" }; break; }
+        if ((data?.private_chat_status || "").trim()) { outcome = { kind: "dms", status: data.private_chat_status }; break; }
+        const errAt = data?.private_chat_last_error_at ? new Date(data.private_chat_last_error_at).getTime() : 0;
+        if ((data?.private_chat_last_error || "").trim() && errAt >= startedAt - 5000) {
+          outcome = { kind: "err", msg: data.private_chat_last_error }; break;
+        }
+      } catch { /* keep waiting */ }
+    }
+    try { await load(); } catch { /* table refresh is best-effort */ }
+    if (outcome?.kind === "ok") {
+      toast.success(`Chat created for ${who}.`);
+    } else if (outcome?.kind === "dms") {
+      toast.error(`${who} has Circle DMs switched off (${outcome.status}) - ask them to enable direct messages, then press Create chat again.`);
+    } else if (outcome?.kind === "err") {
+      toast.error(`Couldn't create ${who}'s chat: ${friendlyChatError(outcome.msg)}`);
+    } else {
+      toast(`Still creating ${who}'s chat - refresh in a minute to see the result.`);
     }
     setCreatingChatId(null);
   };
