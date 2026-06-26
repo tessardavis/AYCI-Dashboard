@@ -956,7 +956,7 @@ function EditModal({ row, onClose, onSaved }) {
           // Private-tier (Private Plus / VIP) call allowance + bookings, computed
           // from the raw row. Lets the team log off-Calendly calls and grant
           // extra allowance here too (same controls as Student Lookup).
-          const pt = summarizePrivateCalls(row.tier, row.private_calls, row.private_call_allowance);
+          const pt = summarizePrivateCalls(row.tier, row.private_calls, row.private_call_allowance, row.boost_and_go);
           if (!pt.eligible) return null;
           return (
             <div className="px-4 pb-2">

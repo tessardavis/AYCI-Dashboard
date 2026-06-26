@@ -211,6 +211,11 @@ months, but they keep their allowance for as long as they need).
 
 - **Private Plus** - 1 x 30-minute coach call.
 - **VIP** - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls total).
+- **Boost & Go Plus** - 2 x 30-minute coach calls (same 30-min coach link). Plain Boost & Go gets a chat but no calls.
+
+**Boost & Go Plus students are usually existing Academy members** who upgrade. Once tagged **B&G Plus**
+on the dashboard (their Boost & Go field), their call allowance shows automatically and their private
+chat is created by the Boost & Go chat zap.
 
 ## Who's eligible & how it's identified
 

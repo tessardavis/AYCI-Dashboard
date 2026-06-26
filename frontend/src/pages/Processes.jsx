@@ -323,8 +323,8 @@ function PrivateTierCallsDoc() {
         <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private Tier calls</h1>
       </div>
       <P>
-        Students on the <strong>Private Plus</strong> and <strong>VIP</strong> tiers get a set of free
-        1:1 coaching calls as part of their package. They can use them <strong>any time</strong> - there
+        Students on the <strong>Private Plus</strong>, <strong>VIP</strong> and <strong>Boost & Go Plus</strong>{" "}
+        packages get a set of free 1:1 coaching calls. They can use them <strong>any time</strong> - there
         is no expiry (people were previously told 12 months, but they can keep their allowance for as
         long as they need).
       </P>
@@ -337,7 +337,13 @@ function PrivateTierCallsDoc() {
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI><strong>Private Plus</strong> - 1 x 30-minute coach call.</LI>
         <LI><strong>VIP</strong> - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls in total).</LI>
+        <LI><strong>Boost & Go Plus</strong> - 2 x 30-minute coach calls (with Becky, Anoop, or Charlotte - the same 30-min coach link as above). Plain Boost & Go gets a private chat but no calls.</LI>
       </ul>
+      <P>
+        <strong>Boost & Go Plus students are usually existing Academy members</strong> who upgrade. Once
+        they're tagged <strong>B&G Plus</strong> on the dashboard (their record's Boost & Go field), their
+        call allowance shows automatically and their private chat is created by the Boost & Go chat zap.
+      </P>
 
       <H>Who's eligible &amp; how it's identified</H>
       <P>

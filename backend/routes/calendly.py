@@ -413,6 +413,7 @@ async def _compute_private_summary() -> dict:
             "kind": "$private_calls.kind",
             "coach": "$private_calls.coach",
             "tier": "$tier",
+            "boost": "$boost_and_go",
             "status": "$private_calls.status",
             "month": {"$substr": [{"$ifNull": ["$private_calls.date", ""]}, 0, 7]},
         }, "n": {"$sum": 1}}},
@@ -429,7 +430,7 @@ async def _compute_private_summary() -> dict:
         active += n
         kind = k.get("kind") or "?"
         coach = k.get("coach") or "?"
-        tier = calendly_webhook._normalize_tier(k.get("tier")) or "?"
+        tier = calendly_webhook._private_allowance(k.get("tier"), k.get("boost"))[1] or "?"
         mo = k.get("month") or "?"
         by_kind[kind] = by_kind.get(kind, 0) + n
         by_coach[coach] = by_coach.get(coach, 0) + n
