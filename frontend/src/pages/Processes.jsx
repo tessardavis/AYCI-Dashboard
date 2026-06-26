@@ -3,6 +3,7 @@ import { BookOpen, MessageCircle, Gift, Phone, CheckCircle2, Clock, Loader2, Sen
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
+import PrivateCallSummary from "@/components/PrivateCallSummary";
 
 // In-dashboard process docs the whole team can read. Add a process by adding an
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
@@ -311,6 +312,7 @@ function BonusCallsDoc() {
 function PrivateTierCallsDoc() {
   return (
     <div data-testid="process-private-tier-calls">
+      <PrivateCallSummary className="mb-5" />
       <div className="flex items-center gap-2 mb-1">
         <Phone className="w-5 h-5 text-[var(--ayci-teal)]" />
         <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private Tier calls</h1>
