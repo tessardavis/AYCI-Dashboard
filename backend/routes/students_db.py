@@ -179,6 +179,74 @@ def _needs_private_chat_setup(row: dict) -> bool:
     return no_chat or _private_chat_blocked(row) or _allowance_flag(row) == "missing"
 
 
+def _needs_chat_created(row: dict) -> bool:
+    """Narrower than _needs_private_chat_setup: a current private-tier / active
+    Boost & Go student who has NO private chat link yet (the case Coralie acts on
+    - create the chat). Excludes Boss / dismissed students."""
+    if row.get("setup_not_needed") or _is_boss(row):
+        return False
+    if not (_is_current_private_tier(row.get("tier")) or _b_and_g_active(row.get("boost_and_go"))):
+        return False
+    return not (row.get("private_chat_url") or "").strip()
+
+
+async def private_chat_setup_alerts(db) -> dict:
+    """Post a Slack heads-up to #fulfillment-team (for Coralie) when a NEW
+    private-tier / Boost & Go student appears who needs their private chat
+    created. Deduped via `needs_setup_alerted_at` so each student is flagged
+    once. The very first run silently stamps the existing backlog so we don't
+    blast #fulfillment-team with everyone who's already waiting - only students
+    who arrive after that get an alert."""
+    import slack_dm
+    channel = "#fulfillment-team"
+    setting = await db.app_settings.find_one({"id": "private_setup_alerts"})
+    first_run = setting is None
+
+    cursor = db.academy_members.find(
+        {"needs_setup_alerted_at": {"$exists": False},
+         "$or": [{"private_chat_url": {"$in": [None, ""]}},
+                 {"private_chat_url": {"$exists": False}}]},
+        {"name": 1, "email": 1, "circle_email": 1, "tier": 1, "boost_and_go": 1,
+         "private_chat_url": 1, "setup_not_needed": 1, "boss_badge": 1},
+    )
+    candidates = [r async for r in cursor if _needs_chat_created(r)]
+    now = datetime.now(timezone.utc)
+    summary = {"candidates": len(candidates), "alerted": 0, "first_run": first_run}
+
+    if first_run:
+        if candidates:
+            await db.academy_members.update_many(
+                {"_id": {"$in": [r["_id"] for r in candidates]}},
+                {"$set": {"needs_setup_alerted_at": now}})
+        await db.app_settings.update_one(
+            {"id": "private_setup_alerts"},
+            {"$set": {"id": "private_setup_alerts", "initialized_at": now}}, upsert=True)
+        summary["stamped_backlog"] = len(candidates)
+        logger.info(f"[needs-setup-alert] first run: stamped {len(candidates)} existing, no posts")
+        return summary
+
+    # Cap posts per tick; un-stamped overflow is picked up next run (no silent loss).
+    for r in candidates[:25]:
+        name = r.get("name") or r.get("email") or "A student"
+        tier = (r.get("tier") or r.get("boost_and_go") or "private tier").strip()
+        email = r.get("email") or r.get("circle_email") or "no email"
+        msg = (f":wave: *New private-tier student needs a chat set up* - {name} "
+               f"({tier} · {email}). Over to *Coralie* to create their private chat "
+               f"(Students DB > Needs setup).")
+        ok = False
+        try:
+            res = await slack_dm.post_to_channel(db, channel, msg)
+            ok = bool(res.get("ok"))
+        except Exception as e:
+            logger.warning(f"[needs-setup-alert] slack failed for {r.get('_id')}: {e}")
+        if ok:
+            await db.academy_members.update_one(
+                {"_id": r["_id"]}, {"$set": {"needs_setup_alerted_at": now}})
+            summary["alerted"] += 1
+    logger.info(f"[needs-setup-alert] {summary}")
+    return summary
+
+
 _MONTHS = {}
 for _i, _m in enumerate(
     ["january", "february", "march", "april", "may", "june", "july",

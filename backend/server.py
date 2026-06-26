@@ -1284,6 +1284,22 @@ async def on_startup():
     import asyncio as _asyncio
     _asyncio.create_task(_academy_members_mirror_sync())
 
+    async def _private_chat_setup_alerts():
+        import routes.students_db as students_db_mod
+        try:
+            await students_db_mod.private_chat_setup_alerts(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] private-chat setup alerts failed: {e}")
+
+    # A few minutes after each 15-min mirror sync, so it sees freshly-synced rows.
+    scheduler.add_job(
+        _private_chat_setup_alerts,
+        CronTrigger(minute="8,23,38,53", timezone=tz),
+        id="private_chat_setup_alerts",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     async def _daily_sla_digest():
         import sla_notifications
         try:
