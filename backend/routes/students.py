@@ -122,14 +122,21 @@ async def _run_lookup_fanout(
         e = (raw or "").strip().lower()
         if e and "@" in e and e != email and e not in alt_emails:
             alt_emails.append(e)
+    alt_emails = alt_emails[:6]  # bound the fan-out
     if alt_emails:
         async def _retry(platform: str, current: dict, make_coro):
-            """If `current` came back not-found, retry the platform under each
-            alternate email and return the first hit (tagged with which email)."""
+            """If `current` came back not-found, retry the platform under all
+            alternate emails CONCURRENTLY and return the first hit (tagged with
+            which email matched). Concurrent so N alternate emails don't add Nx
+            the latency - the old sequential loop was the main cause of slow /
+            timing-out lookups for students with several emails."""
             if (current or {}).get("found"):
                 return current
-            for ae in alt_emails:
-                r = await _bounded_platform(platform, make_coro(ae), PLATFORM_TIMEOUTS[platform])
+            results = await asyncio.gather(*[
+                _bounded_platform(platform, make_coro(ae), PLATFORM_TIMEOUTS[platform])
+                for ae in alt_emails
+            ])
+            for ae, r in zip(alt_emails, results):
                 if (r or {}).get("found"):
                     r["matched_email"] = ae
                     return r
