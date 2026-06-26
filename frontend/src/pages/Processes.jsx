@@ -386,6 +386,12 @@ function PrivateTierCallsDoc() {
         student <strong>doesn't show up</strong>, the coach opens that student's <strong>Student Lookup</strong>
         card and marks that call a <strong>no-show</strong>.
       </P>
+      <P>
+        On the same Student Lookup card, the team can also <strong>log a call that wasn't booked through
+        Calendly</strong> ("Log a call" - it counts as one of their eligible calls), and <strong>grant
+        extra allowance</strong> above the tier default with the <strong>+ / -</strong> buttons next to a
+        call type (e.g. give a VIP a 3rd coach call).
+      </P>
 
       <H>Reminders to book</H>
       <P>

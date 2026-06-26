@@ -20,6 +20,7 @@ import hashlib
 import hmac
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -128,29 +129,41 @@ async def _resolve_event_slug(event_type_uri: str) -> str | None:
         return None
 
 
-def summarize_private_calls(tier, calls: list | None) -> dict:
+_KIND_ORDER = ["tessa_30", "coach_30", "mock_60"]
+
+
+def summarize_private_calls(tier, calls: list | None, extra: dict | None = None) -> dict:
     """Build the allowance view for a student: per-kind allowance / booked /
     remaining, plus the active bookings. 'booked' counts entries that aren't
-    Cancelled or No-show. Pure function - safe to call from the lookup path."""
+    Cancelled or No-show. `extra` is a per-student allowance override (e.g.
+    {"coach_30": 1} = one extra coach call on top of the tier default), set by a
+    team member. Kinds that only appear via manual calls or an override are
+    surfaced too, so nothing is hidden. Pure function - safe in the lookup path."""
     norm = _normalize_tier(tier)
-    allowance = PRIVATE_ALLOWANCE.get(norm, {})
+    base = PRIVATE_ALLOWANCE.get(norm, {})
+    extra = {k: v for k, v in (extra or {}).items() if v}
     calls = calls or []
+
+    kinds = set(base) | set(extra) | {c.get("kind") for c in calls if c.get("kind")}
+    order = {k: i for i, k in enumerate(_KIND_ORDER)}
     by_kind = {}
-    for kind, allow in allowance.items():
+    for kind in sorted(kinds, key=lambda k: (order.get(k, 99), k)):
+        allow = base.get(kind, 0) + extra.get(kind, 0)
         entries = [c for c in calls if c.get("kind") == kind]
         active = [c for c in entries if c.get("status") not in ("Cancelled", "No-show")]
         by_kind[kind] = {
             "label": PRIVATE_KIND_LABELS.get(kind, kind),
             "allowance": allow,
+            "extra": extra.get(kind, 0),
             "booked": len(active),
             "remaining": max(0, allow - len(active)),
             "calls": sorted(entries, key=lambda c: c.get("date") or ""),
         }
-    total_allow = sum(allowance.values())
+    total_allow = sum(v["allowance"] for v in by_kind.values())
     total_booked = sum(v["booked"] for v in by_kind.values())
     return {
         "tier": norm,
-        "eligible": norm is not None,
+        "eligible": bool(by_kind),
         "total_allowance": total_allow,
         "total_booked": total_booked,
         "total_remaining": max(0, total_allow - total_booked),
@@ -533,6 +546,38 @@ async def set_private_call_status(db, row: dict, invitee_uri: str, status: str) 
         "dashboard_edited_by": "dashboard-private-call",
     }})
     return True
+
+
+async def add_manual_private_call(db, row: dict, kind: str, coach, date, status: str) -> dict:
+    """Log a private-tier call that wasn't booked through Calendly (counts as one
+    of the student's eligible calls). Gets a synthetic 'manual:' invitee_uri so it
+    dedupes and so the Attended/No-show action works on it like any booking."""
+    uri = f"manual:{kind}:{uuid.uuid4().hex[:12]}"
+    entry = {"kind": kind, "coach": (coach or None), "date": (date or None),
+             "status": status, "invitee_uri": uri, "event_name": "Logged manually",
+             "manual": True}
+    await _record_private_call(db, row, entry)
+    logger.info(f"[private-call] manual call logged for {row.get('_id')}: {kind} {status}")
+    return entry
+
+
+async def adjust_private_allowance(db, row: dict, kind: str, delta: int) -> dict:
+    """Adjust a student's extra (above-tier) allowance for one call kind by delta.
+    Stored in `private_call_allowance` ({kind: extra_count}), pinned. Clamped at 0;
+    a kind that drops to 0 is removed. Returns the new override dict."""
+    extra = dict(row.get("private_call_allowance") or {})
+    extra[kind] = max(0, int(extra.get(kind) or 0) + int(delta))
+    if not extra[kind]:
+        extra.pop(kind, None)
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"private_call_allowance"})
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        "private_call_allowance": extra,
+        "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": datetime.now(timezone.utc),
+        "dashboard_edited_by": "dashboard-private-call",
+    }})
+    logger.info(f"[private-call] allowance for {row.get('_id')} {kind} -> +{extra.get(kind, 0)}")
+    return extra
 
 
 async def handle_private_created(db, payload: dict, kind: str) -> dict:
