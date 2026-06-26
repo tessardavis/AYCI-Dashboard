@@ -32,7 +32,7 @@ export default function WeeklyScorecard() {
   const [editingValue, setEditingValue] = useState("");
   const [syncing, setSyncing] = useState(false);
 
-  // Weeks oldest → newest (left to right) — newest is right-most
+  // Weeks oldest → newest (left to right) - newest is right-most
   const weeks = useMemo(() => lastNWeekStarts(WEEKS_VISIBLE), []);
   const latestWeek = weeks[weeks.length - 1];
   const teamById = useMemo(() => {
@@ -138,7 +138,7 @@ export default function WeeklyScorecard() {
         }
         return [...prev, data];
       });
-      // Confirmation toast — cells commit on blur, so without this users have
+      // Confirmation toast - cells commit on blur, so without this users have
       // no signal whether a stray click saved a value.
       toast.success("Saved");
     } catch (e) {
@@ -215,7 +215,7 @@ export default function WeeklyScorecard() {
         );
       }
       if (written === 0 && errors.length === 0) {
-        toast.info("No connected sources yet — configure them in Settings → Metrics");
+        toast.info("No connected sources yet - configure them in Settings → Metrics");
       }
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
@@ -266,7 +266,7 @@ export default function WeeklyScorecard() {
 
       <SupportTicketsWidget />
 
-      {/* Owner filter — desktop chip row (hidden on mobile, replaced by dropdown) */}
+      {/* Owner filter - desktop chip row (hidden on mobile, replaced by dropdown) */}
       <div className="hidden sm:flex items-center gap-2 mb-5 flex-wrap">
         <span className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-1.5">
           <Filter className="w-3.5 h-3.5" /> Filter by owner:
@@ -277,7 +277,7 @@ export default function WeeklyScorecard() {
             data-testid="scorecard-clear-filter"
             className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[var(--ayci-accent)] text-white hover:opacity-90"
           >
-            {teamById[filterOwnerId]?.name || "—"}
+            {teamById[filterOwnerId]?.name || "-"}
             <X className="w-3 h-3" />
           </button>
         )}
@@ -423,7 +423,7 @@ export default function WeeklyScorecard() {
                                   ) : (
                                     <span className="metric-number font-medium cursor-text">
                                       {v === undefined ? (
-                                        <span className="text-slate-300">—</span>
+                                        <span className="text-slate-300">-</span>
                                       ) : (
                                         formatValue(v, m.format)
                                       )}

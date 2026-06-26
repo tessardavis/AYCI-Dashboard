@@ -63,7 +63,7 @@ export default function MondayCard({ data }) {
               <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">
                 {k}
               </div>
-              <div className="text-sm mt-0.5 break-words">{fmtCol(k, col) || <span className="text-slate-400">—</span>}</div>
+              <div className="text-sm mt-0.5 break-words">{fmtCol(k, col) || <span className="text-slate-400">-</span>}</div>
             </div>
           ))}
         </div>
@@ -78,7 +78,7 @@ export default function MondayCard({ data }) {
             <div key={k} className="border-b border-dashed border-[var(--ayci-border)] pb-2">
               <div className="text-[10px] uppercase tracking-wider text-[var(--ayci-ink-muted)]">{k}</div>
               <div className="text-xs mt-0.5 break-words">
-                {fmtCol(k, col) || <span className="text-slate-400">—</span>}
+                {fmtCol(k, col) || <span className="text-slate-400">-</span>}
               </div>
             </div>
           ))}

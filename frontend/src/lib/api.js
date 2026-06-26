@@ -1,6 +1,6 @@
 import axios from "axios";
 
-// In production, always use relative /api URLs — Vercel's rewrite proxies
+// In production, always use relative /api URLs - Vercel's rewrite proxies
 // them to Render. This sidesteps mobile Safari's third-party cookie blocking.
 // In local dev (localhost:3000) we still honour REACT_APP_BACKEND_URL.
 const isLocal =

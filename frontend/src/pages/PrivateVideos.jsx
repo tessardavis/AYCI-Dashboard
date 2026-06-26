@@ -5,7 +5,7 @@
  * and assign / reply / mark Done from this dashboard.
  *
  * New submissions arrive via Tally webhook (form 0Qr5py → POST
- * /api/private-videos/tally-webhook) — no Monday automation involved.
+ * /api/private-videos/tally-webhook) - no Monday automation involved.
  */
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Loader2, RefreshCw, ExternalLink, Search, MessageCircle, Video, Save, X, Send, Info, User } from "lucide-react";
@@ -24,7 +24,7 @@ const STATUS_TONE = {
 };
 
 function formatUkDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     const d = new Date(iso);
     return d.toLocaleString("en-GB", {
@@ -38,11 +38,11 @@ function formatUkDate(iso) {
 
 // Auto-assignment helper: prefer the team_member_id linked on the user record,
 // fall back to matching the team_member by name (case-insensitive, substring
-// either direction). Returns "" if no usable match — caller then leaves the
+// either direction). Returns "" if no usable match - caller then leaves the
 // assignee dropdown blank.
 function pickAutoAssignee(users, currentUser) {
   if (!users || !currentUser) return "";
-  // 1. Authoritative link — server set this via _autolink_users_to_team_members.
+  // 1. Authoritative link - server set this via _autolink_users_to_team_members.
   const tmid = currentUser.team_member_id;
   if (tmid && users.some((u) => u.id === tmid)) return tmid;
   // 2. Name match (case-insensitive substring either direction). Handles the
@@ -74,7 +74,7 @@ export default function PrivateVideos() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [editing, setEditing] = useState(null); // currently-edited row
   const [fetchedAt, setFetchedAt] = useState(() => readCache("private-videos")?.data?.fetchedAt || null);
-  // Hide "Done" by default — clears the active backlog so the team only
+  // Hide "Done" by default - clears the active backlog so the team only
   // sees what still needs attention. Toggleable.
   const [showDone, setShowDone] = useState(false);
 
@@ -117,7 +117,7 @@ export default function PrivateVideos() {
 
   useEffect(() => {
     // First load: just show what's in our DB. Don't auto-sync from Monday
-    // on every page open — that POST has a 180s timeout and was the
+    // on every page open - that POST has a 180s timeout and was the
     // dominant cause of slow opens. The 60s auto-refresh tick below keeps
     // the row list current via the Tally webhook + native ingest; click
     // the "Sync from Monday" button manually if you suspect Monday has
@@ -127,14 +127,14 @@ export default function PrivateVideos() {
 
   // When the coach asks to see Done (toggle on, or filters to Done status),
   // fetch the Done rows the default load skipped. Turning it back off needs no
-  // refetch — the client filter hides them and the next refresh drops them.
+  // refetch - the client filter hides them and the next refresh drops them.
   useEffect(() => {
     if (needDone) load(false, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needDone]);
 
   // Auto-refresh the row list every 60s so new Tally submissions appear
-  // without the coach needing to hit Refresh. Quiet — uses load() with no
+  // without the coach needing to hit Refresh. Quiet - uses load() with no
   // toast; if it fails it just retries on the next tick. Pauses when the
   // browser tab is hidden so we don't burn requests on a background tab.
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function PrivateVideos() {
       try {
         await load(true);
       } catch {
-        // Silent — manual refresh button still works
+        // Silent - manual refresh button still works
       }
       timer = setTimeout(tick, 60_000);
     };
@@ -164,7 +164,7 @@ export default function PrivateVideos() {
       toast.success(
         created === 0 && updated === 0
           ? "Already in sync with Monday"
-          : `Synced from Monday — ${created} new, ${updated} updated`,
+          : `Synced from Monday - ${created} new, ${updated} updated`,
       );
       await load(true);
     } catch (e) {
@@ -181,7 +181,7 @@ export default function PrivateVideos() {
     // how many got scheduled.
     if (!window.confirm(
       "Re-transcode every cached video larger than 60 MB at the new compact settings?\n\n" +
-      "Runs in the background — coach reviews stay snappy. " +
+      "Runs in the background - coach reviews stay snappy. " +
       "Each large file takes ~30-60s; the full batch usually finishes in 10-15 min."
     )) return;
     setRecompressing(true);
@@ -190,7 +190,7 @@ export default function PrivateVideos() {
       const n = data?.scheduled ?? 0;
       toast.success(
         n === 0
-          ? "Nothing to recompress — all cached files are already compact."
+          ? "Nothing to recompress - all cached files are already compact."
           : `Recompressing ${n} oversized cached file${n === 1 ? "" : "s"} in the background.`
       );
     } catch (e) {
@@ -203,7 +203,7 @@ export default function PrivateVideos() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = items.filter((it) => {
-      // Hide Done by default — user can toggle the chip below to bring them
+      // Hide Done by default - user can toggle the chip below to bring them
       // back when searching historical submissions. Explicit status filter
       // (e.g. user picks "Done") always wins.
       if (!statusFilter && !showDone && (it.status || "").toLowerCase() === "done") return false;
@@ -216,9 +216,9 @@ export default function PrivateVideos() {
       }
       return true;
     });
-    // Active queue (not Done) — oldest submission first; the longest-waiting
+    // Active queue (not Done) - oldest submission first; the longest-waiting
     // student rises to the top so the team clears the queue fairly.
-    // Done queue — newest-replied first so the most recently completed rows
+    // Done queue - newest-replied first so the most recently completed rows
     // are easy to find / re-open. (Tessa explicitly asked for this on
     // 2026-05-29 because Done rows used to bury recent completions.)
     rows.sort((a, b) => {
@@ -257,14 +257,14 @@ export default function PrivateVideos() {
   const sendNow = async (item) => {
     const replyUrl = item.reply_link?.url;
     if (!replyUrl) {
-      toast.error("No voicenote link saved yet — paste one into the row first");
+      toast.error("No voicenote link saved yet - paste one into the row first");
       return;
     }
     const studentName = `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.name || item.email;
     const dest = item.private_chat;
     const confirmText =
       `Send voicenote to ${studentName} via Circle DM?\n\n` +
-      `Destination: ${dest || "(no Circle DM URL on this row — Send will fail)"}\n\n` +
+      `Destination: ${dest || "(no Circle DM URL on this row - Send will fail)"}\n\n` +
       `Voicenote: ${replyUrl}\n\n` +
       `This can't be undone.`;
     if (!window.confirm(confirmText)) return;
@@ -467,14 +467,14 @@ function DataSourceInfo({ counts }) {
           <div className="font-semibold text-[var(--ayci-ink)] text-sm">How the counts are calculated</div>
           <ul className="space-y-1.5 list-disc pl-4">
             <li>
-              <span className="font-semibold text-[var(--ayci-ink)]">Submission # (X/Y)</span> — the chip on each row.
+              <span className="font-semibold text-[var(--ayci-ink)]">Submission # (X/Y)</span> - the chip on each row.
               <ul className="list-disc pl-4 mt-1 space-y-0.5">
                 <li><b>X</b> = count of prior submissions for that email + 1, computed locally.</li>
                 <li><b>Y</b> = video allowance for that student, looked up from the Monday <i>Academy Members</i> board (column <code>numeric_mkxfvz1k</code>). Falls back to baseline by tier if missing.</li>
               </ul>
             </li>
             <li>
-              <span className="font-semibold text-[var(--ayci-ink)]">Source chip</span> — every row is tagged at ingest:
+              <span className="font-semibold text-[var(--ayci-ink)]">Source chip</span> - every row is tagged at ingest:
               <ul className="list-disc pl-4 mt-1 space-y-0.5">
                 <li><b>Tally</b>: created natively here when the student submitted the Tally form.</li>
                 <li><b>Monday</b>: migrated from the Monday board sync (legacy rows + anything edited there).</li>
@@ -490,7 +490,7 @@ function DataSourceInfo({ counts }) {
               <span>With allowance: <b>{counts.hasAllowance}</b></span>
             </div>
             <p className="text-[10px] opacity-70 mt-2">
-              The 493 "Monday" rows are <b>historical</b> — they were bulk-migrated when this dashboard was first wired up.
+              The 493 "Monday" rows are <b>historical</b> - they were bulk-migrated when this dashboard was first wired up.
               Going forward, <b>every new submission lands as "Tally"</b> via the Tally webhook (no Monday round-trip).
               So you can already retire the Monday board for new work; the legacy column attribution just stays for reference.
             </p>
@@ -567,7 +567,7 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
     <tr className="border-b border-slate-100 hover:bg-slate-50/40">
       <td className="px-3 py-2.5">
         <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_TONE[item.status] || "bg-slate-100 text-slate-800 border-slate-300"}`}>
-          {item.status || "—"}
+          {item.status || "-"}
         </span>
       </td>
       <td className="px-3 py-2.5">
@@ -596,7 +596,7 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
               }
               data-testid={`pv-count-${item.id}`}
             >
-              {subNum}/{total || "—"}
+              {subNum}/{total || "-"}
             </span>
           )}
           {source && (
@@ -645,16 +645,16 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
         )}
       </td>
       <td className="px-3 py-2.5 max-w-[300px]">
-        <div className="text-sm text-[var(--ayci-ink)] line-clamp-2">{item.question || "—"}</div>
+        <div className="text-sm text-[var(--ayci-ink)] line-clamp-2">{item.question || "-"}</div>
       </td>
       <td className="px-3 py-2.5 text-[11px] text-[var(--ayci-ink-muted)] whitespace-nowrap">
-        {item.submitted ? formatUkDate(item.submitted) : "—"}
+        {item.submitted ? formatUkDate(item.submitted) : "-"}
       </td>
       <td className="px-3 py-2.5">
         <InlineAssignee item={item} users={users} onSaved={onSaved} />
       </td>
       <td className="px-3 py-2.5 text-[11px] text-[var(--ayci-ink-muted)] whitespace-nowrap">
-        {item.replied ? formatUkDate(item.replied) : "—"}
+        {item.replied ? formatUkDate(item.replied) : "-"}
       </td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -673,7 +673,7 @@ function Row({ item, users, onEdit, onSaved, onSend }) {
           {replyReady && (
             <span
               className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap"
-              title="A voicenote URL is saved on this row — it's ready to send."
+              title="A voicenote URL is saved on this row - it's ready to send."
               data-testid={`pv-voicenote-ready-${item.id}`}
             >
               ✓ Voicenote
@@ -742,7 +742,7 @@ function InlineAssignee({ item, users, onSaved }) {
         className="text-xs px-1.5 py-0.5 rounded border border-[var(--ayci-accent)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ayci-accent)]/30 max-w-[160px]"
         data-testid={`pv-inline-assignee-${item.id}`}
       >
-        <option value="">— unassigned —</option>
+        <option value="">- unassigned -</option>
         {users.map((u) => (
           <option key={u.id} value={u.id}>{u.name}</option>
         ))}
@@ -776,7 +776,7 @@ function InlineReplyLink({ item, onSaved }) {
     setSaving(true);
     try {
       // Inline edit only stores the URL. The row is NOT marked Done and the
-      // Replied date is NOT set — completion belongs to "Send to Circle" in
+      // Replied date is NOT set - completion belongs to "Send to Circle" in
       // the edit modal, which actually delivers the voicenote to the student.
       // Previously this auto-marked Done and looked like the reply had been
       // sent when it hadn't.
@@ -785,7 +785,7 @@ function InlineReplyLink({ item, onSaved }) {
       });
       toast.success(
         url
-          ? "Reply link saved — open Edit → Preview → Send now to deliver"
+          ? "Reply link saved - open Edit → Preview → Send now to deliver"
           : "Reply link cleared"
       );
       onSaved?.();
@@ -878,11 +878,11 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
   const [totalAllowance, setTotalAllowance] = useState(
     item.total_allowance != null ? String(item.total_allowance) : ""
   );
-  // No editable "Replied date" — the backend stamps it automatically when
+  // No editable "Replied date" - the backend stamps it automatically when
   // Send now succeeds. Showing an empty date field made it look amendable.
 
   // If the coach is editing a Done row's reply link, flip the status
-  // dropdown out of "Done" automatically — saving without re-sending
+  // dropdown out of "Done" automatically - saving without re-sending
   // shouldn't leave the row marked as delivered. They can manually pick
   // "Done" again if they really want to keep the old completion stamp.
   useEffect(() => {
@@ -929,7 +929,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
     setSending(true);
     try {
       await apiClient.post(`/private-videos/${item.id}/send-to-circle`);
-      toast.success("Sent to Circle ✓ — marked Done");
+      toast.success("Sent to Circle ✓ - marked Done");
       onSaved();
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Send failed");
@@ -962,12 +962,12 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
   const [deleting, setDeleting] = useState(false);
   const handleDelete = async () => {
     // Hard-deletes the row. Use when a submission was already handled outside
-    // this dashboard (e.g. answered on Monday before migration) — avoids
+    // this dashboard (e.g. answered on Monday before migration) - avoids
     // marking it Done, which would still count it toward the student's
     // allowance and surface a misleading completion record.
     const ok = window.confirm(
       `Delete this submission permanently?\n\n` +
-      `${item.first_name || ""} ${item.last_name || ""} — "${(item.question || "(no question)").slice(0, 80)}"\n\n` +
+      `${item.first_name || ""} ${item.last_name || ""} - "${(item.question || "(no question)").slice(0, 80)}"\n\n` +
       `This cannot be undone. The row will disappear from this dashboard ` +
       `and will not count toward the student's video allowance.`
     );
@@ -1074,7 +1074,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                 data-testid="pv-edit-private-chat-url"
               />
               <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
-                Only set this when the row is missing one — it normally
+                Only set this when the row is missing one - it normally
                 fills in automatically from Academy Members at ingest.
               </div>
             </div>
@@ -1125,7 +1125,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
               <div className="flex items-start gap-2">
                 <Send className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
                 <div className="flex-1">
-                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">Preview — nothing has been sent yet</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">Preview - nothing has been sent yet</div>
                   <div className="text-[11px] text-emerald-700/80 mt-0.5">
                     Verify the destination + message below. Then click <strong>Send now</strong> to deliver, or <strong>Back</strong> to edit.
                   </div>
@@ -1174,7 +1174,7 @@ function EditModal({ item, users, autoAssigneeId, previousSubmissions = [], onCl
                   data-testid="pv-edit-send-confirmed"
                   title={
                     !preview.destination
-                      ? "Can't send — no private chat link on this row (set up the student's chat first)"
+                      ? "Can't send - no private chat link on this row (set up the student's chat first)"
                       : "Deliver this message now"
                   }
                 >
@@ -1241,7 +1241,7 @@ const inputCls = "w-full px-3 py-1.5 border border-slate-200 rounded text-sm bg-
 function InlineVideo({ itemId }) {
   const [errored, setErrored] = useState(false);
   // Don't render the <video> until the coach clicks Play (avoids burning
-  // bandwidth and confusing browsers with an empty src). BUT — eagerly fire
+  // bandwidth and confusing browsers with an empty src). BUT - eagerly fire
   // ONE status call on mount so the backend starts downloading + transcoding
   // in the background. By the time the coach clicks Play, the transcode is
   // usually finished or close to it.
@@ -1249,7 +1249,7 @@ function InlineVideo({ itemId }) {
   const [status, setStatus] = useState("idle");
   const proxyUrl = `${API}/private-videos/${itemId}/video`;
 
-  // Eager kickoff on mount — single fire-and-forget request. Hitting
+  // Eager kickoff on mount - single fire-and-forget request. Hitting
   // /video/status triggers pv_cache.prepare server-side (idempotent).
   useEffect(() => {
     apiClient
@@ -1268,7 +1268,7 @@ function InlineVideo({ itemId }) {
         setStatus(data.status);
         if (data.status === "ready") return;
         if (data.status === "error" || data.status === "no_video" || data.status === "failed") return;
-        // Poll fast — the transcode could finish at any time; 1.5s feels
+        // Poll fast - the transcode could finish at any time; 1.5s feels
         // responsive without hammering the server.
         pollTimer = setTimeout(poll, 1500);
       } catch {
@@ -1304,7 +1304,7 @@ function InlineVideo({ itemId }) {
 
   if (errored || status === "error" || status === "no_video") {
     // Inline `<video>` couldn't play. We ALWAYS route the fallback to our
-    // proxy URL, which serves the transcoded H.264 — not the raw Tally URL,
+    // proxy URL, which serves the transcoded H.264 - not the raw Tally URL,
     // because iPhone Chrome can't decode HEVC from non-Apple domains.
     return (
       <a
@@ -1328,7 +1328,7 @@ function InlineVideo({ itemId }) {
         <Video className="w-6 h-6" />
         <div className="text-xs font-semibold">This video can't be prepared</div>
         <div className="text-[10px] leading-snug">
-          The upload looks corrupt — ask the student to re-record &amp; resubmit.
+          The upload looks corrupt - ask the student to re-record &amp; resubmit.
           <br />(Admin: use the per-video re-fetch link to retry.)
         </div>
       </div>
@@ -1339,7 +1339,7 @@ function InlineVideo({ itemId }) {
     const labels = {
       loading: { title: "Loading…", sub: "" },
       missing: { title: "Preparing video…", sub: "Starting download from Tally" },
-      downloading: { title: "Downloading from Tally…", sub: "First load only — usually 10-30s" },
+      downloading: { title: "Downloading from Tally…", sub: "First load only - usually 10-30s" },
       downloaded: { title: "Almost ready…", sub: "Optimising for your browser" },
       transcoding: { title: "Optimising for your browser…", sub: "Converting iPhone HEVC → universal H.264 (~60-90s)" },
     };
@@ -1383,7 +1383,7 @@ function ReadyVideo({ proxyUrl, onError }) {
     try {
       localStorage.setItem(SPEED_STORAGE_KEY, String(rate));
     } catch {
-      // localStorage disabled — fine, just lose the persistence
+      // localStorage disabled - fine, just lose the persistence
     }
   }, [rate]);
 
@@ -1441,7 +1441,7 @@ function TranscriptPanel({ itemId, hasTranscript }) {
   const [loadedOnce, setLoadedOnce] = useState(false);
 
   // Fetch + poll the transcript. Only kicks off when the panel is opened
-  // (lazy — no point spending an API roundtrip if the coach doesn't care).
+  // (lazy - no point spending an API roundtrip if the coach doesn't care).
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -1511,18 +1511,18 @@ function TranscriptPanel({ itemId, hasTranscript }) {
           )}
           {loadedOnce && status === "no_audio" && (
             <div className="text-xs text-[var(--ayci-ink-muted)] italic py-2">
-              No audio on this submission — nothing to transcribe.
+              No audio on this submission - nothing to transcribe.
             </div>
           )}
           {loadedOnce && status === "error" && (
             <div className="text-xs text-rose-700 italic py-2">
-              Transcription failed. Try again later — the row will be re-processed.
+              Transcription failed. Try again later - the row will be re-processed.
             </div>
           )}
           {loadedOnce && status === "generating" && (
             <div className="text-xs text-[var(--ayci-ink-muted)] py-2 flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
-              Whisper is transcribing — usually ~30s for a 2-minute video.
+              Whisper is transcribing - usually ~30s for a 2-minute video.
             </div>
           )}
           {loadedOnce && status === "ready" && transcript && (
@@ -1609,16 +1609,16 @@ function PreviousSubmissionsPanel({ previous, users, privateChatUrl }) {
               {sorted.map((p) => {
                 const coach = p.assignee_name
                   || (users.find((u) => u.id === p.assignee_id) || {}).name
-                  || "—";
+                  || "-";
                 const reply = p.reply_link?.url;
                 const video = p.tally_video?.url || p.video?.url;
                 return (
                   <tr key={p.id} className="border-b border-slate-50 last:border-b-0 align-top">
                     <td className="py-1.5 pr-2 whitespace-nowrap text-[var(--ayci-ink-muted)]">
-                      {p.submitted ? formatUkDate(p.submitted) : "—"}
+                      {p.submitted ? formatUkDate(p.submitted) : "-"}
                     </td>
                     <td className="py-1.5 pr-2 max-w-[260px]">
-                      <div className="line-clamp-2 text-[var(--ayci-ink)]">{p.question || "—"}</div>
+                      <div className="line-clamp-2 text-[var(--ayci-ink)]">{p.question || "-"}</div>
                     </td>
                     <td className="py-1.5 pr-2 whitespace-nowrap">{coach}</td>
                     <td className="py-1.5 pr-2 whitespace-nowrap text-[var(--ayci-ink-muted)]">
@@ -1648,7 +1648,7 @@ function PreviousSubmissionsPanel({ previous, users, privateChatUrl }) {
                             <MessageCircle className="w-3 h-3" /> Reply
                           </a>
                         )}
-                        {!video && !reply && <span className="text-[var(--ayci-ink-muted)] italic">—</span>}
+                        {!video && !reply && <span className="text-[var(--ayci-ink-muted)] italic">-</span>}
                       </div>
                     </td>
                   </tr>

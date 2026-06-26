@@ -92,14 +92,14 @@ export default function CohortConfigSection({ isAdmin }) {
         </div>
         <div>
           <h3 className="font-display font-bold text-base text-[var(--ayci-ink)]">
-            Cohort Dashboard — per-cohort config
+            Cohort Dashboard - per-cohort config
           </h3>
           <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
             Powers the Cohort Dashboard's New/Legacy split, Circle join-rate and
-            intros stats. Add a row each launch — no deploy needed.
+            intros stats. Add a row each launch - no deploy needed.
             <br />
             <strong>Label</strong>: exact Monday "Cohort Joined" text (e.g. <code>June 26</code>).{" "}
-            <strong>Circle tag</strong>: exact tag on Circle (e.g. <code>June '26</code> — note some cohorts use the full month).{" "}
+            <strong>Circle tag</strong>: exact tag on Circle (e.g. <code>June '26</code> - note some cohorts use the full month).{" "}
             <strong>New / Legacy</strong>: ConvertKit tag IDs.{" "}
             <strong>Intros space</strong>: Circle "Introduce Yourself" space id.
           </p>
@@ -155,7 +155,7 @@ export default function CohortConfigSection({ isAdmin }) {
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-[var(--ayci-ink-muted)] mt-4 italic">Admin-only — read-only view.</p>
+        <p className="text-xs text-[var(--ayci-ink-muted)] mt-4 italic">Admin-only - read-only view.</p>
       )}
     </div>
   );

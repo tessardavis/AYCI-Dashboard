@@ -1,5 +1,5 @@
 /**
- * Refunds board — Coralie's view of every refund (sourced from Stripe via
+ * Refunds board - Coralie's view of every refund (sourced from Stripe via
  * Zapier) plus the reason/category/status she manages. Read+edit; the
  * underlying records are created by POST /api/refunds/ingest.
  */
@@ -14,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 const STATUSES = ["requested", "approved", "processed", "declined"];
 
 // Coralie's reason taxonomy. Free-text under the hood, so this can grow
-// without a migration — these are just the quick-pick options.
+// without a migration - these are just the quick-pick options.
 const CATEGORIES = [
   "Changed mind",
   "Dissatisfied / not as expected",
@@ -34,7 +34,7 @@ const STATUS_STYLES = {
 };
 
 function fmtMoney(amount, currency) {
-  if (amount == null || amount === "") return "—";
+  if (amount == null || amount === "") return "-";
   const sym = (currency || "gbp").toLowerCase() === "gbp" ? "£"
     : (currency || "").toLowerCase() === "usd" ? "$"
     : (currency || "").toLowerCase() === "eur" ? "€" : "";
@@ -42,7 +42,7 @@ function fmtMoney(amount, currency) {
 }
 
 function fmtDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (isNaN(d)) return iso;
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -100,7 +100,7 @@ export default function Refunds() {
   }, [rows, search, statusFilter, categoryFilter, needsReasonOnly]);
 
   const patchRefund = async (id, fields) => {
-    // Optimistic — revert on failure.
+    // Optimistic - revert on failure.
     const before = rows.find((r) => r.id === id);
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...fields } : r)));
     try {
@@ -114,11 +114,11 @@ export default function Refunds() {
   };
 
   const backfill = async () => {
-    if (!window.confirm("Pull all historical refunds from Stripe into the board? This is safe to run repeatedly — it won't create duplicates.")) return;
+    if (!window.confirm("Pull all historical refunds from Stripe into the board? This is safe to run repeatedly - it won't create duplicates.")) return;
     setBackfilling(true);
     try {
       const { data } = await apiClient.post("/refunds/backfill-from-stripe");
-      toast.success(`Backfill done — ${data.created} new, ${data.updated} updated, ${data.matched_student} matched to a student (${data.fetched} from Stripe).`);
+      toast.success(`Backfill done - ${data.created} new, ${data.updated} updated, ${data.matched_student} matched to a student (${data.fetched} from Stripe).`);
       await load(true);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Backfill failed");
@@ -261,11 +261,11 @@ export default function Refunds() {
               {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/40 align-top">
                   <td className="px-3 py-2">
-                    <div className="font-semibold text-[var(--ayci-ink)]">{r.student_name || "—"}</div>
-                    <div className="text-[11px] text-[var(--ayci-ink-muted)]">{r.student_email || "—"}</div>
+                    <div className="font-semibold text-[var(--ayci-ink)]">{r.student_name || "-"}</div>
+                    <div className="text-[11px] text-[var(--ayci-ink-muted)]">{r.student_email || "-"}</div>
                   </td>
-                  <td className="px-3 py-2 text-[12px]">{r.tier || "—"}</td>
-                  <td className="px-3 py-2 text-[12px]">{r.cohort || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">{r.tier || "-"}</td>
+                  <td className="px-3 py-2 text-[12px]">{r.cohort || "-"}</td>
                   <td className="px-3 py-2 text-[12px] font-semibold whitespace-nowrap">{fmtMoney(r.amount, r.currency)}</td>
                   <td className="px-3 py-2 text-[12px] whitespace-nowrap">{fmtDate(r.refunded_at)}</td>
                   <td className="px-3 py-2">
@@ -283,7 +283,7 @@ export default function Refunds() {
                       }}
                       className={`text-[12px] px-1.5 py-1 border rounded bg-white ${(r.reason_category || "").trim() ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}
                     >
-                      <option value="">— set reason —</option>
+                      <option value="">- set reason -</option>
                       {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                       {r.reason_category && !CATEGORIES.includes(r.reason_category) && (
                         <option value="__other">{r.reason_category} (custom)</option>

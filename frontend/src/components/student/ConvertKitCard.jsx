@@ -5,7 +5,7 @@ export default function ConvertKitCard({ data }) {
   return (
     <div className="space-y-3" data-testid="convertkit-card-content">
       <div>
-        <div className="font-display font-semibold text-[var(--ayci-ink)]">{first_name || "—"}</div>
+        <div className="font-display font-semibold text-[var(--ayci-ink)]">{first_name || "-"}</div>
         <div className="text-xs text-[var(--ayci-ink-muted)]">{email}</div>
       </div>
 
@@ -34,7 +34,7 @@ export default function ConvertKitCard({ data }) {
                   month: "short",
                   year: "numeric",
                 })
-              : "—"}
+              : "-"}
           </div>
         </div>
       </div>

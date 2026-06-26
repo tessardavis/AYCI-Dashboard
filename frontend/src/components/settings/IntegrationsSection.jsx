@@ -11,12 +11,12 @@ import { Input } from "@/components/ui/input";
  * (rather than env vars) so admins can configure production without needing
  * a redeploy or DevTools console.
  *
- *  1. Slack Bot Token (xoxb-...) — powers assignment DMs on Support Tickets
- *  2. Slack #circle-days webhook — powers the "coach posted >3 videos this
+ *  1. Slack Bot Token (xoxb-...) - powers assignment DMs on Support Tickets
+ *  2. Slack #circle-days webhook - powers the "coach posted >3 videos this
  *     week" alert from Coach Activity
  */
 export default function IntegrationsSection({ isAdmin }) {
-  // Non-admins reach this tab only via the "students" board — show them just the
+  // Non-admins reach this tab only via the "students" board - show them just the
   // private-chat tooling (find/create), not the rest of the admin integrations.
   if (!isAdmin) {
     return (
@@ -42,7 +42,7 @@ export default function IntegrationsSection({ isAdmin }) {
 /**
  * One-click switch-on for the Calendly bonus-call automation (replaces the
  * Zapier "Bonus Call Booked" zap). Connecting registers a Calendly webhook
- * subscription + stores its signing key — see backend/routes/calendly.py.
+ * subscription + stores its signing key - see backend/routes/calendly.py.
  */
 function CalendlyBonusCallCard({ isAdmin }) {
   const [state, setState] = useState({ loading: true, connected: false, callback: "" });
@@ -67,7 +67,7 @@ function CalendlyBonusCallCard({ isAdmin }) {
     try {
       const { data } = await apiClient.post("/admin/calendly/register-webhook", {}, { timeout: 30000 });
       if (data?.ok) {
-        toast.success("Calendly connected — bonus-call bookings now flow into the dashboard");
+        toast.success("Calendly connected - bonus-call bookings now flow into the dashboard");
         await load();
       } else {
         toast.error(data?.error || "Couldn't connect Calendly");
@@ -86,7 +86,7 @@ function CalendlyBonusCallCard({ isAdmin }) {
       const { data } = await apiClient.post("/admin/calendly/backfill-bonus-tags", {}, { timeout: 120000 });
       if (data?.ok) {
         toast.success(
-          `Backfill done — tagged ${data.tagged} of ${data.unique_emails} past bookers` +
+          `Backfill done - tagged ${data.tagged} of ${data.unique_emails} past bookers` +
           (data.recorded ? ` · ${data.recorded} recorded` : "") +
           (data.not_found ? ` · ${data.not_found} not in dashboard` : "")
         );
@@ -116,7 +116,7 @@ function CalendlyBonusCallCard({ isAdmin }) {
           <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
             When someone books the AYCI Bonus Call, the dashboard tags them in Kit
             (stops their reminder emails), records the booking, and posts to
-            #fulfillment-team — no Zapier. Connect once to switch it on.
+            #fulfillment-team - no Zapier. Connect once to switch it on.
           </p>
         </div>
       </div>
@@ -192,7 +192,7 @@ function IntakeStatusCard() {
   const pending = counts.pending_reconcile_total ?? 0;
 
   const fmtWhen = (iso) => {
-    if (!iso) return "—";
+    if (!iso) return "-";
     try {
       return new Date(iso).toLocaleString(undefined, {
         month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -218,7 +218,7 @@ function IntakeStatusCard() {
             <code className="text-xs bg-slate-100 px-1 rounded">intake</code> endpoint. Use this to
             confirm real signups are arriving with the right tier &amp; cohort{" "}
             <b>before removing the Monday "Create Item" steps</b>. Brand-new students show as{" "}
-            <b>pending</b> until the 15-min mirror reconciles them onto their Monday row — that should
+            <b>pending</b> until the 15-min mirror reconciles them onto their Monday row - that should
             clear within ~15&nbsp;min.
           </p>
         </div>
@@ -270,7 +270,7 @@ function IntakeStatusCard() {
                 <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-[var(--ayci-ink)] truncate">
-                      {r.name || r.email || "—"}
+                      {r.name || r.email || "-"}
                     </div>
                     <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
                       {[r.tier, r.cohort_joined, r.source].filter(Boolean).join(" · ") || r.email}
@@ -310,7 +310,7 @@ function Stat({ label, value, tone = "ink" }) {
 /**
  * Finds private-tier students we likely failed to link to their Circle
  * identity because they joined Circle under a different email than they signed
- * up with — the root cause of coach group chats never getting created. Each
+ * up with - the root cause of coach group chats never getting created. Each
  * suggested match gets a one-click "Link" that PATCHes circle_email onto the
  * row (pinned dashboard-owned), which unblocks everything downstream.
  * Backed by GET /api/students-db/circle-email-gaps + PATCH /students-db/{id}.
@@ -376,7 +376,7 @@ function CircleEmailGapsCard({ isAdmin }) {
             Circle email gaps (unlinked private chats)
           </h2>
           <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
-            Private-tier students with no <code className="text-xs bg-slate-100 px-1 rounded">circle_email</code> —
+            Private-tier students with no <code className="text-xs bg-slate-100 px-1 rounded">circle_email</code> -
             usually because they joined Circle under a different email than they signed up with, so the upstream
             match failed and their coach chat never got created. <b>Link</b> writes the matched Circle email onto
             the row (pinned, so the sync won't undo it), which unblocks the downstream automation.
@@ -405,21 +405,21 @@ function CircleEmailGapsCard({ isAdmin }) {
 
           {!isAdmin && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-              View-only — linking requires admin.
+              View-only - linking requires admin.
             </p>
           )}
 
           {mismatch.length > 0 && (
             <div className="mb-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2">
-                Likely mismatches — different email on Circle
+                Likely mismatches - different email on Circle
               </p>
               <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)]" data-testid="circle-gaps-mismatch-list">
                 {mismatch.map((r) => (
                   <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-[var(--ayci-ink)] truncate flex items-center gap-2">
-                        {r.name || "—"}
+                        {r.name || "-"}
                         {!r.has_chat && (
                           <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
                             no chat
@@ -430,7 +430,7 @@ function CircleEmailGapsCard({ isAdmin }) {
                         )}
                       </div>
                       <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
-                        <span className="line-through opacity-70">{r.kajabi_email || "—"}</span>
+                        <span className="line-through opacity-70">{r.kajabi_email || "-"}</span>
                         {" → "}
                         <span className="font-medium text-[var(--ayci-ink)]">{r.circle_email}</span>
                         {r.circle_name && r.circle_name !== r.name ? ` (Circle: ${r.circle_name})` : ""}
@@ -454,21 +454,21 @@ function CircleEmailGapsCard({ isAdmin }) {
           {inCircle.length > 0 && (
             <div className="mb-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2">
-                Their signup email is already on Circle — quick link
+                Their signup email is already on Circle - quick link
               </p>
               <div className="border border-[var(--ayci-border)] rounded-lg divide-y divide-[var(--ayci-border)]" data-testid="circle-gaps-incircle-list">
                 {inCircle.map((r) => (
                   <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-[var(--ayci-ink)] truncate flex items-center gap-2">
-                        {r.name || "—"}
+                        {r.name || "-"}
                         {!r.has_chat && (
                           <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
                             no chat
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{r.kajabi_email || "—"}</div>
+                      <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{r.kajabi_email || "-"}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -488,8 +488,8 @@ function CircleEmailGapsCard({ isAdmin }) {
 
           {mismatch.length === 0 && inCircle.length === 0 && (
             <p className="text-sm text-[var(--ayci-ink-muted)]">
-              Nothing to link — no private-tier students with a resolvable Circle email gap.
-              {(counts.not_on_circle ?? 0) > 0 && ` (${counts.not_on_circle} aren't on Circle yet — nothing to link there.)`}
+              Nothing to link - no private-tier students with a resolvable Circle email gap.
+              {(counts.not_on_circle ?? 0) > 0 && ` (${counts.not_on_circle} aren't on Circle yet - nothing to link there.)`}
             </p>
           )}
         </>
@@ -561,7 +561,7 @@ function PrivateVideoAlertsCard({ isAdmin }) {
     try {
       const { data } = await apiClient.post("/private-videos/alerts/test");
       const sent = (data?.interview_imminent?.alerts_posted || 0) + (data?.unanswered_24h?.alerts_posted || 0);
-      toast.success(sent ? `Posted ${sent} alert${sent === 1 ? "" : "s"} to #private-tiers` : "Nothing pending — no alerts posted");
+      toast.success(sent ? `Posted ${sent} alert${sent === 1 ? "" : "s"} to #private-tiers` : "Nothing pending - no alerts posted");
       setPreview({ mode: "send", ...data });
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Send failed");
@@ -606,7 +606,7 @@ function PrivateVideoAlertsCard({ isAdmin }) {
           <div className="flex items-center gap-2 text-sm mb-4" data-testid="private-video-alerts-status">
             <span className={`inline-block w-2 h-2 rounded-full ${state.configured ? "bg-emerald-500" : "bg-slate-400"}`} />
             {state.configured ? (
-              <span className="text-emerald-700 font-semibold break-all">Configured — {state.masked}</span>
+              <span className="text-emerald-700 font-semibold break-all">Configured - {state.masked}</span>
             ) : (
               <span className="text-slate-500">Not configured (falls back to the general Slack webhook if set)</span>
             )}
@@ -644,15 +644,15 @@ function PrivateVideoAlertsCard({ isAdmin }) {
               {preview && (
                 <div className="mt-3 text-xs text-[var(--ayci-ink-muted)] bg-slate-50 border border-[var(--ayci-border)] rounded-lg p-3 space-y-1">
                   <div className="font-semibold text-[var(--ayci-ink)]">
-                    {preview.mode === "preview" ? "Preview — would alert:" : "Sent:"}
+                    {preview.mode === "preview" ? "Preview - would alert:" : "Sent:"}
                   </div>
                   <div>
                     Interview imminent: {preview.mode === "preview" ? (imm?.candidates?.length || 0) : (imm?.alerts_posted || 0)}
-                    {imm?.candidates?.length ? ` — ${imm.candidates.map((c) => `${c.name} (${c.when})`).join(", ")}` : ""}
+                    {imm?.candidates?.length ? ` - ${imm.candidates.map((c) => `${c.name} (${c.when})`).join(", ")}` : ""}
                   </div>
                   <div>
                     Unanswered &gt;24h: {preview.mode === "preview" ? (un?.candidates?.length || 0) : (un?.alerts_posted || 0)}
-                    {un?.candidates?.length ? ` — ${un.candidates.map((c) => `${c.name} (${c.hours}h)`).join(", ")}` : ""}
+                    {un?.candidates?.length ? ` - ${un.candidates.map((c) => `${c.name} (${c.hours}h)`).join(", ")}` : ""}
                   </div>
                 </div>
               )}
@@ -667,8 +667,8 @@ function PrivateVideoAlertsCard({ isAdmin }) {
 /**
  * Phase 0 of the dashboard-native private-chat migration (Route 2). Edit the
  * coach config (who's in every chat + the welcome sender + opener text), then
- * preview which private-tier students would get a chat — matched on either
- * email so dual-email students are caught — and create each chat with one
+ * preview which private-tier students would get a chat - matched on either
+ * email so dual-email students are caught - and create each chat with one
  * click. Manual only; nothing runs on a schedule.
  * Backed by /students-db/private-chat/{config,preview} + .../{id}/create-private-chat.
  */
@@ -744,11 +744,11 @@ function PrivateChatSetupCard({ isAdmin }) {
       await apiClient.post(`/students-db/${encodeURIComponent(row.id)}/create-private-chat`);
       toast(`Creating chat for ${row.name || row.id}… the list updates as it completes (up to ~1 min).`);
     } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't start creating — try again.");
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't start creating - try again.");
       setCreatingId(null);
       return;
     }
-    // Poll the preview — the row drops off "Ready" once the chat is created (or
+    // Poll the preview - the row drops off "Ready" once the chat is created (or
     // its existing chat is linked); if their DMs are off it moves to "Awaiting DMs".
     for (const ms of [7000, 9000, 14000]) {
       await new Promise((r) => setTimeout(r, ms));
@@ -811,7 +811,7 @@ function PrivateChatSetupCard({ isAdmin }) {
         </div>
       ) : (
         <>
-          {/* Coach config — admin setup only. Coralie/Megan (students board) see
+          {/* Coach config - admin setup only. Coralie/Megan (students board) see
               the find/create tooling below, not this. */}
           {!isAdmin && (
             <p className="text-xs text-[var(--ayci-ink-muted)] bg-slate-50 border border-[var(--ayci-border)] rounded-lg px-3 py-2 mb-4">
@@ -821,7 +821,7 @@ function PrivateChatSetupCard({ isAdmin }) {
           {isAdmin && (
           <div className="border border-[var(--ayci-border)] rounded-lg p-4 mb-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-3">
-              Coaches in every chat — enter each one's Circle email
+              Coaches in every chat - enter each one's Circle email
             </p>
             <div className="space-y-2">
               {coaches.map((c, i) => (
@@ -852,7 +852,7 @@ function PrivateChatSetupCard({ isAdmin }) {
 
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-4 mb-2">
               Welcome message per tier
-              <span className="font-normal normal-case"> — placeholders: {"{first_name} {last_name} {email} {tier} {video_allowance}"}</span>
+              <span className="font-normal normal-case"> - placeholders: {"{first_name} {last_name} {email} {tier} {video_allowance}"}</span>
             </p>
             <div className="flex flex-wrap gap-1 mb-2">
               {PC_AUDIENCES.map(([key, label]) => {
@@ -875,7 +875,7 @@ function PrivateChatSetupCard({ isAdmin }) {
               onChange={(e) => setTemplates((t) => ({ ...t, [selectedAud]: e.target.value }))}
               disabled={!isAdmin || savingCfg}
               rows={9}
-              placeholder={`No message yet for ${PC_AUDIENCES.find(([k]) => k === selectedAud)?.[1]} — paste it here.`}
+              placeholder={`No message yet for ${PC_AUDIENCES.find(([k]) => k === selectedAud)?.[1]} - paste it here.`}
               className="w-full text-sm rounded-lg border border-[var(--ayci-border)] px-3 py-2 disabled:bg-slate-50 font-mono"
               data-testid="pc-welcome"
             />
@@ -902,7 +902,7 @@ function PrivateChatSetupCard({ isAdmin }) {
 
           {!configReady && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              Add every coach's Circle email and pick who sends the opener, then Save — creating is disabled until the config is complete{emailedCoaches.length ? "" : ""}.
+              Add every coach's Circle email and pick who sends the opener, then Save - creating is disabled until the config is complete{emailedCoaches.length ? "" : ""}.
             </p>
           )}
 
@@ -916,7 +916,7 @@ function PrivateChatSetupCard({ isAdmin }) {
               {ready.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                    <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "-"}</div>
                     <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
                       {[r.tier, r.circle_email].filter(Boolean).join(" · ")}
                       {r.matched_via === "name" ? " · matched by name" : r.matched_via === "circle_email" ? " · via circle email" : ""}
@@ -941,13 +941,13 @@ function PrivateChatSetupCard({ isAdmin }) {
           {(preview?.awaiting_dms?.length ?? 0) > 0 && (
             <div className="mt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-orange-700 mb-2">
-                Awaiting DMs ({preview.awaiting_dms.length}) — chat couldn't be created; ask them to turn Circle DMs on, then click Create
+                Awaiting DMs ({preview.awaiting_dms.length}) - chat couldn't be created; ask them to turn Circle DMs on, then click Create
               </p>
               <div className="border border-orange-200 bg-orange-50/40 rounded-lg divide-y divide-orange-100 max-h-56 overflow-y-auto">
                 {preview.awaiting_dms.map((r) => (
                   <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                      <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "-"}</div>
                       <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
                         {[r.tier, r.kajabi_email].filter(Boolean).join(" · ")} · {r.status}
                       </div>
@@ -968,11 +968,11 @@ function PrivateChatSetupCard({ isAdmin }) {
             </div>
           )}
 
-          {/* Backlog audit — students with no actual coach group chat in Circle */}
+          {/* Backlog audit - students with no actual coach group chat in Circle */}
           <div className="mt-6 pt-5 border-t border-[var(--ayci-border)]">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">
-                Backlog audit — no group chat in Circle
+                Backlog audit - no group chat in Circle
               </p>
               <Button variant="outline" size="sm" onClick={runAudit} disabled={auditing} data-testid="pc-run-audit">
                 {auditing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1.5" />}
@@ -980,14 +980,14 @@ function PrivateChatSetupCard({ isAdmin }) {
               </Button>
             </div>
             <p className="text-xs text-[var(--ayci-ink-muted)] mb-3 max-w-prose">
-              Checks Circle directly for every private-tier student — lists those <b>not in any coach group chat</b>,
+              Checks Circle directly for every private-tier student - lists those <b>not in any coach group chat</b>,
               even if a (dead) chat URL exists on their row. The likely DMs-off / dual-email / never-created backlog;
               the cause is confirmed when you try to create the chat.
             </p>
             {audit && (
               <>
                 <p className="text-xs text-[var(--ayci-ink-muted)] mb-2">
-                  Checked {(audit.coaches_checked || []).map((c) => c.email).join(", ") || "—"} ·{" "}
+                  Checked {(audit.coaches_checked || []).map((c) => c.email).join(", ") || "-"} ·{" "}
                   {audit.group_chats_scanned} group chats scanned ·{" "}
                   <b className={auditNoChat.length ? "text-orange-700" : "text-emerald-700"}>{auditNoChat.length}</b> with no chat ·{" "}
                   {audit.counts?.not_on_circle ?? 0} not on Circle
@@ -997,7 +997,7 @@ function PrivateChatSetupCard({ isAdmin }) {
                     {auditNoChat.map((r) => (
                       <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "—"}</div>
+                          <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || "-"}</div>
                           <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
                             {[r.tier, r.email].filter(Boolean).join(" · ")}
                             {r.has_dead_url && <span className="text-orange-700"> · has dead chat URL</span>}
@@ -1084,7 +1084,7 @@ function SlackBotTokenCard({ isAdmin }) {
     try {
       const { data } = await apiClient.post("/slack/test-dm", { email });
       if (data?.ok) {
-        toast.success(`Test DM sent — check Slack for '${email}'`);
+        toast.success(`Test DM sent - check Slack for '${email}'`);
       } else {
         toast.error(
           data?.error === "users_not_found"
@@ -1146,7 +1146,7 @@ function SlackBotTokenCard({ isAdmin }) {
             />
             {state.configured ? (
               <span className="text-emerald-700 font-semibold">
-                Configured — {state.masked}
+                Configured - {state.masked}
               </span>
             ) : (
               <span className="text-slate-500">Not configured</span>
@@ -1303,7 +1303,7 @@ function CircleDaysWebhookCard({ isAdmin }) {
             />
             {state.configured ? (
               <span className="text-emerald-700 font-semibold break-all">
-                Configured — {state.masked}
+                Configured - {state.masked}
               </span>
             ) : (
               <span className="text-slate-500">Not configured</span>
@@ -1389,7 +1389,7 @@ function ZapierCircleReplyCard({ isAdmin }) {
         </div>
         <div>
           <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
-            Zapier — Send to Circle (Private-Tier Videos)
+            Zapier - Send to Circle (Private-Tier Videos)
           </h2>
           <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
             When a coach hits "Send to Circle" on a private-tier video, the
@@ -1418,7 +1418,7 @@ function ZapierCircleReplyCard({ isAdmin }) {
             />
             {state.configured ? (
               <span className="text-emerald-700 font-semibold break-all">
-                Configured — {state.masked}
+                Configured - {state.masked}
               </span>
             ) : (
               <span className="text-slate-500">Not configured</span>

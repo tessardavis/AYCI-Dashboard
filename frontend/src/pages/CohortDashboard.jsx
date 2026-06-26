@@ -137,7 +137,7 @@ export default function CohortDashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Tier split — compact */}
+            {/* Tier split - compact */}
             <section
               className="bg-white border border-[var(--ayci-border)] rounded-lg p-4 shadow-sm"
               data-testid="tier-split"
@@ -208,7 +208,7 @@ export default function CohortDashboard() {
               </div>
               {data.milestones.every((m) => m.completed === 0) && (
                 <div className="mt-4 text-xs text-[var(--ayci-ink-muted)] bg-slate-50 border border-dashed border-[var(--ayci-border)] rounded p-3">
-                  No milestones ticked yet — check back after cohort kick-off.
+                  No milestones ticked yet - check back after cohort kick-off.
                 </div>
               )}
             </section>
@@ -399,7 +399,7 @@ export default function CohortDashboard() {
                           {s.signup_date ? (
                             <SignupDateBadge iso={s.signup_date} />
                           ) : (
-                            <span className="text-xs text-[var(--ayci-ink-muted)]">—</span>
+                            <span className="text-xs text-[var(--ayci-ink-muted)]">-</span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-[var(--ayci-ink-muted)] font-mono text-xs">
@@ -408,7 +408,7 @@ export default function CohortDashboard() {
                         <td className="px-3 py-2 text-center">
                           {s.has_circle_account ? (
                             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
-                              Yes — needs tag
+                              Yes - needs tag
                             </span>
                           ) : (
                             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
@@ -521,7 +521,7 @@ function tierColor(tier) {
 
 function SignupDateBadge({ iso }) {
   const dt = new Date(iso);
-  if (isNaN(dt.getTime())) return <span className="text-xs text-[var(--ayci-ink-muted)]">—</span>;
+  if (isNaN(dt.getTime())) return <span className="text-xs text-[var(--ayci-ink-muted)]">-</span>;
   const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
   const dateStr = dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   // Tone the badge based on how long they've been waiting:

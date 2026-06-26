@@ -134,7 +134,7 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* My Gmail — every user can connect their own */}
+      {/* My Gmail - every user can connect their own */}
       <div className="mt-6">
         <ConnectedInboxesSection isAdmin={user?.role === "admin"} />
       </div>

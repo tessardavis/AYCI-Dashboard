@@ -44,7 +44,7 @@ const STATUS_OPTIONS = [
 const STATUS_META = Object.fromEntries(STATUS_OPTIONS.map((s) => [s.value, s]));
 
 function formatUkDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   return d.toLocaleString("en-GB", {
     weekday: "short",
@@ -76,7 +76,7 @@ function relativeTimePhrase(iso) {
 }
 
 function formatDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso + "T00:00:00Z");
   return d.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -157,7 +157,7 @@ function UpcomingView() {
     load();
   }, []);
 
-  // Optimistic local mutation for outcome marks — keeps the UI instant. The
+  // Optimistic local mutation for outcome marks - keeps the UI instant. The
   // background POST still hits the server; on failure OutcomePicker calls
   // `load` to resync.
   const applyLocalUpdate = ({
@@ -256,9 +256,9 @@ function SessionCard({ session, primary, onRecordsChange, onLocalUpdate }) {
         timeout: 30000,
       });
       if (data.sent) {
-        toast.success("Slack preview sent — check your channel");
+        toast.success("Slack preview sent - check your channel");
       } else {
-        toast.error(data.reason || data.error || "Slack send failed — is SLACK_WEBHOOK_URL set?");
+        toast.error(data.reason || data.error || "Slack send failed - is SLACK_WEBHOOK_URL set?");
       }
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to send");
@@ -456,7 +456,7 @@ function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate })
   const lbRank = student.leaderboard_rank;
   const cohortRank = student.cohort_leaderboard_rank;
   // Only flag as "top of leaderboard" when they're genuinely in the cohort
-  // top 10 — earlier this was using session-local rank which gave misleading
+  // top 10 - earlier this was using session-local rank which gave misleading
   // "#1 leaderboard" chips for students who were actually rank #33 cohort-wide.
   const topLeaderboard = cohortRank && cohortRank <= 3;
   // Highlight top 3 rows of the table itself with a gold left-border so the
@@ -528,7 +528,7 @@ function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate })
         {!student.eligible && student.eligibility === "early" && (
           <span
             className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold mt-1"
-            title={`Submitted ${student.submitted_uk_date} — needs to be the day before (${session.deadline_uk_date})`}
+            title={`Submitted ${student.submitted_uk_date} - needs to be the day before (${session.deadline_uk_date})`}
           >
             <AlertCircle className="w-3 h-3" /> Early
           </span>
@@ -555,7 +555,7 @@ function StudentRow({ student, index, session, onRecordsChange, onLocalUpdate })
             Form not done
           </span>
         ) : (
-          <span className="text-xs text-[var(--ayci-ink-muted)]">—</span>
+          <span className="text-xs text-[var(--ayci-ink-muted)]">-</span>
         )}
       </td>
       <td className="px-3 py-3 text-xs text-[var(--ayci-ink-muted)] whitespace-nowrap tabular-nums">
@@ -600,8 +600,8 @@ function ManualRow({ record, index, session, onRecordsChange, onLocalUpdate }) {
       <td className="px-4 py-3 text-[var(--ayci-ink-muted)] italic text-xs max-w-[440px]">
         {record.notes || "(added by coach)"}
       </td>
-      <td className="px-3 py-3 text-xs text-[var(--ayci-ink-muted)]">—</td>
-      <td className="px-3 py-3 text-xs text-[var(--ayci-ink-muted)]">—</td>
+      <td className="px-3 py-3 text-xs text-[var(--ayci-ink-muted)]">-</td>
+      <td className="px-3 py-3 text-xs text-[var(--ayci-ink-muted)]">-</td>
       <td className="px-3 py-3 whitespace-nowrap">
         <OutcomePicker
           sessionId={session.id}
@@ -683,7 +683,7 @@ function OutcomePicker({
         revert: true,
       });
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to save");
-      // Hard fallback — the parent wants a true reload
+      // Hard fallback - the parent wants a true reload
       onDone?.();
     } finally {
       setSaving(false);
@@ -744,7 +744,7 @@ function OutcomePicker({
       });
     };
     positionMenu();
-    // If the user scrolls or resizes, just close — simpler than tracking.
+    // If the user scrolls or resizes, just close - simpler than tracking.
     const close = () => setOpen(false);
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
@@ -972,7 +972,7 @@ function HistoryGroup({ group, onChange }) {
               {label}
             </span>
             <span className="text-xs text-[var(--ayci-ink-muted)]">
-              {group.session_starts_at ? formatUkDateTime(group.session_starts_at) : "—"}
+              {group.session_starts_at ? formatUkDateTime(group.session_starts_at) : "-"}
             </span>
           </div>
           <h3 className="font-display font-semibold text-[var(--ayci-ink)]">{group.session_name || "Unknown session"}</h3>
@@ -1085,7 +1085,7 @@ function LeaderboardRankPill({ rank, score }) {
   return (
     <span
       className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border-2 font-bold uppercase tracking-wider tabular-nums ${tone}`}
-      title={`Ranked ${ordinal} on the cohort leaderboard — ${score} Circle badges (cohort & private tier badges excluded). Matches the Leaderboard tab.`}
+      title={`Ranked ${ordinal} on the cohort leaderboard - ${score} Circle badges (cohort & private tier badges excluded). Matches the Leaderboard tab.`}
       data-testid={`leaderboard-rank-${rank}`}
     >
       {trophy && <span aria-hidden>{trophy}</span>}

@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 
 function relative(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const then = new Date(iso);
   const now = new Date();
   const diffDays = Math.floor((now - then) / (1000 * 60 * 60 * 24));

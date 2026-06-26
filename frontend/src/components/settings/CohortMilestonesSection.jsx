@@ -157,7 +157,7 @@ export default function CohortMilestonesSection({ isAdmin }) {
         </div>
       ) : (
         <p className="text-xs text-[var(--ayci-ink-muted)] mt-4 italic">
-          Admin-only — read-only view.
+          Admin-only - read-only view.
         </p>
       )}
 
@@ -200,7 +200,7 @@ function CoachSpacesEditor({ isAdmin }) {
     try {
       const { data } = await apiClient.put("/settings/coach-spaces", spaces);
       setSpaces(data);
-      toast.success("Coach Activity spaces updated — dashboard cache cleared");
+      toast.success("Coach Activity spaces updated - dashboard cache cleared");
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
     } finally {
@@ -221,7 +221,7 @@ function CoachSpacesEditor({ isAdmin }) {
         </div>
         <div>
           <h3 className="font-display font-bold text-base text-[var(--ayci-ink)]">
-            Coach Activity — Circle spaces
+            Coach Activity - Circle spaces
           </h3>
           <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
             The Coach Activity dashboard tracks coach engagement in these two
@@ -233,7 +233,7 @@ function CoachSpacesEditor({ isAdmin }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <SpacePickerRow
-          label="Recorded Answer Review — space"
+          label="Recorded Answer Review - space"
           value={spaces.recorded_answer_space_id}
           onChange={(v) =>
             setSpaces((s) => ({ ...s, recorded_answer_space_id: Number(v) || 0 }))
@@ -251,7 +251,7 @@ function CoachSpacesEditor({ isAdmin }) {
           inputType="date"
         />
         <SpacePickerRow
-          label="Interview Support — space"
+          label="Interview Support - space"
           value={spaces.interview_support_space_id}
           onChange={(v) =>
             setSpaces((s) => ({ ...s, interview_support_space_id: Number(v) || 0 }))
@@ -286,7 +286,7 @@ function CoachSpacesEditor({ isAdmin }) {
         />
       </div>
       <p className="mt-2 text-[11px] text-[var(--ayci-ink-muted)] max-w-prose">
-        Set a cohort end date when the cohort wraps — the daily Coach SLA Digest
+        Set a cohort end date when the cohort wraps - the daily Coach SLA Digest
         will stop posting in <code>#coaching-spotlight</code> once both end dates
         are in the past. Clear the end date (delete the value) when the next
         cohort starts to resume the digest.
@@ -357,13 +357,13 @@ function SpacePickerRow({ label, value, onChange, disabled, testid, options }) {
           <option value="">Loading spaces…</option>
         ) : (
           <>
-            <option value="">— select a space —</option>
+            <option value="">- select a space -</option>
             {!known && value ? (
               <option value={value}>(current: {value})</option>
             ) : null}
             {options.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} — {s.slug} ({s.id})
+                {s.name} - {s.slug} ({s.id})
               </option>
             ))}
           </>

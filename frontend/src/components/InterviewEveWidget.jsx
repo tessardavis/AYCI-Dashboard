@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api";
 import { useDeployVersion } from "@/hooks/useDeployVersion";
 import DeployBadge from "@/components/DeployBadge";
 
-// Coach Activity widget — last 7 days of interview-eve check-in DMs.
+// Coach Activity widget - last 7 days of interview-eve check-in DMs.
 // Headline counters at the top + focus rows for today's & tomorrow's
 // interviews so the team can quickly see which students need a nudge.
 export default function InterviewEveWidget() {
@@ -152,18 +152,18 @@ function StatGroup({ title, stats, tones, testidPrefix }) {
             data-testid={`${testidPrefix}-reply-rate`}
             title={
               closedCases === 0
-                ? "No closed interview-eve cases yet — reply rate appears once interviews start happening"
+                ? "No closed interview-eve cases yet - reply rate appears once interviews start happening"
                 : `${replied} replied out of ${closedCases} past interviews (still-pending future interviews are excluded so the rate isn't artificially deflated)`
             }
           >
-            Reply {reply == null ? "—" : `${reply}%`}
+            Reply {reply == null ? "-" : `${reply}%`}
           </div>
           <div
             className={`px-2 py-0.5 ${avgTone} border rounded-full text-[11px] font-bold uppercase tracking-wider tabular-nums`}
             data-testid={`${testidPrefix}-avg`}
             title={avg == null ? "No scores received yet in this window" : `Average score across ${replied} replies in the last 7 days`}
           >
-            Avg {avg == null ? "—" : `${avg}/10`}
+            Avg {avg == null ? "-" : `${avg}/10`}
           </div>
         </div>
       </div>
@@ -182,7 +182,7 @@ function StatGroup({ title, stats, tones, testidPrefix }) {
         <div
           className="text-[11px] text-[var(--ayci-ink-muted)] italic mt-1"
           data-testid={`${testidPrefix}-no-reply-note`}
-          title="Interview date has passed without a score — too late for the score to be meaningful, no action required"
+          title="Interview date has passed without a score - too late for the score to be meaningful, no action required"
         >
           {noReply} past interview-eve DM{noReply === 1 ? "" : "s"} didn't get a reply
         </div>
@@ -198,7 +198,7 @@ function SchedulerStatus({ run, version }) {
       <div
         className="mt-1.5 text-[11px] text-[var(--ayci-ink-muted)] italic flex items-center gap-1.5 flex-wrap"
         data-testid="interview-eve-scheduler-status"
-        title="No audited cron runs yet — the audit started after this paper trail was added. The next run will be logged."
+        title="No audited cron runs yet - the audit started after this paper trail was added. The next run will be logged."
       >
         <span>Cron status: no audited runs yet (next: Mon-Fri 19:00 UK)</span>
         {versionTail}

@@ -140,7 +140,7 @@ export default function QuarterlyRocks() {
       <PageHeader
         eyebrow="90-Day Priorities"
         title="Quarterly Rocks"
-        description="Each team member's 2–5 rocks for the quarter. Click a status pill to cycle On Track → Off Track → Done."
+        description="Each team member's 2-5 rocks for the quarter. Click a status pill to cycle On Track → Off Track → Done."
         right={<RocksSummary {...summary} />}
       />
 
@@ -203,21 +203,21 @@ export default function QuarterlyRocks() {
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="font-display font-bold text-[var(--ayci-ink)] leading-tight truncate">{member.name}</div>
-                <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{member.role_title || "—"}</div>
+                <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{member.role_title || "-"}</div>
               </div>
               <div className="flex items-center gap-2 ml-auto shrink-0">
                 <OwnerStatusDots rocks={owned} />
                 <div className="text-xs text-[var(--ayci-ink-muted)] tabular-nums">
                   {owned.length}
                 </div>
-                {/* Chevron — only visible on mobile (controls collapse) */}
+                {/* Chevron - only visible on mobile (controls collapse) */}
                 <ChevronDown
                   className={`w-4 h-4 text-[var(--ayci-ink-muted)] lg:hidden transition-transform ${collapsedOwners[member.id] ? "" : "rotate-180"}`}
                 />
               </div>
             </button>
 
-            {/* Rocks list — hidden on mobile when collapsed; always shown on lg+ */}
+            {/* Rocks list - hidden on mobile when collapsed; always shown on lg+ */}
             <ul className={`divide-y divide-[var(--ayci-border)] ${collapsedOwners[member.id] ? "hidden lg:block" : ""}`}>
               {owned.map((rock) => {
                 const meta = STATUS_META[rock.status];

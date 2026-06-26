@@ -21,26 +21,26 @@ import { toast } from "sonner";
 import { Zap, Unplug, RefreshCw } from "lucide-react";
 
 const CONNECTORS = [
-  { key: "", label: "— No source (manual only) —" },
-  { key: "transistor_weekly_downloads", label: "Transistor — weekly downloads for a show", fields: ["show_id"] },
-  { key: "convertkit_new_subscribers", label: "ConvertKit — total new subscribers", fields: [] },
-  { key: "convertkit_tag_new_subscribers", label: "ConvertKit — new subscribers added to a tag", fields: ["tag_id"] },
-  { key: "convertkit_broadcast_ctr", label: "ConvertKit — avg broadcast click-through rate", fields: [] },
-  { key: "circle_new_non_academy_members", label: "Circle — new community members (tagged 'Circle Member') this week", fields: ["non_academy_tag"] },
-  { key: "circle_active_academy_members", label: "Circle — active Academy members (no 'Circle Member' tag, active last 7 days)", fields: ["non_academy_tag"] },
-  { key: "monday_items_created_this_week", label: "Monday.com — items on a board this week (by status)", fields: ["board_id", "status_column_title", "status_values"] },
-  { key: "stripe_new_signup_revenue", label: "Stripe — new-signup revenue (£) this week", fields: [] },
-  { key: "stripe_upgrade_revenue", label: "Stripe — upgrade revenue (£) this week", fields: [] },
-  { key: "stripe_refunds_count", label: "Stripe — refunds count this week", fields: [] },
-  { key: "stripe_refunds_amount", label: "Stripe — refund amount (£) this week", fields: [] },
-  { key: "stripe_missed_payments_count", label: "Stripe — missed / failed payments count", fields: [] },
-  { key: "youtube_weekly_views_on_new_videos", label: "YouTube — views on new videos published this week", fields: ["channel_id"] },
-  { key: "tally_form_submissions_this_week", label: "Tally — form submissions this week (optionally filtered by answer text)", fields: ["form_id", "answer_contains"] },
-  { key: "tally_avg_rating_this_week", label: "Tally — average of rating answers this week (satisfaction)", fields: ["form_id"] },
-  { key: "stripe_new_signups_from_waitlist", label: "Stripe + ConvertKit — new signups whose email is on waitlist tag", fields: ["waitlist_tag_id"] },
-  { key: "calendly_events_this_week", label: "Calendly — scheduled events of a type this week", fields: ["event_type_uuid"] },
-  { key: "calendly_hours_this_week", label: "Calendly — total hours of events across types this week", fields: ["event_type_uuids"] },
-  { key: "circle_space_posts_this_week", label: "Circle — new posts in a space this week", fields: ["space_id"] },
+  { key: "", label: "- No source (manual only) -" },
+  { key: "transistor_weekly_downloads", label: "Transistor - weekly downloads for a show", fields: ["show_id"] },
+  { key: "convertkit_new_subscribers", label: "ConvertKit - total new subscribers", fields: [] },
+  { key: "convertkit_tag_new_subscribers", label: "ConvertKit - new subscribers added to a tag", fields: ["tag_id"] },
+  { key: "convertkit_broadcast_ctr", label: "ConvertKit - avg broadcast click-through rate", fields: [] },
+  { key: "circle_new_non_academy_members", label: "Circle - new community members (tagged 'Circle Member') this week", fields: ["non_academy_tag"] },
+  { key: "circle_active_academy_members", label: "Circle - active Academy members (no 'Circle Member' tag, active last 7 days)", fields: ["non_academy_tag"] },
+  { key: "monday_items_created_this_week", label: "Monday.com - items on a board this week (by status)", fields: ["board_id", "status_column_title", "status_values"] },
+  { key: "stripe_new_signup_revenue", label: "Stripe - new-signup revenue (£) this week", fields: [] },
+  { key: "stripe_upgrade_revenue", label: "Stripe - upgrade revenue (£) this week", fields: [] },
+  { key: "stripe_refunds_count", label: "Stripe - refunds count this week", fields: [] },
+  { key: "stripe_refunds_amount", label: "Stripe - refund amount (£) this week", fields: [] },
+  { key: "stripe_missed_payments_count", label: "Stripe - missed / failed payments count", fields: [] },
+  { key: "youtube_weekly_views_on_new_videos", label: "YouTube - views on new videos published this week", fields: ["channel_id"] },
+  { key: "tally_form_submissions_this_week", label: "Tally - form submissions this week (optionally filtered by answer text)", fields: ["form_id", "answer_contains"] },
+  { key: "tally_avg_rating_this_week", label: "Tally - average of rating answers this week (satisfaction)", fields: ["form_id"] },
+  { key: "stripe_new_signups_from_waitlist", label: "Stripe + ConvertKit - new signups whose email is on waitlist tag", fields: ["waitlist_tag_id"] },
+  { key: "calendly_events_this_week", label: "Calendly - scheduled events of a type this week", fields: ["event_type_uuid"] },
+  { key: "calendly_hours_this_week", label: "Calendly - total hours of events across types this week", fields: ["event_type_uuids"] },
+  { key: "circle_space_posts_this_week", label: "Circle - new posts in a space this week", fields: ["space_id"] },
 ];
 
 export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved }) {
@@ -109,7 +109,7 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Configure data source — {metric.name}</DialogTitle>
+          <DialogTitle>Configure data source - {metric.name}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -266,7 +266,7 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
 
           {connectorDef?.fields?.includes("academy_space_id") && (
             <div>
-              <Label>Circle — Academy space</Label>
+              <Label>Circle - Academy space</Label>
               <Select
                 value={params.academy_space_id ? String(params.academy_space_id) : ""}
                 onValueChange={(v) => setParams({ ...params, academy_space_id: Number(v) })}
@@ -310,7 +310,7 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                   }
                 >
                   {discovery.youtube_channel.title}
-                  <span className="text-[var(--ayci-ink-muted)]"> — {discovery.youtube_channel.total_videos} videos</span>
+                  <span className="text-[var(--ayci-ink-muted)]"> - {discovery.youtube_channel.total_videos} videos</span>
                 </button>
               ) : (
                 <Input
@@ -333,7 +333,7 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                 />
               </div>
               <div>
-                <Label>Status column title (optional — defaults to any status column)</Label>
+                <Label>Status column title (optional - defaults to any status column)</Label>
                 <Input
                   value={params.status_column_title || ""}
                   onChange={(e) => setParams({ ...params, status_column_title: e.target.value })}
@@ -341,7 +341,7 @@ export default function MetricSourceDialog({ open, onOpenChange, metric, onSaved
                 />
               </div>
               <div>
-                <Label>Match status values (comma-separated — leave empty to count all items)</Label>
+                <Label>Match status values (comma-separated - leave empty to count all items)</Label>
                 <Input
                   value={(params.status_values || []).join(", ")}
                   onChange={(e) =>

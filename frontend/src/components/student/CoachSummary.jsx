@@ -1,7 +1,7 @@
 import { Phone, Video, Award, Briefcase, Calendar, CheckCircle2 } from "lucide-react";
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "numeric",
@@ -14,7 +14,7 @@ const fmtDate = (iso) => {
 };
 
 const fmtShort = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "numeric",
@@ -28,7 +28,7 @@ const fmtShort = (iso) => {
 export default function CoachSummary({ result }) {
   const monday = result?.monday?.data || {};
   const allowances = monday.allowances || {};
-  const tier = monday?.columns?.Tier?.text || "—";
+  const tier = monday?.columns?.Tier?.text || "-";
   const calls = allowances.calls_30min;
   const mocks = allowances.mock_interviews;
   const bonus = allowances.bonus_calls;
@@ -96,7 +96,7 @@ export default function CoachSummary({ result }) {
         <SummaryStat
           icon={Video}
           label="Videos remaining"
-          value={videos?.remaining ?? "—"}
+          value={videos?.remaining ?? "-"}
           sub={
             videos?.allowance
               ? `${videos.submitted}/${videos.allowance} submitted`
@@ -116,7 +116,7 @@ export default function CoachSummary({ result }) {
         <SummaryStat
           icon={Calendar}
           label="Last call"
-          value={lastCall ? fmtShort(lastCall.start_time) : "—"}
+          value={lastCall ? fmtShort(lastCall.start_time) : "-"}
           sub={lastCall ? lastCall.name : "No Calendly history"}
           tone="amber"
           testid="summary-last-call"

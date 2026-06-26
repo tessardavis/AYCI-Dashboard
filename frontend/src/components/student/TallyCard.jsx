@@ -1,7 +1,7 @@
 import { Briefcase, Clock, FileText } from "lucide-react";
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", {
       day: "numeric",

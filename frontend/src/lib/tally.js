@@ -3,7 +3,7 @@
 // report / update their interview date with their details already filled in.
 // Matches the format the dashboard's existing "Report interview date" link uses:
 //   https://tally.so/r/nGyGj2?contactid=<id>&email=<e>&firstname=<f>&surename=<l>&submissiontype=New&speciality=<s>
-// NB: Tally's field key is the misspelled "surename" — must match exactly.
+// NB: Tally's field key is the misspelled "surename" - must match exactly.
 export const TALLY_INTERVIEW_FORM_SLUG = "nGyGj2";
 
 export function tallyPrefillUrl({ contactId, first, last, email, speciality } = {}) {

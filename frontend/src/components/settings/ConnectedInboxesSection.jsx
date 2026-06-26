@@ -84,7 +84,7 @@ export default function ConnectedInboxesSection({ isAdmin }) {
         `width=${w},height=${h},left=${left},top=${top}`,
       );
       if (!popup || popup.closed || typeof popup.closed === "undefined") {
-        // Popup blocked — do a top-level redirect instead
+        // Popup blocked - do a top-level redirect instead
         window.location.assign(url);
       }
     } catch (err) {
@@ -100,9 +100,9 @@ export default function ConnectedInboxesSection({ isAdmin }) {
       const { data } = await apiClient.post("/oauth/gmail/sync");
       const totals = `${data.created || 0} new, ${data.updated || 0} updated · scanned ${data.scanned || 0}`;
       if (data.errors > 0) {
-        toast.warning(`Synced with ${data.errors} error(s) — ${totals}`);
+        toast.warning(`Synced with ${data.errors} error(s) - ${totals}`);
       } else {
-        toast.success(`Sync complete — ${totals}`);
+        toast.success(`Sync complete - ${totals}`);
       }
       await load();
     } catch (err) {
@@ -147,7 +147,7 @@ export default function ConnectedInboxesSection({ isAdmin }) {
               </h3>
               <p className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 max-w-xl">
                 Connect your own Gmail account so ticket replies go out from
-                your address. Optionally also "ingest inbound" — incoming
+                your address. Optionally also "ingest inbound" - incoming
                 emails (from non-team senders) become Support Tickets every
                 15 min, with reply threads appended automatically.
               </p>

@@ -27,7 +27,7 @@ export default function SupportTicketsWidget() {
         const { data } = await apiClient.get("/tickets/stats", { timeout: 15000 });
         if (!cancelled) setData(data);
       } catch {
-        // Silently — widget is informational, not critical
+        // Silently - widget is informational, not critical
       } finally {
         if (!cancelled) setLoading(false);
       }

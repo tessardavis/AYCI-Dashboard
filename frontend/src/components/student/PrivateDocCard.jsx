@@ -106,7 +106,7 @@ export default function PrivateDocCard({ email, name, initialResult }) {
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-display font-semibold">
-              Possible match — please verify before using
+              Possible match - please verify before using
             </div>
             <div className="mt-0.5 text-amber-800">
               Looking for{" "}
@@ -174,7 +174,7 @@ function renderMarkdown(text) {
     let className = "";
     let content = line;
     if (/^#{1,3}\s/.test(line)) {
-      // Header — strip the # and bold it
+      // Header - strip the # and bold it
       content = line.replace(/^#{1,3}\s*/, "");
       className = "font-display font-bold text-base text-[var(--ayci-ink)] mt-2 first:mt-0";
     } else if (/^[-*]\s/.test(line)) {

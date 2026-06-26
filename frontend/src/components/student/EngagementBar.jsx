@@ -3,7 +3,7 @@ import { Check, Lock } from "lucide-react";
 
 import { apiClient } from "@/lib/api";
 
-// Default 5 Circle milestone tags — used as a fallback if the settings API fails.
+// Default 5 Circle milestone tags - used as a fallback if the settings API fails.
 // The active list is loaded dynamically from /api/settings/cohort-milestones.
 export const DEFAULT_COHORT_MILESTONES = [
   "USP Guru",
@@ -73,7 +73,7 @@ export default function EngagementBar({ circle }) {
           </div>
           <div className="text-sm text-[var(--ayci-ink-muted)] mt-0.5">
             {noCircle
-              ? "No Circle account found — milestones can't be tracked."
+              ? "No Circle account found - milestones can't be tracked."
               : `${achievedCount} of ${milestones.length} milestones earned · ${pct}%`}
           </div>
         </div>

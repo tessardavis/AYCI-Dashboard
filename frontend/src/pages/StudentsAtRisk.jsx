@@ -21,7 +21,7 @@ const RISK_LABEL = {
 };
 
 const fmtRelativeDays = (days) => {
-  if (days === null || days === undefined) return "—";
+  if (days === null || days === undefined) return "-";
   if (days === 0) return "Today";
   if (days === 1) return "1 day ago";
   if (days < 30) return `${days} days ago`;
@@ -30,7 +30,7 @@ const fmtRelativeDays = (days) => {
 };
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "numeric",
@@ -38,7 +38,7 @@ const fmtDate = (iso) => {
       year: "2-digit",
     });
   } catch {
-    return "—";
+    return "-";
   }
 };
 
@@ -62,7 +62,7 @@ export default function StudentsAtRisk() {
       setData(data);
       if (refresh) {
         if (data.computing) {
-          toast("Refresh queued — full Stripe scan takes 3–5 min. Reload soon.");
+          toast("Refresh queued - full Stripe scan takes 3-5 min. Reload soon.");
         } else {
           toast.success("At-risk list refreshed");
         }
@@ -161,13 +161,13 @@ export default function StudentsAtRisk() {
         >
           <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
           First-time scan in progress. This pulls a year of Stripe charges and takes
-          ~3–5 minutes. Refresh this page in a few minutes.
+          ~3-5 minutes. Refresh this page in a few minutes.
         </div>
       )}
 
       {data?.stale && !data?.computing && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-          Showing stale cache — a refresh is running in the background.
+          Showing stale cache - a refresh is running in the background.
         </div>
       )}
 
@@ -276,7 +276,7 @@ export default function StudentsAtRisk() {
                   className="p-8 text-center text-[var(--ayci-ink-muted)] italic"
                 >
                   {data?.total_at_risk === 0
-                    ? "Nobody at risk right now — nice."
+                    ? "Nobody at risk right now - nice."
                     : "No students match these filters."}
                 </td>
               </tr>
@@ -302,10 +302,10 @@ export default function StudentsAtRisk() {
                     )}
                     <div>
                       <div className="font-medium text-[var(--ayci-ink)]">
-                        {s.name || "—"}
+                        {s.name || "-"}
                       </div>
                       <div className="text-xs text-[var(--ayci-ink-muted)]">
-                        {s.email || "—"}
+                        {s.email || "-"}
                       </div>
                     </div>
                   </div>
@@ -326,7 +326,7 @@ export default function StudentsAtRisk() {
                       <div className="text-[10px]">{fmtDate(s.circle_last_seen_at)}</div>
                     </>
                   ) : (
-                    <span className="italic">—</span>
+                    <span className="italic">-</span>
                   )}
                 </td>
                 <td className="p-3">
@@ -357,7 +357,7 @@ export default function StudentsAtRisk() {
         Refreshed:{" "}
         {data?.computed_at
           ? new Date(data.computed_at).toLocaleString("en-GB")
-          : "—"}{" "}
+          : "-"}{" "}
         · Cached for {24} h · Auto-refresh daily at 05:15 London.
       </div>
     </div>

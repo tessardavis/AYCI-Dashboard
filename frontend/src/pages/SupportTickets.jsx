@@ -55,7 +55,7 @@ const CATEGORIES = [
 const SOURCE_LABEL = { manual: "Manual", tally: "Form", email: "Email", whatsapp: "WhatsApp" };
 
 function formatUk(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
@@ -107,7 +107,7 @@ function WatiHealthBadge() {
       toast.success(
         data.appended
           ? `Recovered ${data.appended} WhatsApp message${data.appended === 1 ? "" : "s"}`
-          : "WhatsApp inbox in sync — nothing missed",
+          : "WhatsApp inbox in sync - nothing missed",
       );
       await refresh();
     } catch (err) {
@@ -138,7 +138,7 @@ function WatiHealthBadge() {
   const tooltip = errored
     ? `Last sync had errors: ${health.errors.join(", ")}`
     : `Auto-reconciles every 5 min. Last run: ${
-        ranAt ? new Date(ranAt).toLocaleString("en-GB") : "—"
+        ranAt ? new Date(ranAt).toLocaleString("en-GB") : "-"
       }. Click to sync now.`;
 
   return (
@@ -341,7 +341,7 @@ export default function SupportTickets() {
       const closed = data?.closed ?? 0;
       toast.success(
         closed === 0
-          ? "Nothing to close — selected tickets were already closed"
+          ? "Nothing to close - selected tickets were already closed"
           : `Closed ${closed} ticket${closed === 1 ? "" : "s"}`,
       );
       setConfirmBulkClose(false);
@@ -689,7 +689,7 @@ function StudentMatchStripe({ match, compact = false }) {
       {iv && (
         <span
           className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded border font-semibold leading-tight ${iv.tone}`}
-          title={`Interview ${iv.label} — ${iv.suffix}`}
+          title={`Interview ${iv.label} - ${iv.suffix}`}
         >
           <Calendar className="w-2.5 h-2.5" />
           {iv.label}
@@ -733,7 +733,7 @@ function KanbanBoard({ grouped, teamById, onOpen, onUpdate, selectedIds, onToggl
             </div>
             <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[70vh]">
               {colTickets.length === 0 ? (
-                <div className="text-center text-xs text-slate-400 py-6">—</div>
+                <div className="text-center text-xs text-slate-400 py-6">-</div>
               ) : (
                 colTickets.map((t) => (
                   <KanbanCard
@@ -811,7 +811,7 @@ function KanbanCard({ ticket, teamById, onOpen, onUpdate, selected, onToggleSele
           {circleUnread && (
             <span
               className="inline-flex items-center gap-0.5 text-[9px] font-bold text-violet-700 bg-violet-100 border border-violet-300 px-1.5 py-0.5 rounded uppercase tracking-wider"
-              title={`${ticket.unread_circle_count} new Circle DM ${ticket.unread_circle_count === 1 ? "reply" : "replies"} — last ${relativeAge(ticket.last_circle_activity_at)}`}
+              title={`${ticket.unread_circle_count} new Circle DM ${ticket.unread_circle_count === 1 ? "reply" : "replies"} - last ${relativeAge(ticket.last_circle_activity_at)}`}
               data-testid={`ticket-circle-unread-${ticket.id}`}
             >
               <MessageCircle className="w-2.5 h-2.5" />
@@ -1200,7 +1200,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
     const updated = await onUpdate(ticket.id, { [field]: value });
     if (updated) {
       setFullTicket((prev) => ({ ...(prev || {}), ...updated }));
-      // Make status transitions obvious — the card moves out of the Open
+      // Make status transitions obvious - the card moves out of the Open
       // column into Resolved/Closed (which is often off-screen on narrow
       // viewports), so without feedback users think the change didn't save.
       if (field === "status") {
@@ -1236,7 +1236,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         const { data } = await apiClient.get(`/tickets/${ticket.id}`);
         setFullTicket(data);
       } catch {
-        // ignore — onRefresh will catch us up
+        // ignore - onRefresh will catch us up
       }
       onRefresh();
       toast.success("Internal note saved");
@@ -1350,7 +1350,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
               </div>
             ) : (
               <div className="mt-2 text-[11px] text-[var(--ayci-ink-muted)] italic">
-                Not matched to a student record yet —
+                Not matched to a student record yet -
                 <button
                   onClick={async () => {
                     setMatching(true);
@@ -1448,7 +1448,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             </Field>
           </div>
         </div>
-        {/* Conversation thread — newest first so the latest reply is the
+        {/* Conversation thread - newest first so the latest reply is the
             first thing the team sees. The original message is shown last. */}
         <ConversationThread ticket={t} onRefresh={async () => {
           try {
@@ -1546,7 +1546,7 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Write an internal note for the team — not sent to the student"
+              placeholder="Write an internal note for the team - not sent to the student"
               rows={2}
               className={inputCls + " bg-white"}
               data-testid="ticket-add-note-input"
@@ -1599,7 +1599,7 @@ const TEAM_OUTBOUND_AUTHOR_IDS = new Set(["_whatsapp_outbound", "_gmail_outbound
 
 // Renders the entire ticket conversation (original message + every reply +
 // outbound replies from the team) in a chat-style timeline. The most recent
-// message is at the TOP — that's the whole point: the team always sees the
+// message is at the TOP - that's the whole point: the team always sees the
 // freshest student reply first, no scrolling required.
 function ConversationThread({ ticket, onRefresh }) {
   const [deletingId, setDeletingId] = useState(null);
@@ -1621,7 +1621,7 @@ function ConversationThread({ ticket, onRefresh }) {
 
   const items = [];
 
-  // Original incoming ticket body — modelled as the first message
+  // Original incoming ticket body - modelled as the first message
   if (ticket.description) {
     items.push({
       kind: "student",
@@ -1661,7 +1661,7 @@ function ConversationThread({ ticket, onRefresh }) {
 
   return (
     <div data-testid="conversation-thread">
-      <Label>Conversation ({items.length}) — newest first</Label>
+      <Label>Conversation ({items.length}) - newest first</Label>
       <div className="space-y-2">
         {items.map((m, i) => {
           const isStudent = m.kind === "student";
@@ -1938,11 +1938,11 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
   const [templateName, setTemplateName] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
 
-  // 24h session window — Wati requires templates after this
+  // 24h session window - Wati requires templates after this
   const lastInbound = ticket.wati_last_inbound_at || ticket.created_at;
   const hoursSince = lastInbound ? (Date.now() - new Date(lastInbound).getTime()) / 3600000 : Infinity;
   const outOfWindow = hoursSince >= 24;
-  // Live countdown — ticks every minute so the chip stays accurate without re-fetching.
+  // Live countdown - ticks every minute so the chip stays accurate without re-fetching.
   const [, _tickNow] = useState(0);
   useEffect(() => {
     if (outOfWindow || !lastInbound) return;
@@ -2056,7 +2056,7 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-amber-900">
-            More than 24h since last student message — only pre-approved templates can be sent.
+            More than 24h since last student message - only pre-approved templates can be sent.
           </p>
           {!showTemplates ? (
             <Button
@@ -2101,7 +2101,7 @@ function WhatsAppReplyPanel({ ticket, onSent }) {
           )}
           {templateName && (
             <div className="text-xs text-[var(--ayci-ink-muted)] bg-white border border-slate-200 rounded p-2">
-              {(templates.find((t) => t.name === templateName) || {}).body || "—"}
+              {(templates.find((t) => t.name === templateName) || {}).body || "-"}
             </div>
           )}
         </div>

@@ -2,7 +2,7 @@
  * Mobile-only Weekly Scorecard view (shown on `<sm` viewports, hidden on
  * tablet/desktop where the table is shown). Cards are grouped by category
  * matching the desktop table. Each card collapses to "this week" by default
- * and expands tap-by-tap to show every visible week — and any week is
+ * and expands tap-by-tap to show every visible week - and any week is
  * editable in the same way (reuses startEdit / commitEdit / etc.).
  */
 import { useState } from "react";
@@ -33,7 +33,7 @@ export default function MobileScorecard({
 
   return (
     <div className="space-y-5 sm:hidden" data-testid="scorecard-mobile">
-      {/* Owner filter — collapsed into a disclosure on mobile (option 4b) */}
+      {/* Owner filter - collapsed into a disclosure on mobile (option 4b) */}
       <OwnerFilter
         team={team}
         filterOwnerId={filterOwnerId}
@@ -157,7 +157,7 @@ function MetricCard({
     .map((id) => teamById[id])
     .filter(Boolean);
 
-  // Sparkline data — chronological
+  // Sparkline data - chronological
   const series = weeks
     .slice()
     .reverse()
@@ -224,7 +224,7 @@ function MetricCard({
             <span
               className={`inline-block min-w-[3.5rem] text-right text-sm font-display font-semibold tabular-nums px-2.5 py-1 rounded-md border ${toneCls}`}
             >
-              {latestVal !== undefined ? formatValue(latestVal, metric.format) : "—"}
+              {latestVal !== undefined ? formatValue(latestVal, metric.format) : "-"}
             </span>
             <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-0.5">
               W/C {formatWeekLabel(latest)}
@@ -286,7 +286,7 @@ function MetricCard({
                       className={`min-w-[3.5rem] text-right font-display font-semibold tabular-nums ${tone} hover:underline`}
                       data-testid={`scorecard-mobile-cell-${metric.id}-${w}`}
                     >
-                      {val !== undefined ? formatValue(val, metric.format) : "—"}
+                      {val !== undefined ? formatValue(val, metric.format) : "-"}
                     </button>
                   )}
                 </li>

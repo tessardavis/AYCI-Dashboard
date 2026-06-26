@@ -50,7 +50,7 @@ const SERIES_COLORS = ["#4457B6", "#94a3b8", "#cbd5e1"];
 const fmtGbp = (v) =>
   `£${Number(v || 0).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
 const fmtDate = (iso) =>
-  iso ? new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "—";
+  iso ? new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "-";
 
 export default function LaunchDashboard() {
   const [launches, setLaunches] = useState([]);
@@ -135,7 +135,7 @@ export default function LaunchDashboard() {
         {...HERO_PRESETS.launch}
         eyebrow="Launch"
         title={launch?.name || "Launch Dashboard"}
-        subtitle="Live webinar registrations from ConvertKit and revenue from Stripe — broken down by source / product, with overlay against the previous two launches."
+        subtitle="Live webinar registrations from ConvertKit and revenue from Stripe - broken down by source / product, with overlay against the previous two launches."
         testid="launch-hero"
         actions={
           <Select value={launchId || ""} onValueChange={setLaunchId}>
@@ -164,7 +164,7 @@ export default function LaunchDashboard() {
 
       {launch && (
         <>
-          {/* KPI summary — 6 cards: revenue, signups (new/legacy/total), conversion, EPL, AOV/user, webinar regs (right) */}
+          {/* KPI summary - 6 cards: revenue, signups (new/legacy/total), conversion, EPL, AOV/user, webinar regs (right) */}
           {loading && !registrations && !sales ? (
             <div className="bg-white border border-[var(--ayci-border)] rounded-lg p-8 text-center text-[var(--ayci-ink-muted)]">
               <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--ayci-teal)]" />
@@ -175,7 +175,7 @@ export default function LaunchDashboard() {
               <Stat
                 icon={TrendingUp}
                 label="Revenue"
-                value={sales ? fmtGbp(sales.total_amount_gbp) : "—"}
+                value={sales ? fmtGbp(sales.total_amount_gbp) : "-"}
                 sub={`Goal £${Math.round(launch.target_good / 1000)}k / £${Math.round(launch.target_better / 1000)}k / £${Math.round(launch.target_best / 1000)}k`}
                 tone="violet"
                 testid="kpi-revenue"
@@ -187,7 +187,7 @@ export default function LaunchDashboard() {
                 value={
                   registrations?.unique && sales?.total_count
                     ? `${((sales.total_count / registrations.unique) * 100).toFixed(1)}%`
-                    : "—"
+                    : "-"
                 }
                 sub="Signups / unique regs"
                 tone="amber"
@@ -199,7 +199,7 @@ export default function LaunchDashboard() {
                 value={
                   registrations?.unique && sales?.total_amount_gbp
                     ? fmtGbp(sales.total_amount_gbp / registrations.unique)
-                    : "—"
+                    : "-"
                 }
                 sub="Earnings per lead"
                 tone="cyan"
@@ -208,7 +208,7 @@ export default function LaunchDashboard() {
               <Stat
                 icon={ShoppingBag}
                 label="AOV"
-                value={sales?.aov_per_user_gbp ? fmtGbp(sales.aov_per_user_gbp) : "—"}
+                value={sales?.aov_per_user_gbp ? fmtGbp(sales.aov_per_user_gbp) : "-"}
                 sub={
                   sales?.unique_customers
                     ? `Avg per user · ${sales.unique_customers} unique`
@@ -220,7 +220,7 @@ export default function LaunchDashboard() {
               <Stat
                 icon={Users}
                 label="Webinar regs"
-                value={registrations?.total ?? "—"}
+                value={registrations?.total ?? "-"}
                 sub={
                   registrations?.unique
                     ? `${registrations.unique} unique`
@@ -234,7 +234,7 @@ export default function LaunchDashboard() {
             </div>
           )}
 
-          {/* Pace forecast — primary prediction, always visible for the active launch */}
+          {/* Pace forecast - primary prediction, always visible for the active launch */}
           <PaceTrackerCard />
 
           {/* Compact phase timeline */}
@@ -245,10 +245,10 @@ export default function LaunchDashboard() {
             <SalesChart launch={launch} sales={sales} comparison={comparison} />
           )}
 
-          {/* Phase breakdown — compare each phase against previous 2 launches */}
+          {/* Phase breakdown - compare each phase against previous 2 launches */}
           <PhaseBreakdown data={phaseBreakdown} launch={launch} />
 
-          {/* Onboarding gap — students who paid but aren't in Circle cohort yet */}
+          {/* Onboarding gap - students who paid but aren't in Circle cohort yet */}
           <OnboardingGap data={onboardingGap} launchId={launchId} onRefresh={(d) => setOnboardingGap(d)} />
 
           {/* Sales by tier */}
@@ -256,7 +256,7 @@ export default function LaunchDashboard() {
             <SalesByTier sales={sales} />
           )}
 
-          {/* Webinar — moved to the bottom (lower priority post-webinar) */}
+          {/* Webinar - moved to the bottom (lower priority post-webinar) */}
           {registrations && !registrations.error && (
             <RegistrationsChart
               launch={launch}
@@ -596,7 +596,7 @@ function SalesChart({ launch, sales, comparison }) {
             Sales (cumulative revenue)
           </h2>
           <div className="text-xs text-[var(--ayci-ink-muted)]">
-            From Stripe — by day from launch start
+            From Stripe - by day from launch start
           </div>
         </div>
       </div>
@@ -724,7 +724,7 @@ function SignupsTile({ sales }) {
       </div>
       <div className="mt-1.5 flex items-baseline gap-2">
         <span className="font-display font-bold text-2xl text-[var(--ayci-ink)] leading-none">
-          {sales?.total_count ?? "—"}
+          {sales?.total_count ?? "-"}
         </span>
         <span className="text-[10px] text-[var(--ayci-ink-muted)] uppercase tracking-wider">
           total
@@ -1009,12 +1009,12 @@ function OnboardingGap({ data, launchId, onRefresh }) {
                     {r.signup_date}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="font-medium text-[var(--ayci-ink)]">{r.name || r.monday_name || "—"}</div>
+                    <div className="font-medium text-[var(--ayci-ink)]">{r.name || r.monday_name || "-"}</div>
                     <div className="text-xs text-[var(--ayci-ink-muted)] break-all">{r.email || "(no email)"}</div>
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-semibold">
-                      {r.tier_hint || "—"}
+                      {r.tier_hint || "-"}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs text-[var(--ayci-ink)]">
@@ -1037,7 +1037,7 @@ function OnboardingGap({ data, launchId, onRefresh }) {
                           Open <ExternalLink className="w-3 h-3" />
                         </a>
                       ) : (
-                        <span className="text-[var(--ayci-ink-muted)]">—</span>
+                        <span className="text-[var(--ayci-ink-muted)]">-</span>
                       )}
                     </td>
                   )}

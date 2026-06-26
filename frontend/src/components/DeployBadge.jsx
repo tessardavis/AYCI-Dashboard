@@ -7,7 +7,7 @@ export default function DeployBadge({ version }) {
     return (
       <span
         className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[10px]"
-        title={`Running v${running} — matches latest commit on main. Deploy is up to date.`}
+        title={`Running v${running} - matches latest commit on main. Deploy is up to date.`}
         data-testid="deploy-badge"
       >
         ✓ deploy up to date · v{running}
@@ -18,7 +18,7 @@ export default function DeployBadge({ version }) {
     return (
       <span
         className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300 font-mono text-[10px]"
-        title={`Running v${running} but GitHub main is at v${version.github_head}. Render didn't pick up the latest push — go to Render → Manual Deploy → "Clear build cache & deploy".`}
+        title={`Running v${running} but GitHub main is at v${version.github_head}. Render didn't pick up the latest push - go to Render → Manual Deploy → "Clear build cache & deploy".`}
         data-testid="deploy-badge"
       >
         ⚠ deploy stale · running v{running}, main v{version.github_head}

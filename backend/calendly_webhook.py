@@ -132,10 +132,10 @@ async def handle_invitee_created(db, payload: dict) -> dict:
         name = payload.get("name") or email
         when = (ev.get("start_time") or "")[:16].replace("T", " ")
         msg = (
-            f":calendar: *Bonus call booked* — {name} ({email})"
+            f":calendar: *Bonus call booked* - {name} ({email})"
             + (f" with *{host}*" if host else "")
             + (f" · {when} UTC" if when else "")
-            + (" · :warning: not found in dashboard — check their email"
+            + (" · :warning: not found in dashboard - check their email"
                if result["row_updated"] == "student_not_found" else "")
         )
         sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
