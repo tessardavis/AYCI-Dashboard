@@ -301,7 +301,7 @@ function BonusCallsDoc() {
         <LI><strong>Kit tags [Arub]:</strong> create the cohort's tags - <Tag>Purchase - Live webinar</Tag>, <Tag>Legacy Video Launch Day 1 Upgrade</Tag>, <Tag>Legacy Video Launch Last Day Upgrade</Tag>, <Tag>Cart Close Signup</Tag>, and <Tag>Ad Hoc Bonus Call</Tag>.</LI>
         <LI><strong>Booking-link automation [Tessa/Megan]:</strong> the Kit automation that emails the booking link - ideally one automation with all five tags as entry points. Update the booking link and the cohort name in the email copy.</LI>
         <LI><strong>Reminders [Megan]:</strong> ensure the "Bonus Call Reminders" sequence has all five eligibility tags as entry points (not just Live Webinar).</LI>
-        <LI><strong>Calendly [Arub/Megan]:</strong> create a fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with the coaches' availability (Onboarding Week to before the next Onboarding Week). Confirm coaches + dates with Arub.</LI>
+        <LI><strong>Calendly [Arub/Megan]:</strong> create a fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with the coaches' availability (Onboarding Week to before the next Onboarding Week). Confirm coaches + dates with Arub. <strong>Set the event's booking window to only accept bookings until the next cohort starts</strong> (date-range / scheduling limit), so calls can't roll over.</LI>
         <LI><strong>Dashboard:</strong> nothing to change. Keep Calendly connected (Settings → Integrations). It auto-detects the new tags + event.</LI>
         <LI><strong>End of cohort:</strong> read the snapshot (eligible / booked / no-show / rescheduled) on the Cohort Dashboard, share with Tessa, then the coaches.</LI>
       </ol>

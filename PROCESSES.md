@@ -140,7 +140,7 @@ tags by suffix and matches the Calendly event by the words "bonus call").
 1. **Kit tags [Arub]** - create the cohort's tags: `Purchase - Live webinar`, `Legacy Video Launch Day 1 Upgrade`, `Legacy Video Launch Last Day Upgrade`, `Cart Close Signup`, and `Ad Hoc Bonus Call`.
 2. **Booking-link automation [Tessa/Megan]** - the Kit automation that emails the booking link, ideally **one** automation with all five tags as entry points. Update the booking link + the cohort name in the email.
 3. **Reminders [Megan]** - ensure the "Bonus Call Reminders" sequence has **all five** tags as entry points (not just Live Webinar).
-4. **Calendly [Arub/Megan]** - fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with coach availability (Onboarding Week → before the next one); confirm coaches + dates with Arub.
+4. **Calendly [Arub/Megan]** - fresh round-robin "AYCI Bonus call - &lt;cohort&gt;" event with coach availability (Onboarding Week → before the next one); confirm coaches + dates with Arub. **Set the event's booking window so it only accepts bookings until the next cohort starts** (date-range / scheduling limit) - so calls can't roll over.
 5. **Dashboard** - nothing to change. Keep Calendly connected (Settings → Integrations).
 6. **End of cohort** - read the snapshot below on the Cohort Dashboard / Processes board; share with Tessa then coaches.
 
