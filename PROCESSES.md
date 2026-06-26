@@ -31,6 +31,8 @@ when they signed up. Booked via a round-robin Calendly event shared by the bonus
 round-robin event is created each cohort, so **update this link each launch** (here + in the Kit
 booking-link automation).
 
+**Walkthrough video:** https://www.loom.com/share/00eb3199d5b14c9abcc701edc101441b
+
 ## Who's eligible?
 
 A student is eligible if they hold **any** of these ConvertKit tags (shown for the JUN-26 cohort;
@@ -229,14 +231,14 @@ Sales Zap (applies these Kit tier tags): https://zapier.com/editor/365773719/pub
 
 **VIP** - five calls across three links:
 - 2 x 30-min **with Tessa**: https://calendly.com/tessardavis/ayci-vip-30-min
-- 2 x 30-min **coach calls** (Becky) - same link as Private Plus: https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+- 2 x 30-min **coach calls** (Becky, Anoop, or Charlotte) - same link as Private Plus: https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
 - 1 x 60-min **mock interview** (Becky / Charlotte / Anoop): https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min
 
 ## Keeping coaching availability open
 
 These links stay live all year, so availability has to be kept topped up:
 
-- set coach availability on Calendly **well ahead** of each launch;
+- coach availability needs to be set up on Calendly **each month**;
 - availability should run **consistently throughout the year**; and
 - do **regular checks** on each link: Private Plus 30-min, VIP 60-min mock, VIP 2 x 30-min coach, VIP 2 x 30-min Tessa.
 

@@ -133,13 +133,13 @@ THE BOOKING LINKS + COACHES:
   - Private Plus 30-min coach call (Becky / Charlotte / Anoop):
     https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
   - VIP 2 x 30-min with Tessa: https://calendly.com/tessardavis/ayci-vip-30-min
-  - VIP 2 x 30-min coach calls (Becky) - the SAME link as Private Plus:
-    https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
+  - VIP 2 x 30-min coach calls (Becky, Anoop, or Charlotte) - the SAME link as
+    Private Plus: https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min
   - VIP 60-min mock interview (Becky / Charlotte / Anoop):
     https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min
 
 KEEPING AVAILABILITY OPEN: these links stay live all year, so availability has to
-be kept topped up - set coach availability on Calendly well ahead of each launch,
+be kept topped up - coach availability needs to be set up on Calendly each month,
 keep it running consistently through the year, and do regular checks on each link
 (Private Plus 30-min, VIP 60-min mock, VIP 2x30-min coach, VIP 2x30-min Tessa).
 
