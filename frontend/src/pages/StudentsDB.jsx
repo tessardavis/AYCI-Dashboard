@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Search, X, Save, RefreshCw } from "lucide-react";
+import { Loader2, Search, X, Save, RefreshCw, Gift } from "lucide-react";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/swrCache";
 import { tallyPrefillUrl } from "@/lib/tally";
@@ -740,6 +740,19 @@ function EditModal({ row, onClose, onSaved }) {
     }
   };
 
+  const [markingBonus, setMarkingBonus] = useState(false);
+  const markBonusEligible = async () => {
+    setMarkingBonus(true);
+    try {
+      await apiClient.post("/bonus-call/mark-eligible", { email: row.email }, { timeout: 30000 });
+      toast.success("Marked eligible - tagged 'Ad Hoc Bonus Call' in Kit");
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't mark eligible");
+    } finally {
+      setMarkingBonus(false);
+    }
+  };
+
   const protectedFields = new Set(row.dashboard_edited_fields || []);
 
   const save = async () => {
@@ -870,6 +883,29 @@ function EditModal({ row, onClose, onSaved }) {
             <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1.5">
               Adds them to the Circle space(s) + DMs them (as the configured sender). Replaces the old Zapier flow.
             </div>
+          </div>
+        </div>
+
+        <div className="px-4 pb-2">
+          <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider font-bold text-violet-800 mb-0.5">
+                Bonus call
+              </div>
+              <div className="text-[11px] text-[var(--ayci-ink-muted)]">
+                Tags them "Ad Hoc Bonus Call" in Kit so they get the booking link.
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={markingBonus || !row.email}
+              onClick={markBonusEligible}
+              className="border-violet-300 text-violet-800 hover:bg-violet-100"
+            >
+              {markingBonus ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Gift className="w-3.5 h-3.5 mr-1.5" />}
+              Mark eligible (ad hoc)
+            </Button>
           </div>
         </div>
 
