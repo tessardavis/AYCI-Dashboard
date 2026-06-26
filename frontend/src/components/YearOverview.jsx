@@ -19,7 +19,7 @@ export default function YearOverview({ onSelect, selectedId }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Compute time range — pad a bit on either side
+  // Compute time range - pad a bit on either side
   const range = useMemo(() => {
     if (!data?.launches?.length) return null;
     const dates = [];

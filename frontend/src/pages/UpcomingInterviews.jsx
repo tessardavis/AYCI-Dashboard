@@ -26,7 +26,7 @@ function usePrefetchLookup() {
   const schedule = (email) => {
     cancel();
     if (!email || _prefetchedEmails.has(email)) return;
-    // 200ms hover-intent debounce — avoid firing on accidental cursor sweeps.
+    // 200ms hover-intent debounce - avoid firing on accidental cursor sweeps.
     timer.current = setTimeout(() => {
       _prefetchedEmails.add(email);
       apiClient
@@ -38,7 +38,7 @@ function usePrefetchLookup() {
 }
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso + "T00:00:00Z");
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 };
@@ -66,7 +66,7 @@ function EveScoreChip({ eve }) {
     return (
       <span
         className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full text-[10px] uppercase tracking-wider font-bold"
-        title={`Eve-of-interview check-in DM sent ${new Date(eve.sent_at).toLocaleString("en-GB")} — no score reply yet`}
+        title={`Eve-of-interview check-in DM sent ${new Date(eve.sent_at).toLocaleString("en-GB")} - no score reply yet`}
         data-testid="eve-score-pending"
       >
         💬 Eve · pending
@@ -82,7 +82,7 @@ function EveScoreChip({ eve }) {
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 ${tone} border rounded-full text-[10px] uppercase tracking-wider font-bold`}
-      title={`Pre-interview support score ${score}/10 — replied ${new Date(eve.score_received_at).toLocaleString("en-GB")}`}
+      title={`Pre-interview support score ${score}/10 - replied ${new Date(eve.score_received_at).toLocaleString("en-GB")}`}
       data-testid={`eve-score-${score}`}
     >
       {score <= 5 ? "🚨" : score <= 7 ? "🟡" : "✅"} Eve {score}/10
@@ -162,7 +162,7 @@ function PastCoaches({ coaches }) {
           <span
             key={c.name}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full font-medium"
-            title={`${c.count} call${c.count > 1 ? "s" : ""}${c.last_at ? ` — last ${new Date(c.last_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`}
+            title={`${c.count} call${c.count > 1 ? "s" : ""}${c.last_at ? ` - last ${new Date(c.last_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}`}
             data-testid={`past-coach-chip-${cleanCoachName(c.name).replace(/\s+/g, "-").toLowerCase()}`}
           >
             {cleanCoachName(c.name)}
@@ -209,7 +209,7 @@ export default function UpcomingInterviews() {
       const n = data?.changed_count ?? 0;
       toast.success(
         n === 0
-          ? "Reconcile done — every date already matches the latest Tally entry"
+          ? "Reconcile done - every date already matches the latest Tally entry"
           : `Updated ${n} interview date${n === 1 ? "" : "s"} from Tally`
       );
       await load();
@@ -357,7 +357,7 @@ export default function UpcomingInterviews() {
 
       {data && (
         <div className={"grid grid-cols-1 gap-6 " + (showAcademy ? "xl:grid-cols-2" : "")}>
-          {/* Private — always shown */}
+          {/* Private - always shown */}
           <section data-testid="private-section">
             <SectionHeader
               title="Private tier · Boost & Go"
@@ -376,7 +376,7 @@ export default function UpcomingInterviews() {
             )}
           </section>
 
-          {/* Academy — only when 'All tiers' is selected */}
+          {/* Academy - only when 'All tiers' is selected */}
           {showAcademy && (
             <section data-testid="academy-section">
               <SectionHeader
@@ -483,7 +483,7 @@ function EveCheckInsWidget() {
       if (n > 0) {
         toast.success(`Recovered ${n} score${n > 1 ? "s" : ""}`);
       } else {
-        toast.info("No new scores recovered — see breakdown");
+        toast.info("No new scores recovered - see breakdown");
       }
       load();
     } catch (err) {
@@ -548,7 +548,7 @@ function EveCheckInsWidget() {
 
   // Group split: Premium (Private Plus + VIP + Boost & Go) vs Academy
   // (Academy + legacy Silver/Gold). Mirrors the system's `is_private_tier`
-  // flag — set server-side at eve-DM send time.
+  // flag - set server-side at eve-DM send time.
   const isPremium = (r) => Boolean(r.is_private_tier);
 
   // Build a stats block for an arbitrary subset of records.
@@ -713,7 +713,7 @@ function EveCheckInsWidget() {
                   </div>
                   {buckets.post.length > 0 && (
                     <div className="text-[10.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                      <strong>{buckets.post.length}</strong> reply{buckets.post.length === 1 ? "" : "ies"} came in after the interview — excluded from the average (student already knew the result)
+                      <strong>{buckets.post.length}</strong> reply{buckets.post.length === 1 ? "" : "ies"} came in after the interview - excluded from the average (student already knew the result)
                     </div>
                   )}
                 </div>
@@ -745,11 +745,11 @@ function EveCheckInsWidget() {
                             {tierLabel}
                           </span>
                           {cls === "post" ? (
-                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-semibold" title="Score arrived after the interview — could be skewed by knowing the result">
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-semibold" title="Score arrived after the interview - could be skewed by knowing the result">
                               Post-interview
                             </span>
                           ) : (
-                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold" title="Score arrived before the interview — clean signal">
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold" title="Score arrived before the interview - clean signal">
                               Pre
                             </span>
                           )}
@@ -760,7 +760,7 @@ function EveCheckInsWidget() {
                           )}
                         </div>
                         <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
-                          Interview {rec.interview_date} · replied {rec.score_received_at ? new Date(rec.score_received_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          Interview {rec.interview_date} · replied {rec.score_received_at ? new Date(rec.score_received_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-"}
                         </div>
                       </div>
                       <span className={`text-sm font-display font-bold rounded border px-2.5 py-1 ${scoreColor}`}>
@@ -779,7 +779,7 @@ function EveCheckInsWidget() {
               </div>
             ) : pendingRows.length === 0 ? (
               <div className="text-xs text-emerald-700 bg-emerald-50/70 border border-emerald-200 rounded px-3 py-2" data-testid="eve-widget-no-pending">
-                ✓ No pending check-ins — every student who was DM'd has either replied or is still in the response window.
+                ✓ No pending check-ins - every student who was DM'd has either replied or is still in the response window.
               </div>
             ) : (
               <div className="space-y-1.5" data-testid="eve-widget-pending-list">
@@ -802,7 +802,7 @@ function EveCheckInsWidget() {
                         </span>
                       </div>
                       <div className="text-[10.5px] text-[var(--ayci-ink-muted)]">
-                        Interview {rec.interview_date} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        Interview {rec.interview_date} · sent {rec.sent_at ? new Date(rec.sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "-"}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -912,7 +912,7 @@ function GroupStatsCard({ label, colour, stats, series30d, testIdPrefix }) {
         <MiniStat label="Low ≤5" value={stats.low} accent={stats.low > 0 ? "text-rose-700" : "text-slate-500"} testid={`${testIdPrefix}-low`} />
         <MiniStat
           label={stats.avgAll && postCount > 0 ? "Avg · pre" : "Avg"}
-          value={stats.avgPre ? `${stats.avgPre}` : "—"}
+          value={stats.avgPre ? `${stats.avgPre}` : "-"}
           accent={palette.avg}
           big
           sublabel={stats.avgAll && postCount > 0 ? `inc post ${stats.avgAll}` : null}
@@ -936,7 +936,7 @@ function Sparkline({ series, stroke, fill, testid }) {
   const W = 280;
   const H = 28;
   const PAD = 2;
-  // Y range: 1–10 (full score range, so trends stay visually comparable
+  // Y range: 1-10 (full score range, so trends stay visually comparable
   // across both cards even if one has a tight cluster).
   const yMin = 1;
   const yMax = 10;
@@ -971,7 +971,7 @@ function Sparkline({ series, stroke, fill, testid }) {
           y1={y(7)} y2={y(7)}
           stroke={stroke} strokeOpacity="0.18" strokeDasharray="2 2" strokeWidth="0.6"
         />
-        {/* Fill under curve — visual weight, optional */}
+        {/* Fill under curve - visual weight, optional */}
         {valid.length > 1 && (
           <path
             d={d + `L${(endX || 0).toFixed(1)},${H - PAD} L${(x(series.findIndex((p) => p.avg !== null)) || PAD).toFixed(1)},${H - PAD} Z`}
@@ -1006,7 +1006,7 @@ function MiniStat({ label, value, accent, big, sublabel, testid }) {
 
 // ----------------------------------------------------------- InterviewDateEditor
 // Click the date to edit it straight in the dashboard. Saves to the mirror and
-// pins it so the Monday sync can't overwrite it — the supported path for dates
+// pins it so the Monday sync can't overwrite it - the supported path for dates
 // set outside the Tally form. `onChanged` reloads the list after a save.
 function InterviewDateEditor({ student, today, onChanged }) {
   const [editing, setEditing] = useState(false);
@@ -1128,7 +1128,7 @@ function AcademyRow({ student, today, onChanged }) {
           <EveScoreChip eve={student.eve_score} />
         </div>
         <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5 flex flex-wrap gap-x-3">
-          <span>{student.speciality || "—"}</span>
+          <span>{student.speciality || "-"}</span>
           {student.hospital && <span>· {student.hospital}</span>}
         </div>
         <PastCoaches coaches={student.past_coaches} />
@@ -1207,7 +1207,7 @@ function PrivateCard({ student, today, onChanged }) {
             <EveScoreChip eve={student.eve_score} />
           </div>
           <div className="text-xs text-[var(--ayci-ink-muted)] mt-0.5">
-            {student.speciality || "—"}
+            {student.speciality || "-"}
             {student.hospital && ` · ${student.hospital}`}
           </div>
           <PastCoaches coaches={student.past_coaches} />
@@ -1323,7 +1323,7 @@ function SlotRow({ slot }) {
 }
 
 // ============================================================================
-// Private Tier Utilisation — flagged students who haven't used their videos /
+// Private Tier Utilisation - flagged students who haven't used their videos /
 // calls yet, surfaced ahead of their interview so coaches can chase.
 // ============================================================================
 function UtilisationSection({ utilisation, loading, days, onRefresh }) {
@@ -1656,7 +1656,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
         notes: notes || null,
       });
       toast.success(
-        `Logged ${minutes}-min call for ${finalName} — counts as 1 call`,
+        `Logged ${minutes}-min call for ${finalName} - counts as 1 call`,
       );
       setStudentId("");
       setEmailOverride("");
@@ -1680,7 +1680,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
             Log extra call
           </DialogTitle>
           <DialogDescription>
-            Records a 1:1 call that wasn't booked through Calendly. <strong>Counts as one call</strong> towards the student's allowance, no matter the length. (Tier allowances are call-events, not minutes — VIP = 4×30 + 1×60-min mock = 5 calls; Private Plus = 1 call; bonus calls = 1 each.) Duration is logged for the audit trail.
+            Records a 1:1 call that wasn't booked through Calendly. <strong>Counts as one call</strong> towards the student's allowance, no matter the length. (Tier allowances are call-events, not minutes - VIP = 4×30 + 1×60-min mock = 5 calls; Private Plus = 1 call; bonus calls = 1 each.) Duration is logged for the audit trail.
           </DialogDescription>
         </DialogHeader>
 
@@ -1693,7 +1693,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
               className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
               data-testid="log-call-student-select"
             >
-              <option value="">— Select a private-tier student —</option>
+              <option value="">- Select a private-tier student -</option>
               {studentOptions.map((o) => (
                 <option key={o.key} value={o.key}>{o.label}</option>
               ))}
@@ -1774,7 +1774,7 @@ function LogExtraCallDialog({ open, onOpenChange, students, onSaved }) {
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Extra session by request, ran 60 min — student kindly bumped allowance"
+              placeholder="e.g. Extra session by request, ran 60 min - student kindly bumped allowance"
               rows={2}
               maxLength={500}
               className="w-full text-sm border border-[var(--ayci-border)] rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"

@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 
 const fmtAckTime = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     const d = new Date(iso);
     return d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   } catch {
-    return "—";
+    return "-";
   }
 };
 
@@ -20,7 +20,7 @@ const fmtAckTime = (iso) => {
  * Auto-refreshes every 5 min via the backend's `over_allowance_check`
  * scheduled job; this widget just polls the cached snapshot.
  *
- * Each row has an Acknowledge button — clicking it records the current
+ * Each row has an Acknowledge button - clicking it records the current
  * `over_by` and hides the row until the student goes further over.
  */
 export default function OverAllowanceWidget() {
@@ -75,7 +75,7 @@ export default function OverAllowanceWidget() {
   // not Monday. Adding 1 raises their allowance by 1, so over_by drops by 1.
   const addBonus = async (s) => {
     if (!s.monday_id) {
-      toast.error("Can't add a bonus call — no student record id on this row.");
+      toast.error("Can't add a bonus call - no student record id on this row.");
       return;
     }
     setBumping((m) => ({ ...m, [s.email]: true }));
@@ -206,7 +206,7 @@ export default function OverAllowanceWidget() {
                   onClick={() => ack(s)}
                   disabled={!!acking[s.email]}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-white border border-[var(--ayci-border)] text-[var(--ayci-ink)] hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-50 transition-colors"
-                  title={`Acknowledge — hide until they go over by more than ${s.over_by}`}
+                  title={`Acknowledge - hide until they go over by more than ${s.over_by}`}
                   data-testid={`over-allowance-ack-${s.email}`}
                 >
                   {acking[s.email] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
@@ -294,7 +294,7 @@ function AcknowledgementLog() {
                 >
                   <span className="truncate">
                     <span className="font-semibold text-[var(--ayci-ink)]">{a.email}</span>
-                    <span className="opacity-70"> — acked at +{a.over_by} over by {a.acked_by_name || "?"}</span>
+                    <span className="opacity-70"> - acked at +{a.over_by} over by {a.acked_by_name || "?"}</span>
                   </span>
                   <span className="text-[10px] flex-shrink-0 opacity-70">{fmtAckTime(a.acked_at)}</span>
                 </li>

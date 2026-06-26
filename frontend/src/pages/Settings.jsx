@@ -251,7 +251,7 @@ function InboxRoutingPanel({ isAdmin, team }) {
   return (
     <Panel
       title="Inbox auto-assignment"
-      description="When an email lands in the listed inbox(es), the new ticket is auto-assigned to the chosen team member. Only the part before @ — comma-separated for multiple."
+      description="When an email lands in the listed inbox(es), the new ticket is auto-assigned to the chosen team member. Only the part before @ - comma-separated for multiple."
       action={isAdmin && (
         <Button size="sm" onClick={save} disabled={saving} data-testid="inbox-routing-save" style={{ backgroundColor: "var(--ayci-accent)" }}>
           {saving ? "Saving…" : "Save"}
@@ -263,7 +263,7 @@ function InboxRoutingPanel({ isAdmin, team }) {
       ) : (
         <div className="px-6 py-4 space-y-3">
           {rules.length === 0 && (
-            <div className="text-xs text-[var(--ayci-ink-muted)] italic">No rules yet — add one below.</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] italic">No rules yet - add one below.</div>
           )}
           {rules.map((r, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2" data-testid={`inbox-routing-row-${i}`}>
@@ -286,7 +286,7 @@ function InboxRoutingPanel({ isAdmin, team }) {
                   className="w-full h-9 px-3 text-sm border border-[var(--ayci-border)] rounded-md bg-white"
                   data-testid={`inbox-routing-assignee-${i}`}
                 >
-                  <option value="">— pick a team member —</option>
+                  <option value="">- pick a team member -</option>
                   {team.map((t) => (
                     <option key={t.id} value={t.name}>{t.name}</option>
                   ))}
@@ -410,7 +410,7 @@ function UsersSection({ isAdmin }) {
     }
     try {
       await apiClient.patch(`/admin/users/${user.id}`, { password: newPw });
-      toast.success(`Password reset for ${user.email} — share securely with them`);
+      toast.success(`Password reset for ${user.email} - share securely with them`);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     }
@@ -589,7 +589,7 @@ function UsersSection({ isAdmin }) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__">— Not linked —</SelectItem>
+                          <SelectItem value="__none__">- Not linked -</SelectItem>
                           {teamMembers.map((tm) => (
                             <SelectItem
                               key={tm.id}
@@ -1041,7 +1041,7 @@ function RocksSection({ isAdmin }) {
       <ul className="divide-y divide-[var(--ayci-border)]">
         {rocks.map((r) => (
           <li key={r.id} className="px-6 py-3 flex items-center gap-4">
-            <div className="w-32 text-xs text-[var(--ayci-ink-muted)]">{teamById[r.owner_id]?.name || "—"}</div>
+            <div className="w-32 text-xs text-[var(--ayci-ink-muted)]">{teamById[r.owner_id]?.name || "-"}</div>
             <div className="flex-1 text-sm">{r.title}</div>
             <div className="text-xs text-[var(--ayci-ink-muted)] flex items-center gap-1">
               {r.quarter}
@@ -1164,7 +1164,7 @@ function LaunchesSection({ isAdmin }) {
                 <div><Label>Better (£)</Label><Input type="number" value={form.target_better} onChange={(e) => setForm({ ...form, target_better: e.target.value })} /></div>
                 <div><Label>Best (£)</Label><Input type="number" value={form.target_best} onChange={(e) => setForm({ ...form, target_best: e.target.value })} /></div>
               </div>
-              <p className="text-xs text-[var(--ayci-ink-muted)]">Phase dates can be set after creating — click "Edit phases" on the launch row.</p>
+              <p className="text-xs text-[var(--ayci-ink-muted)]">Phase dates can be set after creating - click "Edit phases" on the launch row.</p>
             </div>
             <DialogFooter>
               <Button onClick={save} data-testid="launch-form-save" style={{ backgroundColor: "var(--ayci-accent)" }}>Save</Button>
@@ -1177,7 +1177,7 @@ function LaunchesSection({ isAdmin }) {
         {launches.map((l) => (
           <li key={l.id} className="px-6 py-3 flex items-center gap-4">
             <div className="font-display font-bold text-[var(--ayci-ink)] w-40">{l.name}</div>
-            <div className="text-xs text-[var(--ayci-ink-muted)] w-24">{l.code || "—"}</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)] w-24">{l.code || "-"}</div>
             <div className="text-xs text-[var(--ayci-ink-muted)] w-44">Webinar: {l.webinar_date}</div>
             <div className="flex-1 text-xs text-[var(--ayci-ink-muted)]">
               £{Number(l.target_good / 1000).toFixed(0)}k / £{Number(l.target_better / 1000).toFixed(0)}k / £{Number(l.target_best / 1000).toFixed(0)}k
@@ -1200,7 +1200,7 @@ function LaunchesSection({ isAdmin }) {
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit launch — {editing?.name}</DialogTitle>
+            <DialogTitle>Edit launch - {editing?.name}</DialogTitle>
           </DialogHeader>
           {editing && (
             <div className="space-y-4">
@@ -1294,7 +1294,7 @@ function CoachPlaybookSection({ isAdmin }) {
   // 0 means "all".
   const [threadRecentDays, setThreadRecentDays] = useState(7);
   // Thread-trace diagnostic: paste a student name (or UUID) and see exactly
-  // which gate in _process_thread() would fire — without polling.
+  // which gate in _process_thread() would fire - without polling.
   const [traceQuery, setTraceQuery] = useState("");
   const [tracing, setTracing] = useState(false);
   const [traceResult, setTraceResult] = useState(null);
@@ -1362,7 +1362,7 @@ function CoachPlaybookSection({ isAdmin }) {
     try {
       const next = !bot.config.enabled;
       await apiClient.put("/circle/bot/config", { enabled: next });
-      toast.success(next ? "Bot enabled — will reply on next poll" : "Bot paused");
+      toast.success(next ? "Bot enabled - will reply on next poll" : "Bot paused");
       loadBot();
     } catch (err) {
       toast.error("Failed: " + (err.response?.data?.detail || err.message));
@@ -1374,13 +1374,13 @@ function CoachPlaybookSection({ isAdmin }) {
     try {
       const { data } = await apiClient.post("/circle/bot/poll-now");
       if (data.started) {
-        toast.success("Polling started in background — refresh in ~30s for results");
+        toast.success("Polling started in background - refresh in ~30s for results");
         // Auto-refresh the bot status after 30s so the user sees the result
         // without manually reloading.
         setTimeout(() => { loadBot(); }, 30000);
       } else {
         const r = data.replied || 0, e = data.escalated || 0, s = data.seeded || 0;
-        toast.success(`Poll done — replied ${r}, escalated ${e}, seeded ${s}`);
+        toast.success(`Poll done - replied ${r}, escalated ${e}, seeded ${s}`);
         loadBot();
       }
     } catch (err) {
@@ -1400,7 +1400,7 @@ function CoachPlaybookSection({ isAdmin }) {
     setResettingAll(true);
     try {
       const { data } = await apiClient.post("/circle/bot/reset-stuck-threads");
-      toast.success(`Reset ${data.modified} stuck thread${data.modified === 1 ? "" : "s"} — bot re-armed`);
+      toast.success(`Reset ${data.modified} stuck thread${data.modified === 1 ? "" : "s"} - bot re-armed`);
       loadBot();
     } catch (err) {
       toast.error("Reset all failed: " + (err.response?.data?.detail || err.message));
@@ -1413,7 +1413,7 @@ function CoachPlaybookSection({ isAdmin }) {
     setResetting(uuid);
     try {
       await apiClient.post(`/circle/bot/reset-thread/${uuid}`);
-      toast.success("Thread re-armed — bot will engage on next student message");
+      toast.success("Thread re-armed - bot will engage on next student message");
       loadBot();
     } catch (err) {
       toast.error("Reset failed: " + (err.response?.data?.detail || err.message));
@@ -1430,14 +1430,14 @@ function CoachPlaybookSection({ isAdmin }) {
     setResetting(uuid);
     try {
       const { data } = await apiClient.post(`/circle/bot/trust-takeover/${uuid}`);
-      toast.success(`Trusted message #${data.trusted_message_id || "?"} and re-armed — bot will resume`);
+      toast.success(`Trusted message #${data.trusted_message_id || "?"} and re-armed - bot will resume`);
       loadBot();
     } catch (err) {
       const reason = err.response?.data?.detail || err.message;
       if (reason === "no_trigger_body_recorded") {
         toast.error("This thread predates the breadcrumb. Use plain Re-arm instead.");
       } else if (reason === "not_in_human_takeover") {
-        toast.error("This thread is no longer in human_takeover — try Re-arm.");
+        toast.error("This thread is no longer in human_takeover - try Re-arm.");
       } else {
         toast.error("Trust failed: " + reason);
       }
@@ -1455,7 +1455,7 @@ function CoachPlaybookSection({ isAdmin }) {
     setTracing(true);
     setTraceResult(null);
     try {
-      // UUIDs are 36 chars with dashes — anything else is treated as a name search.
+      // UUIDs are 36 chars with dashes - anything else is treated as a name search.
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
       const params = isUuid ? { thread_uuid: q } : { student_search: q };
       const { data } = await apiClient.get("/circle/bot/thread-trace", { params });
@@ -1554,10 +1554,10 @@ function CoachPlaybookSection({ isAdmin }) {
               <div className="text-[11px] text-[var(--ayci-ink-muted)] mt-0.5">
                 {loadingBot ? "Loading…" : bot ? (
                   <>
-                    Watching: <b>{(bot.config.coach_emails || []).join(", ") || "—"}</b>{" • "}
+                    Watching: <b>{(bot.config.coach_emails || []).join(", ") || "-"}</b>{" • "}
                     Last poll: {bot.last_poll_at ? new Date(bot.last_poll_at).toLocaleString("en-GB") : "never"}
                   </>
-                ) : "—"}
+                ) : "-"}
               </div>
               {editingCoaches && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -1624,14 +1624,14 @@ function CoachPlaybookSection({ isAdmin }) {
           {bot?.state_totals && Object.keys(bot.state_totals).length > 0 && (
             <div className="border-t border-[var(--ayci-border)] pt-3">
               <div className="text-[11px] uppercase tracking-wider text-[var(--ayci-ink-muted)] mb-2 font-semibold">
-                Live thread state — across all coaches
+                Live thread state - across all coaches
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]" data-testid="bot-state-totals">
                 {[
-                  ["Active", bot.state_totals.active || 0, "bg-emerald-50 border-emerald-200 text-emerald-900", "Bot is watching — will reply on next student message"],
-                  ["Human takeover", bot.state_totals.human_takeover || 0, "bg-violet-50 border-violet-200 text-violet-900", "Coach replied directly — bot is silent here"],
-                  ["Escalated", bot.state_totals.escalated || 0, "bg-amber-50 border-amber-200 text-amber-900", "Converted to a Support Ticket — bot is silent here"],
-                  ["Tag-excluded", bot.state_totals.tag_excluded || 0, "bg-pink-50 border-pink-200 text-pink-900", "Student has an excluded tag (e.g. Boss) — bot is silent here"],
+                  ["Active", bot.state_totals.active || 0, "bg-emerald-50 border-emerald-200 text-emerald-900", "Bot is watching - will reply on next student message"],
+                  ["Human takeover", bot.state_totals.human_takeover || 0, "bg-violet-50 border-violet-200 text-violet-900", "Coach replied directly - bot is silent here"],
+                  ["Escalated", bot.state_totals.escalated || 0, "bg-amber-50 border-amber-200 text-amber-900", "Converted to a Support Ticket - bot is silent here"],
+                  ["Tag-excluded", bot.state_totals.tag_excluded || 0, "bg-pink-50 border-pink-200 text-pink-900", "Student has an excluded tag (e.g. Boss) - bot is silent here"],
                 ].map(([label, n, cls, hint]) => (
                   <div key={label} className={`border rounded px-2 py-1.5 ${cls}`} title={hint}>
                     <div className="text-base font-bold leading-none">{n}</div>
@@ -1702,7 +1702,7 @@ function CoachPlaybookSection({ isAdmin }) {
               <div className="flex items-start justify-between gap-2 flex-wrap mb-1.5">
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)]">Excluded member tags</div>
-                  <div className="text-[10px] text-[var(--ayci-ink-muted)]">If a student has any of these tags, the bot stays silent (no reply, no ticket) — the coach handles it themselves in Circle.</div>
+                  <div className="text-[10px] text-[var(--ayci-ink-muted)]">If a student has any of these tags, the bot stays silent (no reply, no ticket) - the coach handles it themselves in Circle.</div>
                 </div>
                 {isAdmin && !editingTags && (
                   <Button
@@ -1729,7 +1729,7 @@ function CoachPlaybookSection({ isAdmin }) {
               ) : (
                 <div className="flex gap-1.5 flex-wrap" data-testid="bot-excluded-tags-list">
                   {(bot.config.excluded_member_tags || []).length === 0 ? (
-                    <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No tags excluded — bot will reply to everyone.</span>
+                    <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No tags excluded - bot will reply to everyone.</span>
                   ) : (bot.config.excluded_member_tags || []).map((t) => (
                     <span key={t} className="text-[11px] bg-pink-50 border border-pink-200 text-pink-900 rounded px-2 py-0.5 font-medium">
                       {t}
@@ -1769,7 +1769,7 @@ function CoachPlaybookSection({ isAdmin }) {
                 ) : (
                   <div className="flex gap-1.5 flex-wrap" data-testid="bot-excl-coaches-list">
                     {(bot.config.tag_exclusion_coach_emails || []).length === 0 ? (
-                      <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No coaches selected — exclusion currently disabled.</span>
+                      <span className="text-[11px] italic text-[var(--ayci-ink-muted)]">No coaches selected - exclusion currently disabled.</span>
                     ) : (bot.config.tag_exclusion_coach_emails || []).map((e) => (
                       <span key={e} className="text-[11px] bg-slate-100 border border-slate-300 text-slate-700 rounded px-2 py-0.5 font-medium">
                         {e}
@@ -1802,11 +1802,11 @@ function CoachPlaybookSection({ isAdmin }) {
                   </li>
                   <li>
                     <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-800 mr-1">escalated</span>
-                    <span>The bot answered with the holding handoff ("the team will be in touch within 24h") and opened a support ticket — usually because the playbook didn't cover the question or the student asked for a human. Won't reply again until you re-arm.</span>
+                    <span>The bot answered with the holding handoff ("the team will be in touch within 24h") and opened a support ticket - usually because the playbook didn't cover the question or the student asked for a human. Won't reply again until you re-arm.</span>
                   </li>
                   <li>
                     <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-pink-50 border-pink-200 text-pink-800 mr-1">tag-excluded</span>
-                    <span>The student carries a tag in the "excluded member tags" list (e.g. Boss, Interview week). The bot stays silent — no reply, no ticket, no Slack. Coach handles in Circle.</span>
+                    <span>The student carries a tag in the "excluded member tags" list (e.g. Boss, Interview week). The bot stays silent - no reply, no ticket, no Slack. Coach handles in Circle.</span>
                   </li>
                 </ul>
               </div>
@@ -1819,7 +1819,7 @@ function CoachPlaybookSection({ isAdmin }) {
                   </li>
                   <li>
                     <span className="font-semibold mr-1">Trust &amp; re-arm</span>
-                    <span>(Only on <em>human takeover</em> rows.) Tells the bot "this message was actually mine — please remember it." Adds the message body and id to the bot's known-replies list and re-arms. Use when a cross-environment race made the bot mistake its own reply for a coach's.</span>
+                    <span>(Only on <em>human takeover</em> rows.) Tells the bot "this message was actually mine - please remember it." Adds the message body and id to the bot's known-replies list and re-arms. Use when a cross-environment race made the bot mistake its own reply for a coach's.</span>
                   </li>
                   <li>
                     <span className="font-semibold mr-1">Reset stuck threads</span>
@@ -1837,7 +1837,7 @@ function CoachPlaybookSection({ isAdmin }) {
               </div>
             </div>
             <div className="bg-amber-50/60 border border-amber-200 rounded p-2 text-[11.5px] text-amber-900">
-              <span className="font-semibold">Important:</span> the bot never replies to the <em>backlog</em> — when it sees a thread for the first time, it just records where it is and waits for the next message. Exception: brand-new DMs from a student less than 10 minutes old will get a reply on first sight (fixed 2026-05-15).
+              <span className="font-semibold">Important:</span> the bot never replies to the <em>backlog</em> - when it sees a thread for the first time, it just records where it is and waits for the next message. Exception: brand-new DMs from a student less than 10 minutes old will get a reply on first sight (fixed 2026-05-15).
             </div>
           </div>
         </details>
@@ -1912,7 +1912,7 @@ function CoachPlaybookSection({ isAdmin }) {
             </div>
           </div>
 
-          {/* Thread-trace diagnostic — non-mutating walk-through of every gate in
+          {/* Thread-trace diagnostic - non-mutating walk-through of every gate in
               _process_thread() for a single thread. Solves "why didn't the bot
               reply to X?" without needing prod logs. Lookup by student name
               (substring match) or paste a chat_room_uuid. */}
@@ -1920,7 +1920,7 @@ function CoachPlaybookSection({ isAdmin }) {
             <div className="mb-3 bg-amber-50/60 border border-amber-200 rounded p-3" data-testid="bot-thread-trace-panel">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold text-amber-900">Diagnose a thread</span>
-                <span className="text-[10px] text-amber-800/80">Walks every bot gate for one thread (read-only — no replies, no state changes)</span>
+                <span className="text-[10px] text-amber-800/80">Walks every bot gate for one thread (read-only - no replies, no state changes)</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap mt-2">
                 <input
@@ -1973,7 +1973,7 @@ function CoachPlaybookSection({ isAdmin }) {
                 <div key={t.thread_uuid} className="text-xs bg-white border border-[var(--ayci-border)] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold truncate">{t.student_name || "—"}</span>
+                      <span className="font-semibold truncate">{t.student_name || "-"}</span>
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
                           t.state === "active" ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
@@ -2129,7 +2129,7 @@ function CoachPlaybookSection({ isAdmin }) {
                 <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider">Custom</span>
               )}
               {meta.updatedAt && (
-                <span>Last edited {new Date(meta.updatedAt).toLocaleString("en-GB")} by {meta.updatedBy || "—"}</span>
+                <span>Last edited {new Date(meta.updatedAt).toLocaleString("en-GB")} by {meta.updatedBy || "-"}</span>
               )}
             </div>
           )}
@@ -2167,7 +2167,7 @@ function CoachPlaybookSection({ isAdmin }) {
             </Button>
           </div>
           {events.length === 0 && !loadingEvents && (
-            <div className="text-xs text-[var(--ayci-ink-muted)]">No events loaded yet — click "Load latest 20" if your Circle Workflow webhook is still active.</div>
+            <div className="text-xs text-[var(--ayci-ink-muted)]">No events loaded yet - click "Load latest 20" if your Circle Workflow webhook is still active.</div>
           )}
           {events.length > 0 && (
             <div className="space-y-1.5 max-h-64 overflow-y-auto" data-testid="coach-playbook-events">

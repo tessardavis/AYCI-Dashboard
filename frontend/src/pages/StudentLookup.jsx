@@ -39,7 +39,7 @@ export default function StudentLookup() {
       setSearch(emailParam);
       runLookupForEmail(emailParam);
     } else if (!emailParam && nameParam && nameParam !== search) {
-      // Pre-fill the input — the debounced name-search effect will fire
+      // Pre-fill the input - the debounced name-search effect will fire
       // suggestions automatically so the coach can pick the right student.
       setSearch(nameParam);
     }
@@ -48,7 +48,7 @@ export default function StudentLookup() {
 
   // Set to true the moment the coach picks a suggestion (or focuses out).
   // Prevents the dropdown from popping back open when the input text is
-  // programmatically set to the picked name — which would re-trigger the
+  // programmatically set to the picked name - which would re-trigger the
   // debounced name-search effect and re-show the suggestion list right
   // when the unified lookup is loading.
   const suppressSuggestionsRef = useRef(false);
@@ -71,7 +71,7 @@ export default function StudentLookup() {
       try {
         const { data } = await apiClient.get(`/students/name-search`, {
           params: { q: trimmed, limit: 8 },
-          // 30s — the first name-search after a backend restart has to read
+          // 30s - the first name-search after a backend restart has to read
           // a 1.7MB Mongo doc; subsequent calls are in-memory.
           timeout: 30000,
         });
@@ -161,7 +161,7 @@ export default function StudentLookup() {
       const { data } = await apiClient.post(`/students/circle-cache/refresh`, null, {
         timeout: 120000,
       });
-      toast.success(`Circle cache refreshed — ${data.member_count} members`);
+      toast.success(`Circle cache refreshed - ${data.member_count} members`);
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Cache refresh failed");
     } finally {
@@ -295,7 +295,7 @@ export default function StudentLookup() {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm text-[var(--ayci-ink)] truncate">
-                      {s.name || "—"}
+                      {s.name || "-"}
                     </div>
                     <div className="text-xs text-[var(--ayci-ink-muted)] truncate">{s.email}</div>
                   </div>
@@ -367,13 +367,13 @@ export default function StudentLookup() {
             }}
           />
 
-          {/* Coach summary — at-a-glance tier + calls/videos remaining + last call */}
+          {/* Coach summary - at-a-glance tier + calls/videos remaining + last call */}
           <CoachSummary result={result} />
 
-          {/* Cohort engagement progress — 5 Circle milestone tags */}
+          {/* Cohort engagement progress - 5 Circle milestone tags */}
           <EngagementBar circle={result.circle} />
 
-          {/* Quick links — private chat + Google Doc */}
+          {/* Quick links - private chat + Google Doc */}
           <QuickLinks result={result} />
 
           {/* Team notes + pre-filled Tally form link */}
@@ -392,7 +392,7 @@ export default function StudentLookup() {
           {/* Platform cards grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
             <StudentPlatformCard
-              title="Calendly — Calls"
+              title="Calendly - Calls"
               platform="calendly"
               state={result.calendly}
               accent="#006bff"
@@ -401,7 +401,7 @@ export default function StudentLookup() {
             </StudentPlatformCard>
 
             <StudentPlatformCard
-              title="Tally — Past interviews"
+              title="Tally - Past interviews"
               platform="tally"
               state={{
                 found: (result.tally?.history_count || 0) > 0,
@@ -431,7 +431,7 @@ export default function StudentLookup() {
             </StudentPlatformCard>
 
             <StudentPlatformCard
-              title="Circle — Community"
+              title="Circle - Community"
               platform="circle"
               state={result.circle}
               accent="#7c3aed"
@@ -528,8 +528,8 @@ function StudentNotesCard({ email, fallbackName }) {
             variant="outline"
             onClick={() => {
               (navigator.clipboard?.writeText(tallyUrl) || Promise.reject())
-                .then(() => toast.success("Tally link copied — ready to send"))
-                .catch(() => toast.error("Couldn't copy — select the text and copy manually"));
+                .then(() => toast.success("Tally link copied - ready to send"))
+                .catch(() => toast.error("Couldn't copy - select the text and copy manually"));
             }}
           >
             <Copy className="w-4 h-4 mr-1" /> Copy
@@ -549,7 +549,7 @@ function StudentNotesCard({ email, fallbackName }) {
         <>
           <div className="mb-3">
             <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ayci-ink-muted)] mb-1">
-              Other emails (Calendly/Stripe/Circle booked under — comma-separated)
+              Other emails (Calendly/Stripe/Circle booked under - comma-separated)
             </div>
             <input
               value={otherEmails}
@@ -558,14 +558,14 @@ function StudentNotesCard({ email, fallbackName }) {
               className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
             />
             <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1">
-              Add any other address this student uses — the lookup then matches their Calendly, Stripe, Circle and Tally under it too.
+              Add any other address this student uses - the lookup then matches their Calendly, Stripe, Circle and Tally under it too.
             </div>
           </div>
           <textarea
             rows={4}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Add notes about this student — visible to anyone with student access."
+            placeholder="Add notes about this student - visible to anyone with student access."
             className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
           />
           <div className="flex items-center justify-end mt-2">
@@ -702,7 +702,7 @@ function StudentHeaderCard({ header, query, result, onNameSaved }) {
           </div>
         )}
 
-        {/* Interview type — Substantive / Locum */}
+        {/* Interview type - Substantive / Locum */}
         <div
           className={`rounded-lg border px-3 py-2.5 sm:px-4 sm:py-3 ${
             interviewType
@@ -755,7 +755,7 @@ function PlatformBadges({ result }) {
     <div className="flex flex-wrap gap-1.5">
       {platforms.map((p) => {
         const r = result[p.key];
-        // Tally has no `found` flag — derive from history_count
+        // Tally has no `found` flag - derive from history_count
         const found =
           p.key === "tally"
             ? (r?.history_count || 0) > 0
@@ -775,7 +775,7 @@ function PlatformBadges({ result }) {
             title={errored ? r.error : found ? "Found" : "Not found"}
             data-testid={`platform-badge-${p.key}`}
           >
-            {p.label} {found ? "✓" : errored ? "!" : "—"}
+            {p.label} {found ? "✓" : errored ? "!" : "-"}
           </span>
         );
       })}
@@ -801,7 +801,7 @@ function StudentNameEditor({ currentName, mondayItemId, onSaved }) {
   }, [currentName]);
 
   if (!mondayItemId) {
-    // No Monday record means we can't write back — just render the name.
+    // No Monday record means we can't write back - just render the name.
     return (
       <div
         className="font-display font-bold text-lg sm:text-xl text-[var(--ayci-ink)] truncate"

@@ -2,9 +2,9 @@
  * Brand-styled page hero used on Launch / Cohort / Students-at-risk dashboards.
  *
  * Single component, three colour stories:
- *   - Launch     — navy → indigo, cyan accent
- *   - Cohort     — magenta → purple, pink accent
- *   - At Risk    — amber → orange, rose accent
+ *   - Launch     - navy → indigo, cyan accent
+ *   - Cohort     - magenta → purple, pink accent
+ *   - At Risk    - amber → orange, rose accent
  *
  * The giant rotated AYCI icon watermark is rendered top-right at ~7 % opacity.
  */
@@ -66,7 +66,7 @@ export default function HeroBanner({
   );
 }
 
-// Brand presets — keep in one place so every dashboard stays consistent.
+// Brand presets - keep in one place so every dashboard stays consistent.
 export const HERO_PRESETS = {
   launch: {
     gradient: "linear-gradient(135deg, #182E87 0%, #4457B6 60%, #5b6dc7 100%)",

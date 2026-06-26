@@ -7,7 +7,7 @@ import { apiClient } from "@/lib/api";
  * they hit the backend stale-while-revalidate cache and become instant by
  * the time the user clicks.
  *
- * Debounced 200 ms — quick mouse fly-overs don't fire requests.
+ * Debounced 200 ms - quick mouse fly-overs don't fire requests.
  *
  * Map of route → endpoint(s) is intentionally tiny: we only prefetch the
  * "page-load expensive" endpoints, not every endpoint a page may call.
@@ -33,7 +33,7 @@ function prefetch(to) {
     apiClient
       .get(p, { timeout: 30000 })
       .catch(() => {
-        // Best-effort — swallow errors; user will see the real one on click
+        // Best-effort - swallow errors; user will see the real one on click
         triggered.delete(key);
       });
   }

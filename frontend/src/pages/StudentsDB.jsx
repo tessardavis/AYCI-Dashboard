@@ -1,4 +1,4 @@
-/* Students (academy_members mirror) — the editable replacement for the
+/* Students (academy_members mirror) - the editable replacement for the
  * Monday Academy Members board.
  *
  * Reads from db.academy_members which is kept fresh by the 15-min Monday
@@ -22,7 +22,7 @@ const EDITABLE_FIELDS = [
   { key: "surname",        label: "Surname" },
   { key: "email",          label: "Email" },
   { key: "circle_email",   label: "Circle email" },
-  { key: "other_emails",   label: "Other emails (Calendly/Stripe booked under — comma-separated)" },
+  { key: "other_emails",   label: "Other emails (Calendly/Stripe booked under - comma-separated)" },
   { key: "tier",           label: "Tier" },
   { key: "cohort_joined",  label: "Cohort joined" },
   { key: "interview_date", label: "Interview date" },
@@ -31,15 +31,15 @@ const EDITABLE_FIELDS = [
   { key: "hospital",       label: "Hospital" },
   { key: "interview_type", label: "Interview type" },
   { key: "private_chat_url", label: "Private chat URL" },
-  { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs — clear when sorted)" },
+  { key: "private_chat_status", label: "Private chat status (e.g. Awaiting DMs - clear when sorted)" },
   { key: "video_allowance", label: "Video allowance", type: "number" },
-  { key: "videos_used_set", label: "Videos used (set the current count — new submissions still add on top; clear to auto-count only)", type: "number" },
+  { key: "videos_used_set", label: "Videos used (set the current count - new submissions still add on top; clear to auto-count only)", type: "number" },
   { key: "boost_and_go", label: "Boost & Go", type: "select", options: ["", "B&G", "B&G Plus"] },
   { key: "coach_notes", label: "Notes", type: "textarea" },
 ];
 
 function formatDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     const d = new Date(iso);
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -48,7 +48,7 @@ function formatDate(iso) {
   }
 }
 
-// An active Boost & Go customer — matches the backend rule (any "B&G…" status
+// An active Boost & Go customer - matches the backend rule (any "B&G…" status
 // OR "Upgraded"). Used for the tier-row ·B&G tag.
 function isBandG(boost) {
   const b = (boost || "").trim().toLowerCase();
@@ -92,7 +92,7 @@ export default function StudentsDB() {
   useEffect(() => { load(); }, []);
 
   // Create a student's private chat from here (same backend action as the
-  // Settings card). Creation runs in the background (~1 min) — refresh a
+  // Settings card). Creation runs in the background (~1 min) - refresh a
   // couple of times so the row updates (link recorded, or 'Awaiting DMs').
   const createChat = async (row) => {
     setCreatingChatId(row._id);
@@ -100,7 +100,7 @@ export default function StudentsDB() {
       await apiClient.post(`/students-db/${encodeURIComponent(row._id)}/create-private-chat`);
       toast(`Creating chat for ${row.name || row.email}… the row updates in up to ~1 min.`);
     } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't start creating — try again.");
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't start creating - try again.");
       setCreatingChatId(null);
       return;
     }
@@ -136,7 +136,7 @@ export default function StudentsDB() {
       if (dismissedOnly && !r.setup_not_needed) return false;
       if (refundedOnly && !r.has_refund) return false;
       if (bgOnly && !isBandG(r.boost_and_go)) return false;
-      // Only flag actual, parseable dates on/before the cutoff — not vague
+      // Only flag actual, parseable dates on/before the cutoff - not vague
       // answers like "no date yet" / "within 12 months" (those parse to null).
       const isEarly = r.early_interview_flag === "before";
       if (earlyFilter === "allocate" && !(isEarly && !r.early_access_grant)) return false;
@@ -263,7 +263,7 @@ export default function StudentsDB() {
             size="sm"
             onClick={revertAllowances}
             disabled={revertingAllow}
-            title="Undo a recent 'set missing allowances' — clears the just-applied allowances back to empty"
+            title="Undo a recent 'set missing allowances' - clears the just-applied allowances back to empty"
           >
             {revertingAllow ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>↩</span>}
             <span className="ml-2">Undo allowance fill</span>
@@ -322,7 +322,7 @@ export default function StudentsDB() {
         </label>
         {allowanceMismatch > 0 && (
           <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${mismatchOnly ? "bg-red-50 text-red-700" : "text-[var(--ayci-ink-muted)]"}`}
-                 title="Students whose video allowance differs from the expected value — review each">
+                 title="Students whose video allowance differs from the expected value - review each">
             <input type="checkbox" checked={mismatchOnly} onChange={(e) => setMismatchOnly(e.target.checked)} />
             Allowance mismatch ({allowanceMismatch})
           </label>
@@ -336,7 +336,7 @@ export default function StudentsDB() {
         )}
         {refundedCount > 0 && (
           <label className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${refundedOnly ? "bg-rose-50 text-rose-700" : "text-[var(--ayci-ink-muted)]"}`}
-                 title="Students with one or more refunds — full detail on the Refunds board">
+                 title="Students with one or more refunds - full detail on the Refunds board">
             <input type="checkbox" checked={refundedOnly} onChange={(e) => setRefundedOnly(e.target.checked)} />
             Refunded ({refundedCount})
           </label>
@@ -351,15 +351,15 @@ export default function StudentsDB() {
         {(earlyToAllocateCount > 0 || earlyFilter === "allocate") && (
           <button type="button" onClick={() => setEarlyFilter(earlyFilter === "allocate" ? null : "allocate")}
                   className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyFilter === "allocate" ? "bg-orange-100 text-orange-800 font-semibold" : "bg-orange-50 text-orange-700"}`}
-                  title="Early-interview students (in the June cohort via Kit — new signups or 'in between' joiners — with an interview on/before the Week-3 cutoff) who DON'T have access yet. These are the ones to allocate.">
-            ⏱ Early — to allocate ({earlyToAllocateCount})
+                  title="Early-interview students (in the June cohort via Kit - new signups or 'in between' joiners - with an interview on/before the Week-3 cutoff) who DON'T have access yet. These are the ones to allocate.">
+            ⏱ Early - to allocate ({earlyToAllocateCount})
           </button>
         )}
         {(earlyGrantedCount > 0 || earlyFilter === "granted") && (
           <button type="button" onClick={() => setEarlyFilter(earlyFilter === "granted" ? null : "granted")}
                   className={`text-xs flex items-center gap-1.5 px-2 py-1.5 rounded ${earlyFilter === "granted" ? "bg-emerald-100 text-emerald-800 font-semibold" : "bg-emerald-50 text-emerald-700"}`}
                   title="Students who have already been given previous-cohort / Sunday-group-calls access.">
-            ✓ Early — access given ({earlyGrantedCount})
+            ✓ Early - access given ({earlyGrantedCount})
           </button>
         )}
         <span className="text-xs text-[var(--ayci-ink-muted)] ml-auto">
@@ -369,12 +369,12 @@ export default function StudentsDB() {
 
       {earlyFilter && (
         <div className="mb-3 text-xs bg-orange-50 border border-orange-200 rounded-lg p-3 text-orange-900 leading-relaxed">
-          <strong>How this list is chosen:</strong> students in the <strong>June cohort via Kit</strong> (new signups or "in between" joiners — not legacy/returning) whose interview is <strong>on or before the Week-3 cutoff</strong>
+          <strong>How this list is chosen:</strong> students in the <strong>June cohort via Kit</strong> (new signups or "in between" joiners - not legacy/returning) whose interview is <strong>on or before the Week-3 cutoff</strong>
           {(() => {
             const cuts = [...new Set(filtered.map((r) => r.early_access_cutoff).filter(Boolean))];
-            return cuts.length ? <> — cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
+            return cuts.length ? <> - cutoff{cuts.length > 1 ? "s" : ""}: <strong>{cuts.map((c) => formatDate(c)).join(", ")}</strong></> : null;
           })()}
-. Only students whose Kajabi/interview date is an actual date on or before the cutoff are listed — vague answers ("no date yet", "within 12 months") aren't. To actually <strong>grant</strong>, they must be <strong>on Circle with the cohort tag</strong> — if not, get them on board first (the grant button will tell you).{" "}
+. Only students whose Kajabi/interview date is an actual date on or before the cutoff are listed - vague answers ("no date yet", "within 12 months") aren't. To actually <strong>grant</strong>, they must be <strong>on Circle with the cohort tag</strong> - if not, get them on board first (the grant button will tell you).{" "}
           <span className="text-emerald-700 font-semibold">✓ Access</span> = already granted; <span className="text-slate-500">no access yet</span> = still to do.
         </div>
       )}
@@ -422,13 +422,13 @@ export default function StudentsDB() {
                         className="hover:underline hover:text-[var(--ayci-teal)]"
                         title="Open in Student Lookup"
                       >
-                        {r.name || "—"}
+                        {r.name || "-"}
                       </Link>
-                    ) : (r.name || "—")}
+                    ) : (r.name || "-")}
                     {r.needs_setup && (
                       <span
                         className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 align-middle"
-                        title="No private chat link yet — needs setting up"
+                        title="No private chat link yet - needs setting up"
                       >
                         ⚠ Setup
                       </span>
@@ -436,7 +436,7 @@ export default function StudentsDB() {
                     {r.setup_not_needed && (
                       <span
                         className="ml-2 inline-block text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 align-middle"
-                        title={r.setup_not_needed_reason ? `Setup not needed — ${r.setup_not_needed_reason}` : "Setup not needed"}
+                        title={r.setup_not_needed_reason ? `Setup not needed - ${r.setup_not_needed_reason}` : "Setup not needed"}
                       >
                         setup n/a
                       </span>
@@ -444,7 +444,7 @@ export default function StudentsDB() {
                     {r.has_refund && (
                       <span
                         className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 align-middle"
-                        title={`${r.refund_count} refund${r.refund_count === 1 ? "" : "s"}${r.refund_total ? ` · £${Number(r.refund_total).toFixed(2)}` : ""} — see the Refunds board`}
+                        title={`${r.refund_count} refund${r.refund_count === 1 ? "" : "s"}${r.refund_total ? ` · £${Number(r.refund_total).toFixed(2)}` : ""} - see the Refunds board`}
                       >
                         ↩ Refunded{r.refund_count > 1 ? ` ×${r.refund_count}` : ""}
                       </span>
@@ -452,7 +452,7 @@ export default function StudentsDB() {
                     {(r.private_chat_status || "").trim() && (
                       <span
                         className="ml-2 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 align-middle"
-                        title={`Private chat blocked — ${r.private_chat_status}. Clear it (via Edit) once sorted.`}
+                        title={`Private chat blocked - ${r.private_chat_status}. Clear it (via Edit) once sorted.`}
                       >
                         {r.private_chat_status}
                       </span>
@@ -466,21 +466,21 @@ export default function StudentsDB() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-[12px] text-[var(--ayci-ink-muted)]">{r.email || "—"}</td>
+                  <td className="px-3 py-2 text-[12px] text-[var(--ayci-ink-muted)]">{r.email || "-"}</td>
                   <td className="px-3 py-2 text-[12px]">
-                    {r.tier || "—"}
+                    {r.tier || "-"}
                     {isBandG(r.boost_and_go) && (
                       <span className="ml-1 text-[10px] text-violet-700" title={`Boost & Go status: ${r.boost_and_go}`}>· B&amp;G</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">{r.cohort_joined || "-"}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-500" title={r.monday_created_at || ""}>
                     {formatDate(r.monday_created_at)}
                   </td>
                   <td className="px-3 py-2 text-[12px]">
                     <span
                       className={r.early_interview_flag === "before" ? "text-orange-700 font-semibold" : ""}
-                      title={r.early_interview_flag === "before" ? "Interview is on/before this cohort's Week-3 cutoff — candidate for early access" : undefined}
+                      title={r.early_interview_flag === "before" ? "Interview is on/before this cohort's Week-3 cutoff - candidate for early access" : undefined}
                     >
                       {formatDate(r.interview_date)}
                       {r.early_interview_flag === "before" ? " ⏱" : ""}
@@ -507,17 +507,17 @@ export default function StudentsDB() {
                       </div>
                     ) : r.early_interview_flag === "before" ? (
                       r.in_cohort_on_circle ? (
-                        <div className="text-[10px] mt-0.5 text-orange-700 font-semibold" title="Eligible + early interview, and in the cohort on Circle — ready to grant (open Edit).">
+                        <div className="text-[10px] mt-0.5 text-orange-700 font-semibold" title="Eligible + early interview, and in the cohort on Circle - ready to grant (open Edit).">
                           ⏱ ready to grant
                         </div>
                       ) : (
-                        <div className="text-[10px] mt-0.5 text-amber-600" title="Eligible + early interview, but NOT in the June cohort on Circle yet — get them on board (join Circle + cohort tag) before you can grant.">
+                        <div className="text-[10px] mt-0.5 text-amber-600" title="Eligible + early interview, but NOT in the June cohort on Circle yet - get them on board (join Circle + cohort tag) before you can grant.">
                           ⏱ get on board first
                         </div>
                       )
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 text-[12px]">{r.speciality || "—"}</td>
+                  <td className="px-3 py-2 text-[12px]">{r.speciality || "-"}</td>
                   <td className="px-3 py-2 text-[12px]">
                     {(() => {
                       const used = r.videos_used || 0;
@@ -527,7 +527,7 @@ export default function StudentsDB() {
                       return (
                         <span
                           className={atLimit ? "text-amber-700 font-semibold" : "text-slate-600"}
-                          title={manual ? `${used} — manually set (Edit to change)` : limitNote}
+                          title={manual ? `${used} - manually set (Edit to change)` : limitNote}
                         >
                           {used}{manual && <span className="ml-0.5 text-slate-400" title="Manually set">✎</span>}
                         </span>
@@ -536,11 +536,11 @@ export default function StudentsDB() {
                   </td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.video_allowance_expected == null ? (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400">-</span>
                     ) : r.allowance_flag === "ok" ? (
                       <span className="text-emerald-700">{r.video_allowance}</span>
                     ) : r.allowance_flag === "missing" ? (
-                      <span className="text-amber-700" title={`Should be ${r.video_allowance_expected}`}>— / {r.video_allowance_expected}</span>
+                      <span className="text-amber-700" title={`Should be ${r.video_allowance_expected}`}>- / {r.video_allowance_expected}</span>
                     ) : (
                       <span className="text-red-600 font-semibold" title={`Expected ${r.video_allowance_expected}`}>
                         {r.video_allowance} / {r.video_allowance_expected}
@@ -563,11 +563,11 @@ export default function StudentsDB() {
                       <span className="text-slate-400" title={r.setup_not_needed_reason || "Setup not needed"}>n/a</span>
                     ) : (
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-amber-600" title="No private chat link — click Edit to add one">— missing</span>
+                        <span className="text-amber-600" title="No private chat link - click Edit to add one">- missing</span>
                         {r.on_circle === false && (
                           <span
                             className="text-[10px] font-semibold text-red-600"
-                            title="This email matches no Circle member — likely a typo'd/wrong email, or they haven't joined Circle yet. Fix the email, then create the chat."
+                            title="This email matches no Circle member - likely a typo'd/wrong email, or they haven't joined Circle yet. Fix the email, then create the chat."
                           >
                             not on Circle
                           </span>
@@ -575,7 +575,7 @@ export default function StudentsDB() {
                         {r.on_circle === true && (
                           <span
                             className="text-[10px] text-emerald-700"
-                            title="On Circle — just needs a private chat created."
+                            title="On Circle - just needs a private chat created."
                           >
                             on Circle · needs chat
                           </span>
@@ -602,8 +602,8 @@ export default function StudentsDB() {
                           e.stopPropagation();
                           const url = tallyPrefillUrl({ contactId: r._id, first: r.first_name, last: r.surname, email: r.email, speciality: r.speciality });
                           (navigator.clipboard?.writeText(url) || Promise.reject())
-                            .then(() => toast.success("Interview-date form link copied — ready to send"))
-                            .catch(() => toast.error("Couldn't copy — open the student and copy from there"));
+                            .then(() => toast.success("Interview-date form link copied - ready to send"))
+                            .catch(() => toast.error("Couldn't copy - open the student and copy from there"));
                         }}
                         className="text-orange-700 hover:underline"
                         title="Copy this student's pre-filled 'report interview date' form link to send to them"
@@ -611,7 +611,7 @@ export default function StudentsDB() {
                         Copy form link
                       </button>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400">-</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -650,7 +650,7 @@ export default function StudentsDB() {
           {filtered.length > visibleCount && (
             <div className="px-3 py-2 flex items-center justify-between gap-3 border-t border-slate-100">
               <span className="text-[11px] text-[var(--ayci-ink-muted)] italic">
-                Showing {visibleCount} of {filtered.length} matches — search/filter to narrow, or load more.
+                Showing {visibleCount} of {filtered.length} matches - search/filter to narrow, or load more.
               </span>
               <button
                 type="button"
@@ -683,14 +683,14 @@ export default function StudentsDB() {
             </div>
             <div className="max-h-[50vh] overflow-y-auto divide-y divide-slate-100">
               {missingRows.length === 0 ? (
-                <div className="p-4 text-sm text-[var(--ayci-ink-muted)] italic">Nothing to set — no missing allowances.</div>
+                <div className="p-4 text-sm text-[var(--ayci-ink-muted)] italic">Nothing to set - no missing allowances.</div>
               ) : (
                 missingRows.map((r) => (
                   <div key={r._id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                     <div className="min-w-0">
                       <div className="font-medium text-[var(--ayci-ink)] truncate">{r.name || r.email}</div>
                       <div className="text-[11px] text-[var(--ayci-ink-muted)]">
-                        {r.tier || "—"}{r.boost_and_go && /b&g/i.test(r.boost_and_go) ? " · B&G" : ""}
+                        {r.tier || "-"}{r.boost_and_go && /b&g/i.test(r.boost_and_go) ? " · B&G" : ""}
                       </div>
                     </div>
                     <div className="text-sm font-semibold text-emerald-700 shrink-0">→ {r.video_allowance_expected}</div>
@@ -731,7 +731,7 @@ function EditModal({ row, onClose, onSaved }) {
     setGranting(kind);
     try {
       const { data } = await apiClient.post(`/students-db/${row._id}/grant-early-access`, { grant: kind });
-      toast.success(`Granted ${labels[kind]}${data.dm_sent ? " + DM sent" : " (DM not sent — check sender)"}`);
+      toast.success(`Granted ${labels[kind]}${data.dm_sent ? " + DM sent" : " (DM not sent - check sender)"}`);
       onSaved(data.item);
     } catch (e) {
       toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Grant failed");
@@ -809,7 +809,7 @@ function EditModal({ row, onClose, onSaved }) {
                   rows={4}
                   value={form[f.key] ?? ""}
                   onChange={(e) => setField(f.key, e.target.value)}
-                  placeholder="Team notes about this student — visible to anyone with student access."
+                  placeholder="Team notes about this student - visible to anyone with student access."
                   className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
                 />
               ) : f.type === "select" ? (
@@ -824,7 +824,7 @@ function EditModal({ row, onClose, onSaved }) {
                     ? null
                     : <option value={form[f.key]}>{form[f.key]}</option>}
                   {(f.options || []).map((opt) => (
-                    <option key={opt} value={opt}>{opt === "" ? "— none —" : opt}</option>
+                    <option key={opt} value={opt}>{opt === "" ? "- none -" : opt}</option>
                   ))}
                 </select>
               ) : (
@@ -848,7 +848,7 @@ function EditModal({ row, onClose, onSaved }) {
               Interview date: <strong>{formatDate(row.interview_date)}</strong>
               {row.kajabi_interview_date ? <span> · Kajabi: {row.kajabi_interview_date}</span> : null}
               {row.early_interview_flag === "before" && <span className="ml-1 text-orange-700 font-semibold">· before Week-3 cutoff</span>}
-              {row.early_interview_flag === "unparsed" && <span className="ml-1 text-amber-600">· couldn't read date — check it</span>}
+              {row.early_interview_flag === "unparsed" && <span className="ml-1 text-amber-600">· couldn't read date - check it</span>}
               {row.early_interview_flag === "after" && <span className="ml-1 text-slate-500">· after cutoff (not usually needed)</span>}
               {row.early_access_grant && <span className="ml-1 text-emerald-700 font-semibold">· already granted: {row.early_access_grant}</span>}
             </div>

@@ -3,9 +3,9 @@ import { ExternalLink } from "lucide-react";
 const fmtGbp = (v) =>
   `£${Number(v || 0).toLocaleString("en-GB", { maximumFractionDigits: 2 })}`;
 const fmtDate = (iso) =>
-  iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-";
 const fmtUnix = (ts) =>
-  ts ? new Date(ts * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  ts ? new Date(ts * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "-";
 
 export default function StripeCard({ data }) {
   if (!data) return null;
@@ -67,7 +67,7 @@ export default function StripeCard({ data }) {
             rel="noreferrer"
             className="text-xs text-[var(--ayci-teal)] hover:underline inline-flex items-center gap-1"
           >
-            {cu.id} {cu.name ? `— ${cu.name}` : ""} <ExternalLink className="w-3 h-3" />
+            {cu.id} {cu.name ? `- ${cu.name}` : ""} <ExternalLink className="w-3 h-3" />
           </a>
         ))}
       </div>
@@ -89,7 +89,7 @@ function SubRow({ s, active }) {
     <div className="flex items-center justify-between bg-slate-50 rounded border border-[var(--ayci-border)] p-2 text-xs">
       <div>
         <div className="font-medium text-[var(--ayci-ink)]">
-          {s.product_name} — £{s.amount}/{s.interval || "once"}
+          {s.product_name} - £{s.amount}/{s.interval || "once"}
         </div>
         <div className="text-[var(--ayci-ink-muted)]">
           Status: {s.status}

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 const HOSTS = ["Tessa", "Anoop", "Charlotte", "Becky", "Coralie", "Oksana", "Arub"];
 
 function fmtTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
   } catch {
@@ -146,7 +146,7 @@ function CallRow({ call, onDelete }) {
   const [brief, setBrief] = useState(null);
   const [loadingBrief, setLoadingBrief] = useState(false);
 
-  // Lazy-load on mount — backend is cached per (email, UK-date) so this is
+  // Lazy-load on mount - backend is cached per (email, UK-date) so this is
   // a no-op after the first call.
   useEffect(() => {
     if (!call.student_email) return;
@@ -234,7 +234,7 @@ function CallRow({ call, onDelete }) {
           </button>
         )}
       </div>
-      {/* AI brief — 3 short lines, lazily fetched + cached server-side */}
+      {/* AI brief - 3 short lines, lazily fetched + cached server-side */}
       {(loadingBrief || (brief && brief.length > 0)) && (
         <div className="ml-[88px] mt-1.5 pl-2 border-l-2 border-emerald-200/70">
           {loadingBrief && !brief && (

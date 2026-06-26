@@ -1,9 +1,9 @@
-/* Outbound webhook subscriptions — admin for the dispatcher that replaces
+/* Outbound webhook subscriptions - admin for the dispatcher that replaces
  * Monday "Specific Column Value Changed" triggers.
  *
  * Each subscription says: when COLUMN changes on a student (via a dashboard
  * edit or a migrated zap), POST a "column_changed" event to URL (a Zapier
- * "Webhooks by Zapier — Catch Hook"). The receiving zap then does its
+ * "Webhooks by Zapier - Catch Hook"). The receiving zap then does its
  * Circle/Kit/Slack side-effects without triggering on Monday.
  *
  * Backend: /api/webhook-subscriptions (list/create/delete) +
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 
 function formatDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "2-digit", month: "short", year: "numeric",
@@ -139,9 +139,9 @@ export default function WebhookSubscriptions() {
             <Webhook className="h-6 w-6" /> Webhook Subscriptions
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            When a column changes on a student — via a dashboard edit or a migrated
-            zap — the dashboard POSTs a <code>column_changed</code> event to each
-            URL subscribed to that column. Point a zap's "Webhooks by Zapier — Catch
+            When a column changes on a student - via a dashboard edit or a migrated
+            zap - the dashboard POSTs a <code>column_changed</code> event to each
+            URL subscribed to that column. Point a zap's "Webhooks by Zapier - Catch
             Hook" trigger here to replace its Monday "Specific Column Value Changed"
             trigger.
           </p>
@@ -166,7 +166,7 @@ export default function WebhookSubscriptions() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Name</label>
                   <Input
-                    placeholder="e.g. 8b — Boss tagging on Circle"
+                    placeholder="e.g. 8b - Boss tagging on Circle"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />

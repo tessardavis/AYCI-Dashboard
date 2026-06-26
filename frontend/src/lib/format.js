@@ -1,5 +1,5 @@
 export function formatValue(value, format) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
   const num = Number(value);
   if (format === "currency") {
     return `£${num.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
@@ -20,7 +20,7 @@ export function mondayOf(date) {
 }
 
 // Returns the last N *completed* week-start Mondays, oldest-first.
-// The current (in-progress) week is intentionally excluded — we only review
+// The current (in-progress) week is intentionally excluded - we only review
 // fully-finished weeks in the Monday scorecard meeting.
 export function lastNWeekStarts(n) {
   const out = [];

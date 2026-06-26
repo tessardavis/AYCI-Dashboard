@@ -9,11 +9,11 @@ import OverAllowanceWidget from "@/components/OverAllowanceWidget";
 import InterviewEveWidget from "@/components/InterviewEveWidget";
 
 const fmtShortDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   } catch {
-    return "—";
+    return "-";
   }
 };
 
@@ -45,7 +45,7 @@ export default function CoachActivity() {
   };
 
   useEffect(() => {
-    // Honour ?refresh=true in the URL — busts the 30-min server cache on
+    // Honour ?refresh=true in the URL - busts the 30-min server cache on
     // initial load, useful after fixing Circle API tokens / changing config.
     const params = new URLSearchParams(window.location.search);
     load(params.get("refresh") === "true");
@@ -191,7 +191,7 @@ function DebugPostInspector() {
               {result.searched && (
                 <ul className="mt-1 text-xs list-disc pl-5">
                   {result.searched.map((s, i) => (
-                    <li key={i}>{s.space}: {s.error ? `error — ${s.error}` : `${s.post_count} posts`}</li>
+                    <li key={i}>{s.space}: {s.error ? `error - ${s.error}` : `${s.post_count} posts`}</li>
                   ))}
                 </ul>
               )}
@@ -203,7 +203,7 @@ function DebugPostInspector() {
                 : "bg-amber-50 border-amber-300 text-amber-900"
             }`}>
               <strong>{result.would_be_marked_answered ? "✓ Counted as answered" : "✗ Counted as unanswered"}</strong>
-              {" — "}{result.comment_count} comment{result.comment_count === 1 ? "" : "s"} returned by Circle
+              {" - "}{result.comment_count} comment{result.comment_count === 1 ? "" : "s"} returned by Circle
               {result.error && <div className="mt-1 text-xs">{result.error}</div>}
             </div>
           )}
@@ -238,7 +238,7 @@ function DebugPostInspector() {
           )}
           {(result.interpreted || []).length === 0 && !result.error && (
             <div className="text-sm text-[var(--ayci-ink-muted)] italic">
-              Circle returned zero comments for this post. If you replied with a voice note, it might be a separate Circle artefact the comments API doesn't surface — share what you see in Circle and we'll dig.
+              Circle returned zero comments for this post. If you replied with a voice note, it might be a separate Circle artefact the comments API doesn't surface - share what you see in Circle and we'll dig.
             </div>
           )}
           <details className="text-xs">
@@ -251,7 +251,7 @@ function DebugPostInspector() {
   );
 }
 
-// Helper for rate-limit dedup key — must match backend `coach_activity_dismissals.rate_limit_key`
+// Helper for rate-limit dedup key - must match backend `coach_activity_dismissals.rate_limit_key`
 function _normName(name) {
   return (name || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -262,7 +262,7 @@ function rateLimitKey(name, weekStart) {
 async function dismissAlert({ alert_type, key, onSuccess }) {
   try {
     await apiClient.post("/coach-activity/dismiss", { alert_type, key });
-    toast.success("Dismissed — won't show again");
+    toast.success("Dismissed - won't show again");
     onSuccess?.();
   } catch (err) {
     toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't dismiss");
@@ -373,7 +373,7 @@ function RateLimitedRow({ rl, onDismiss }) {
         </button>
         <button
           type="button"
-          title="Mark as seen — won't ping Slack again for this week"
+          title="Mark as seen - won't ping Slack again for this week"
           onClick={() => dismissAlert({
             alert_type: "rate_limited",
             key: rateLimitKey(rl.name, rl.week_start),
@@ -510,7 +510,7 @@ function DailyBars({ perDay }) {
     return d === 0 || d === 6;
   };
   // For long ranges (e.g. 28-day cohort), drop the inline count label above
-  // every bar — it's noisy at 28 columns. Keep weekly totals + tooltip-on-hover.
+  // every bar - it's noisy at 28 columns. Keep weekly totals + tooltip-on-hover.
   const showInlineCounts = !isLong;
   // Week-boundary detection: insert a visual break at the start of each new
   // ISO week (Mon = 1). The first column never gets a leading break.
@@ -552,7 +552,7 @@ function DailyBars({ perDay }) {
                   Week {i + 1}
                 </div>
                 <div className="text-[10px] text-[var(--ayci-ink-muted)] truncate leading-tight">
-                  {niceDate(w.start)} – {niceDate(w.end)}
+                  {niceDate(w.start)} - {niceDate(w.end)}
                 </div>
               </div>
               <div className="font-display font-bold text-base text-[var(--ayci-ink)] tabular-nums shrink-0">
@@ -599,7 +599,7 @@ function DailyBars({ perDay }) {
                   style={{
                     height: d.count > 0 ? `${pct}%` : "2px",
                     minHeight: d.count > 0 ? "4px" : "2px",
-                    // Weekend bars get a subtle fade via inline opacity —
+                    // Weekend bars get a subtle fade via inline opacity -
                     // the Tailwind `/60` opacity modifier doesn't work when
                     // the colour is a CSS variable, so bars were rendering
                     // with no visible background at all (looked empty).

@@ -20,7 +20,7 @@ export default function QuickLinks({ result }) {
         ? "bg-amber-50 text-amber-800 border-amber-300 ring-1 ring-amber-200"
         : "bg-amber-50 text-amber-700 border-amber-200",
       title: fuzzy
-        ? `Closest match: "${result.drive.name}"${result.drive.match_score ? ` (${Math.round(result.drive.match_score * 100)}%)` : ""} — please verify`
+        ? `Closest match: "${result.drive.name}"${result.drive.match_score ? ` (${Math.round(result.drive.match_score * 100)}%)` : ""} - please verify`
         : result.drive.name,
     });
   }
@@ -38,7 +38,7 @@ export default function QuickLinks({ result }) {
 
   return (
     <div className="space-y-3" data-testid="student-quick-links">
-      {/* Primary CTA — Private chat */}
+      {/* Primary CTA - Private chat */}
       {privateChatUrl && (
         <a
           href={privateChatUrl}

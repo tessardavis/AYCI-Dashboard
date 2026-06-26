@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
       const { data } = await apiClient.get("/auth/me");
       setUser(data);
     } catch (error) {
-      // 401 before login is expected — log only unexpected failures
+      // 401 before login is expected - log only unexpected failures
       if (error?.response?.status !== 401) {
         console.warn("Auth refresh failed:", error);
       }
@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
     try {
       await apiClient.post("/auth/logout");
     } catch (error) {
-      // Server-side logout failed — still clear local state so the user isn't stuck
+      // Server-side logout failed - still clear local state so the user isn't stuck
       console.warn("Logout request failed; clearing local session anyway:", error);
     }
     setUser(false);

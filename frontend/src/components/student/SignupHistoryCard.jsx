@@ -1,7 +1,7 @@
 import { Receipt, Tags } from "lucide-react";
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "numeric",

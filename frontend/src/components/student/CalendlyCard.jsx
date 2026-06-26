@@ -1,7 +1,7 @@
 import { Phone, Calendar, ChevronRight } from "lucide-react";
 
 const fmtDate = (iso) => {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
       day: "numeric",
@@ -28,7 +28,7 @@ const fmtTime = (iso) => {
 const hostNameOnly = (full) => {
   if (!full) return null;
   // "Tessa Davis - Ace Your Consultant Interview" → "Tessa Davis"
-  return full.split(/[-–]/)[0].trim();
+  return full.split(/[--]/)[0].trim();
 };
 
 export default function CalendlyCard({ data }) {

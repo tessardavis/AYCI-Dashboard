@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { PrefetchNavLink } from "@/components/PrefetchLink";
 import { apiClient } from "@/lib/api";
 
-// Sidebar information architecture — collapsible groups at the top so they're
+// Sidebar information architecture - collapsible groups at the top so they're
 // the primary navigation surface, then top-level items (Tickets, Settings)
 // underneath.
 const NAV_GROUPS = [
@@ -82,7 +82,7 @@ export function userCanAccess(user, board) {
   return (user.board_access || []).includes(board);
 }
 
-// Single nav row — used both for top-level items and inside groups.
+// Single nav row - used both for top-level items and inside groups.
 // `collapsed` renders an icon-only row (centred, tooltip via title).
 function NavItem({ item, indent = false, collapsed = false }) {
   const { to, label, icon: Icon, testid, end } = item;
@@ -206,7 +206,7 @@ export default function AppShell() {
   // (the mobile slide-in always shows full labels).
   const railMode = collapsed && !mobileOpen;
 
-  // Flat list of every nav item the user can see — used in collapsed mode
+  // Flat list of every nav item the user can see - used in collapsed mode
   // (group headers don't make sense as icons).
   const canSeeItem = (item) =>
     item.adminOnly ? user?.role === "admin" : userCanAccess(user, item.board);
@@ -228,7 +228,7 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen lg:flex bg-[var(--ayci-canvas)]">
-      {/* Mobile top bar — visible below lg */}
+      {/* Mobile top bar - visible below lg */}
       <header
         className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 h-14 border-b border-[var(--ayci-border)]"
         style={{ backgroundColor: "var(--ayci-sidebar)" }}
@@ -260,7 +260,7 @@ export default function AppShell() {
       <aside
         className={[
           "shrink-0 flex flex-col",
-          // Desktop: sticky column — 256px expanded, 64px icon-rail collapsed
+          // Desktop: sticky column - 256px expanded, 64px icon-rail collapsed
           collapsed ? "lg:w-16" : "lg:w-64",
           "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:transition-[width] lg:duration-200",
           // Mobile: fixed slide-in drawer. Use dynamic viewport units (dvh)
@@ -272,7 +272,7 @@ export default function AppShell() {
         style={{ backgroundColor: "var(--ayci-sidebar)" }}
         data-testid="app-sidebar"
       >
-        {/* Close button — mobile only */}
+        {/* Close button - mobile only */}
         <button
           onClick={closeDrawer}
           className="lg:hidden absolute top-3 right-3 p-2 text-white/70 hover:text-white"
@@ -347,7 +347,7 @@ export default function AppShell() {
           {!railMode && (
             <div className="px-3 py-2 mb-2">
               <div className="text-white text-sm font-medium truncate" data-testid="sidebar-user-name">
-                {user?.name || "—"}
+                {user?.name || "-"}
               </div>
               <div className="text-[var(--ayci-sidebar-muted)] text-xs capitalize">{user?.role || ""}</div>
             </div>
@@ -400,7 +400,7 @@ function SLACountBadge({ user }) {
         const { data } = await apiClient.get("/notifications/sla/count");
         if (!cancelled) setCount(data.unanswered_count);
       } catch {
-        // Silently swallow — bell is a nice-to-have, not critical.
+        // Silently swallow - bell is a nice-to-have, not critical.
       }
     };
     tick();

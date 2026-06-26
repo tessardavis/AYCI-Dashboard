@@ -72,7 +72,7 @@ export default function AtRiskWidget() {
                   className="flex items-center justify-between text-[11px]"
                 >
                   <span className="text-[var(--ayci-ink)] truncate max-w-[140px]">
-                    {s.name || s.email || "—"}
+                    {s.name || s.email || "-"}
                   </span>
                   <span className="text-[var(--ayci-ink-muted)] font-semibold">
                     £{Math.round(s.lifetime_gbp).toLocaleString("en-GB")}

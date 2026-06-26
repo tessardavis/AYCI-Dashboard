@@ -7,11 +7,11 @@
 
 :root {
     /* AYCI brand palette */
-    --ayci-brand-primary: #182E87;       /* deep navy — sidebar, dark backgrounds */
-    --ayci-brand-accent: #4457B6;        /* indigo — primary CTA, active states */
-    --ayci-brand-cyan: #01D9DC;          /* aqua — secondary highlight */
-    --ayci-brand-magenta: #AF41AC;       /* magenta — tertiary highlight */
-    --ayci-brand-warm: #FEB870;          /* warm amber — spotlight CTA, sparingly */
+    --ayci-brand-primary: #182E87;       /* deep navy - sidebar, dark backgrounds */
+    --ayci-brand-accent: #4457B6;        /* indigo - primary CTA, active states */
+    --ayci-brand-cyan: #01D9DC;          /* aqua - secondary highlight */
+    --ayci-brand-magenta: #AF41AC;       /* magenta - tertiary highlight */
+    --ayci-brand-warm: #FEB870;          /* warm amber - spotlight CTA, sparingly */
     --ayci-brand-light: #F9F9F9;         /* off-white surface */
 
     /* Semantic mapping */
@@ -25,7 +25,7 @@
     --ayci-border: #e2e8f0;
     --ayci-accent: #4457B6;
     --ayci-accent-hover: #182E87;
-    --ayci-teal: #4457B6;                /* legacy alias — kept for inline refs */
+    --ayci-teal: #4457B6;                /* legacy alias - kept for inline refs */
 
     --ayci-success-bg: #e8f5e9;
     --ayci-success-ink: #166534;
