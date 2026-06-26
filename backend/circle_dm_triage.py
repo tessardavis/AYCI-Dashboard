@@ -109,7 +109,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     message_text = _msg_body(last) or "(no text)"
     student_email = None
     try:
-        m = await circle_api.fetch_member(last_sender)
+        m = await circle_api.fetch_member_cached(db, last_sender)
         student_email = (m or {}).get("email")
         student_name = student_name or (m or {}).get("name") or ""
     except Exception:
@@ -147,7 +147,7 @@ async def _triage_one_coach(db, admin_email: str) -> dict:
             if not admin_member_id:
                 out["errors"].append("no admin id")
                 return out
-        coach_info = await circle_api.fetch_member(admin_member_id)
+        coach_info = await circle_api.fetch_member_cached(db, admin_member_id)
         coach_name = (coach_info or {}).get("name") or admin_email.split("@")[0].title()
         threads = await circle_api.list_dm_threads(db, admin_email, per_page=100)
         dm_threads = [t for t in threads if (t.get("chat_room") or {}).get("kind") == "direct"]

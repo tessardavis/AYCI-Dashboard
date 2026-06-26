@@ -1420,7 +1420,10 @@ async def on_startup():
 
     scheduler.add_job(
         _circle_video_alerts,
-        CronTrigger(minute="*/5", timezone=tz),
+        # Hourly (was */5). This detects a WEEKLY threshold (>3 videos/wk), so
+        # up-to-an-hour latency is fine - cuts the Circle /posts polling from
+        # ~1,440 to ~120 calls/day (the space is paginated ~5 pages per run).
+        CronTrigger(minute=0, timezone=tz),
         id="circle_video_alerts",
         replace_existing=True,
         max_instances=1, coalesce=True,
