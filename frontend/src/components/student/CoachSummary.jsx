@@ -68,6 +68,12 @@ export default function CoachSummary({ result }) {
   };
   const bonusBooked = hasTagSuffix(BONUS_BOOKED_SUFFIX);
   const eligibleVia = BONUS_ELIGIBILITY_SUFFIXES.find((s) => hasTagSuffix(s));
+  // Booking lifecycle from the student record (set by Calendly webhook + coaches).
+  const bonusCall = monday.bonus_call || {};
+  const bonusStatusTone =
+    /no.?show|cancel/i.test(bonusCall.status || "") ? "bg-rose-50 text-rose-700 border-rose-200"
+      : /reschedul/i.test(bonusCall.status || "") ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-emerald-50 text-emerald-700 border-emerald-200";
   const [markedNow, setMarkedNow] = useState(false);
   const [marking, setMarking] = useState(false);
   const eligible = bonusBooked || !!eligibleVia || markedNow;
@@ -130,7 +136,20 @@ export default function CoachSummary({ result }) {
         <span className="text-[10px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">
           Bonus call
         </span>
-        {bonusBooked ? (
+        {bonusCall.status ? (
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] uppercase tracking-wider font-semibold ${bonusStatusTone}`}
+            title="Bonus call status (from Calendly or set by a coach)"
+          >
+            <Gift className="w-3 h-3" /> {bonusCall.status}
+            {(bonusCall.date || bonusCall.coach) && (
+              <span className="normal-case font-normal opacity-80">
+                {bonusCall.date ? `· ${fmtShort(bonusCall.date)}` : ""}
+                {bonusCall.coach ? ` · ${bonusCall.coach}` : ""}
+              </span>
+            )}
+          </span>
+        ) : bonusBooked ? (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] uppercase tracking-wider font-semibold">
             <Gift className="w-3 h-3" /> Booked
           </span>

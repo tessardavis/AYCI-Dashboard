@@ -1262,6 +1262,9 @@ EDITABLE_FIELDS = {
     "videos_used_set",
     "setup_not_needed", "setup_not_needed_reason", "coach_notes", "boost_and_go",
     "extra_bonus_calls",
+    # Bonus-call booking lifecycle - coaches can log/correct it by hand (the
+    # Calendly webhook also sets these automatically).
+    "bonus_call_status", "bonus_call_date", "bonus_call_coach",
 }
 
 

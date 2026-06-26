@@ -106,6 +106,26 @@ function LI({ children }) {
 function Tag({ children }) {
   return <code className="text-[12px] bg-slate-100 text-[var(--ayci-ink)] px-1.5 py-0.5 rounded">{children}</code>;
 }
+// Renders a screenshot from /public/process-img. Hides itself gracefully until
+// the PNG is committed, so the doc never shows a broken image.
+function Figure({ src, alt, caption }) {
+  return (
+    <figure className="my-4 border border-[var(--ayci-border)] rounded-lg overflow-hidden max-w-2xl">
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+        className="w-full block"
+      />
+      {caption && (
+        <figcaption className="text-[11px] text-[var(--ayci-ink-muted)] px-3 py-1.5 bg-slate-50 border-t border-[var(--ayci-border)]">
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
 
 function BonusCallsDoc() {
   return (
@@ -140,6 +160,10 @@ function BonusCallsDoc() {
         or <strong>Students DB → Edit</strong> - use the <strong>"Mark eligible (ad hoc)"</strong> button.
         It tags them <Tag>Ad Hoc Bonus Call</Tag> in Kit, which triggers Kit's email with the booking link.
       </P>
+      <Figure src="/process-img/bonus-eligibility-record.png" alt="Bonus call line on the student record"
+        caption="Student Lookup - the Coach view 'Bonus call' line + Mark eligible button" />
+      <Figure src="/process-img/bonus-eligibility-edit.png" alt="Mark eligible in the Students DB edit modal"
+        caption="Students DB - Edit - the Bonus call box" />
 
       <H>What happens when they book</H>
       <P>When a student books on the Calendly bonus-call event, the dashboard automatically:</P>
@@ -149,6 +173,8 @@ function BonusCallsDoc() {
         <LI>posts a heads-up in <Tag>#fulfillment-team</Tag>.</LI>
       </ul>
       <P>Reschedules and cancellations are picked up automatically too (with the old → new dates).</P>
+      <Figure src="/process-img/bonus-connect-calendly.png" alt="Connect Calendly card in Settings"
+        caption="Settings - Integrations - Connect Calendly (switches the booking automation on)" />
 
       <H>Booking under a different email</H>
       <P>

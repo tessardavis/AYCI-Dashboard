@@ -35,6 +35,9 @@ const EDITABLE_FIELDS = [
   { key: "video_allowance", label: "Video allowance", type: "number" },
   { key: "videos_used_set", label: "Videos used (set the current count - new submissions still add on top; clear to auto-count only)", type: "number" },
   { key: "boost_and_go", label: "Boost & Go", type: "select", options: ["", "B&G", "B&G Plus"] },
+  { key: "bonus_call_status", label: "Bonus call status", type: "select", options: ["", "Eligible", "Booked", "Attended", "No-show", "Rescheduled", "Cancelled", "Done"] },
+  { key: "bonus_call_date", label: "Bonus call date", type: "date" },
+  { key: "bonus_call_coach", label: "Bonus call coach" },
   { key: "coach_notes", label: "Notes", type: "textarea" },
 ];
 

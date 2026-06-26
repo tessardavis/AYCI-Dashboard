@@ -503,6 +503,14 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         # them (students often book/pay with a different email).
                         "circle_email": row.get("circle_email"),
                         "other_emails": row.get("other_emails"),
+                        # Bonus-call booking lifecycle (set by the Calendly webhook
+                        # and by coaches via the dashboard).
+                        "bonus_call": {
+                            "status": row.get("bonus_call_status"),
+                            "date": row.get("bonus_call_date"),
+                            "coach": row.get("bonus_call_coach"),
+                            "rescheduled_from": row.get("bonus_call_rescheduled_from"),
+                        },
                     },
                     "error": None,
                     "source": "mongo_mirror",
