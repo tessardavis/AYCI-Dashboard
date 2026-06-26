@@ -6,8 +6,8 @@ import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import HeroBanner, { HERO_PRESETS } from "@/components/HeroBanner";
 
-const DEFAULT_COHORT = "Apr '26";
-const COHORT_OPTIONS = ["Apr '26", "Feb '26", "April '25"];
+const DEFAULT_COHORT = "June '26";
+const COHORT_OPTIONS = ["June '26", "Apr '26", "Feb '26", "April '25"];
 
 const RANK_STYLES = {
   1: { ring: "ring-2 ring-amber-400", bg: "bg-gradient-to-br from-amber-100 to-yellow-50", medal: "text-amber-600" },

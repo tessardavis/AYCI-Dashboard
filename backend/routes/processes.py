@@ -24,6 +24,10 @@ depending on when they signed up. It's booked via a round-robin Calendly event
 shared by the bonus-call coaches (currently Anoop and Charlotte) and should be
 used before the next cohort starts.
 
+BOOKING LINK (June '26): https://calendly.com/d/cytf-7q4-nzy/ayci-bonus-call-june-26
+- a fresh round-robin event is created each cohort, so this link is updated each
+launch (here and in the Kit booking-link automation).
+
 WHO IS ELIGIBLE: A student is eligible if they hold any of these ConvertKit tags
 for the current cohort (the "[AYCI MON-YY]" prefix changes each launch):
   - "Purchase - Live webinar" (live-webinar signups - the majority)
