@@ -111,6 +111,8 @@ coaching calls as part of their package. They can be used ANY TIME - there is no
 expiry (people were previously told 12 months, but they keep the allowance for as
 long as they need). This is separate from bonus calls.
 
+WALKTHROUGH VIDEO: https://www.loom.com/share/9d9aa53be0d648159fe25bbf809d268e
+
 WHO GETS WHAT:
   - Private Plus: 1 x 30-minute coach call.
   - VIP: 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x

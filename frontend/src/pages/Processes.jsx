@@ -327,6 +327,10 @@ function PrivateTierCallsDoc() {
         is no expiry (people were previously told 12 months, but they can keep their allowance for as
         long as they need).
       </P>
+      <P>
+        <strong>Walkthrough video:</strong>{" "}
+        <a href="https://www.loom.com/share/9d9aa53be0d648159fe25bbf809d268e" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">loom.com/share/9d9aa53be0d648159fe25bbf809d268e</a>
+      </P>
 
       <H>Who gets what</H>
       <ul className="list-disc pl-5 space-y-1 mb-3">

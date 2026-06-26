@@ -8,6 +8,7 @@ Go-live (admin, once): POST /api/admin/calendly/register-webhook to create the
 Calendly subscription and store its signing key. Inspect/clean up existing
 subscriptions via GET /api/admin/calendly/webhooks.
 """
+import asyncio
 import logging
 import os
 import re
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 import calendly_webhook
 import connectors
 import launches as launches_mod
+import slack_dm
 from db import db
 from deps import require_admin, require_board, get_current_user
 
@@ -368,17 +370,35 @@ async def set_private_call_status_endpoint(body: PrivateCallStatusBody,
 async def backfill_private_calls_endpoint(admin: dict = Depends(require_admin)):
     """Catch up private-tier (Private Plus / VIP) bookings: scan past/upcoming
     Calendly events, classify the private-tier ones, and record each on the
-    matching student's private_calls array. Idempotent. No Slack, no Kit tag."""
+    matching student's private_calls array. Idempotent. No Kit tag.
+
+    Runs in the BACKGROUND (the private-tier calendar runs year-round, so the
+    scan makes many Calendly calls and would otherwise outlast the request) and
+    posts a summary to #fulfillment-team when it finishes."""
     if not os.environ.get("CALENDLY_TOKEN"):
         raise HTTPException(400, "CALENDLY_TOKEN not set")
-    try:
-        result = await calendly_webhook.backfill_private_calls(db)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Calendly: {e.response.text[:200]}")
-    except Exception as e:
-        logger.exception("[calendly] private backfill error")
-        raise HTTPException(500, f"backfill failed: {str(e)[:200]}")
-    return {"ok": True, **result}
+
+    async def _run():
+        try:
+            res = await calendly_webhook.backfill_private_calls(db)
+            msg = (f":white_check_mark: *Private-tier backfill done* - recorded "
+                   f"{res.get('recorded', 0)} bookings across {res.get('private_events', 0)} "
+                   f"private-tier events"
+                   + (f"; {res.get('not_found', 0)} not matched to a student" if res.get("not_found") else "")
+                   + (f". {res.get('error')}" if res.get("error") else "."))
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"[calendly] private backfill HTTP {e.response.status_code}: {e.response.text[:300]}")
+            msg = f":x: *Private-tier backfill failed* - Calendly {e.response.status_code}: {e.response.text[:160]}"
+        except Exception as e:
+            logger.exception("[calendly] private backfill error")
+            msg = f":x: *Private-tier backfill failed* - {str(e)[:200]}"
+        try:
+            await slack_dm.post_to_channel(db, "#fulfillment-team", msg)
+        except Exception:
+            logger.warning("[calendly] couldn't post private-backfill summary to Slack")
+
+    asyncio.create_task(_run())
+    return {"ok": True, "started": True}
 
 
 async def _compute_private_summary() -> dict:

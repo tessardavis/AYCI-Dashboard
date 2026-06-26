@@ -16,6 +16,7 @@ subscription was registered (app_settings.calendly_webhook). See routes/calendly
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -118,8 +119,7 @@ async def _resolve_event_slug(event_type_uri: str) -> str | None:
         return _EVENT_SLUG_CACHE[event_type_uri]
     try:
         async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.get(event_type_uri, headers=connectors._calendly_headers())
-            r.raise_for_status()
+            r = await _cal_get(c, event_type_uri, headers=connectors._calendly_headers())
             slug = (r.json().get("resource") or {}).get("slug")
             if slug:
                 _EVENT_SLUG_CACHE[event_type_uri] = slug
@@ -169,6 +169,30 @@ def summarize_private_calls(tier, calls: list | None, extra: dict | None = None)
         "total_remaining": max(0, total_allow - total_booked),
         "by_kind": by_kind,
     }
+
+
+async def _cal_get(client, url, *, headers=None, params=None, tries=5):
+    """GET Calendly with retry/backoff on 429 (rate limit) and 5xx, honouring
+    Retry-After. Calls like the year-round private-tier backfill make many
+    requests and will otherwise trip Calendly's rate limit."""
+    last = None
+    for attempt in range(tries):
+        r = await client.get(url, headers=headers, params=params)
+        if r.status_code == 429 or r.status_code >= 500:
+            last = r
+            ra = r.headers.get("Retry-After")
+            try:
+                wait = min(15.0, float(ra)) if ra else min(15.0, 1.5 * (attempt + 1))
+            except ValueError:
+                wait = min(15.0, 1.5 * (attempt + 1))
+            logger.warning(f"[calendly] {r.status_code} on {url} - retry in {wait}s (attempt {attempt + 1})")
+            await asyncio.sleep(wait)
+            continue
+        r.raise_for_status()
+        return r
+    if last is not None:
+        last.raise_for_status()
+    raise RuntimeError("calendly GET exhausted retries")
 
 
 async def _get_signing_key(db) -> str:
@@ -736,8 +760,7 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
     bookings: list[dict] = []
 
     async with httpx.AsyncClient(timeout=60) as c:
-        me = await c.get(f"{base}/users/me", headers=headers)
-        me.raise_for_status()
+        me = await _cal_get(c, f"{base}/users/me", headers=headers)
         org = (me.json().get("resource") or {}).get("current_organization")
         if not org:
             return {**summary, "error": "could not resolve organization"}
@@ -748,8 +771,7 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
                   "max_start_time": _fmt(now + timedelta(days=days_fwd)),
                   "sort": "start_time:asc"}
         while url:
-            r = await c.get(url, headers=headers, params=params)
-            r.raise_for_status()
+            r = await _cal_get(c, url, headers=headers, params=params)
             body = r.json()
             for ev in body.get("collection", []):
                 summary["events_scanned"] += 1
@@ -770,9 +792,9 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
                 inv_url = f"{ev.get('uri')}/invitees"
                 inv_params = {"count": 100, "status": "active"}
                 while inv_url:
-                    ir = await c.get(inv_url, headers=headers, params=inv_params)
-                    ir.raise_for_status()
+                    ir = await _cal_get(c, inv_url, headers=headers, params=inv_params)
                     ib = ir.json()
+                    await asyncio.sleep(0.1)  # gentle throttle - year-round calendar = many calls
                     for inv in ib.get("collection", []):
                         summary["invitees"] += 1
                         em = (inv.get("email") or "").strip().lower()
