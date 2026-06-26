@@ -268,7 +268,11 @@ they know how to book and to remind them of their remaining allowance.
 
 ## Tracking the data
 
-- Monthly summary of completed 1:1 calls - by **tier**, **call type**, and **coach**.
+On the **1st of each month** the dashboard automatically posts the previous month's summary to the
+**#private-tiers** Slack channel - 1:1 calls held, broken down by **tier**, **call type** and **coach**
+(plus no-shows / cancellations). No one compiles it by hand.
+
+- **Monthly Slack summary (#private-tiers, automatic on the 1st):** 1:1 calls held, by tier, call type, coach.
 - Summary of how many private-tier students had interviews, and how much of their allowance they used.
 
 ## Each cohort - what changes, and what doesn't
