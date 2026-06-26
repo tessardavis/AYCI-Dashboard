@@ -6,6 +6,7 @@
 const PRIVATE_ALLOWANCE = {
   "Private Plus": { coach_30: 1 },
   VIP: { tessa_30: 2, coach_30: 2, mock_60: 1 },
+  "Boost & Go Plus": { coach_30: 2 },
 };
 const PRIVATE_KIND_LABELS = {
   coach_30: "30-min coach call",
@@ -21,9 +22,21 @@ function normalizeTier(tier) {
   return null;
 }
 
-export function summarizePrivateCalls(tier, calls, extra) {
+// Base allowance + label from tier and Boost & Go status (B&G Plus = 2 coach
+// calls; plain B&G = none). Mirrors backend _private_allowance.
+function resolveAllowance(tier, boost) {
   const norm = normalizeTier(tier);
-  const base = PRIVATE_ALLOWANCE[norm] || {};
+  if (norm && PRIVATE_ALLOWANCE[norm]) return [PRIVATE_ALLOWANCE[norm], norm];
+  const hay = `${tier || ""} ${boost || ""}`.toLowerCase();
+  if (hay.includes("b&g") || hay.includes("boost & go") || hay.includes("upgraded")) {
+    if (hay.includes("plus")) return [PRIVATE_ALLOWANCE["Boost & Go Plus"], "Boost & Go Plus"];
+    return [{}, "Boost & Go"];
+  }
+  return [{}, null];
+}
+
+export function summarizePrivateCalls(tier, calls, extra, boost) {
+  const [base, norm] = resolveAllowance(tier, boost);
   const ex = {};
   for (const [k, v] of Object.entries(extra || {})) if (v) ex[k] = v;
   calls = calls || [];

@@ -117,6 +117,11 @@ WHO GETS WHAT:
   - Private Plus: 1 x 30-minute coach call.
   - VIP: 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x
     60-minute mock interview (5 calls in total).
+  - Boost & Go Plus: 2 x 30-minute coach calls (same 30-min coach link). Plain
+    Boost & Go gets a private chat but no calls. B&G Plus students are usually
+    existing Academy members who upgrade - once tagged B&G Plus on the dashboard
+    (their Boost & Go field), their call allowance shows automatically and their
+    chat is created by the Boost & Go chat zap.
 
 WHO IS ELIGIBLE / HOW IT'S IDENTIFIED: When a student buys Private Plus or VIP,
 the Sales Zap tags them in ConvertKit (Kit) for the current cohort:

@@ -68,11 +68,30 @@ PRIVATE_KIND_LABELS = {
     "tessa_30": "30-min call with Tessa",
     "mock_60": "60-min mock interview",
 }
-# Allowance per normalised tier -> how many of each kind they're entitled to.
+# Allowance per audience -> how many of each kind they're entitled to.
+# Private Plus / VIP come from the `tier` field; Boost & Go Plus comes from the
+# `boost_and_go` field (those students are usually base Academy on `tier`).
+# Plain Boost & Go gets a private chat but NO calls.
 PRIVATE_ALLOWANCE = {
     "Private Plus": {"coach_30": 1},
     "VIP": {"tessa_30": 2, "coach_30": 2, "mock_60": 1},
+    "Boost & Go Plus": {"coach_30": 2},
 }
+
+
+def _private_allowance(tier, boost=None) -> tuple[dict, str | None]:
+    """Resolve a student's base call allowance + audience label from their tier
+    and Boost & Go status. Returns ({kind: count}, label). Plain B&G → no calls.
+    Matches B&G in either the tier or boost field, spelled "B&G" or "Boost & Go"."""
+    norm = _normalize_tier(tier)
+    if norm in PRIVATE_ALLOWANCE:
+        return PRIVATE_ALLOWANCE[norm], norm
+    hay = f"{tier or ''} {boost or ''}".lower()
+    if "b&g" in hay or "boost & go" in hay or "upgraded" in hay:
+        if "plus" in hay:
+            return PRIVATE_ALLOWANCE["Boost & Go Plus"], "Boost & Go Plus"
+        return {}, "Boost & Go"  # plain B&G: chat but no calls
+    return {}, None
 
 
 def _normalize_tier(tier) -> str | None:
@@ -132,15 +151,16 @@ async def _resolve_event_slug(event_type_uri: str) -> str | None:
 _KIND_ORDER = ["tessa_30", "coach_30", "mock_60"]
 
 
-def summarize_private_calls(tier, calls: list | None, extra: dict | None = None) -> dict:
+def summarize_private_calls(tier, calls: list | None, extra: dict | None = None,
+                            boost=None) -> dict:
     """Build the allowance view for a student: per-kind allowance / booked /
     remaining, plus the active bookings. 'booked' counts entries that aren't
     Cancelled or No-show. `extra` is a per-student allowance override (e.g.
-    {"coach_30": 1} = one extra coach call on top of the tier default), set by a
-    team member. Kinds that only appear via manual calls or an override are
-    surfaced too, so nothing is hidden. Pure function - safe in the lookup path."""
-    norm = _normalize_tier(tier)
-    base = PRIVATE_ALLOWANCE.get(norm, {})
+    {"coach_30": 1} = one extra coach call on top of the default), set by a team
+    member. `boost` is the Boost & Go status (B&G Plus gets 2 coach calls). Kinds
+    that only appear via manual calls or an override are surfaced too, so nothing
+    is hidden. Pure function - safe in the lookup path."""
+    base, norm = _private_allowance(tier, boost)
     extra = {k: v for k, v in (extra or {}).items() if v}
     calls = calls or []
 
@@ -647,9 +667,10 @@ async def handle_private_created(db, payload: dict, kind: str) -> dict:
             await _record_private_call(db, row, entry, replace_uri=old_uri)
             result["row_updated"] = row["_id"]
             fresh = await db.academy_members.find_one(
-                {"_id": row["_id"]}, {"tier": 1, "private_calls": 1})
+                {"_id": row["_id"]}, {"tier": 1, "private_calls": 1, "boost_and_go": 1})
             summary = summarize_private_calls(
-                (fresh or {}).get("tier"), (fresh or {}).get("private_calls"))
+                (fresh or {}).get("tier"), (fresh or {}).get("private_calls"),
+                boost=(fresh or {}).get("boost_and_go"))
             if email not in (row.get("email"), row.get("circle_email")):
                 result["dup_email_note"] = row.get("email") or row.get("circle_email")
         else:
@@ -864,7 +885,8 @@ async def post_monthly_private_summary(db, channel: str = "#private-tiers", ref_
         {"$match": {"private_calls.date": {"$regex": f"^{prefix}"}}},
         {"$group": {"_id": {
             "kind": "$private_calls.kind", "coach": "$private_calls.coach",
-            "tier": "$tier", "status": "$private_calls.status"}, "n": {"$sum": 1}}},
+            "tier": "$tier", "boost": "$boost_and_go",
+            "status": "$private_calls.status"}, "n": {"$sum": 1}}},
     ]):
         k = r["_id"]
         n = r["n"]
@@ -878,7 +900,7 @@ async def post_monthly_private_summary(db, channel: str = "#private-tiers", ref_
         held += n
         kind = PRIVATE_KIND_LABELS.get(k.get("kind"), k.get("kind") or "?")
         coach = k.get("coach") or "Unknown"
-        tier = _normalize_tier(k.get("tier")) or "Other"
+        tier = _private_allowance(k.get("tier"), k.get("boost"))[1] or "Other"
         by_type[kind] = by_type.get(kind, 0) + n
         by_coach[coach] = by_coach.get(coach, 0) + n
         by_tier[tier] = by_tier.get(tier, 0) + n
