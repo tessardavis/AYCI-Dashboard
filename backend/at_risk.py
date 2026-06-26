@@ -125,7 +125,7 @@ async def compute_at_risk(db) -> dict:
         elif last_seen_dt < dormant_cutoff:
             risk_status = "dormant"
         else:
-            # Active on Circle — not at risk
+            # Active on Circle - not at risk
             continue
 
         high_spenders.append(
@@ -189,7 +189,7 @@ async def get_at_risk_cached(db, force: bool = False) -> dict:
     if cached and not force:
         return {**cached["payload"], "cached": True, "stale": True}
 
-    # No cache yet — return placeholder
+    # No cache yet - return placeholder
     return {
         "computing": True,
         "min_spend_gbp": MIN_SPEND_GBP,

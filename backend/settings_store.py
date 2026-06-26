@@ -43,7 +43,7 @@ async def set_cohort_milestones(db, milestones: list[str]) -> list[str]:
 # Lets the Cohort Dashboard work for any cohort without a code change each
 # launch. Keyed by the exact Monday "Cohort Joined" label (e.g. "June 26").
 # NB Circle tags use the FULL month for some cohorts ("June '26") but an
-# abbreviation for others ("Apr '26") — so it's stored explicitly, never
+# abbreviation for others ("Apr '26") - so it's stored explicitly, never
 # derived.
 # String fields stored verbatim; integer fields coerced to int.
 _COHORT_CFG_STR_KEYS = (
@@ -135,7 +135,7 @@ async def set_cohort_configs(db, configs: dict) -> dict:
 
 
 # ---- Coach Activity Circle space IDs (per cohort, admin-editable) -------
-# End dates default to None — if unset, the SLA digest fires forever (legacy
+# End dates default to None - if unset, the SLA digest fires forever (legacy
 # behaviour). Set an end date when a cohort wraps so the digest goes quiet
 # until the next cohort's spaces + dates are configured.
 DEFAULT_COACH_SPACES = {
@@ -278,7 +278,7 @@ async def set_inbox_routing(db, rules: list[dict]) -> list[dict]:
 
 # ---- Private-chat coach config (Route 2, see PRIVATE_CHAT_MIGRATION.md) ----
 # The coaches added to every new private-tier group chat. Ported from the
-# Zapier "coach list" table — same people for every student, occasionally
+# Zapier "coach list" table - same people for every student, occasionally
 # edited. One coach is the `sender`: their Circle token creates the room and
 # posts the welcome message. Emails are each coach's CIRCLE login email
 # (resolved to a community_member_id at create time); seeded blank for the

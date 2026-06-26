@@ -29,7 +29,7 @@ async def status(user: dict = Depends(get_current_user)):
     all_inboxes = await gmail_sync.list_inboxes(db) if _is_admin(user) else None
     return {
         "configured": gmail_sync.is_configured(),
-        # Diagnostics — which creds the BACKEND process actually sees (booleans,
+        # Diagnostics - which creds the BACKEND process actually sees (booleans,
         # no secret leak) + the redirect it'll use. Lets us tell "env var not set
         # on this service / not redeployed" from "wrong value".
         "client_id_present": bool(gmail_sync._client_id()),
@@ -51,7 +51,7 @@ async def start(
     if not gmail_sync.is_configured():
         raise HTTPException(
             500,
-            "Gmail integration not configured — admin must set GOOGLE_CLIENT_ID + "
+            "Gmail integration not configured - admin must set GOOGLE_CLIENT_ID + "
             "GOOGLE_CLIENT_SECRET in the backend environment first.",
         )
     url = await gmail_sync.start_oauth(
@@ -108,7 +108,7 @@ async def remove_inbox(inbox_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/sync")
 async def sync_now(user: dict = Depends(get_current_user)):
-    # Any member can trigger a sync — it only touches inboxes flagged
+    # Any member can trigger a sync - it only touches inboxes flagged
     # `ingest_inbound` anyway.
     return await gmail_sync.sync_all(db)
 

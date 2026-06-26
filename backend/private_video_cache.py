@@ -11,19 +11,19 @@ Why we transcode:
   transcode HEVC → H.264 (universally supported) once per video so coaches
   on any browser get inline playback.
 
-Storage layout (per video) — under $PRIVATE_VIDEO_CACHE_DIR which on prod
+Storage layout (per video) - under $PRIVATE_VIDEO_CACHE_DIR which on prod
 is the persistent Render disk (`/var/data/private_video_cache`) and locally
 defaults to `/tmp/private_video_cache`:
-  {id}.bin        — original Tally bytes
-  {id}.h264.mp4   — Chrome-playable transcode
-  {id}.codec      — text marker, e.g. "h264" ("hevc" → transcode pending)
+  {id}.bin        - original Tally bytes
+  {id}.h264.mp4   - Chrome-playable transcode
+  {id}.codec      - text marker, e.g. "h264" ("hevc" → transcode pending)
 
 The persistent disk survives deploys + idle restarts, so we don't lose the
 whole cache every time we push. Boot-warm in private_videos_store still
 runs after deploy as a belt-and-braces guard against new submissions
 landing while /var/data wasn't yet mounted.
 
-Cache cap is soft — we LRU-evict by atime when total bytes exceed limit.
+Cache cap is soft - we LRU-evict by atime when total bytes exceed limit.
 Transcoding runs through a global semaphore so we never hammer CPU with
 multiple concurrent encodes.
 """
@@ -55,11 +55,11 @@ _EVICT_HEADROOM_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_HEADROOM_BYTES",
 _MIN_FREE_DISK_BYTES = int(os.environ.get("PRIVATE_VIDEO_CACHE_MIN_FREE_BYTES", str(2 * 1024 ** 3)))
 # H.264 sources at or below this size are served as-is (instant playback, no
 # transcode). LARGER H.264 is downscaled/compressed like HEVC so a full-size
-# iPhone upload doesn't sit on the disk forever — the slow leak that refilled
+# iPhone upload doesn't sit on the disk forever - the slow leak that refilled
 # the disk after every cleanup.
 _H264_KEEP_MAX_BYTES = int(os.environ.get("PRIVATE_VIDEO_H264_KEEP_MAX_BYTES", str(40 * 1024 ** 2)))
 # After this many failed prepare attempts on the same source we stop retrying
-# and mark the video as a corrupt upload needing a re-record — instead of the
+# and mark the video as a corrupt upload needing a re-record - instead of the
 # status poll re-downloading + re-failing forever. Reset by a forced re-fetch.
 _PREP_FAIL_THRESHOLD = int(os.environ.get("PRIVATE_VIDEO_PREP_FAIL_THRESHOLD", "3"))
 
@@ -71,7 +71,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # PRIVATE_VIDEO_CACHE_DIR env var isn't reaching the process.
 logger.info(
     f"[pv-cache] CACHE_DIR={CACHE_DIR} MAX_CACHE_BYTES={MAX_CACHE_BYTES} "
-    f"(persistent={'yes' if str(CACHE_DIR).startswith('/var/data') else 'NO — files lost on deploy'})"
+    f"(persistent={'yes' if str(CACHE_DIR).startswith('/var/data') else 'NO - files lost on deploy'})"
 )
 
 
@@ -121,7 +121,7 @@ def cache_diagnostics() -> dict:
 def purge(target_free_bytes: int = 2 * 1024 ** 3) -> dict:
     """Recover from a full/over-cap cache: delete orphaned *.partial downloads,
     then LRU-evict until total is under (cap - target_free_bytes) so there's
-    headroom to download again. Safe — evicted transcodes just re-download on
+    headroom to download again. Safe - evicted transcodes just re-download on
     next open. Returns what it freed + fresh diagnostics."""
     deleted_partials = freed = 0
     try:
@@ -230,7 +230,7 @@ def _detect_codec(path: Path) -> str:
 
 
 def _evict_if_needed(target_bytes: int | None = None) -> int:
-    """LRU eviction — delete oldest-atime files until total <= target_bytes
+    """LRU eviction - delete oldest-atime files until total <= target_bytes
     (default the cap). Returns bytes freed."""
     if target_bytes is None:
         target_bytes = MAX_CACHE_BYTES
@@ -343,7 +343,7 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
         _ffmpeg_exe(),
         "-y",  # overwrite
         "-loglevel", "error",
-        # Single thread — Render's instance has very limited CPU and the
+        # Single thread - Render's instance has very limited CPU and the
         # default ffmpeg behaviour (use all cores) was saturating it,
         # making concurrent HTTP requests (e.g. the /video/status polling)
         # take 2-4s instead of the usual <100ms. Slower per-transcode but
@@ -352,17 +352,17 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
         "-i", str(src),
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "30",                # was 28 — still fine for talking-head review, ~20% smaller / faster
+        "-crf", "30",                # was 28 - still fine for talking-head review, ~20% smaller / faster
         # Cap longest dimension at 854. Was 1280; halved pixel count for
         # an iPhone 1080p source which roughly halves single-thread
         # encode time on Render's 1-CPU Standard plan. Landscape
         # 1920x1080 → 854x480; portrait 1080x1920 → 480x854. EDTV-class
-        # resolution — coaches reviewing talking-head answers don't
+        # resolution - coaches reviewing talking-head answers don't
         # need full HD detail and the win on cold-load is significant.
         "-vf", "scale=854:854:force_original_aspect_ratio=decrease",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
-        "-b:a", "64k",               # was 96k — voice-only, perceptually identical
+        "-b:a", "64k",               # was 96k - voice-only, perceptually identical
         "-movflags", "+faststart",
         "-f", "mp4",  # filename ends in .partial so format must be explicit
         str(tmp),
@@ -385,7 +385,7 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
             # Self-heal: if the source isn't independently browser-playable
             # (i.e. not already H.264), keeping a source that won't transcode
             # means a permanent 502 on every future view. Drop the bad source +
-            # codec marker so the next request re-downloads a fresh copy — fixes
+            # codec marker so the next request re-downloads a fresh copy - fixes
             # one-off truncated/corrupt downloads (a 4 MB undecodable .bin).
             try:
                 marker = _path_codec(item_id)
@@ -400,17 +400,17 @@ async def _transcode_to_h264(item_id: str, *, priority: str = "background") -> N
                         pass
                 logger.warning(
                     f"[pv-cache] dropped unplayable source {item_id} after transcode "
-                    f"failure — next view will re-download"
+                    f"failure - next view will re-download"
                 )
             _note_prep_failure(item_id, f"ffmpeg: {stderr.decode(errors='replace')[:200]}")
             raise RuntimeError(f"ffmpeg failed: {stderr.decode(errors='replace')[:500]}")
     tmp.replace(dst)
-    _clear_prep_failure(item_id)  # success — reset any prior failure count
+    _clear_prep_failure(item_id)  # success - reset any prior failure count
     logger.info(f"[pv-cache] transcoded {dst.name} ({dst.stat().st_size} bytes)")
     # Free disk: the H.264 copy is what we serve from now on. Keeping the
     # original .bin doubles the per-video footprint and contributed to
     # /tmp eviction on Render's 2 GB cap. (If we ever need to re-transcode
-    # we re-download from Tally — rare.)
+    # we re-download from Tally - rare.)
     try:
         _path_orig(item_id).unlink(missing_ok=True)
     except OSError as e:
@@ -424,11 +424,11 @@ def get_status(item_id: str) -> Status:
     task = _transcode_tasks.get(item_id)
 
     if item_id in _prep_failed_reason:
-        return "failed"  # corrupt upload — stopped retrying; needs re-record
+        return "failed"  # corrupt upload - stopped retrying; needs re-record
     if h264.exists() and h264.stat().st_size > 0:
         return "ready"
     if codec_marker.exists() and codec_marker.read_text().strip() == "h264":
-        # Original is already H.264 — playable as-is, no transcode needed
+        # Original is already H.264 - playable as-is, no transcode needed
         return "ready"
     if task and not task.done():
         return "transcoding"
@@ -464,7 +464,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
     behind the boot-warm batch.
 
     `force=True` re-runs the transcode even when a cached file already
-    exists — used by the admin recompress endpoint to apply new
+    exists - used by the admin recompress endpoint to apply new
     transcode settings (resolution/CRF) to previously-cached rows.
     """
     lock = _locks.setdefault(item_id, asyncio.Lock())
@@ -478,13 +478,13 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
         if playable_path(item_id) and not force:
             _clear_prep_failure(item_id)
             return
-        # Force path: clean re-fetch — drop the transcode, the source, AND the
+        # Force path: clean re-fetch - drop the transcode, the source, AND the
         # codec marker so we re-download from Tally and re-detect from scratch.
         # (Dropping the source is what fixes a cached truncated/corrupt .bin
-        # that's stuck failing — the recompress flow already re-downloads since
+        # that's stuck failing - the recompress flow already re-downloads since
         # the source is deleted after a successful transcode anyway.)
         if force:
-            _clear_prep_failure(item_id)  # manual retry — start fresh
+            _clear_prep_failure(item_id)  # manual retry - start fresh
             for p in (_path_h264(item_id), _path_orig(item_id), _path_codec(item_id)):
                 try:
                     p.unlink(missing_ok=True)
@@ -492,7 +492,7 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
                     pass
         # Make room BEFORE downloading. Eviction used to run only AFTER the
         # download, so once the disk filled, every download failed first and
-        # eviction never ran — a deadlock. Trim to leave headroom up front.
+        # eviction never ran - a deadlock. Trim to leave headroom up front.
         try:
             _evict_if_needed(max(0, MAX_CACHE_BYTES - _EVICT_HEADROOM_BYTES))
             _evict_for_free_disk()  # also guarantee real free space on the disk
@@ -519,11 +519,11 @@ async def prepare(item_id: str, src_url: str, *, priority: str = "background", f
             # 502 even while the background compress runs (or if it fails).
             try:
                 if _path_orig(item_id).stat().st_size <= _H264_KEEP_MAX_BYTES:
-                    _clear_prep_failure(item_id)  # playable as-is — success
+                    _clear_prep_failure(item_id)  # playable as-is - success
                     return
             except OSError:
                 return
-            logger.info(f"[pv-cache] {item_id} is large H.264 — compressing to cap disk footprint")
+            logger.info(f"[pv-cache] {item_id} is large H.264 - compressing to cap disk footprint")
 
     # Transcode outside the per-id lock so other items can download
     # concurrently. Fire-and-forget so the caller doesn't block.

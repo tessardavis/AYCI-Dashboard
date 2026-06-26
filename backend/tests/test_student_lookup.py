@@ -1,4 +1,4 @@
-"""AYCI — Student Lookup and related regression tests (pytest)."""
+"""AYCI - Student Lookup and related regression tests (pytest)."""
 import os
 import time
 import pytest

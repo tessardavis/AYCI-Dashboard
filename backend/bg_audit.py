@@ -4,7 +4,7 @@ Boost & Go reconciliation audit.
 Finds students who BOUGHT Boost & Go (per Stripe) but aren't flagged as B&G in
 the dashboard. The dashboard's `boost_and_go` is only a mirror of Monday's
 "Boost + Go" column, so a missed Kajabi→Monday update leaves a real buyer
-unflagged — and the dashboard can't self-detect that. Stripe is the purchase
+unflagged - and the dashboard can't self-detect that. Stripe is the purchase
 source of truth, so we cross-reference against it.
 
 Read-only (surfaces the gap; no writes). The heavy Stripe scan runs in the
@@ -12,7 +12,7 @@ background and the result is cached in db.cache (_id "bg_audit"), so the admin
 GET returns instantly instead of blocking on the Vercel proxy timeout.
 
 Matching is by keyword (default "boost") in each succeeded charge's
-description / statement descriptor / metadata — Kajabi typically puts the offer
+description / statement descriptor / metadata - Kajabi typically puts the offer
 name there. The result echoes the distinct matched descriptions + a sample of
 Stripe products so we can CONFIRM the keyword is hitting real B&G charges before
 trusting (or acting on) the buyer list.
@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 # Match the Boost & Go family ("Boost & Go", "Boost&GO", "Boost and Go",
-# "Boost & Go Plus") but NOT "Booster" products (Turbo Booster / Prep Booster) —
+# "Boost & Go Plus") but NOT "Booster" products (Turbo Booster / Prep Booster) -
 # "boost" alone false-matches "boostER", so we require the "go".
 _BG_RE = re.compile(r"boost\s*&?\s*(?:and\s*)?go", re.I)
 
@@ -95,7 +95,7 @@ async def get_cached() -> Optional[dict]:
 
 
 async def _stripe_boost_products(c: httpx.AsyncClient, keyword: str) -> list:
-    """Stripe products whose name contains the keyword — for transparency, so we
+    """Stripe products whose name contains the keyword - for transparency, so we
     can see what 'Boost' products exist (helps confirm the naming)."""
     try:
         products = await _stripe_list_all(c, "/products", {"active": "true"})
@@ -110,7 +110,7 @@ async def _stripe_boost_products(c: httpx.AsyncClient, keyword: str) -> list:
 
 
 def _bg_level_from_bought(bought: list) -> str:
-    """'B&G Plus' if any purchase mentions Plus, else 'B&G' — matching the label
+    """'B&G Plus' if any purchase mentions Plus, else 'B&G' - matching the label
     convention the dashboard's B&G logic recognises ('b&g' substring + 'plus')."""
     return "B&G Plus" if "plus" in " ".join(bought or []).lower() else "B&G"
 
@@ -119,7 +119,7 @@ async def apply_backfill(dry_run: bool = True) -> dict:
     """Set `boost_and_go` on the audit's `unflagged` buyers (B&G / B&G Plus from
     what they bought), pinned in dashboard_edited_fields so the Monday sync won't
     revert it to "Offer Due". Acts on the most recent cached audit. dry_run=True
-    just previews. Fixes the dashboard only — the upstream Monday column / Kajabi
+    just previews. Fixes the dashboard only - the upstream Monday column / Kajabi
     zap still needs sorting separately, but the pin keeps the dashboard correct."""
     cached = await get_cached()
     if not cached or not cached.get("ok"):
@@ -157,7 +157,7 @@ async def apply_backfill(dry_run: bool = True) -> dict:
         "count": len(planned),
         "applied": applied,
         "students": planned,
-        "note": "buyer_not_in_dashboard cases can't be backfilled (no row) — investigate separately.",
+        "note": "buyer_not_in_dashboard cases can't be backfilled (no row) - investigate separately.",
     }
 
 
@@ -187,10 +187,10 @@ async def run_audit(keyword: str = DEFAULT_KEYWORD) -> dict:
         if ch.get("status") != "succeeded" or not ch.get("paid"):
             continue
         if not _BG_RE.search(_charge_haystack(ch)):
-            continue  # require "boost & go" — excludes Turbo/Prep "Booster"
+            continue  # require "boost & go" - excludes Turbo/Prep "Booster"
         if ch.get("refunded"):
             refunded_excluded += 1
-            continue  # fully-refunded B&G purchase — don't flag them as B&G
+            continue  # fully-refunded B&G purchase - don't flag them as B&G
         desc = (ch.get("description") or "").strip()
         matched_descriptions[desc] = matched_descriptions.get(desc, 0) + 1
         email = (_email_from_charge(ch) or "").strip().lower()

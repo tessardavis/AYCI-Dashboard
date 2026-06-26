@@ -38,7 +38,7 @@ MAX_DOC_CHARS = 12000  # Truncate input to the LLM
 # verification flag for the coach.
 FUZZY_MIN_WHOLE = 0.82
 FUZZY_MIN_TOKEN = 0.78
-# Below this, two name tokens are considered different people — a 5-char token
+# Below this, two name tokens are considered different people - a 5-char token
 # pair under 0.55 is almost certainly unrelated.
 FUZZY_HARD_FLOOR = 0.55
 
@@ -96,7 +96,7 @@ def _token_match_score(target_tokens: list[str], file_tokens: list[str]) -> tupl
     """
     For each target token, find its best fuzzy match against any file token.
     Returns (mean_score, per_token_scores). Tokens shorter than 3 chars
-    (initials, middle name "M") are skipped — they shouldn't drive the score.
+    (initials, middle name "M") are skipped - they shouldn't drive the score.
     """
     scores: list[float] = []
     for t in target_tokens:
@@ -121,7 +121,7 @@ def _find_best_match(student_name: str, files: list[dict]) -> Optional[dict]:
     1. Filename contains the full normalised student name (exact)
     2. All target tokens (>=3 chars) appear verbatim in filename (tokens)
     3. Fuzzy: highest SequenceMatcher ratio across whole-string OR per-token
-       average — with a warning so the coach can verify
+       average - with a warning so the coach can verify
     4. Last-name verbatim fallback (lastname)
 
     Returns the matched file dict augmented with:
@@ -147,7 +147,7 @@ def _find_best_match(student_name: str, files: list[dict]) -> Optional[dict]:
         if all(p in fname for p in parts if len(p) >= 3):
             return {**f, "match_reason": "tokens", "match_score": 1.0, "needs_verification": False}
 
-    # 3) fuzzy — score every file by whole-string AND per-token, take the max
+    # 3) fuzzy - score every file by whole-string AND per-token, take the max
     scored: list[tuple[float, str, dict, float, float]] = []
     for f in files:
         fname = _normalise(_strip_extension(f["name"]))
@@ -370,7 +370,7 @@ def _docx_to_text(drive, file_id: str) -> str:
                         parts.append(cell.text)
         return "\n".join(parts)
     except ImportError:
-        raise RuntimeError("python-docx not installed — can't read .docx files")
+        raise RuntimeError("python-docx not installed - can't read .docx files")
 
 
 def _strip_html(html: str) -> str:
@@ -490,7 +490,7 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
                     "mime": target_mime,
                 },
                 "summary": None,
-                "error": f"File type ({target_mime.split('.')[-1]}) not summarisable yet — open the link to view.",
+                "error": f"File type ({target_mime.split('.')[-1]}) not summarisable yet - open the link to view.",
                 "candidates_scanned": len(files),
                 "cached": False,
             }
@@ -500,7 +500,7 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
             except RuntimeError as exc:
                 msg = str(exc)
                 hint = (
-                    "Couldn't read the doc — looks like the target file isn't "
+                    "Couldn't read the doc - looks like the target file isn't "
                     "shared with the service account. Share it (or its parent "
                     "folder) with "
                     "ayci-drive-reader@ayci-dashboard.iam.gserviceaccount.com "
@@ -563,7 +563,7 @@ async def summarise_student_doc(db, student_name: str, student_email: str) -> di
         return payload
     except Exception as e:
         logger.exception(f"summarise_student_doc failed: {e}")
-        # Don't cache errors — let the next attempt retry
+        # Don't cache errors - let the next attempt retry
         return {
             "found": False,
             "file": None,

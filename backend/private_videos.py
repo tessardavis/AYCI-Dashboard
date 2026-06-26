@@ -1,5 +1,5 @@
 """
-Private-Tier Video Submissions — read + write to Monday board 5083952249.
+Private-Tier Video Submissions - read + write to Monday board 5083952249.
 
 The Tally form + Monday automations (board webhook, "Send reply via Circle"
 button) remain the source of truth. This module only:
@@ -203,7 +203,7 @@ async def update_submission(db, item_id: str, patch: dict) -> dict:
        - reply_link (URL string)"""
     column_values: dict = {}
     if "status_label" in patch:
-        # Monday expects {"label": "Done"} — ignored if label not in board's options
+        # Monday expects {"label": "Done"} - ignored if label not in board's options
         column_values[COL["status"]] = {"label": patch["status_label"] or ""}
     if "assignee_id" in patch:
         if patch["assignee_id"]:

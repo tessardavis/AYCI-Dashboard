@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 UK_TZ = ZoneInfo("Europe/London")
 
 # Cohorts we keep warm. Matches the frontend dropdown (CohortLeaderboard.jsx).
-# Order matters for prewarm — active cohort first so it's hottest if budget is tight.
+# Order matters for prewarm - active cohort first so it's hottest if budget is tight.
 ACTIVE_COHORTS = ["Apr '26", "Feb '26", "April '25"]
 
 # Start keeping the cache warm this many minutes before a Curriculum /
@@ -82,7 +82,7 @@ async def _compute_response(db, cohort: str, limit: int = 25) -> dict:
 
 async def prewarm(db, cohort: str, *, limit: int = 25) -> dict:
     """Compute the leaderboard response for `cohort` and write it to cache.
-    Idempotent — re-runs just overwrite the doc. Returns a small status dict."""
+    Idempotent - re-runs just overwrite the doc. Returns a small status dict."""
     started = datetime.now(timezone.utc)
     payload = await _compute_response(db, cohort, limit=limit)
     await db.leaderboard_response_cache.update_one(
@@ -133,7 +133,7 @@ async def warm_for_upcoming_sessions(db) -> dict:
 
     Why hook here vs. its own cron: the spotlight tick already fetches the
     upcoming-sessions list, so we piggyback. We don't fire when no session
-    is imminent — saves ~30s of Mongo I/O on every 5-min idle tick.
+    is imminent - saves ~30s of Mongo I/O on every 5-min idle tick.
 
     Returns `{checked: N, warmed: [...]}`. Never raises."""
     try:

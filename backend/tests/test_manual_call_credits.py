@@ -5,7 +5,7 @@ Two correctness properties pinned:
 
 1. **Each manual call = 1 credit, regardless of duration.**
    The system counts call events, not minutes. VIP's tier allowance is
-   described as "4 x 30-min + 1 x 60-min mock = 5 calls" — i.e. the
+   described as "4 x 30-min + 1 x 60-min mock = 5 calls" - i.e. the
    60-min mock is ONE event in the count, same as a 30-min call. So
    William Twiggs's extra 60-min call counts as ONE additional event.
    The duration field is kept on each entry for the audit trail.
@@ -14,7 +14,7 @@ Two correctness properties pinned:
    that are actually tracked in the source dataset (the page's student
    list), never arbitrarily mutate the counts dict. Previously the
    over-allowance widget could drop manual-call credits if the student
-   had zero Calendly calls — both modules now scope by the tracked
+   had zero Calendly calls - both modules now scope by the tracked
    email set.
 """
 from __future__ import annotations

@@ -1,8 +1,8 @@
-"""Today's Calls — unified view of every call happening in the next ~24 h.
+"""Today's Calls - unified view of every call happening in the next ~24 h.
 
 Sources:
   • Calendly (read-only, the source of truth for 95% of bookings)
-  • `manual_calls` collection — short ad-hoc entries the team adds when a
+  • `manual_calls` collection - short ad-hoc entries the team adds when a
     student reschedules via DM and there's no Calendly event for it.
 
 Each call is pre-warmed for Drive doc summaries (see upcoming_call_prewarm)

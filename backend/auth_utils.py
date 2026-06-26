@@ -1,5 +1,5 @@
 """
-Authentication helpers — password hashing + JWT token issuance/verification.
+Authentication helpers - password hashing + JWT token issuance/verification.
 
 Pure functions; no DB dependency. The actual `get_current_user` dependency
 that hits MongoDB lives in deps.py.

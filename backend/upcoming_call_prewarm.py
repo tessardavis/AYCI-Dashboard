@@ -2,12 +2,12 @@
 
 The Coach Activity / Student Lookup flow is `email → drive doc → AI summary`,
 which takes 10-20s the first time we touch a student's doc. The team almost
-always wants to look up a student RIGHT BEFORE their call — so we pre-fetch
+always wants to look up a student RIGHT BEFORE their call - so we pre-fetch
 the Drive summary for every student with a Calendly event in the next 36
 hours. By the time Anoop opens Fiona's lookup at 8:55am, the summary is
 already in the cache and renders instantly.
 
-Scheduled via APScheduler — runs every hour at :05 UK time.
+Scheduled via APScheduler - runs every hour at :05 UK time.
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ async def _list_upcoming_invitees(window_hours: int = WINDOW_HOURS) -> list[dict
             if isinstance(r, list):
                 out.extend(r)
 
-    # De-dupe by email — one student may have multiple events in the window
+    # De-dupe by email - one student may have multiple events in the window
     by_email: dict[str, dict] = {}
     for inv in out:
         em = inv["email"]

@@ -37,7 +37,7 @@ async def upcoming_interviews(
     today = datetime.now(timezone.utc).date()
     academy_cutoff = (today + timedelta(days=academy_days)).isoformat()
     academy = [s for s in data["academy"] if s["interview_date"] <= academy_cutoff]
-    # Enrich every student with the over-allowance snapshot (no extra fetch —
+    # Enrich every student with the over-allowance snapshot (no extra fetch -
     # uses the cached map written by the over_allowance_check scheduled job).
     import over_allowance_alerts as oaa
     over_snapshot = await oaa.get_cached_over_allowance(db)
@@ -103,7 +103,7 @@ async def set_interview_date(
 
     Writes straight to the academy_members mirror and PINS `interview_date` in
     `dashboard_edited_fields`, so the 15-minute Monday sync can no longer
-    overwrite it — the dashboard becomes the source of truth for this date.
+    overwrite it - the dashboard becomes the source of truth for this date.
     This is the supported path for dates set outside the Tally form (which the
     Tally reconcile can't see). Pass interview_date=null/"" to clear.
     """

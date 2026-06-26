@@ -2,9 +2,9 @@
 FastAPI dependency providers + board-access helpers.
 
 Anything route handlers need from `Depends(...)`:
-  - get_current_user — pulls user from JWT cookie / bearer token
-  - require_admin    — admin-only guard
-  - require_board    — factory for per-board access guards
+  - get_current_user - pulls user from JWT cookie / bearer token
+  - require_admin    - admin-only guard
+  - require_board    - factory for per-board access guards
 
 Also defines the canonical board list and `user_has_board()` helper.
 """

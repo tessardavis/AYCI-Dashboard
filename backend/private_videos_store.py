@@ -1,5 +1,5 @@
 """
-Private-Tier Video Submissions — DB-backed (replaces Monday board 5083952249).
+Private-Tier Video Submissions - DB-backed (replaces Monday board 5083952249).
 
 Sources:
   - Migration: one-off pull from Monday board 5083952249 → migrate_from_monday()
@@ -148,7 +148,7 @@ _team_cache: dict = {"by_id": None, "at": 0.0}
 
 
 async def _team_members_by_id(db) -> dict:
-    """{team_member_id: {id, name, role_title}} — used to decorate assignee.
+    """{team_member_id: {id, name, role_title}} - used to decorate assignee.
     Cached in-process ~60s: the team list barely changes, but the list
     endpoint (+ its 60s auto-refresh) used to re-scan team_members every call."""
     import time as _t
@@ -177,14 +177,14 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         "name": (
             f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
             or row.get("email")
-            or "—"
+            or "-"
         ),
         "email": row.get("email"),
         # submission
         "submitted": row.get("submitted_at"),
         "created_at": row.get("created_at"),
         "question": row.get("question"),
-        # video / reply links — legacy nested shape
+        # video / reply links - legacy nested shape
         "tally_video": {
             "label": "Watch on Tally",
             "url": row.get("tally_video_url"),
@@ -208,7 +208,7 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
         "private_chat": row.get("private_chat_url"),
         "interview_date": row.get("interview_date"),
         "interview_type": row.get("interview_type"),
-        # AI transcript availability — full text fetched via separate endpoint
+        # AI transcript availability - full text fetched via separate endpoint
         # so the list response stays small. has_transcript drives the
         # Transcript chip in the row UI. The list query computes this flag
         # server-side and projects the (heavy) transcript text OUT, so prefer
@@ -218,10 +218,10 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
             row["has_transcript"] if "has_transcript" in row
             else (row.get("transcript") or {}).get("text")
         ),
-        # assignee — return the team_member id + name (was Monday person id + name in legacy)
+        # assignee - return the team_member id + name (was Monday person id + name in legacy)
         "assignee_id": row.get("assignee_team_member_id"),
         "assignee_name": (assignee or {}).get("name"),
-        # tier (cached at ingest time) — informs UI styling + Zapier message
+        # tier (cached at ingest time) - informs UI styling + Zapier message
         "tier": row.get("tier"),
         # Where did this row come from? "tally" (native ingest via Tally
         # webhook), "monday" (migrated from the Monday board sync), or null
@@ -238,16 +238,16 @@ def _decorate(row: dict, team_by_id: dict) -> dict:
 async def list_submissions(db, *, force: bool = False, include_done: bool = False) -> dict:
     """Return submissions, sorted New → Working → Done, then submitted desc.
 
-    By default Done rows are EXCLUDED — they're hidden in the UI anyway and
+    By default Done rows are EXCLUDED - they're hidden in the UI anyway and
     accumulate forever, so fetching them on every load (incl. the 60s
     auto-refresh) was pure waste. Pass include_done=True to fetch them (the
     "show Done" toggle / a Done status filter).
 
     Side effect: pre-warm the video cache for the top active rows (status
     != "done") so by the time a coach opens an Edit modal the transcode is
-    already finished. Idempotent — pv_cache.prepare bails fast if the file
+    already finished. Idempotent - pv_cache.prepare bails fast if the file
     is already cached."""
-    # Project the heavy embedded transcript text OUT of the list read — it's
+    # Project the heavy embedded transcript text OUT of the list read - it's
     # only needed as a yes/no chip (full text is fetched on demand via the
     # /transcript endpoint). Compute has_transcript server-side and drop the
     # text. Combined with excluding Done rows, the read + payload stay small.
@@ -304,7 +304,7 @@ async def boot_warm_active_videos(db, *, limit: int = 30) -> dict:
     this boot-warm a coach reviewing on Monday morning hits the
     "still being prepared" path on every active row.
 
-    Fire-and-forget per row — pv_cache.prepare is idempotent, throttles
+    Fire-and-forget per row - pv_cache.prepare is idempotent, throttles
     concurrent transcodes via its own semaphore, and bails fast when
     the file is already playable. Capped so we don't queue thousands
     of transcodes after a long quiet period.
@@ -329,7 +329,7 @@ async def boot_warm_active_videos(db, *, limit: int = 30) -> dict:
 
 
 async def get_team_users(db) -> list[dict]:
-    """Assignee dropdown — uses our internal team_members (not Monday users)."""
+    """Assignee dropdown - uses our internal team_members (not Monday users)."""
     out = []
     async for m in db.team_members.find(
         {}, {"_id": 0, "id": 1, "name": 1, "role_title": 1}
@@ -440,7 +440,7 @@ async def _academy_lookup(db, email: str) -> dict:
     # Prefer the authoritative scalar (set from Monday's column OR recorded by
     # private-chat-setup). Fall back to the raw Monday column text only if the
     # scalar is absent (e.g. the live-API lookup path, which doesn't surface
-    # the scalar). Reading the column alone missed dashboard-recorded chats —
+    # the scalar). Reading the column alone missed dashboard-recorded chats -
     # the link existed but video replies couldn't see it, so the room got
     # guessed (→ wrong DM).
     private_chat = ((result.get("data") or {}).get("private_chat_url") or "").strip() or _txt("Private Chat Link")
@@ -502,7 +502,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     if not sub_id:
         return {"ignored": True, "reason": "no submissionId"}
 
-    # Idempotency guard — but allow resends to heal partial ingests where
+    # Idempotency guard - but allow resends to heal partial ingests where
     # an earlier extraction missed the question / video URL.
     existing = await db.private_video_submissions.find_one(
         {"tally_submission_id": sub_id},
@@ -558,7 +558,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
                 email = email or (hidden.get("email") or "").strip().lower()
 
     if not email:
-        # Without an email we can't match the student — bail.
+        # Without an email we can't match the student - bail.
         # Log the field keys/labels so we can diagnose any future shape changes.
         try:
             field_summary = [
@@ -597,7 +597,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
     # Resend-heal path: row already exists for this submissionId. Patch only
     # the fields the prior ingest left empty (typically question / video URL
     # when Tally field-key shape changed) and exit. Never overwrites coach
-    # edits — they touch status/assignee/reply, not the source fields.
+    # edits - they touch status/assignee/reply, not the source fields.
     if existing:
         patch: dict = {}
         if not (existing.get("question") or "").strip() and question:
@@ -634,7 +634,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
 
     # Enrich from Academy Members (tier + allowance + Circle DM URL) then
     # apply any per-student overrides the team has saved via the Edit modal
-    # (student_overrides collection). Overrides win — that's the whole
+    # (student_overrides collection). Overrides win - that's the whole
     # point: a coach who corrected Maha's tier/allowance/DM URL once
     # shouldn't have to redo it on every new submission.
     academy = await _academy_lookup(db, email)
@@ -678,7 +678,7 @@ async def ingest_tally_submission(db, payload: dict) -> dict:
 
     # Pre-warm the video cache so the first coach to open this row gets
     # instant playback instead of waiting 10-30s for the HEVC → H.264
-    # transcode. Fire-and-forget — never blocks the webhook response.
+    # transcode. Fire-and-forget - never blocks the webhook response.
     # Also schedule transcription (OpenAI Whisper) in parallel so the
     # transcript is ready alongside the playable video.
     if video_url:
@@ -714,11 +714,11 @@ async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
     """Periodic sync: pull every row from Monday board 5083952249 and upsert
     into our DB. Idempotent.
 
-    `preserve_team_edits=False` (default) — full mirror. Status, assignee,
+    `preserve_team_edits=False` (default) - full mirror. Status, assignee,
     replied_at, reply_link from Monday all overwrite our row. This is what
     you want while Monday is the source of truth (the team replies there).
 
-    `preserve_team_edits=True` — only Tally-source fields get refreshed
+    `preserve_team_edits=True` - only Tally-source fields get refreshed
     (name, email, video URL, question). Status / assignee / reply stays as
     we have it. Use this once the team transitions to replying from THIS
     dashboard so a stray sync doesn't undo their work.
@@ -733,7 +733,7 @@ async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
         monday_id = str(it.get("id"))
         tally_url = (it.get("tally_video") or {}).get("url") or (it.get("video") or {}).get("url")
         reply_url = (it.get("reply_link") or {}).get("url")
-        # Tally-source fields — always safe to overwrite from Monday
+        # Tally-source fields - always safe to overwrite from Monday
         tally_fields = {
             "first_name": (it.get("first_name") or "").strip(),
             "last_name": (it.get("last_name") or "").strip(),
@@ -746,7 +746,7 @@ async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
             "interview_date": it.get("interview_date"),
             "updated_at": now,
         }
-        # Team-edit fields — only set on insert (or when preserve=False)
+        # Team-edit fields - only set on insert (or when preserve=False)
         team_fields = {
             "status": _norm_status(it.get("status")),
             "assignee_team_member_id": None,

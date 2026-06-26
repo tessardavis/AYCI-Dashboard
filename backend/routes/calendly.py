@@ -1,6 +1,6 @@
 """Inbound Calendly webhook + one-time admin registration.
 
-Replaces the Zapier "Bonus Call Booked (Anoop's calendar)" zap — the action
+Replaces the Zapier "Bonus Call Booked (Anoop's calendar)" zap - the action
 logic lives in calendly_webhook.py. Calendly POSTs every org booking here; we
 verify the signature, then act only on AYCI Bonus Call bookings.
 
@@ -29,7 +29,7 @@ _DEFAULT_CALLBACK = "https://ayci-dashboard.onrender.com/api/calendly/webhook"
 @router.post("/calendly/webhook")
 async def calendly_webhook_receiver(request: Request):
     """Receive a signed Calendly event. Always returns 200 once the signature
-    is valid — a handler error is logged and swallowed so Calendly doesn't
+    is valid - a handler error is logged and swallowed so Calendly doesn't
     retry-storm on a bug we've already recorded."""
     raw = await request.body()
     sig = request.headers.get("Calendly-Webhook-Signature", "")

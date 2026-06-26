@@ -5,8 +5,8 @@ Given any combination of (email, phone, name), find the student's Monday
 record and return a slim context object for display on the ticket:
   {matched, email, name, tier, cohort, monday_item_id, monday_url}
 
-Used by the ticket detail panel so every ticket — regardless of whether it
-came in via email, Tally form, manual entry, or WhatsApp — can deep-link to
+Used by the ticket detail panel so every ticket - regardless of whether it
+came in via email, Tally form, manual entry, or WhatsApp - can deep-link to
 the Student Lookup page and show the team quick context.
 
 Match is cached on the ticket under `student_match` and `student_match_at`
@@ -89,7 +89,7 @@ async def _monday_search_by_phone(phone_digits: str) -> Optional[dict]:
     if not phone_digits:
         return None
     # We can't filter Monday's phone column server-side (column-type rules are
-    # fiddly for phone) — pull a page and scan client-side. The Phone column's
+    # fiddly for phone) - pull a page and scan client-side. The Phone column's
     # `text` representation contains the number as the user typed it, so we
     # normalise both sides to digits.
     q = """
@@ -103,8 +103,8 @@ async def _monday_search_by_phone(phone_digits: str) -> Optional[dict]:
     }
     """
     cursor: Optional[str] = None
-    # Try the last-N (most recently updated) items first — the team rarely
-    # messages ancient alumni via WhatsApp — but cap at 1000 items total
+    # Try the last-N (most recently updated) items first - the team rarely
+    # messages ancient alumni via WhatsApp - but cap at 1000 items total
     # (~10 pages) so we don't scan the whole 5000-item board on every ticket.
     scanned = 0
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
@@ -185,7 +185,7 @@ async def match_student(
     db=None,
 ) -> dict:
     """Try email first (cheap indexed search), then phone (board scan), then
-    name (Circle cache → email → Monday). Returns a student-match dict —
+    name (Circle cache → email → Monday). Returns a student-match dict -
     `matched=False` when no row found."""
     try:
         if email:
@@ -219,11 +219,11 @@ async def ensure_ticket_student_match(db, ticket: dict, *, force: bool = False) 
     cached_at = ticket.get("student_match_at")
     cached_matched = bool(cache and cache.get("matched"))
     # Successful matches written before the `interview_date` field existed
-    # don't carry that key — treat them as stale so the stripe on the
+    # don't carry that key - treat them as stale so the stripe on the
     # Kanban card / table row picks up tier · cohort · interview-date on
     # the next ticket open without waiting 24h for the TTL.
     cache_has_new_fields = bool(cache and "interview_date" in cache)
-    # Re-try unmatched tickets on every open (cheap — Circle name cache is in
+    # Re-try unmatched tickets on every open (cheap - Circle name cache is in
     # Mongo, Monday email search is ~500ms). Without this, Circle DM tickets
     # that landed before the name-fallback existed would stay un-linked for
     # 24h. Only the cache for successful matches with the latest field set is
@@ -244,7 +244,7 @@ async def ensure_ticket_student_match(db, ticket: dict, *, force: bool = False) 
         or ""
     )
     name = (ticket.get("student_name") or "").strip()
-    # Skip the expensive phone scan when the ticket already has an email — the
+    # Skip the expensive phone scan when the ticket already has an email - the
     # email search alone is enough and runs in < 500 ms.
     match = await match_student(
         email=email or None,

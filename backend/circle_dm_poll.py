@@ -1,5 +1,5 @@
 """
-Polling-based Circle DM bot — v2 of the Circle community AI auto-responder.
+Polling-based Circle DM bot - v2 of the Circle community AI auto-responder.
 
 Replaces the Circle Workflow webhook approach (which only fires once per
 member, by Circle's design). This module polls the Headless API for each
@@ -12,12 +12,12 @@ Behaviour:
   • If a coach posted manually (a message NOT in our `sent_message_ids`),
     mark the thread `human_takeover` and back off permanently
   • Otherwise:
-      – escalation_phrase ("create a ticket", "talk to human"…)  → escalate
-      – sensitive keyword                                        → escalate + Slack
-      – playbook covers it                                       → AI reply
-      – playbook doesn't cover it                                → escalate
+      - escalation_phrase ("create a ticket", "talk to human"…)  → escalate
+      - sensitive keyword                                        → escalate + Slack
+      - playbook covers it                                       → AI reply
+      - playbook doesn't cover it                                → escalate
   • All replies include the AI disclosure
-  • On first sight of a thread we DON'T reply — we just record the last id,
+  • On first sight of a thread we DON'T reply - we just record the last id,
     so we don't auto-reply to a backlog of old messages on the first run
 """
 from __future__ import annotations
@@ -155,7 +155,7 @@ async def _save_thread_state(db, thread_uuid: str, patch: dict) -> None:
 
 
 def _identify_student(thread: dict, admin_member_id: int) -> tuple[Optional[int], Optional[str]]:
-    """Return (student_member_id, student_name) — the non-admin participant.
+    """Return (student_member_id, student_name) - the non-admin participant.
 
     Our normalised thread shape (from circle_api.list_dm_threads) puts the
     other-side participants at `other_participants_preview`. Falls back to
@@ -209,11 +209,11 @@ async def _process_thread(
 
     state = await _get_thread_state(db, chat_room_uuid)
 
-    # Already escalated / human took over / tag-excluded — bot stays
+    # Already escalated / human took over / tag-excluded - bot stays
     # silent, but for escalated threads with a linked ticket we still
     # need to *forward* any new student messages onto the ticket as
     # inbound notes. Otherwise follow-up questions from the student
-    # silently vanish — Tessa/Coralie/etc only see the original
+    # silently vanish - Tessa/Coralie/etc only see the original
     # message in the ticket and never learn the student replied again.
     if state and state.get("state") == "escalated" and state.get("escalated_ticket_id"):
         ticket_id = state["escalated_ticket_id"]
@@ -245,7 +245,7 @@ async def _process_thread(
 
     # Fast-path: skip threads with no new messages.
     # The inline `last_message` is the most recent message in the room. If
-    # its id <= last_seen, nothing to do — avoids 1 API call per thread on
+    # its id <= last_seen, nothing to do - avoids 1 API call per thread on
     # quiet polls (we have ~400 threads, so this is a big saving).
     inline_last = thread.get("last_message") or {}
     inline_last_id = _msg_id(inline_last)
@@ -257,7 +257,7 @@ async def _process_thread(
     # last_seen without fetching the full message list (avoids 1 API call
     # per thread on the very first poll across all of Tessa's ~400 rooms).
     #
-    # EXCEPTION — fresh-student-message bypass: if the most-recent message
+    # EXCEPTION - fresh-student-message bypass: if the most-recent message
     # in this thread is a *student* message less than 10 minutes old, this
     # is almost certainly a brand-new DM that just landed (e.g. a coach
     # testing the bot, or a real student messaging a coach for the first
@@ -288,7 +288,7 @@ async def _process_thread(
                 "last_activity_at": datetime.now(timezone.utc).isoformat(),
             })
             return {"seeded": chat_room_uuid}
-        # Fresh student message — seed minimal state (last_seen=0 so the
+        # Fresh student message - seed minimal state (last_seen=0 so the
         # student message counts as "new"), then fall through to the rest
         # of _process_thread() which will fetch /messages, run the
         # lookback guard, and produce a reply.
@@ -331,12 +331,12 @@ async def _process_thread(
     # When we DM a student the night before their interview asking for a
     # confidence score, this thread is special: the ONLY thing the bot may
     # do here is record a numeric score. It must NEVER fall through to the
-    # generic playbook auto-responder — otherwise a non-numeric reply
+    # generic playbook auto-responder - otherwise a non-numeric reply
     # ("thanks!", "so nervous!") or an old backlog message (the eve-DM
     # seeds last_seen=0, so prior history counts as "new") triggers a
     # second bot DM seconds after the support-score prompt. That
     # double-message is the bug one student hit. So this block ALWAYS
-    # returns — score recorded or not.
+    # returns - score recorded or not.
     #
     # It also runs BEFORE the lookback guard so a coach's personal note in
     # the thread can't flip it to human_takeover and lose the score. The
@@ -386,7 +386,7 @@ async def _process_thread(
                     "score": scored_early["score"]}
         return {"interview_eve_no_reply": chat_room_uuid}
 
-    # Detect human takeover — scan the FULL fetched window, not just `new_messages`.
+    # Detect human takeover - scan the FULL fetched window, not just `new_messages`.
     # Why full window? Two reasons:
     #   1. A coach can reply directly in Circle's web/mobile UI. If the
     #      reply happened before `last_seen_message_id` was last bumped
@@ -395,13 +395,13 @@ async def _process_thread(
     #   2. We just shipped a `reset-stuck-threads` admin endpoint to recover
     #      from cross-environment polling races. Reset threads should
     #      auto-re-flag to `human_takeover` if a coach has been actively
-    #      chatting via Circle's own UI — without that, the bot would reply
+    #      chatting via Circle's own UI - without that, the bot would reply
     #      on top of a live coach conversation.
     # We exclude messages whose id is in `sent_message_ids` OR whose body is
     # in `sent_bodies` so the bot doesn't flag its own previous replies as
     # takeover. We deliberately ignore messages older than 14 days so a
     # zombie 2-year-old admin message doesn't permanently silence the bot.
-    # Additionally we ignore anything older than `reset_at` — when a coach
+    # Additionally we ignore anything older than `reset_at` - when a coach
     # resets a stuck thread via the dashboard they're explicitly saying
     # "forget the past and resume normal bot behaviour".
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
@@ -417,7 +417,7 @@ async def _process_thread(
         body = _msg_body(m)
         if sid == admin_member_id and mid not in sent_ids and body not in sent_bodies:
             # Breadcrumb: capture exactly which message convinced us a human
-            # was talking — invaluable for post-mortems when a thread looks
+            # was talking - invaluable for post-mortems when a thread looks
             # like it should be bot-active but quietly went to human_takeover.
             # `body` is stored in full (not truncated) so the "Trust & re-arm"
             # admin tool can append it to `sent_bodies` and the next poll's
@@ -450,7 +450,7 @@ async def _process_thread(
             latest_student_msg = m
             break
     if not latest_student_msg:
-        # All new messages were the bot's own — nothing to react to.
+        # All new messages were the bot's own - nothing to react to.
         await _save_thread_state(db, chat_room_uuid, {
             "last_seen_message_id": latest_id,
             "last_activity_at": datetime.now(timezone.utc).isoformat(),
@@ -471,7 +471,7 @@ async def _process_thread(
 
     # ---- Tag exclusion check ---------------------------------------------
     # If the student carries any excluded member tag (e.g. "Interview week",
-    # "Autoreply hold"), the bot stays completely silent — no reply, no
+    # "Autoreply hold"), the bot stays completely silent - no reply, no
     # ticket, no Slack. The coach handles it themselves in Circle.
     if excluded_tags_lower:
         member = await circle_api.fetch_member_cached(db, student_id)
@@ -493,7 +493,7 @@ async def _process_thread(
         if state.get("ai_reply_count_date") == today else 0
     )
     if reply_count_today >= DAILY_REPLY_CAP_PER_THREAD:
-        # Hard cap — escalate.
+        # Hard cap - escalate.
         reply = _holding_handoff(first, coach_name)
         return await _escalate_and_reply(
             db, admin_email=admin_email, chat_room_uuid=chat_room_uuid,
@@ -516,7 +516,7 @@ async def _process_thread(
             existing_sent_bodies=list(sent_bodies),
         )
 
-    # 2. Sensitive keyword (refund/complaint/urgent/etc.) — escalate + Slack
+    # 2. Sensitive keyword (refund/complaint/urgent/etc.) - escalate + Slack
     sensitive, kw = circle_dm_bot._is_sensitive(student_text)
     if sensitive:
         reply = _holding_handoff(first, coach_name)
@@ -539,7 +539,7 @@ async def _process_thread(
     resolved = res["resolved"]
 
     if not resolved:
-        # Playbook didn't cover it — escalate
+        # Playbook didn't cover it - escalate
         reply = _holding_handoff(first, coach_name)
         return await _escalate_and_reply(
             db, admin_email=admin_email, chat_room_uuid=chat_room_uuid,
@@ -550,7 +550,7 @@ async def _process_thread(
             existing_sent_bodies=list(sent_bodies),
         )
 
-    # Successful AI resolve — post and stay watching
+    # Successful AI resolve - post and stay watching
     posted = await circle_api.post_dm_message(db, admin_email, chat_room_uuid, reply)
     posted_id = _msg_id(posted) if posted else None
     new_sent_ids = list(sent_ids)
@@ -569,7 +569,7 @@ async def _process_thread(
         "last_reply_text": reply,
         "last_reply_at": datetime.now(timezone.utc).isoformat(),
     })
-    # Audit ticket — keep low-noise: only insert one if we haven't already
+    # Audit ticket - keep low-noise: only insert one if we haven't already
     # for this thread. (We use the thread_uuid as the dedup key.)
     existing = await db.tickets.find_one(
         {"circle_dm_meta.thread_uuid": chat_room_uuid,
@@ -676,7 +676,7 @@ async def _poll_one_coach(db, admin_email: str, excluded_tags_lower: set[str]) -
         for t in dm_threads:
             try:
                 # Per-thread hard timeout so one slow thread can't hang the
-                # whole coach's poll. 8s is generous — typical fetch is <500ms.
+                # whole coach's poll. 8s is generous - typical fetch is <500ms.
                 res = await asyncio.wait_for(
                     _process_thread(
                         db, admin_email=admin_email,
@@ -712,7 +712,7 @@ async def poll_once(db) -> dict:
     # Persist `last_poll_started_at` IMMEDIATELY so the dashboard can show
     # "poll in progress" instead of stuck-at-old-timestamp during a long
     # poll cycle. Also useful for telling apart "poll hung" from "scheduler
-    # never fired" — a stale started_at means the scheduler isn't even
+    # never fired" - a stale started_at means the scheduler isn't even
     # triggering; a fresh started_at means it triggered but is hung.
     await db.app_settings.update_one(
         {"id": _settings_id()},
@@ -791,7 +791,7 @@ async def _forward_new_msgs_to_ticket(
     don't re-import on the next poll, and re-opens the ticket if it
     was closed.
 
-    Only forwards messages sent by the STUDENT — admin replies (made by
+    Only forwards messages sent by the STUDENT - admin replies (made by
     the team in Circle) aren't pushed back into the ticket because they
     might create a confusing loop with Coralie's own reply work.
     """
@@ -841,7 +841,7 @@ async def _forward_new_msgs_to_ticket(
     if not existing:
         logger.warning(
             f"[circle-dm] thread {chat_room_uuid} escalated_ticket_id "
-            f"{ticket_id} not found in tickets — skipping forward.",
+            f"{ticket_id} not found in tickets - skipping forward.",
         )
         return
     already_forwarded_ids = {
@@ -891,7 +891,7 @@ async def reset_thread(db, chat_room_uuid: str) -> bool:
     """Re-enable the bot on a thread that was previously escalated or taken
     over by a human.
 
-    Important: we DON'T delete the state doc — that would wipe
+    Important: we DON'T delete the state doc - that would wipe
     `sent_message_ids` / `sent_bodies` and the next poll's lookback guard
     would treat the bot's own previous replies (or any admin message in
     the last 14 days) as "human is here, back off" and immediately re-flag
@@ -943,7 +943,7 @@ async def trust_takeover_trigger(db, chat_room_uuid: str) -> dict:
     trigger = state.get("human_takeover_trigger") or {}
     body = trigger.get("body")
     if not body:
-        # Older takeovers (pre-breadcrumb) won't have the full body — the
+        # Older takeovers (pre-breadcrumb) won't have the full body - the
         # admin should use plain Re-arm in that case.
         return {"ok": False, "reason": "no_trigger_body_recorded"}
     mid = trigger.get("message_id")
@@ -993,12 +993,12 @@ async def trace_thread(
 
     Walks every gate the bot would walk for a single thread and returns a
     step-by-step trace + the *exact* conclusion the bot would reach. Nothing
-    is mutated — no state writes, no Circle POSTs, no LLM calls. Designed
+    is mutated - no state writes, no Circle POSTs, no LLM calls. Designed
     for the "why didn't the bot reply to *this* thread?" debugging loop.
 
     Lookup priority:
-      • ``thread_uuid`` (+ optional ``coach_email``) — exact UUID lookup
-      • ``student_search`` — substring-matches the *other-participant* name
+      • ``thread_uuid`` (+ optional ``coach_email``) - exact UUID lookup
+      • ``student_search`` - substring-matches the *other-participant* name
         across every configured coach's DM list; picks the most recently
         active match. Useful when you don't know the UUID off-hand.
     """
@@ -1131,7 +1131,7 @@ async def trace_thread(
                 f"WOULD SKIP: no_new (inline_last_id={inline_last_id} "
                 f"<= last_seen={last_seen}). The inline last_message in the "
                 f"thread-list response is older than the bot's high-water "
-                f"mark — either no new message arrived, or a previous poll "
+                f"mark - either no new message arrived, or a previous poll "
                 f"already advanced last_seen past it."
             ),
         }
@@ -1270,7 +1270,7 @@ async def trace_thread(
             "found": True, "trace": steps,
             "conclusion": (
                 "WOULD SKIP: no_student_msg (all new messages came from the "
-                "bot itself — nothing to react to)."
+                "bot itself - nothing to react to)."
             ),
         }
     student_text = _msg_body(latest_student_msg)
@@ -1326,14 +1326,14 @@ async def trace_thread(
         if matched:
             return {
                 "found": True, "trace": steps,
-                "conclusion": f"WOULD SKIP: tag_excluded — student carries excluded tag(s): {matched}",
+                "conclusion": f"WOULD SKIP: tag_excluded - student carries excluded tag(s): {matched}",
             }
     else:
         steps.append({
             "step": "tag_check_scoped_out",
             "reason": (
                 f"coach {target_coach} is not in tag_exclusion_coach_emails "
-                f"({sorted(tag_excl_coaches_lower)}) — tags ignored for this coach"
+                f"({sorted(tag_excl_coaches_lower)}) - tags ignored for this coach"
             ),
         })
 
@@ -1342,7 +1342,7 @@ async def trace_thread(
         "conclusion": (
             "WOULD REPLY (or escalate via playbook). The bot would post an "
             "AI reply. If the real bot is silent on this thread, the failure "
-            "is downstream of these gates — likely: (a) Circle rejecting the "
+            "is downstream of these gates - likely: (a) Circle rejecting the "
             "POST (token revoked / wrong admin), (b) the asyncio polling "
             "loop died, or (c) the playbook LLM call is timing out. Trigger "
             "'Poll Now' from Settings and check last_poll_summary."

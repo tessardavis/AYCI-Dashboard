@@ -8,7 +8,7 @@ watching every full submission.
 
 Pipeline per video:
   1. Wait for the original Tally bytes on disk (pv_cache.prepare).
-  2. Extract the audio track (ffmpeg, no re-encode — fast, tiny output).
+  2. Extract the audio track (ffmpeg, no re-encode - fast, tiny output).
      Most iPhone videos are HEVC + AAC; Whisper accepts AAC in M4A.
   3. Send to OpenAI Whisper API (whisper-1, verbose_json for segments).
   4. Persist {text, segments, model, generated_at} on the Mongo row.
@@ -16,7 +16,7 @@ Pipeline per video:
 Cost: ~$0.006/min of audio. 2-3min videos = ~£0.01 each.
 
 Configuration:
-  OPENAI_API_KEY — required, must start with `sk-...`. If missing, the
+  OPENAI_API_KEY - required, must start with `sk-...`. If missing, the
   module gracefully no-ops (no transcript generated, dashboard shows
   "Transcription not configured").
 """
@@ -72,7 +72,7 @@ async def _extract_audio(video_path: Path) -> Optional[Path]:
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
         # Some files don't have a copyable AAC track. Re-encode to AAC as
-        # a fallback — slower but works.
+        # a fallback - slower but works.
         cmd_reencode = [
             pv_cache._ffmpeg_exe(),
             "-y",
@@ -107,7 +107,7 @@ async def transcribe(video_path: Path) -> Optional[dict]:
     (no key, ffmpeg fails, file too large, API error)."""
     key = _api_key()
     if not key:
-        logger.info("[transcription] skipped — OPENAI_API_KEY not set")
+        logger.info("[transcription] skipped - OPENAI_API_KEY not set")
         return None
 
     audio_path = await _extract_audio(video_path)
@@ -155,7 +155,7 @@ async def transcribe(video_path: Path) -> Optional[dict]:
 
 async def transcribe_and_save(db, item_id: str, src_url: str) -> Optional[dict]:
     """Wait for the video to be downloaded, transcribe it, and persist the
-    transcript on the row. Idempotent — re-runs are skipped if a transcript
+    transcript on the row. Idempotent - re-runs are skipped if a transcript
     already exists. Designed to be called fire-and-forget from the ingest
     webhook (and lazily from the /transcript endpoint)."""
     if not configured():
@@ -175,7 +175,7 @@ async def transcribe_and_save(db, item_id: str, src_url: str) -> Optional[dict]:
         return None
 
     # Prefer the transcoded .h264.mp4 (the original .bin is deleted after
-    # transcode to save disk). Audio track is identical in both — Whisper
+    # transcode to save disk). Audio track is identical in both - Whisper
     # only cares about audio.
     video_path = pv_cache._path_h264(item_id)
     if not video_path.exists():
@@ -188,7 +188,7 @@ async def transcribe_and_save(db, item_id: str, src_url: str) -> Optional[dict]:
     if not transcript:
         return None
 
-    # Clean up the audio extract — we won't need it again. Keeps /tmp lean
+    # Clean up the audio extract - we won't need it again. Keeps /tmp lean
     # on Render's 2 GB cap.
     try:
         audio_path = video_path.with_suffix(".audio.m4a")

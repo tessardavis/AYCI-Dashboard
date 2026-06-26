@@ -3,7 +3,7 @@ Private Tier Utilisation tracker.
 
 For Private Plus and VIP students with an upcoming interview in the next
 N days (default 14), check whether they're on track with their video
-submissions and 1:1 calls — and surface the rest as a chase list.
+submissions and 1:1 calls - and surface the rest as a chase list.
 
 Allowances (per tier, defined by the team):
   - Private Plus: 15 video submissions + 1 × 1:1 call
@@ -52,7 +52,7 @@ COL_INTERVIEW_TYPE = "color_mkr7wahg"  # Status: "Locum" / "Substantive"
 # private call/video allowance), so we don't classify them as Private Plus
 # in Upcoming Interviews or the Private Tier Utilisation board.
 PRIVATE_PLUS_LABELS = {"Academy Private Plus", "Upgrade Private Plus"}
-# "Upgrade VIP" / "Academy VIP" are the same product as "VIP" — without them an
+# "Upgrade VIP" / "Academy VIP" are the same product as "VIP" - without them an
 # Upgrade-VIP student normalises to None and silently drops out of this widget
 # (and Upcoming Interviews' VIP grouping). Mirror the "Upgrade …" Private Plus
 # variant above. NB: matched case-sensitively here against the raw Monday label.
@@ -238,7 +238,7 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
     call_counts = await _fetch_private_call_counts(emails)
 
     # Add manually-logged calls (ad-hoc bookings the team added via
-    # `/api/today-calls/manual` — these aren't on Calendly). Each entry
+    # `/api/today-calls/manual` - these aren't on Calendly). Each entry
     # counts as **one** call event, regardless of duration. Matches how
     # tier allowances are described (VIP = 4 x 30-min + 1 x 60-min mock
     # = 5 calls; PP = 1 call; bonus calls = 1 call each). The duration
@@ -278,7 +278,7 @@ async def fetch_private_tier_utilisation(days: int = 14) -> dict:
         else:
             ok = passes_videos or passes_calls
 
-        # Reasons only populated when row is flagged — on_track rows
+        # Reasons only populated when row is flagged - on_track rows
         # always have an empty list.
         reasons: list[str] = []
         if not ok:

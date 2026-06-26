@@ -10,7 +10,7 @@ MOST-RECENTLY-SUBMITTED Tally entry and pins it in `dashboard_edited_fields`
 (already in academy_members_mirror.PROTECTED_FIELDS), so the 15-min Monday sync
 can't clobber it.
 
-Per Tessa: Tally is the single source of truth for date changes — no manual
+Per Tessa: Tally is the single source of truth for date changes - no manual
 dashboard editing; off-form reschedules are out of scope.
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _latest_tally_date(history: list) -> str | None:
     date.
 
     NB: `tally_lookup` sorts history by DATE, but Tessa's rule is "most recent
-    *submission* wins" — so we sort by `submitted_at` here, not by date. This is
+    *submission* wins" - so we sort by `submitted_at` here, not by date. This is
     what makes a re-submission with an earlier-but-future date still win.
     """
     rows = sorted((history or []), key=lambda r: (r.get("submitted_at") or ""), reverse=True)
@@ -56,13 +56,13 @@ def _latest_tally_date(history: list) -> str | None:
 
 async def sync_upcoming_calendar(db_=db, days_ahead: int = 180) -> dict:
     """Ensure the AYCI Interviews calendar has an event for EVERY student with an
-    upcoming interview_date — not just those the Tally reconcile changed this run.
+    upcoming interview_date - not just those the Tally reconcile changed this run.
 
     A date can reach the dashboard via the Monday sync (or any path), not only
     via the Tally reconcile, and the reconcile's calendar step only fired for
     rows it *changed*. So a Monday-sourced reschedule landed on the dashboard but
     never on the calendar. This sweeps all upcoming-dated rows and ensures each
-    one's event — idempotent, since ensure_interview_event matches by location ID.
+    one's event - idempotent, since ensure_interview_event matches by location ID.
     """
     try:
         import google_calendar
@@ -122,7 +122,7 @@ async def reconcile_interview_dates(db_=db) -> dict:
 
     now = datetime.now(timezone.utc)
     changed = []
-    ops = []  # collected into a single bulk_write — one round trip, not one per row
+    ops = []  # collected into a single bulk_write - one round trip, not one per row
     for r in rows:
         merged: list = []
         for k in ("email", "circle_email"):

@@ -1,4 +1,4 @@
-"""AYCI iteration 6 — change-password, past_coaches, HeroBanner regression, RBAC.
+"""AYCI iteration 6 - change-password, past_coaches, HeroBanner regression, RBAC.
 
 Covers:
 - POST /api/auth/change-password (4 cases) + auth required

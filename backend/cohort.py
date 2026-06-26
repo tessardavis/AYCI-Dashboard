@@ -1,11 +1,11 @@
 """
-Cohort dashboard — aggregates Monday.com Academy Members board for one
+Cohort dashboard - aggregates Monday.com Academy Members board for one
 cohort (e.g. "April 26"), cross-references Circle membership via the
 slim cached member list, and returns totals for the team's weekly review.
 
 New vs Legacy split now comes from ConvertKit tags because Monday's
 "Legacy" column is only populated when a student carries over from a
-previous cohort — it misses the "upgrade/downgrade" nuance that Kit
+previous cohort - it misses the "upgrade/downgrade" nuance that Kit
 captures cleanly with dedicated tags.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ COL_IN_ACTIVE_COHORT = "color_mkrd1evr"
 # Manually-curated Monday status column: "On Circle, in Apr '26 spaces" /
 # "On Circle, not in spaces" / blank. When set to the in-cohort-spaces
 # variant, the student has been manually verified as joined for the cohort
-# — authoritative signal that bridges email mismatches between Monday and
+# - authoritative signal that bridges email mismatches between Monday and
 # Circle (students often sign up to Circle with a different email).
 COL_ON_CIRCLE = "color_mkqxdbm8"
 MILESTONE_COLS = [
@@ -218,7 +218,7 @@ async def cohort_summary(
         return ""
 
     # New vs Legacy from ConvertKit tags (authoritative). We need `new_emails`
-    # before the per-item loop so we can filter stats to new signups only —
+    # before the per-item loop so we can filter stats to new signups only -
     # the team tracks "cohort" = "new signups in this launch", not upgrades.
     new_count = 0
     legacy_count = 0
@@ -268,7 +268,7 @@ async def cohort_summary(
         if not is_in_cohort:
             continue
 
-        # Tier split (may contain multiple comma-separated values — take primary)
+        # Tier split (may contain multiple comma-separated values - take primary)
         tier = _txt(cols, COL_TIER) or "(no tier)"
         first_tier = tier.split(",")[0].strip()
         tier_counter[first_tier] += 1
@@ -293,10 +293,10 @@ async def cohort_summary(
             }
 
     # Two denominators:
-    # - `cohort_total` = new + legacy (the team's headline "cohort size") —
+    # - `cohort_total` = new + legacy (the team's headline "cohort size") -
     #   used for the top stat card and the On Circle / Intros coverage.
     # - `monday_cohort_total` = the subset of those who are also on the
-    #   Monday board for this cohort — used for tier/milestone/speciality
+    #   Monday board for this cohort - used for tier/milestone/speciality
     #   breakdowns so percentages sum within the visible Monday data.
     if cohort_tag_emails:
         cohort_total = new_count + legacy_count
@@ -305,7 +305,7 @@ async def cohort_summary(
         cohort_total = monday_total
         monday_cohort_total = monday_total
 
-    # Circle cross-reference — count only NEW signups (not legacy) who joined
+    # Circle cross-reference - count only NEW signups (not legacy) who joined
     # Circle for this cohort. Tessa wants the "On Circle" / Pending counts to
     # measure the launch's job, i.e. getting new customers onto Circle. Legacy
     # students are already established on Circle from prior cohorts.
@@ -352,12 +352,12 @@ async def cohort_summary(
                     boss_emails.add(email)
                     break
 
-    # ---- "Still to join Circle" — chase list (NEW signups only) -----------
+    # ---- "Still to join Circle" - chase list (NEW signups only) -----------
     # Limit to new signups (the launch's primary onboarding job). Legacy
-    # students are excluded — they're either already long-time Circle members
+    # students are excluded - they're either already long-time Circle members
     # or chased through other workflows. Team test accounts (TEAM_ACCOUNT_EMAILS)
     # are also excluded so the coach doesn't chase themselves. Students with
-    # the "Boss" badge on Circle are excluded too — they already have a job
+    # the "Boss" badge on Circle are excluded too - they already have a job
     # and don't need chasing into the cohort space.
     #
     # Additionally, students whose Monday "On Circle" column is manually set
@@ -373,7 +373,7 @@ async def cohort_summary(
             continue
         # Accept either the cohort-specific variant ("on circle, in apr '26
         # spaces") or a generic "on circle, in <x> spaces" that names the
-        # same circle tag. The "not in spaces" variant does NOT count —
+        # same circle tag. The "not in spaces" variant does NOT count -
         # those students have a Circle account but haven't joined the
         # cohort's space yet, so they should stay on the chase list.
         if "in" in status and "spaces" in status and circle_tag_short in status:
@@ -405,7 +405,7 @@ async def cohort_summary(
             ).strip()
             info = {"name": cm_name, "tier": "(unknown)", "monday_url": None}
         tier = info.get("tier") or "(unknown)"
-        # Has a Circle account (any tag) but not the cohort tag — useful to know
+        # Has a Circle account (any tag) but not the cohort tag - useful to know
         on_circle_no_tag = email in by_email
         pending_tier_counter[tier] += 1
         pending_list.append({
@@ -436,7 +436,7 @@ async def cohort_summary(
         {
             "label": lbl,
             "completed": milestone_totals[i],
-            # Milestones come from Monday columns — use the Monday subset
+            # Milestones come from Monday columns - use the Monday subset
             # as denominator so percentages reflect the visible population.
             "total": monday_cohort_total,
             "percent": (
@@ -573,7 +573,7 @@ async def _ck_tag_emails(tag_id: int) -> set[str]:
 async def _ck_tag_email_dates(tag_id: int) -> dict[str, str]:
     """Like `_ck_tag_emails` but returns `{email: signup_date_iso}`. The
     signup date is the subscription's `created_at` (when this person was
-    tagged — i.e. when they joined this cohort)."""
+    tagged - i.e. when they joined this cohort)."""
     out: dict[str, str] = {}
     page = 1
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:

@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["students"])
 
 # Per-platform wall-clock budgets. One stuck call must not block the
-# whole page — without these, a hung Tally/Calendly pagination loop
+# whole page - without these, a hung Tally/Calendly pagination loop
 # would block the endpoint until the frontend gives up at 90s.
 PLATFORM_TIMEOUTS = {
-    "circle":     12.0,  # 1.7MB Mongo read from Atlas — 5s was too tight
+    "circle":     12.0,  # 1.7MB Mongo read from Atlas - 5s was too tight
     "convertkit": 10.0,  # subscriber lookup + tags (2 sequential calls)
     "stripe":     15.0,  # customer search + parallel charges/subs per customer
     "calendly":   12.0,
@@ -80,7 +80,7 @@ async def _get_inline_summary(email: str) -> Optional[dict]:
 async def _prewarm_drive_summary(student_name: str, email: str) -> None:
     """Background task fired on every Student Lookup so by the time the user
     clicks the doc card the AI summary is already in the DB cache. Silent on
-    failure — the user-facing endpoint will retry/show the error."""
+    failure - the user-facing endpoint will retry/show the error."""
     try:
         await gdrive.summarise_student_doc(db, student_name, email)
     except Exception:
@@ -99,7 +99,7 @@ async def _run_lookup_fanout(
 
     `skip_drive_summary=True` disables the background Drive summary
     pre-generation (Claude API call). Used by the daily prewarm cron to
-    keep costs at $0/day — summaries still generate on-demand when the
+    keep costs at $0/day - summaries still generate on-demand when the
     coach opens the doc card."""
     monday_safe, circle_safe, stripe_safe, ck_safe, calendly_safe, tally_safe = await asyncio.gather(
         _bounded_platform("monday",     lookup.monday_lookup(email, name_hint=name, db=db), PLATFORM_TIMEOUTS["monday"]),
@@ -110,8 +110,8 @@ async def _run_lookup_fanout(
         _bounded_platform("tally",      tally.lookup_student(db, email),                     PLATFORM_TIMEOUTS["tally"]),
     )
     # Students often book Calendly / pay Stripe under a DIFFERENT email than the
-    # one we searched. Retry those two under any known alternate emails — the
-    # student's circle_email + any recorded `other_emails` — and merge in a hit.
+    # one we searched. Retry those two under any known alternate emails - the
+    # student's circle_email + any recorded `other_emails` - and merge in a hit.
     md = (monday_safe or {}).get("data") or {}
     alt_emails: list[str] = []
     for raw in [md.get("circle_email")] + re.split(r"[,\s;]+", md.get("other_emails") or ""):
@@ -131,7 +131,7 @@ async def _run_lookup_fanout(
                     return r
             return current
 
-        # Run the four platform retries concurrently — they're independent, so
+        # Run the four platform retries concurrently - they're independent, so
         # there's no reason to pay calendly+stripe+circle+tally serially when a
         # student has alternate emails (the common mismatch case).
         calendly_safe, stripe_safe, circle_safe, tally_safe = await asyncio.gather(
@@ -145,7 +145,7 @@ async def _run_lookup_fanout(
     drive_summary = None
     student_name = (monday_safe.get("data") or {}).get("name") if monday_safe else None
     if student_name:
-        # Bound the Drive call — it has no internal timeout and has been
+        # Bound the Drive call - it has no internal timeout and has been
         # observed hanging the whole lookup endpoint when the Drive API is
         # slow. Cap at 10s; on timeout return a 'not found' so the rest of
         # the page still renders.
@@ -233,7 +233,7 @@ async def students_lookup(
     refresh: bool = False,
     user: dict = Depends(require_board("students")),
 ):
-    """Unified student lookup — fan out across Monday.com, Circle, Stripe,
+    """Unified student lookup - fan out across Monday.com, Circle, Stripe,
     ConvertKit, Calendly, Tally in parallel. Optional `name` param falls
     back to a Monday name-column search when emails differ across platforms.
     Pass `refresh=true` to bypass the 30-min cache and force a fresh fetch."""
@@ -266,7 +266,7 @@ async def students_lookup(
     except asyncio.TimeoutError:
         fanout_ms = int((time.monotonic() - fanout_t0) * 1000)
         logger.error(f"[lookup] {email} fan-out TIMEOUT after {fanout_ms}ms")
-        raise HTTPException(504, "Lookup timed out — try again in a moment")
+        raise HTTPException(504, "Lookup timed out - try again in a moment")
     fanout_ms = int((time.monotonic() - fanout_t0) * 1000)
     logger.info(f"[lookup] {email} fan-out done in {fanout_ms}ms")
 

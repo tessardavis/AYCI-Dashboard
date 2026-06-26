@@ -1,8 +1,8 @@
 """
-Outbound webhook dispatcher — emits column-change events to subscribed URLs.
+Outbound webhook dispatcher - emits column-change events to subscribed URLs.
 
 Replaces the Monday "Specific Column Value Changed" trigger used by ~12 zaps.
-Each subscribed zap re-points its trigger to "Webhooks by Zapier — Catch Hook"
+Each subscribed zap re-points its trigger to "Webhooks by Zapier - Catch Hook"
 and registers the catch-hook URL here via the admin endpoint.
 
 Mongo collection: `dashboard_webhook_subscriptions`
@@ -17,7 +17,7 @@ Mongo collection: `dashboard_webhook_subscriptions`
     }
 
 Emission is best-effort and fire-and-forget: failures are logged but never
-break the originating write. No retries in v1 — Zapier's catch hook is
+break the originating write. No retries in v1 - Zapier's catch hook is
 reliable enough for the use case and the dashboard remains source of truth.
 """
 from __future__ import annotations
@@ -60,7 +60,7 @@ async def notify_column_changes(
     `student` is the minimal post-write row (used to populate the payload).
 
     Returns the number of webhook POSTs successfully delivered. Failures
-    are logged but do not propagate — the originating write succeeded
+    are logged but do not propagate - the originating write succeeded
     regardless."""
     if not fields_changed:
         return 0
@@ -76,7 +76,7 @@ async def notify_column_changes(
     now = datetime.now(timezone.utc).isoformat()
 
     # Group POSTs by URL so two changes to the same subscriber don't fire
-    # twice — bundle into one payload with all changed columns.
+    # twice - bundle into one payload with all changed columns.
     by_url: dict[str, list[dict]] = {}
     for s in subs:
         by_url.setdefault(s["url"], []).append(s)
@@ -122,7 +122,7 @@ async def notify_column_changes(
 async def active_subscription_columns(db) -> set[str]:
     """The set of columns that currently have at least one active subscriber.
     The mirror uses this to decide whether to bother diffing Monday-side
-    changes at all — when nothing is subscribed (the common case during
+    changes at all - when nothing is subscribed (the common case during
     transition) the mirror-emit bridge is a complete no-op."""
     cols = await db.dashboard_webhook_subscriptions.distinct("column", {"active": True})
     return {c for c in cols if c}

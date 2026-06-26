@@ -1,7 +1,7 @@
 """
 Slack alert: when a student posts > 3 videos in the "Recorded Answer Review"
 Circle space within a single calendar week (Mon 00:00 → Sun 23:59 UK), ping
-`#circle-days` once per (member, week). Idempotent — re-running never spams.
+`#circle-days` once per (member, week). Idempotent - re-running never spams.
 
 Scheduled every 5 min from `server.py`. The cross-the-threshold detection is
 "first time we observe count > 3 for a given (name, week_start)".
@@ -34,7 +34,7 @@ async def get_webhook_url(db) -> str:
     """Read the configured webhook URL. Order of preference:
        1. `app_settings.circle_days_webhook` (DB-stored, set via API)
        2. env var `SLACK_CIRCLE_DAYS_WEBHOOK_URL`
-       3. env var `SLACK_WEBHOOK_URL` (general fallback — wrong channel)
+       3. env var `SLACK_WEBHOOK_URL` (general fallback - wrong channel)
     Storing the URL in the DB lets non-technical admins set it without an
     Emergent redeploy when new env-var slots can't be added."""
     doc = await db.app_settings.find_one(
@@ -73,7 +73,7 @@ async def _post(db, text: str) -> dict:
 async def check_and_send(db) -> dict:
     """Inspect the Recorded Answer Review space, find any student who has
     posted more than 3 videos in the current calendar week, and post a Slack
-    line — once per (member, week_start). User-dismissed alerts (via the
+    line - once per (member, week_start). User-dismissed alerts (via the
     Coach Activity UI) are also suppressed so the team can manually silence
     a flag without waiting for the next week."""
     try:
@@ -83,7 +83,7 @@ async def check_and_send(db) -> dict:
             "Recorded Answer Review",
             db=db,
             # This alert only reads result["rate_limited"], which is derived
-            # purely from posts. Skip the per-post /comments fan-out — it was
+            # purely from posts. Skip the per-post /comments fan-out - it was
             # costing ~1.9M Circle Admin-API calls/month (~$7k) for nothing.
             fetch_comments=False,
         )
@@ -133,7 +133,7 @@ async def check_and_send(db) -> dict:
             sent += 1
             logger.info(f"[circle-video-alerts] sent for {name} ({count}/wk, week {week_start})")
         else:
-            # Send failed — roll back the claim so the next tick can retry.
+            # Send failed - roll back the claim so the next tick can retry.
             await db.circle_video_alerts_sent.delete_one({"_id": key})
             logger.warning(f"[circle-video-alerts] failed to post for {name}: {post_result}")
 

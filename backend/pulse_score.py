@@ -1,11 +1,11 @@
 """
-Pulse Score: a single 0–100 health score for the team dashboard, amalgamating
-four pillars (each scored 0–25):
+Pulse Score: a single 0-100 health score for the team dashboard, amalgamating
+four pillars (each scored 0-25):
 
-  1. Scorecard goals — ratio of metrics on-track for the most recent week.
-  2. Quarterly rocks — ratio of active-quarter rocks that are NOT off-track.
-  3. SLA breaches    — number of Circle posts unanswered >48 h.
-  4. Students at risk — number of high-spend students that are dormant.
+  1. Scorecard goals - ratio of metrics on-track for the most recent week.
+  2. Quarterly rocks - ratio of active-quarter rocks that are NOT off-track.
+  3. SLA breaches    - number of Circle posts unanswered >48 h.
+  4. Students at risk - number of high-spend students that are dormant.
 
 Cheap to compute because every input is already cached upstream:
   - coach_activity / sla_notifications.count_unanswered → cached coach summary
@@ -152,7 +152,7 @@ def _label_for_score(score: int) -> str:
 
 
 async def compute_pulse_score(db, week_start: Optional[str] = None) -> dict:
-    """Compute the four pillar scores and the overall 0–100 Pulse Score."""
+    """Compute the four pillar scores and the overall 0-100 Pulse Score."""
     ws = week_start or _latest_completed_monday()
     sc, rk, sla, st = (
         await _score_scorecard(db, ws),

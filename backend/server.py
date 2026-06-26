@@ -298,7 +298,7 @@ async def set_circle_days_webhook(
 # -------------------------- Private-tier video Slack alerts ----------------
 @api.get("/private-videos/alerts/preview")
 async def preview_private_video_alerts(admin: dict = Depends(require_admin)):
-    """Dry-run both checks — returns who WOULD be alerted, posts nothing."""
+    """Dry-run both checks - returns who WOULD be alerted, posts nothing."""
     import private_video_alerts as pva
     return {
         "interview_imminent": await pva.recheck_imminent(db, dry_run=True),
@@ -308,7 +308,7 @@ async def preview_private_video_alerts(admin: dict = Depends(require_admin)):
 
 @api.post("/private-videos/alerts/test")
 async def run_private_video_alerts(admin: dict = Depends(require_admin)):
-    """Run both checks for real now (idempotent — won't re-post already-sent).
+    """Run both checks for real now (idempotent - won't re-post already-sent).
     interview_imminent here re-scans recent submissions; the live path is the
     on-ingest hook in private_videos_store.ingest_tally_submission."""
     import private_video_alerts as pva
@@ -346,7 +346,7 @@ class SlackBotTokenPayload(BaseModel):
 
 class SlackTestDmPayload(BaseModel):
     email: str
-    text: str = ":wave: Test DM from AYCI Dashboard — your Slack bot integration is wired correctly."
+    text: str = ":wave: Test DM from AYCI Dashboard - your Slack bot integration is wired correctly."
 
 
 @api.get("/slack/bot-token")
@@ -554,7 +554,7 @@ async def _ensure_results_from_this_weeks_metric():
 async def _backfill_results_received_goal():
     """One-shot fix: 'Results Received' metric was originally seeded as a count
     (goal=15) but later converted to a percentage; goal was wiped to None during
-    that conversion. Restore a sensible 50% baseline (responsiveness target —
+    that conversion. Restore a sensible 50% baseline (responsiveness target -
     half of this week's interviewees report back the same week)."""
     metric = await db.metrics.find_one(
         {"name": "Results Received"}, {"_id": 0, "id": 1, "goal": 1, "format": 1},
@@ -679,7 +679,7 @@ async def _seed_rocks():
     rocks_seed = [
         # Arub
         (arub, "Deliver APR-26 launch (Good £140k / Better £160k / Best £200k)", "on_track"),
-        (arub, "Deliver June launch (target TBD — bonus structure applies)", "on_track"),
+        (arub, "Deliver June launch (target TBD - bonus structure applies)", "on_track"),
         (arub, "Implement Brenna's pre-launch course material", "on_track"),
         (arub, "Develop affiliate programme plan", "off_track"),
         (arub, "Develop & improve the Boost and Go upgrades process", "on_track"),
@@ -905,7 +905,7 @@ async def _scheduled_sync() -> None:
     """Runs every Monday at 06:00 Europe/London. Syncs last week's values."""
     try:
         logger.info("[scheduler] Running weekly auto-sync")
-        # Last Monday (i.e. the week that just ended — 7 days ago)
+        # Last Monday (i.e. the week that just ended - 7 days ago)
         today = datetime.now(timezone.utc).date()
         this_monday = today - timedelta(days=today.weekday())
         last_monday = (this_monday - timedelta(days=7)).isoformat()
@@ -978,7 +978,7 @@ async def on_startup():
             [("cohort", 1), ("snapshot_date", -1)],
             name="cohort_snapshot_date",
         )
-        # Support tickets — without these, every list call COLLSCANs the
+        # Support tickets - without these, every list call COLLSCANs the
         # whole tickets collection + sorts in-memory. With ~2k tickets and
         # ~5k view records that's noticeably slow on first load AND every
         # reload after Resolved/Closed.
@@ -990,7 +990,7 @@ async def on_startup():
             name="user_ticket",
         )
 
-        # academy_members mirror — primary lookup by email; range query on
+        # academy_members mirror - primary lookup by email; range query on
         # interview_date for the Upcoming Interviews page; synced_at for
         # stale-row checks.
         await db.academy_members.create_index("email", sparse=True)
@@ -998,20 +998,20 @@ async def on_startup():
         await db.academy_members.create_index("interview_date", sparse=True)
         await db.academy_members.create_index([("synced_at", -1)])
 
-        # Refunds board — list filters by status, sorts by refunded_at, and the
+        # Refunds board - list filters by status, sorts by refunded_at, and the
         # Students DB badges refunds by student_email. Without these the board
         # list, the no-filter /refunds/summary scan, and the per-load Students
         # DB refunds aggregation all COLLSCAN.
         await db.refunds.create_index("student_email", sparse=True)
         await db.refunds.create_index("status", sparse=True)
         await db.refunds.create_index([("refunded_at", -1)])
-        # private_video_submissions — Students DB aggregates "videos used" per
+        # private_video_submissions - Students DB aggregates "videos used" per
         # email on every load; index the group key so it's not a full scan.
         await db.private_video_submissions.create_index("email", sparse=True)
 
         # url_shortlinks: idempotent shorten() relies on unique long_url;
         # /v/{code} redirect lookup hits unique code. Drop any pre-self-
-        # hosted rows (is.gd era — they stored `short_url` instead of
+        # hosted rows (is.gd era - they stored `short_url` instead of
         # `code`, which would collide with the new unique index).
         old_shortlinks_cleared = await db.url_shortlinks.delete_many(
             {"code": {"$exists": False}}
@@ -1028,7 +1028,7 @@ async def on_startup():
 
     # Warm the in-process name-search index so the first coach to open
     # Student Lookup after a deploy doesn't pay the ~5-10s cold-read cost
-    # of pulling the 1.7MB members doc from Mongo Atlas. Fire-and-forget —
+    # of pulling the 1.7MB members doc from Mongo Atlas. Fire-and-forget -
     # boot should not block on this.
     async def _warm_name_index():
         try:
@@ -1123,7 +1123,7 @@ async def on_startup():
                 "end_date": {"$gte": today},
             }, {"_id": 0})
             if not launch:
-                logger.info("[daily] No active launch — phase-breakdown skip")
+                logger.info("[daily] No active launch - phase-breakdown skip")
                 return
             payload = await launches_mod.compute_phase_breakdown(db.launches, launch)
             await db.cache.update_one(
@@ -1184,7 +1184,7 @@ async def on_startup():
         replace_existing=True,
     )
 
-    # Interview-date reconcile — adopt each student's most-recent Tally date
+    # Interview-date reconcile - adopt each student's most-recent Tally date
     # into the mirror's interview_date (pinned), so reschedules flow through to
     # the dashboard, Upcoming Interviews and the night-before DM. Runs 05:30
     # (after the 05:20 Tally refresh) and 18:45 weekdays (refresh Tally first,
@@ -1194,7 +1194,7 @@ async def on_startup():
             import interview_date_reconcile
             res = await interview_date_reconcile.reconcile_interview_dates(db)
             logger.info(f"[scheduler] interview_date_reconcile: {res.get('changed_count')} changed")
-            # Sweep the calendar for ALL upcoming students — a date can arrive
+            # Sweep the calendar for ALL upcoming students - a date can arrive
             # via the Monday sync too, and the reconcile only calendar-synced
             # rows it changed. This keeps the calendar in step regardless.
             cal = await interview_date_reconcile.sync_upcoming_calendar(db)
@@ -1220,7 +1220,7 @@ async def on_startup():
     )
 
     # Private-chat HYBRID auto-create (Route 2, Phase 1). Inert until
-    # PRIVATE_CHAT_AUTOCREATE_ENABLED=true — enable it the same day the Monday
+    # PRIVATE_CHAT_AUTOCREATE_ENABLED=true - enable it the same day the Monday
     # zaps 46/47/53 are turned off (running both would double-create). Creates
     # clear-cut chats, flags DMs-off as "Awaiting DMs", leaves edge cases for
     # the team. Every 30 min so new joiners get a chat promptly.
@@ -1243,10 +1243,10 @@ async def on_startup():
 
     # Link existing Circle chats back onto the dashboard (the backlog of
     # zap-created chats whose URL was never written to the row). Runs itself
-    # every 20 min so it self-heals once Circle isn't rate-limited — no manual
+    # every 20 min so it self-heals once Circle isn't rate-limited - no manual
     # triggering. Single-flight + cached, so it can't pile up. apply=True writes
     # the URLs (idempotent: only records chats that already exist).
-    # NOTE: the scheduled link-existing scan is DISABLED — reading every coach's
+    # NOTE: the scheduled link-existing scan is DISABLED - reading every coach's
     # Circle chats (Coralie has hundreds of threads) consistently times out and
     # just ties up Circle every 20 min. The real fix is the zap writing
     # private_chat_url back to the dashboard in real-time (update-by-email). The
@@ -1259,9 +1259,9 @@ async def on_startup():
             logger.info(f"[scheduler] link_existing_chats: {res.get('counts') or res.get('error')}")
         except Exception as e:
             logger.warning(f"[scheduler] link_existing_chats failed: {e}")
-    # (intentionally not scheduled — see note above)
+    # (intentionally not scheduled - see note above)
 
-    # Academy Members Mongo mirror — refresh every 15 minutes so the
+    # Academy Members Mongo mirror - refresh every 15 minutes so the
     # Student Lookup + Upcoming Interviews pages don't have to hit Monday
     # on each request. Idempotent; ~5-10s per run for a ~3.5k row board.
     async def _academy_members_mirror_sync():
@@ -1279,7 +1279,7 @@ async def on_startup():
         replace_existing=True,
     )
     # Also run once shortly after startup so the cache is populated
-    # before the next 15-min tick — coaches who open the dashboard right
+    # before the next 15-min tick - coaches who open the dashboard right
     # after a deploy still get fresh data.
     import asyncio as _asyncio
     _asyncio.create_task(_academy_members_mirror_sync())
@@ -1427,7 +1427,7 @@ async def on_startup():
     )
 
     # Private-tier video Slack alerts → #private-tiers.
-    #  • interview-imminent: fired ON video ingest (not scheduled) — see the
+    #  • interview-imminent: fired ON video ingest (not scheduled) - see the
     #    notify_if_interview_imminent hook in private_videos_store. The job
     #    below is a safety-net re-scan (catches an interview date set AFTER the
     #    video was submitted), once daily at 08:30 UK. Idempotent.
@@ -1483,7 +1483,7 @@ async def on_startup():
     # Every 30 min (was */5): each run does an uncached per-student Calendly
     # fan-out (one /scheduled_events crawl per private student). Over-allowance
     # alerts aren't time-critical, so 30 min is plenty and cuts Calendly load
-    # ~6x — same waste/rate-limit pattern that caused the Circle /comments blow-up.
+    # ~6x - same waste/rate-limit pattern that caused the Circle /comments blow-up.
     scheduler.add_job(
         _over_allowance_check,
         CronTrigger(minute="*/30", timezone=tz),
@@ -1493,7 +1493,7 @@ async def on_startup():
 
     # Gmail → Tickets sync every 15 min for every connected inbox. Skips
     # silently if GOOGLE_CLIENT_ID/SECRET aren't set (i.e. integration not
-    # yet configured) — no inboxes possible.
+    # yet configured) - no inboxes possible.
     async def _gmail_inbox_sync():
         import gmail_sync
         try:
@@ -1510,7 +1510,7 @@ async def on_startup():
         replace_existing=True,
     )
 
-    # Circle DM Bot polling — every 1 minute, for each enabled coach admin,
+    # Circle DM Bot polling - every 1 minute, for each enabled coach admin,
     # checks their DM threads via Headless API and replies / escalates.
     # Defaults to ENABLED. Preview's /app/backend/.env sets
     # CIRCLE_BOT_ENABLED=false so preview and production don't both poll the
@@ -1521,7 +1521,7 @@ async def on_startup():
     # user reliably and (b) we accidentally set CIRCLE_BOT_ENABLED=false in
     # production env vars while debugging in preview, with no way to remove
     # them after deployment. So we detect environment by inspecting the
-    # MongoDB connection string — preview's `MONGO_URL` is the local in-
+    # MongoDB connection string - preview's `MONGO_URL` is the local in-
     # container Mongo at `mongodb://localhost:27017`, while production
     # uses a managed external cluster (atlas/etc). Anything that's not
     # `localhost` is treated as production.
@@ -1529,7 +1529,7 @@ async def on_startup():
     _is_preview = "localhost" in _mongo_url or "127.0.0.1" in _mongo_url
     # HARD-DISABLED 2026-06-10 at Tessa's request: the Circle DM auto-responder
     # must NOT send AI replies from her inbox or any coach's. We force the
-    # polling job off here — independent of the DB `enabled` toggle — so no
+    # polling job off here - independent of the DB `enabled` toggle - so no
     # reply can be posted as anyone. Re-enabling is now a deliberate act:
     # set CIRCLE_BOT_ENABLED=true on Render (and only after it's pointed at the
     # right coach inboxes with an automated-reply disclosure).
@@ -1541,14 +1541,14 @@ async def on_startup():
         import circle_dm_poll
         import asyncio as _asyncio
         try:
-            # Hard timeout — APScheduler's `max_instances=1` means a hung
+            # Hard timeout - APScheduler's `max_instances=1` means a hung
             # poll silently drops every subsequent cron fire. Cap each
             # cycle at 90s so the watchdog actually has something to watch.
             res = await _asyncio.wait_for(circle_dm_poll.poll_once(db), timeout=90)
             if res.get("replied") or res.get("escalated") or res.get("errors"):
                 logger.info(f"[scheduler] circle_dm_poll: replied={res.get('replied')} escalated={res.get('escalated')} seeded={res.get('seeded')} human_takeover={res.get('human_takeover')} errors={res.get('errors')}")
         except _asyncio.TimeoutError:
-            logger.warning("[scheduler] circle_dm_poll TIMED OUT after 90s — next cron fire will pick up where this left off")
+            logger.warning("[scheduler] circle_dm_poll TIMED OUT after 90s - next cron fire will pick up where this left off")
         except Exception as e:
             logger.warning(f"[scheduler] circle_dm_poll failed: {e}")
 
@@ -1562,12 +1562,12 @@ async def on_startup():
         )
         logger.info("[scheduler] circle_dm_poll: ENABLED (CIRCLE_BOT_DISABLED is not set)")
 
-        # Watchdog — if a poll hangs (e.g. a Circle API call blocking for 10
+        # Watchdog - if a poll hangs (e.g. a Circle API call blocking for 10
         # minutes), `max_instances=1, coalesce=True` would silently drop
         # every subsequent cron fire and the bot would go dark. Every 5
         # minutes we check the persisted `last_poll_at` timestamp: if no
         # poll has completed in the last 5 minutes, we kick a fresh poll as
-        # a one-shot background task. Idempotent — the next normal cron
+        # a one-shot background task. Idempotent - the next normal cron
         # fire will resume from where this leaves off.
         async def _circle_dm_poll_watchdog():
             import circle_dm_poll
@@ -1618,7 +1618,7 @@ async def on_startup():
 
         scheduler.add_job(
             _circle_dm_triage,
-            CronTrigger(minute="*/10", timezone=tz),  # was */2 — eased Circle load to clear rate-limiting
+            CronTrigger(minute="*/10", timezone=tz),  # was */2 - eased Circle load to clear rate-limiting
             id="circle_dm_triage",
             replace_existing=True,
             max_instances=1, coalesce=True,
@@ -1627,12 +1627,12 @@ async def on_startup():
     else:
         logger.info("[scheduler] circle_dm_triage: disabled (set CIRCLE_TRIAGE_ENABLED=true)")
 
-    # Independent asyncio loop — runs OUTSIDE APScheduler so if APScheduler
+    # Independent asyncio loop - runs OUTSIDE APScheduler so if APScheduler
     # ever dies (event-loop crash, broken job store, etc.) the bot keeps
     # polling regardless. Yesterday's outage was APScheduler silently
     # dropping cron fires for 7+ hours; the watchdog above is itself an
     # APScheduler job so it died with the rest. This task is fire-and-
-    # forget — created with `asyncio.create_task` and never awaited.
+    # forget - created with `asyncio.create_task` and never awaited.
     # Each iteration: sleep 60s, then run a poll with 90s hard timeout.
     # Wrapped in `while True` with broad try/except so a single failure
     # never breaks the loop.
@@ -1653,17 +1653,17 @@ async def on_startup():
                 try:
                     await asyncio.sleep(60)
                 except Exception:
-                    # Sleep failure (event loop weirdness) — just spin.
+                    # Sleep failure (event loop weirdness) - just spin.
                     pass
         # Hold a strong reference so Python's GC can't kill the task. Without
         # this, the Task returned by create_task has no live reference and
-        # gets garbage-collected the moment on_startup exits — silently
+        # gets garbage-collected the moment on_startup exits - silently
         # killing the entire loop. The module-level list keeps it alive.
         _INDEPENDENT_POLLER_TASKS.append(
             asyncio.create_task(_circle_dm_poll_independent_loop())
         )
 
-    # Interview-eve check-in DMs — 19:00 UK every weekday.
+    # Interview-eve check-in DMs - 19:00 UK every weekday.
     # Sends a Coralie DM to every student whose interview is tomorrow,
     # asking for a 1-10 support score. Low scores → Slack alert.
     # Wrapped in run_audited so each run lands in db.scheduler_runs (the
@@ -1696,7 +1696,7 @@ async def on_startup():
 
     # Pre-warm Student Lookup cache for every private-tier student at 05:30 UK.
     # Coaches open these students 10x more often than Academy students (private
-    # coaching sessions, weekly 1:1s) — warming the cache means the first open
+    # coaching sessions, weekly 1:1s) - warming the cache means the first open
     # of the day is instant instead of a 3-8s parallel fan-out. Academy
     # students fall back to the on-demand 30-min cache.
     async def _prewarm_private_lookups():
@@ -1719,7 +1719,7 @@ async def on_startup():
         f"[scheduler] Jobs: weekly_sync (Mon 06:00), daily_circle_refresh (05:00), "
         f"daily_cohort_refresh (05:05), daily_at_risk_refresh (05:15), daily_tally_refresh (05:20), "
         f"daily_phase_breakdown_refresh (05:25), daily_sla_digest (08:00), "
-        f"spotlight_reminders (every 5 min), daily_leaderboard_snapshot (02:15) — {tz}"
+        f"spotlight_reminders (every 5 min), daily_leaderboard_snapshot (02:15) - {tz}"
     )
 
     # Kick off Circle member cache refresh in background (takes ~30-40s for 3.9K members).
@@ -1808,7 +1808,7 @@ async def on_startup():
     _asyncio.create_task(_warm_active_launch_data())
 
     # Initial Tally → Tickets backfill (fire-and-forget). Safe to re-run at
-    # any time — uses Tally submission id as the dedup key.
+    # any time - uses Tally submission id as the dedup key.
     async def _initial_tickets_backfill():
         try:
             await _asyncio.sleep(45)
@@ -1839,7 +1839,7 @@ async def root():
 async def admin_academy_mirror_sync(admin: dict = Depends(require_admin)):
     """Manually trigger a full sync of the Academy Members Mongo mirror
     from Monday. Returns the sync summary. Normally runs every 15 min via
-    the scheduler — use this when you've just edited rows on Monday and
+    the scheduler - use this when you've just edited rows on Monday and
     want the dashboard to see them immediately."""
     import academy_members_mirror
     return await academy_members_mirror.full_sync(db)
@@ -1862,7 +1862,7 @@ async def admin_boost_and_go_audit(
 ):
     """Boost & Go reconciliation: students who bought B&G (per Stripe) but
     aren't flagged B&G in the dashboard. The Stripe scan runs in the BACKGROUND
-    (it can be slow) and the result is cached — so:
+    (it can be slow) and the result is cached - so:
       - first call (or ?refresh=true): kicks off a scan, returns status.
       - subsequent calls: return the cached result instantly.
     Read-only. Check `matched_charge_descriptions` to confirm the keyword is
@@ -1871,12 +1871,12 @@ async def admin_boost_and_go_audit(
     import bg_audit
     if refresh:
         _asyncio.create_task(bg_audit.run_audit(keyword))
-        return {"status": "refresh started — re-open this URL (no ?refresh) in ~30-60s",
+        return {"status": "refresh started - re-open this URL (no ?refresh) in ~30-60s",
                 "previous": await bg_audit.get_cached()}
     cached = await bg_audit.get_cached()
     if cached is None:
         _asyncio.create_task(bg_audit.run_audit(keyword))
-        return {"status": "first run started — re-open this URL in ~30-60s"}
+        return {"status": "first run started - re-open this URL in ~30-60s"}
     return cached
 
 
@@ -1886,7 +1886,7 @@ async def admin_boost_and_go_backfill(
     admin: dict = Depends(require_admin),
 ):
     """Set boost_and_go (B&G / B&G Plus) on the unflagged buyers from the latest
-    audit, pinned so the Monday sync won't revert it. DRY-RUN by default —
+    audit, pinned so the Monday sync won't revert it. DRY-RUN by default -
     shows exactly what it would change; pass ?apply=true to commit."""
     import bg_audit
     return await bg_audit.apply_backfill(dry_run=not apply)
@@ -1906,7 +1906,7 @@ async def admin_upgrade_bonus_audit(
     bonus 1:1 call. The Stripe scan runs in the BACKGROUND and is cached:
       - first call (or ?refresh=true): kicks off a scan, returns status.
       - subsequent calls: return the cached result instantly.
-    Read-only — check `matched_charge_descriptions` + `stripe_upgrade_products`
+    Read-only - check `matched_charge_descriptions` + `stripe_upgrade_products`
     to confirm the keyword is hitting the real upgrade offer before applying."""
     import asyncio as _asyncio
     import upgrade_bonus
@@ -1914,12 +1914,12 @@ async def admin_upgrade_bonus_audit(
           "keyword": keyword, "cohort": cohort}
     if refresh:
         _asyncio.create_task(upgrade_bonus.run_audit(**kw))
-        return {"status": "refresh started — re-open this URL (no ?refresh) in ~30-60s",
+        return {"status": "refresh started - re-open this URL (no ?refresh) in ~30-60s",
                 "previous": await upgrade_bonus.get_cached()}
     cached = await upgrade_bonus.get_cached()
     if cached is None:
         _asyncio.create_task(upgrade_bonus.run_audit(**kw))
-        return {"status": "first run started — re-open this URL in ~30-60s"}
+        return {"status": "first run started - re-open this URL in ~30-60s"}
     return cached
 
 
@@ -1928,10 +1928,10 @@ async def admin_upgrade_bonus_apply(
     apply: bool = False,
     admin: dict = Depends(require_admin),
 ):
-    """Persist the latest audit's grants into upgrade_bonus_grants (idempotent —
+    """Persist the latest audit's grants into upgrade_bonus_grants (idempotent -
     keyed by Stripe charge id; removes grants whose charge no longer qualifies).
     The over-allowance check then adds these to each student's bonus allowance.
-    DRY-RUN by default — pass ?apply=true to commit."""
+    DRY-RUN by default - pass ?apply=true to commit."""
     import upgrade_bonus
     return await upgrade_bonus.apply_grants(dry_run=not apply)
 
@@ -1947,7 +1947,7 @@ async def admin_circle_test_add_to_space(
     """Diagnostic: try the likely Circle 'add member to space' request variants
     against a REAL space + member and report each response, so we can see which
     one Circle accepts (the grant's add_member_to_space currently gets a generic
-    "User not added to space"). NB this is NOT dry-run — a variant that works
+    "User not added to space"). NB this is NOT dry-run - a variant that works
     actually adds the member (which is the goal). Read the `results` and tell me
     which variant returned 2xx; I'll patch add_member_to_space to match.
 
@@ -1962,7 +1962,7 @@ async def admin_circle_test_add_to_space(
     email = (email or "").strip().lower()
     token_h = {"Authorization": f"Token {token}", "Content-Type": "application/json"}
     bearer_h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    # Admin v1 token (separate from the v2 token) — the v1 API hosts the
+    # Admin v1 token (separate from the v2 token) - the v1 API hosts the
     # single-space `space_members` add. Set CIRCLE_ADMIN_V1_TOKEN on Render.
     v1_token = (os.environ.get("CIRCLE_ADMIN_V1_TOKEN") or "").strip()
     v1_h = {"Authorization": f"Token {v1_token}", "Content-Type": "application/json"} if v1_token else None
@@ -1995,7 +1995,7 @@ async def admin_circle_test_add_to_space(
     # Bearer auth variant (in case v2 wants Bearer not Token)
     await attempt("v2 space_members {space_id,email} BEARER", "POST", f"{V2}/space_members", bearer_h,
                   json={"space_id": space_id, "email": email})
-    # --- v1 endpoint with the v2 token (expected to fail auth — kept for contrast) ---
+    # --- v1 endpoint with the v2 token (expected to fail auth - kept for contrast) ---
     await attempt("v1 space_members {space_id,email} [v2 token]", "POST", f"{V1}/space_members", token_h,
                   json={"space_id": space_id, "email": email})
     # --- v1 endpoint with the ADMIN V1 token (the real candidate) ---
@@ -2032,7 +2032,7 @@ async def admin_circle_test_add_to_space(
 @api.get("/admin/google-calendar/config")
 async def admin_google_calendar_config(admin: dict = Depends(require_admin)):
     """Surface what's needed to wire the AYCI Interviews calendar: the
-    service-account email to share the calendar WITH (not secret — only the
+    service-account email to share the calendar WITH (not secret - only the
     private key in the file is), and whether the calendar id env + share are in
     place. `configured` is true once both the calendar id and credentials exist."""
     import json as _json
@@ -2067,7 +2067,7 @@ async def admin_google_calendar_selftest(admin: dict = Depends(require_admin)):
 
 @api.get("/admin/google-calendar/sync-upcoming")
 async def admin_google_calendar_sync_upcoming(days: int = 180, admin: dict = Depends(require_admin)):
-    """Ensure a calendar event for EVERY student with an upcoming interview_date —
+    """Ensure a calendar event for EVERY student with an upcoming interview_date -
     not just those a Tally reconcile changed. Fixes calendar drift when a date
     reached the dashboard via the Monday sync. Runs in the background (idempotent,
     matches events by location ID); re-check the calendar in ~1-2 min. Pass
@@ -2078,7 +2078,7 @@ async def admin_google_calendar_sync_upcoming(days: int = 180, admin: dict = Dep
     if not google_calendar.is_configured():
         return {"ok": False, "configured": False, "detail": "Google Calendar not configured"}
     _asyncio.create_task(interview_date_reconcile.sync_upcoming_calendar(db, days_ahead=days))
-    return {"ok": True, "action": f"syncing upcoming interviews (next {days} days) to the calendar in the background — re-check in ~1-2 min"}
+    return {"ok": True, "action": f"syncing upcoming interviews (next {days} days) to the calendar in the background - re-check in ~1-2 min"}
 
 
 @api.post("/admin/interview-date/reconcile")
@@ -2124,7 +2124,7 @@ async def diag_mongo():
     find_one timings so we can diagnose whether Mongo (not the per-platform
     fan-out) is the bottleneck for slow / hanging endpoints.
 
-    No PII is returned — only existence flags + latency."""
+    No PII is returned - only existence flags + latency."""
     import asyncio as _asyncio
     import time as _time
     results: dict = {}
@@ -2154,7 +2154,7 @@ async def diag_mongo():
 @api.get("/diag/lookup-fanout")
 async def diag_lookup_fanout(email: str):
     """No-auth wrapper around the Student Lookup fan-out. Used purely for
-    debugging when authed /students/lookup hangs — lets us hit the same
+    debugging when authed /students/lookup hangs - lets us hit the same
     code path directly to see if the issue is in the fan-out itself or
     something else (auth, framework, network)."""
     import asyncio as _asyncio
@@ -2187,7 +2187,7 @@ async def diag_lookup_fanout(email: str):
 # --- Shortlink redirect -------------------------------------------------
 # Tally video URLs in outbound coach messages get shortened to /v/{code}.
 # This is the redirect that turns those codes back into the original target.
-# Mounted on `app` (not `api`) so the resulting URL is /v/abc123 — short.
+# Mounted on `app` (not `api`) so the resulting URL is /v/abc123 - short.
 from fastapi.responses import RedirectResponse  # noqa: E402
 
 
@@ -2246,7 +2246,7 @@ _cors_origins_raw = os.environ.get("CORS_ORIGINS", "").strip()
 _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 if not _cors_origins:
     logger.warning(
-        "[cors] CORS_ORIGINS env var is empty — no cross-origin requests will be allowed."
+        "[cors] CORS_ORIGINS env var is empty - no cross-origin requests will be allowed."
     )
 
 app.add_middleware(

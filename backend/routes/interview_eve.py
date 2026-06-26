@@ -1,4 +1,4 @@
-"""Interview-Eve DM routes — admin view of sent check-ins + manual trigger."""
+"""Interview-Eve DM routes - admin view of sent check-ins + manual trigger."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,7 @@ async def run_now(admin: dict = Depends(require_admin)):
 
 @router.get("/summary")
 async def summary(user: dict = Depends(require_board("coach_activity"))):
-    """Aggregated view of the last 7 days of interview-eve DMs — for the
+    """Aggregated view of the last 7 days of interview-eve DMs - for the
     Coach Activity widget. Returns counts (sent / replied / low / pending),
     averages, and the rows for today + tomorrow's interviews, split by
     tier so private-tier students can be tracked separately."""
@@ -58,7 +58,7 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
             and (r.get("interview_date") or "9999") < today
         ]
         avg = round(sum(r["score"] for r in scored) / len(scored), 1) if scored else None
-        # Reply rate over 'closed' cases only — still-pending future
+        # Reply rate over 'closed' cases only - still-pending future
         # interviews could still reply, so excluding them from the
         # denominator avoids artificially deflating the rate.
         closed = len(scored) + len(no_reply_past)
@@ -76,7 +76,7 @@ async def summary(user: dict = Depends(require_board("coach_activity"))):
     private_rows = [r for r in rows if r.get("is_private_tier")]
     other_rows = [r for r in rows if not r.get("is_private_tier")]
 
-    # Last audited run of the scheduler job — lets the widget show
+    # Last audited run of the scheduler job - lets the widget show
     # "did the 19:00 cron fire last night?" without log access.
     last_run_doc = await db.scheduler_runs.find_one(
         {"job_id": "interview_eve_dms"},
@@ -135,7 +135,7 @@ async def preview(admin: dict = Depends(require_admin)):
 @router.post("/backfill-scores")
 async def backfill_scores(user: dict = Depends(require_board("coach_activity")), days: int = 3):
     """Retroactively recover any interview-eve scores that were missed by
-    the bot — typically because the polling bot's lookback guard fired on
+    the bot - typically because the polling bot's lookback guard fired on
     a coach's manual personal message and short-circuited before the
     score-capture step. (Fixed structurally on 2026-05-15 by moving score
     capture above the lookback guard; this endpoint cleans up records
@@ -179,7 +179,7 @@ async def backfill_scores(user: dict = Depends(require_board("coach_activity")),
         # Sort oldest -> newest, find the FIRST student message that parses
         # as a 1-10 score. (We can't just grab the latest student message:
         # students often reply with the score first, then the coach sends a
-        # personal note, then the student sends a "thanks!" — which would
+        # personal note, then the student sends a "thanks!" - which would
         # be the latest student message but isn't the score.)
         messages.sort(key=lambda m: m.get("created_at") or "")
         sent_at_iso = rec.get("sent_at") or ""
@@ -212,7 +212,7 @@ async def backfill_scores(user: dict = Depends(require_board("coach_activity")),
             # Fall back to "latest student message" for the still_pending
             # report so the admin can see what the student actually said.
             # Also surface ALL student messages after the eve-DM send time
-            # — if the score is in there but `parse_score()` rejected it
+            # - if the score is in there but `parse_score()` rejected it
             # (e.g. an unusual rating keyword), the admin can spot it.
             student_msgs_after_send: list[str] = []
             for m in messages:
@@ -248,7 +248,7 @@ async def backfill_scores(user: dict = Depends(require_board("coach_activity")),
         # Persist + fire Slack alert if low.
         scored = await interview_eve_dm.maybe_record_score(db, thread_uuid, best_msg)
         if scored is None:
-            # Could be a race — already recorded. Re-check.
+            # Could be a race - already recorded. Re-check.
             fresh = await db.interview_eve_dms.find_one({"id": rec["id"]}, {"_id": 0, "score": 1})
             recovered.append({
                 "name": rec.get("student_name"),
@@ -283,7 +283,7 @@ async def set_score_manual(
 ):
     """Manually set the support score on an eve-DM record. Use this when
     backfill couldn't parse the student's reply (e.g. "very supported,
-    thanks!" — no digit) but the coach has read the conversation and
+    thanks!" - no digit) but the coach has read the conversation and
     knows the right number. Fires the low-score Slack alert if ≤ threshold.
     Audit-stamps `score_set_manually_by` so we can tell hand-entered
     scores apart from auto-captured ones.

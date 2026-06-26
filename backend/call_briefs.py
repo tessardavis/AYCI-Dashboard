@@ -1,9 +1,9 @@
 """3-line AI briefing for each Today's Calls row.
 
 Goal: 3 short lines a coach can read in 5 seconds before the call.
-  • Line 1 — student context (tier, speciality, hospital, days-to-interview)
-  • Line 2 — most recent ask / focus area
-  • Line 3 — last coach reply or risk signal
+  • Line 1 - student context (tier, speciality, hospital, days-to-interview)
+  • Line 2 - most recent ask / focus area
+  • Line 3 - last coach reply or risk signal
 
 Cached in `call_briefs` keyed by `(email, UK-date)` so we don't re-charge
 the LLM every time the widget mounts. Cache invalidates at midnight UK.
@@ -28,7 +28,7 @@ def _uk_date_str() -> str:
 
 async def get_brief(db, email: str, name: str) -> dict:
     """Return {lines: [str, str, str], cached: bool}. Returns empty list of
-    lines on any failure — caller renders the row plainly in that case."""
+    lines on any failure - caller renders the row plainly in that case."""
     email = (email or "").strip().lower()
     if not email:
         return {"lines": [], "cached": False}
@@ -39,7 +39,7 @@ async def get_brief(db, email: str, name: str) -> dict:
     if cached and cached.get("lines"):
         return {"lines": cached["lines"], "cached": True}
 
-    # Pull context — Drive summary + Monday/student data
+    # Pull context - Drive summary + Monday/student data
     context = await _build_context(db, email, name)
     if not context:
         return {"lines": [], "cached": False}
@@ -140,7 +140,7 @@ async def _llm_brief(ctx: dict) -> list[str]:
         "Each line MUST be under 140 characters. "
         "Line 1: who the student is + speciality + interview date or days-to-go. "
         "Line 2: their current focus / most recent question or ask. "
-        "Line 3: one signal worth knowing — last coach interaction, recurring "
+        "Line 3: one signal worth knowing - last coach interaction, recurring "
         "weakness, or progress note. Use the source material verbatim where "
         "possible; do not invent facts. If a field is missing, skip it (don't say "
         "'unknown'). Output the 3 lines separated by single newlines and nothing else."

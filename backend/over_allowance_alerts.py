@@ -7,7 +7,7 @@ the total slots tracked on their Monday Academy Members row (calls +
 mocks + bonus columns combined).
 
 This is a real-world issue because Monday allowance is updated manually
-by the team — students can book ahead of the team marking the slot.
+by the team - students can book ahead of the team marking the slot.
 
 Detection flow (run by scheduler every 5 min):
   1. Pull all Private Plus / VIP rows from Monday (no interview-date filter).
@@ -65,8 +65,8 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
     date. Returns name, email, tier, monday_url, and totals from the
     call/mock/bonus columns.
 
-    `extra_bonus_calls` — a dashboard-native numeric override on the student
-    record (academy_members mirror) — is added to the bonus total. This lets
+    `extra_bonus_calls` - a dashboard-native numeric override on the student
+    record (academy_members mirror) - is added to the bonus total. This lets
     the team record a student who earned more than one 1:1 bonus call (e.g. a
     signup bonus *and* an upgrade bonus during a launch) without needing a
     second Monday status column, so over-allowance stops false-flagging them.
@@ -107,8 +107,8 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
 
     # Dashboard-native bonus-call overrides, keyed by monday item id (== the
     # academy_members `_id`). Two sources, both added to the bonus total:
-    #   1. extra_bonus_calls — MANUAL override (the "+1 bonus call" button).
-    #   2. upgrade_bonus_grants — AUTO-detected upgrade-offer purchases on Stripe
+    #   1. extra_bonus_calls - MANUAL override (the "+1 bonus call" button).
+    #   2. upgrade_bonus_grants - AUTO-detected upgrade-offer purchases on Stripe
     #      during a launch window (see upgrade_bonus.py). One grant = one bonus.
     overrides: dict[str, int] = {}
     auto_grants: dict[str, int] = {}
@@ -149,7 +149,7 @@ async def _fetch_all_private_students(db=None) -> list[dict]:
         bonus_total = bonus["total"] + added_bonus
         total = calls["total"] + mocks["total"] + bonus_total
         if total <= 0:
-            continue  # no per-student allowance configured — skip
+            continue  # no per-student allowance configured - skip
         out.append({
             "monday_id": it.get("id"),
             "monday_url": it.get("url"),
@@ -231,7 +231,7 @@ async def _count_calendly_alltime(emails: list[str]) -> dict[str, int]:
 async def find_over_allowance_students(db) -> dict:
     """Returns {"computed_at", "students": [...]} for students whose
     Calendly all-time private-call count exceeds Monday's total allowance.
-    Excludes (email, over_by) pairs that the team has acknowledged — the row
+    Excludes (email, over_by) pairs that the team has acknowledged - the row
     re-appears if `over_by` grows further (e.g. +1 → +2 over)."""
     students = await _fetch_all_private_students(db)
     emails = [s["email"] for s in students if s.get("email")]
@@ -373,9 +373,9 @@ async def notify_over_allowance_breaches(db, force: bool = False) -> dict:
             f"{s['monday_calls_total']} calls + {s['monday_mocks_total']} mock + {bonus_str}"
         )
         text = (
-            f":rotating_light: *Over-allowance booking* — {s['tier']}\n"
+            f":rotating_light: *Over-allowance booking* - {s['tier']}\n"
             f"*{s['name']}* ({s['email']})\n"
-            f"Booked *{s['calendly_calls_used']}* Calendly calls — allowance is *{s['monday_total_allowance']}* ({breakdown})\n"
+            f"Booked *{s['calendly_calls_used']}* Calendly calls - allowance is *{s['monday_total_allowance']}* ({breakdown})\n"
             f"Over by *{s['over_by']}*\n"
             f"{link_line}"
         )

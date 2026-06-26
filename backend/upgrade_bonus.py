@@ -2,19 +2,19 @@
 Retrospective upgrade-bonus detection.
 
 During a launch, a student who BUYS an upgrade offer on Kajabi earns a bonus
-30-min 1:1 call (on top of any signup bonus). There's no Kajabi API — Kajabi
-charges through Stripe — so Stripe is the purchase source of truth, exactly
+30-min 1:1 call (on top of any signup bonus). There's no Kajabi API - Kajabi
+charges through Stripe - so Stripe is the purchase source of truth, exactly
 like the Boost & Go audit (see bg_audit.py).
 
 This module scans Stripe charges inside a launch window, matches the upgrade
-offer by keyword (description / statement descriptor / metadata — Kajabi puts
+offer by keyword (description / statement descriptor / metadata - Kajabi puts
 the offer name there), and records ONE grant per qualifying charge in
 `upgrade_bonus_grants` (keyed by the Stripe charge id, so re-running never
 double-grants). The over-allowance check (over_allowance_alerts.py) counts a
-student's grants and folds them into their bonus allowance — so a legitimate
+student's grants and folds them into their bonus allowance - so a legitimate
 upgrade purchase stops the student being false-flagged as over-allowance.
 
-Deliberately Stripe + dashboard only — no Monday column (we're retiring that
+Deliberately Stripe + dashboard only - no Monday column (we're retiring that
 board). Match is keyword-based and the report echoes the distinct matched
 descriptions + Stripe products, so we can CONFIRM the keyword is hitting the
 real upgrade offer before applying (dry-run by default).
@@ -84,7 +84,7 @@ async def get_cached() -> Optional[dict]:
 
 
 async def _stripe_products(c: httpx.AsyncClient, keyword: str) -> list:
-    """Active Stripe products whose name contains the keyword — transparency,
+    """Active Stripe products whose name contains the keyword - transparency,
     so we can eyeball which 'upgrade' products exist."""
     try:
         products = await _stripe_list_all(c, "/products", {"active": "true"})
@@ -123,7 +123,7 @@ async def run_audit(
     cohort: str = DEFAULT_COHORT,
 ) -> dict:
     """Scan Stripe for upgrade-offer purchases inside the launch window and
-    build the proposed grant list. Read-only — stores the result for the GET
+    build the proposed grant list. Read-only - stores the result for the GET
     to read; `apply_grants` does the writing."""
     keyword = (keyword or DEFAULT_KEYWORD).strip().lower()
     start = _parse_day(window_start, end=False)
@@ -167,7 +167,7 @@ async def run_audit(
             continue
         dt = _charge_dt(ch)
         if not dt or dt < start or dt > end:
-            continue  # outside the launch window (defensive — Stripe already filtered)
+            continue  # outside the launch window (defensive - Stripe already filtered)
         if ch.get("refunded"):
             refunded_excluded += 1
             continue
@@ -273,7 +273,7 @@ async def apply_grants(dry_run: bool = True) -> dict:
         "applied": 0 if dry_run else len(grants),
         "removed": 0 if dry_run else len(stale),
         "grants": grants,
-        "note": "buyer_not_in_dashboard cases can't be granted (no student row) — add their alt email to the matching record, then re-run.",
+        "note": "buyer_not_in_dashboard cases can't be granted (no student row) - add their alt email to the matching record, then re-run.",
     }
 
 

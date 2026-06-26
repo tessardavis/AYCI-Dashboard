@@ -7,8 +7,8 @@ inbound message into a Ticket (or appends to an existing ticket if it's a
 reply on an existing thread).
 
 Mongo collections:
-- `gmail_inboxes`         — one doc per connected inbox (email, tokens, last sync)
-- `gmail_oauth_states`    — short-lived OAuth state tokens (10 min TTL)
+- `gmail_inboxes`         - one doc per connected inbox (email, tokens, last sync)
+- `gmail_oauth_states`    - short-lived OAuth state tokens (10 min TTL)
 
 Env required:
 - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
@@ -182,7 +182,7 @@ async def start_oauth(
     )
     await db.gmail_oauth_states.insert_one({
         "state": state,
-        "code_verifier": flow.code_verifier,  # PKCE — required to redeem the code
+        "code_verifier": flow.code_verifier,  # PKCE - required to redeem the code
         "return_to": return_to,
         "user_id": user_id,
         "ingest_inbound": bool(ingest_inbound),
@@ -202,12 +202,12 @@ async def complete_oauth(db, code: str, state: str) -> dict:
         created = created.replace(tzinfo=timezone.utc)
     if created and created < cutoff:
         await db.gmail_oauth_states.delete_one({"state": state})
-        raise ValueError("OAuth state expired — try again")
+        raise ValueError("OAuth state expired - try again")
 
     import warnings
 
     flow = _flow()
-    # Restore the PKCE verifier from the start step — Google requires it to
+    # Restore the PKCE verifier from the start step - Google requires it to
     # exchange the auth code we just received for tokens.
     code_verifier = state_doc.get("code_verifier")
     if code_verifier:
@@ -288,7 +288,7 @@ async def remove_inbox(db, inbox_id: str, *, user_id: Optional[str] = None) -> b
 
 
 async def get_inbox_for_user(db, user_id: str) -> Optional[dict]:
-    """Return the first connected inbox for this user — used as the default
+    """Return the first connected inbox for this user - used as the default
     'From' when they reply to a ticket."""
     return await db.gmail_inboxes.find_one(
         {"user_id": user_id},
@@ -374,7 +374,7 @@ def _extract_body(payload: dict) -> tuple[str, list[dict]]:
             html_fallback = _decode_b64url(data)
 
     if not plain and html_fallback:
-        # Strip tags very loosely — good enough for ticket previews
+        # Strip tags very loosely - good enough for ticket previews
         import re
         plain = re.sub(r"<[^>]+>", " ", html_fallback)
         plain = re.sub(r"\s+", " ", plain).strip()
@@ -490,7 +490,7 @@ async def sync_inbox(db, inbox: dict) -> dict:
         # Label-only: pull threads tagged with any team-name label.
         q = f"newer_than:{lookback_days}d ({' OR '.join(label_clauses)})"
     else:
-        # Nothing to do — no inbox ingestion AND no team labels exist yet.
+        # Nothing to do - no inbox ingestion AND no team labels exist yet.
         await db.gmail_inboxes.update_one(
             {"id": inbox["id"]},
             {"$set": {"last_sync_at": datetime.now(timezone.utc), "last_sync_status": "ok_label_only_no_labels"}},
@@ -619,7 +619,7 @@ async def _handle_message(
     sender_email = (sender_email or "").lower().strip()
     sender_name = (sender_name or "").strip() or (sender_email.split("@")[0] if sender_email else "Unknown")
 
-    # Match an existing ticket on the same Gmail thread — but only if it's
+    # Match an existing ticket on the same Gmail thread - but only if it's
     # in a reopenable status (open / in_progress / waiting / resolved). A
     # reply on a `closed` ticket spawns a fresh one.
     REOPENABLE = ["open", "in_progress", "waiting", "resolved"]
@@ -719,7 +719,7 @@ async def _handle_message(
 async def sync_all(db) -> dict:
     """Iterate every connected inbox and sync.
 
-    All inboxes are polled — `ingest_inbound` only decides whether to also
+    All inboxes are polled - `ingest_inbound` only decides whether to also
     pull every inbox message, or just team-labelled threads (label-only
     mode). See `sync_inbox` for the query construction.
     """
@@ -756,7 +756,7 @@ async def send_reply(
 
     Inbox preference (first non-None wins):
       1. `from_inbox_email` (explicit pick)
-      2. `ticket.gmail_inbox_email` (original inbox that received it — email source)
+      2. `ticket.gmail_inbox_email` (original inbox that received it - email source)
       3. the inbox owned by `sender_user_id` (the current user's personal Gmail)
       4. the first connected inbox globally (fallback)
 
@@ -780,7 +780,7 @@ async def send_reply(
             {}, {"_id": 0, "email": 1}, sort=[("connected_at", 1)],
         )
         if not first:
-            raise ValueError("No Gmail inbox connected — connect one first")
+            raise ValueError("No Gmail inbox connected - connect one first")
         target_inbox_email = first["email"]
 
     inbox = await db.gmail_inboxes.find_one({"email": target_inbox_email})
@@ -860,7 +860,7 @@ async def send_reply(
     return {"ok": True, "gmail_message_id": sent.get("id"), "from_inbox": target_inbox_email}
 
 
-def _header(headers: list[dict], name: str) -> str:  # noqa: F811 — re-exported
+def _header(headers: list[dict], name: str) -> str:  # noqa: F811 - re-exported
     n = name.lower()
     for h in headers or []:
         if (h.get("name") or "").lower() == n:

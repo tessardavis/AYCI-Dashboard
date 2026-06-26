@@ -220,7 +220,7 @@ def test_set_active_quarter_non_admin_blocked(arub):
 
 
 def test_archived_quarter_blocks_non_admin_edit(admin, arub):
-    # 1. Set active to a fake quarter ('Q99 9999' — no rocks there)
+    # 1. Set active to a fake quarter ('Q99 9999' - no rocks there)
     admin.put(
         f"{BASE_URL}/api/rocks/active-quarter",
         json={"quarter": "Q99 9999"},

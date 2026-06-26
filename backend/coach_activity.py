@@ -9,10 +9,10 @@ coaching team can see, at a glance:
   - How many of those each coach has replied to (Circle comment by a coach).
   - Which posts have NO coach reply after 48 h (escalation flag).
   - Students posting more than 3 videos in a calendar week (rate-limit flag).
-  - Private-tier video submissions on Monday board 5083952249 — total
+  - Private-tier video submissions on Monday board 5083952249 - total
     submitted vs total each coach has been assigned to reply to.
 
-Caching: 30-minute Mongo SWR cache (per `coach_activity:*` key) — Circle
+Caching: 30-minute Mongo SWR cache (per `coach_activity:*` key) - Circle
 post + comment fetches are slow (a couple of seconds for a few dozen posts),
 and the data is fine to be a few minutes stale.
 """
@@ -36,19 +36,19 @@ logger = logging.getLogger(__name__)
 # `recorded-answer-review-apr-26` = the dedicated space for this cohort's
 # recorded-answer practice. Earlier cohorts had separate spaces; the
 # previous code accidentally pointed at the legacy March/April space
-# (2513456) — corrected 2026-04-29 after team confirmed the active space.
+# (2513456) - corrected 2026-04-29 after team confirmed the active space.
 RECORDED_ANSWER_SPACE_ID = 2529508           # /c/recorded-answer-review-apr-26/
 INTERVIEW_SUPPORT_SPACE_ID = 2529509         # /c/specific-interview-support-apr-26/
 PRIVATE_VIDEOS_BOARD_ID = 5083952249         # AYCI - Private video responses
 
 # Day 1 cut-offs (cohort April 26)
-RECORDED_ANSWERS_START = date(2026, 4, 4)   # Mon 4 Apr — recorded answer review
-INTERVIEW_SUPPORT_START = date(2026, 4, 23) # Thu 23 Apr — interview support
+RECORDED_ANSWERS_START = date(2026, 4, 4)   # Mon 4 Apr - recorded answer review
+INTERVIEW_SUPPORT_START = date(2026, 4, 23) # Thu 23 Apr - interview support
 
 # Past cohorts you can flick back to on the Coach Activity page. The CURRENT
 # cohort always uses the live Settings → Coach Spaces config; these are
 # historical cohorts (their spaces are fixed). Add a cohort with its two Circle
-# space ids + Day-1 dates — found via the Circle spaces list
+# space ids + Day-1 dates - found via the Circle spaces list
 # (recorded-answer-review-* / specific-interview-support-*).
 COHORT_COACH_SPACES: dict = {
     "April 26": {
@@ -59,7 +59,7 @@ COHORT_COACH_SPACES: dict = {
     },
 }
 
-# Coach roster — `(canonical_name, [emails], [name_aliases_or_partial_matches])`.
+# Coach roster - `(canonical_name, [emails], [name_aliases_or_partial_matches])`.
 # Aliases are useful when Circle stores a coach under their full real name (e.g.
 # "Anoopkishore Chidambaram") but the team refers to them differently. Match is
 # attempted against email first, then exact lowercase, then alias contains, then
@@ -110,7 +110,7 @@ def _coach_canonical(name: str | None, email: str | None = None) -> str | None:
     for alias, canon in _ALIAS_TO_COACH:
         if alias in n:
             return canon
-    # Fuzzy fall-through — last-name token must match exactly to avoid pulling
+    # Fuzzy fall-through - last-name token must match exactly to avoid pulling
     # unrelated people with similar first names.
     name_tokens = n.split()
     for canon in COACHES:
@@ -152,7 +152,7 @@ async def _circle_list_posts_in_space(client: httpx.AsyncClient, space_id: int) 
 
 
 _RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
-_MAX_RETRY_ATTEMPTS = 6   # was 3 — Circle's /comments API was flakier than expected,
+_MAX_RETRY_ATTEMPTS = 6   # was 3 - Circle's /comments API was flakier than expected,
                           # transient 5xx/429 was leaving ~13% of posts unanswered
                           # in the dashboard's per-coach reply count
 
@@ -162,7 +162,7 @@ def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
     Sequence: 0.5, 1.0, 2.0, 4.0, 8.0, 12.0 seconds, each with up to 25%
     random jitter so concurrent retries don't sync up and dogpile Circle.
     If the response has a Retry-After header, honour that (clamped to the
-    same upper bound) — Circle uses this for 429s."""
+    same upper bound) - Circle uses this for 429s."""
     base = min(0.5 * (2 ** attempt), 12.0)
     if response is not None:
         ra = response.headers.get("retry-after")
@@ -202,7 +202,7 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
                     )
                     await asyncio.sleep(_retry_delay(attempt, r))
                     continue
-                # 404 = post deleted/inaccessible — return what we've got
+                # 404 = post deleted/inaccessible - return what we've got
                 # (an empty list on page 1). Genuine, not a flag-worthy event.
                 if r.status_code == 404:
                     return out
@@ -218,7 +218,7 @@ async def _circle_list_comments_for_post(client: httpx.AsyncClient, post_id: int
                 await asyncio.sleep(_retry_delay(attempt))
                 continue
         else:
-            # All retries failed with transient errors — bubble up so
+            # All retries failed with transient errors - bubble up so
             # analyse_circle_space marks the post fetch_failed rather than
             # silently treating it as having zero comments.
             logger.warning(
@@ -319,14 +319,14 @@ async def analyse_circle_space(
                 comments_by_post[p["id"]] = cs
                 # Cross-check against the post listing's comments_count: if
                 # Circle says the post has N>0 comments but our fetch came
-                # back empty, treat the same as a 5xx — exclude rather than
+                # back empty, treat the same as a 5xx - exclude rather than
                 # falsely flag as unanswered.
                 expected = int(p.get("comments_count") or 0)
                 if expected > 0 and not cs:
                     logger.warning(
                         f"[coach-activity] post {p['id']} ({p.get('name')!r}) "
                         f"reports comments_count={expected} but /comments returned "
-                        f"0 records — marking fetch_failed"
+                        f"0 records - marking fetch_failed"
                     )
                     fetch_failed_post_ids.add(p["id"])
             except Exception as e:
@@ -376,7 +376,7 @@ async def analyse_circle_space(
     per_coach.sort(key=lambda x: x["replies"], reverse=True)
 
     # Unanswered (> NO_REPLY_SLA_HOURS, no coach reply). Posts whose comment
-    # fetch failed are EXCLUDED — a transient 5xx/429/empty-response from
+    # fetch failed are EXCLUDED - a transient 5xx/429/empty-response from
     # Circle shouldn't surface as a false-positive SLA breach. They'll
     # re-evaluate on the next cache refresh.
     unanswered: list[dict] = []
@@ -437,7 +437,7 @@ async def analyse_circle_space(
     rate_limited.sort(key=lambda x: (x["count"], x["week_start"]), reverse=True)
 
     # Apply user-driven dismissals so cards the team has marked "not needed"
-    # disappear from the board (and from Slack pings — same dedup key).
+    # disappear from the board (and from Slack pings - same dedup key).
     if db is not None:
         try:
             from coach_activity_dismissals import (

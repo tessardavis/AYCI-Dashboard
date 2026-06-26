@@ -1,17 +1,17 @@
 """
 Spotlight Coaching: for each upcoming live curriculum / group-coaching session,
 list students who submitted the spotlight Tally form, with their requested
-topic and (if available) their upcoming interview date — so the coach can
+topic and (if available) their upcoming interview date - so the coach can
 prioritise interview-soon people on the day.
 
 Sources
 -------
-1. Circle Live Calendar API (`/admin/v2/events`) — finds the next upcoming
+1. Circle Live Calendar API (`/admin/v2/events`) - finds the next upcoming
    "Curriculum Session" or "General Coaching" event.
-2. Tally spotlight forms — one per session type:
+2. Tally spotlight forms - one per session type:
    - mY8WPq → curriculum sessions
    - wgxO1l → group coaching sessions
-3. Interview Tally form (`tally_lookup.INTERVIEW_FORM_ID`) — cross-referenced
+3. Interview Tally form (`tally_lookup.INTERVIEW_FORM_ID`) - cross-referenced
    by **full name** because the spotlight forms don't capture email.
 
 Eligibility
@@ -226,13 +226,13 @@ async def _interview_lookup_by_name(db) -> dict[str, dict]:
 
     Why "most recently submitted" rather than "soonest future date"? When a
     student reschedules, they submit a fresh tally entry. The latest
-    submission is the source of truth — even if its date is later than an
+    submission is the source of truth - even if its date is later than an
     older "ghost" entry that's still in the future. Past dates are dropped
     only after we've already picked the latest submission.
     """
     today = datetime.now(UK_TZ).date()
     submissions = await tally_lookup.get_cached_submissions(db)
-    # Index by (name_key) and (first_word) — collect ALL parses, sorted by
+    # Index by (name_key) and (first_word) - collect ALL parses, sorted by
     # submitted_at desc.
     by_full: dict[str, list[dict]] = {}
     by_first: dict[str, list[dict]] = {}
@@ -263,7 +263,7 @@ async def _interview_lookup_by_name(db) -> dict[str, dict]:
         if first_word:
             by_first.setdefault(first_word, []).append(record)
 
-    # For each name, pick the most recently SUBMITTED entry — but only if its
+    # For each name, pick the most recently SUBMITTED entry - but only if its
     # date is in the future. If the latest submission's date is past, the
     # student doesn't have an upcoming interview (don't fall back to older
     # entries; they're stale and the student rescheduled past).
@@ -304,7 +304,7 @@ async def _build_session_payload(
     """Compose one session block: header + eligible students.
 
     `cycle_start_iso` is the ISO-8601 UTC timestamp of when the SPOTLIGHT cycle
-    for this session opened — i.e. the start of the previous same-type session,
+    for this session opened - i.e. the start of the previous same-type session,
     or None to fall back to a 14-day floor.
 
     `leaderboard_index` is `{name_key: badge_score}` from `leaderboard_mod`,
@@ -399,7 +399,7 @@ async def _build_session_payload(
 
     in_window.sort(key=_sort_key)
 
-    # Compute leaderboard rank within this session — purely based on badge
+    # Compute leaderboard rank within this session - purely based on badge
     # count (descending). Used by the UI to show "🏆 top eligible" chips so
     # the team can SEE why the top rows are prioritised. Ties share a rank
     # (standard competition ranking: 1, 2, 2, 4...).
@@ -453,14 +453,14 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
 
     A session is considered "still current" until its `ends_at` (or
     `starts_at + 2h` if no end is published). This way today's session stays
-    visible while it's actually happening — coaches still need to see the
+    visible while it's actually happening - coaches still need to see the
     prep list during the call."""
     events = await _fetch_circle_events(db)
     now_utc = datetime.now(timezone.utc)
 
     def _still_current(e: dict) -> bool:
         """A session stays on the upcoming list until the END of its calendar
-        day in UK local time — so coaches can still record outcomes the
+        day in UK local time - so coaches can still record outcomes the
         evening of the session (not just during its run window)."""
         starts = e.get("starts_at") or ""
         if not starts:
@@ -485,7 +485,7 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
         _, form_id = cls
         upcoming.append((e, form_id))
     upcoming.sort(key=lambda x: x[0].get("starts_at") or "")
-    # Dedupe events that share the same (name, starts_at) — Circle stores one
+    # Dedupe events that share the same (name, starts_at) - Circle stores one
     # row per recurring/host duplicate, but we only want to display one card.
     seen: set[tuple[str, str]] = set()
     deduped: list[tuple[dict, str]] = []
@@ -520,7 +520,7 @@ async def get_upcoming_spotlight_sessions(db, limit: int = 3) -> dict:
     # Build a per-(form_id) timeline of past events so we can derive the cycle
     # start (when the *previous* same-type session ran) for each upcoming
     # session. "Past" here means anything whose `starts_at` is before the
-    # earliest currently-displayed session — today's session is displayed so
+    # earliest currently-displayed session - today's session is displayed so
     # its start time acts as the lower cutoff, not `now`.
     earliest_displayed = upcoming[0][0].get("starts_at") or now_utc.isoformat()
     past_by_form: dict[str, list[str]] = {}

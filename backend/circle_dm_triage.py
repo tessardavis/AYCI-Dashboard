@@ -2,7 +2,7 @@
 Circle DM → support-ticket TRIAGE (send-free).
 
 Restores the "Circle DM becomes a Coralie ticket" behaviour that the
-auto-responder poller (circle_dm_poll) used to provide — WITHOUT any reply
+auto-responder poller (circle_dm_poll) used to provide - WITHOUT any reply
 capability. This module deliberately contains NO post_dm_message / send code,
 so it can never message a student. It only READS DMs and CREATES tickets.
 
@@ -39,7 +39,7 @@ def triage_enabled() -> bool:
 
 
 # Automated/system Circle accounts whose DMs are notifications, not student
-# questions — never make tickets from these (matched case-insensitively).
+# questions - never make tickets from these (matched case-insensitively).
 _IGNORED_SENDERS = {"do not reply bot"}
 
 
@@ -56,7 +56,7 @@ def _older_than_days(iso_ts: str, days: int) -> bool:
 
 
 async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -> dict:
-    """Decide whether a DM thread needs a ticket — entirely from the listing's
+    """Decide whether a DM thread needs a ticket - entirely from the listing's
     last_message, no per-thread fetch.
 
     The message sender id is a community_member_id (SAME space as the coach's
@@ -83,7 +83,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     if student_name.lower() in _IGNORED_SENDERS:
         return {"reason": "ignored_sender", "sender": student_name}
 
-    # Unanswered: newest message is from someone other than the coach — i.e. the
+    # Unanswered: newest message is from someone other than the coach - i.e. the
     # student (their community_member_id == last_sender).
     last_at = (last.get("created_at") or "").strip()
     if not last_at:
@@ -101,7 +101,7 @@ async def _triage_thread(db, admin_email, admin_member_id, coach_name, thread) -
     }
 
     # First time triage sees this thread (no triage baseline yet): only ticket if
-    # the message is recent — don't surface ancient dormant DMs as a burst.
+    # the message is recent - don't surface ancient dormant DMs as a burst.
     if not baseline_at and _older_than_days(last_at, 14):
         await _save_thread_state(db, uuid_, base_save)
         return {"reason": "old_seeded", "last_at": last_at}
@@ -202,10 +202,10 @@ async def triage_once(db) -> dict:
         for err in r.get("errors") or []:
             summary["errors"].append(f"{e}: {err}")
     # 0 threads across ALL coaches (with tokens minting fine) almost always
-    # means Circle is rate-limiting the listing call — the call swallows the
+    # means Circle is rate-limiting the listing call - the call swallows the
     # 429 and returns []. Surface it so it doesn't look like "nothing to do".
     if coach_emails and summary["threads_scanned"] == 0 and not summary["errors"]:
-        summary["warning"] = ("0 threads for all coaches — likely Circle rate-limiting the "
+        summary["warning"] = ("0 threads for all coaches - likely Circle rate-limiting the "
                               "listing call (it returns [] on a 429). Retry in a few minutes.")
     logger.info(f"[circle-triage] done: {summary['tickets_created']} tickets, {len(summary['errors'])} errors")
     return summary

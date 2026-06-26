@@ -3,7 +3,7 @@
 Replaces the Zapier "Bonus Call Booked (Anoop's calendar)" zap. On an
 `invitee.created` event for the AYCI Bonus Call (a round-robin event), we:
 
-  1. Tag the subscriber in Kit as "[AYCI <cohort>] 1:1 Call Booked" — this is
+  1. Tag the subscriber in Kit as "[AYCI <cohort>] 1:1 Call Booked" - this is
      what removes them from the booking-reminder emails. The current cohort's
      tag is resolved automatically (newest-first), so it survives the per-cohort
      rename without any code or config change.
@@ -256,9 +256,9 @@ async def handle_invitee_canceled(db, payload: dict) -> dict:
 async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120) -> dict:
     """One-shot catch-up: tag every AYCI Bonus Call booker (past + upcoming, in
     the window) with the current cohort's "1:1 Call Booked" Kit tag and record
-    `bonus_call` on their row — for bookings missed while the Zapier zaps were
+    `bonus_call` on their row - for bookings missed while the Zapier zaps were
     off. Covers Anoop AND Charlotte (the round-robin pool). Idempotent (Kit
-    no-ops if already tagged). Deliberately does NOT Slack — that would spam
+    no-ops if already tagged). Deliberately does NOT Slack - that would spam
     #fulfillment-team with old bookings."""
     headers = connectors._calendly_headers()
     base = connectors.CALENDLY_BASE

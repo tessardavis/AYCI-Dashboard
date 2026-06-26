@@ -1,11 +1,11 @@
 """
-Unified Student Lookup — fan out an email across Monday.com, Circle,
+Unified Student Lookup - fan out an email across Monday.com, Circle,
 Stripe, ConvertKit, and Calendly and return a normalised profile.
 
 Each `*_lookup` function returns:
     {"found": bool, "data": {...} | None, "error": str | None}
 
-Circle has no email-search endpoint — members list is cached in Mongo
+Circle has no email-search endpoint - members list is cached in Mongo
 (`circle_members_cache`) and refreshed when older than CACHE_TTL_HOURS.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ CACHE_TTL_HOURS = 24
 ACADEMY_MEMBERS_BOARD_ID = "1956295952"
 # Monday column IDs are stable for the life of a board (column re-creation is
 # rare and would also require dashboard re-config). Cache the discovered
-# email-column ID per board so we skip the schema GraphQL call — that's the
+# email-column ID per board so we skip the schema GraphQL call - that's the
 # first of two sequential Monday calls on every cold Student Lookup.
 MONDAY_SCHEMA_CACHE_TTL_HOURS = 24
 
@@ -48,7 +48,7 @@ def _normalise(s: str) -> str:
 
 # In-process cache for the Circle members list used by name_search. The Mongo
 # document is ~1.7MB and the cross-region read from Atlas takes several
-# seconds — well over the 8s frontend timeout on the autocomplete endpoint.
+# seconds - well over the 8s frontend timeout on the autocomplete endpoint.
 # Read once per process and keep a slim (name + email + avatar) projection in
 # memory; everything after the first call is sub-millisecond.
 _NAME_INDEX_TTL_SECONDS = 30 * 60  # 30 min
@@ -64,7 +64,7 @@ async def _get_name_index(db) -> list[dict]:
     Mongo read per 30 min, regardless of how many lookups happen.
 
     Reloads early (before the TTL) if the underlying `circle_members_cache.all`
-    doc's `cached_at` changed — e.g. someone hit "Refresh Circle cache" or the
+    doc's `cached_at` changed - e.g. someone hit "Refresh Circle cache" or the
     daily 05:00 rebuild ran. Without this, a refresh wouldn't show in the
     Students list (which reads this index) for up to 30 min, and a brand-new
     Circle member keeps showing "get on board first" even after a refresh. The
@@ -83,7 +83,7 @@ async def _get_name_index(db) -> list[dict]:
         and _name_index_cache.get("doc_cached_at") == doc_cached_at
     ):
         return _name_index_cache["members"]
-    # Load the whole slim doc — circle_lookup needs the extra fields
+    # Load the whole slim doc - circle_lookup needs the extra fields
     # (created_at, last_seen_at, member_tags, profile_url). Memory cost is
     # ~1.7MB once per process; saves us the same 1.7MB Mongo read on
     # every lookup.
@@ -251,7 +251,7 @@ async def stripe_lookup(email: str) -> dict:
                             "status": s.get("status"),
                             "product_name": (price.get("nickname")
                                              or price.get("product")
-                                             or "—"),
+                                             or "-"),
                             "amount": (price.get("unit_amount") or 0) / 100.0,
                             "currency": (price.get("currency") or "gbp").upper(),
                             "interval": (price.get("recurring") or {}).get("interval"),
@@ -334,7 +334,7 @@ async def _circle_get_cached_members(db) -> tuple[list[dict], str]:
     doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0})
     if doc:
         cached_at = doc.get("cached_at")
-        # Mongo may return naive datetimes — normalise to UTC for comparison
+        # Mongo may return naive datetimes - normalise to UTC for comparison
         if isinstance(cached_at, datetime):
             if cached_at.tzinfo is None:
                 cached_at = cached_at.replace(tzinfo=timezone.utc)
@@ -472,7 +472,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
     the email recorded on Monday (e.g. work vs personal address).
     """
     # Mongo-first short-circuit. The mirror stores everything monday_lookup
-    # would return — id, name, url, created_at, columns dict — so this is a
+    # would return - id, name, url, created_at, columns dict - so this is a
     # drop-in for the live-API path.
     if db is not None:
         try:
@@ -492,7 +492,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         "columns": cols,
                         "allowances": allowances,
                         # Authoritative private-chat link. This scalar is the
-                        # merged value — set from Monday's "Private Chat Link"
+                        # merged value - set from Monday's "Private Chat Link"
                         # column OR (more often) recorded by private-chat-setup,
                         # which only ever writes the scalar, never Monday's
                         # column. Callers should prefer this over the raw
@@ -508,7 +508,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                     "source": "mongo_mirror",
                 }
         except Exception as e:
-            # Never let a Mongo hiccup block lookups — fall through to live.
+            # Never let a Mongo hiccup block lookups - fall through to live.
             import logging as _logging
             _logging.getLogger(__name__).info(
                 f"[student-lookup] mirror lookup failed for {email}, falling back to Monday: {e}"
@@ -597,7 +597,7 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                     page = body2.get("data", {}).get("items_page_by_column_values") or {}
                     items = page.get("items") or []
             else:
-                # No email column detected — fallback needed
+                # No email column detected - fallback needed
                 used_fallback = True
 
             # Fallback: capped scan (first 500 items only)

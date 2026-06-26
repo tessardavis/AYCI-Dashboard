@@ -1,4 +1,4 @@
-"""AYCI Team Dashboard — Backend API tests (pytest)."""
+"""AYCI Team Dashboard - Backend API tests (pytest)."""
 import os
 import pytest
 import requests

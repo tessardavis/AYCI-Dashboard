@@ -1,10 +1,10 @@
 """
-Dashboard-native private-chat creation — Route 2, Phase 0.
+Dashboard-native private-chat creation - Route 2, Phase 0.
 
 See PRIVATE_CHAT_MIGRATION.md. Replaces the Monday-triggered "Private Chat …
 when they join Circle" zaps (46/47/53/54). Phase 0 is MANUAL: a dry-run
 `preview()` (no writes) and a per-student `create_for_student()` behind an
-explicit admin click — nothing runs on a schedule yet.
+explicit admin click - nothing runs on a schedule yet.
 
 Key win over the zaps: we match the student to their Circle identity on EITHER
 email (or a strong name match), so students who joined Circle under a different
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def _eligible(row: dict) -> bool:
-    """Same population the 'needs setup' flag cares about — current private
+    """Same population the 'needs setup' flag cares about - current private
     tier / active B&G, not a Boss, not setup-dismissed. (Predicates live in
     routes.students_db; imported lazily to avoid an import cycle.)"""
     from routes.students_db import (
@@ -49,7 +49,7 @@ async def _match_circle_member(row: dict, by_email: dict) -> tuple[Optional[dict
         hits = await student_lookup.name_search(db, name, limit=1)
         top = hits[0] if hits else None
         if top and (top.get("match_score") or 0) >= 80 and (top.get("email") or "").strip():
-            # name_search returns slim hits without id — re-resolve from the cache
+            # name_search returns slim hits without id - re-resolve from the cache
             te = (top["email"] or "").strip().lower()
             if te in by_email:
                 return by_email[te], "name"
@@ -74,7 +74,7 @@ def _looks_like_dms_off(error_text: Optional[str], status) -> bool:
     if not t:
         return False
     # Circle returns an opaque 500 ("something went wrong / contact support") when
-    # a specific member can't be added to a chat — almost always their messaging/
+    # a specific member can't be added to a chat - almost always their messaging/
     # privacy settings (since the same call works for other members). Treat it as
     # a probable DMs-off so it routes to the "ask them to enable DMs" action
     # rather than a dead-end error. (The raw 500 is still kept in last_error.)
@@ -148,7 +148,7 @@ def _render(template: str, ctx: dict) -> str:
 
 
 async def preview(db_) -> dict:
-    """Dry run — who WOULD get a chat, and whether we can resolve them on
+    """Dry run - who WOULD get a chat, and whether we can resolve them on
     Circle. Writes nothing."""
     cfg = await settings_store.get_private_chat_config(db_)
     coaches_with_email = [c for c in cfg["coaches"] if c.get("email")]
@@ -162,7 +162,7 @@ async def preview(db_) -> dict:
         if not _eligible(r):
             continue
         if (r.get("private_chat_url") or "").strip():
-            continue  # already has a chat — never touch
+            continue  # already has a chat - never touch
         base = {
             "id": r["_id"],
             "name": r.get("name"),
@@ -171,7 +171,7 @@ async def preview(db_) -> dict:
             "kajabi_email": (r.get("email") or "").strip().lower() or None,
         }
         # A pending status (e.g. "Awaiting DMs") means a create was attempted and
-        # the student needs to enable Circle DMs — surface separately, not as
+        # the student needs to enable Circle DMs - surface separately, not as
         # "ready", so the team knows to chase rather than re-click.
         status = (r.get("private_chat_status") or "").strip()
         if status:
@@ -214,7 +214,7 @@ def _norm_name(s: str) -> str:
 
 
 _GATHER_CACHE_KEY = "private_chat_coach_chats"
-_GATHER_TTL_SECONDS = 600  # 10 min — listing all coaches' chats is slow + rate-limited
+_GATHER_TTL_SECONDS = 600  # 10 min - listing all coaches' chats is slow + rate-limited
 
 
 async def _bust_gather_cache(db_) -> None:
@@ -253,11 +253,11 @@ async def _gather_coach_chats(db_, coach_emails: list, use_cache: bool = True) -
     chats: list = []
     # Read each coach's chats CONCURRENTLY. Every coach authenticates with their
     # OWN Circle token, so this fans out across 4 separate auth contexts rather
-    # than serialising them — ~4x faster wall time. Sequential reads were
+    # than serialising them - ~4x faster wall time. Sequential reads were
     # blowing the caller's 75s budget (4 coaches × slow paged reads). Each
     # coach still paginates internally, so we never burst more than ~4 requests
     # at once. A coach that errors/empties is just skipped (partial coverage is
-    # fine — every private chat includes the coaches, so the others cover it).
+    # fine - every private chat includes the coaches, so the others cover it).
     results = await asyncio.gather(
         *[circle_api.list_group_chats(db_, ce) for ce in coach_emails],
         return_exceptions=True,
@@ -288,12 +288,12 @@ async def _gather_coach_chats(db_, coach_emails: list, use_cache: bool = True) -
 async def no_chat_audit(db_) -> dict:
     """Reconciliation audit: current private-tier students who have NO coach
     group chat in Circle. More accurate than the `private_chat_url` field
-    because it checks Circle directly — catches students with a *dead* URL too
+    because it checks Circle directly - catches students with a *dead* URL too
     (e.g. a chat that "succeeded" in the zap but the student has DMs off).
 
     Lists a resident coach's group chats (every private chat includes the
     coaches), then flags eligible students not present in any of them. The
-    cause isn't necessarily DMs-off (could be dual-email or never-created) —
+    cause isn't necessarily DMs-off (could be dual-email or never-created) -
     DMs-off is confirmed when chat creation is attempted and fails.
 
     Read-only. Best-effort matching: by Circle member id (authoritative) with a
@@ -304,14 +304,14 @@ async def no_chat_audit(db_) -> dict:
     if not coach_emails:
         return {"ok": False, "error": "Set at least one coach's Circle email in Private chat setup first."}
 
-    # Union every coach's group chats (see _gather_coach_chats) — survives a
+    # Union every coach's group chats (see _gather_coach_chats) - survives a
     # coach whose session can't be minted and covers historical Oksana chats.
     chat_member_ids, chat_names, coaches_read, _chats = await _gather_coach_chats(db_, coach_emails)
     if not coaches_read:
         return {"ok": False, "error": (
             "Couldn't read any coach's Circle group chats. The Circle parent "
             "token can only mint a session for coaches who are admins/moderators "
-            "— check that at least one configured coach has those rights."
+            "- check that at least one configured coach has those rights."
         )}
 
     by_email = await _build_email_index()
@@ -358,7 +358,7 @@ async def no_chat_audit(db_) -> dict:
 async def create_for_student(db_, student_id: str) -> dict:
     """Create ONE student's coach group chat. Heavily guarded against
     duplicates (Circle can't mutate a room's roster, so a wrong call makes a
-    confusing second chat). Returns a diagnostic dict — `raw` carries Circle's
+    confusing second chat). Returns a diagnostic dict - `raw` carries Circle's
     response so we can confirm the contract on the first live run.
 
     Phase 0 scope: match → no-dup guards → create group chat → write back →
@@ -380,7 +380,7 @@ async def create_for_student(db_, student_id: str) -> dict:
     if (row.get("private_chat_url") or "").strip():
         return {"ok": False, "skipped": "already_has_chat", "private_chat_url": row["private_chat_url"]}
 
-    # Resolve the welcome template for this student's audience up-front — refuse
+    # Resolve the welcome template for this student's audience up-front - refuse
     # to create a chat we can't open with the right (tier-specific) message.
     audience = _audience(row)
     template = (cfg.get("welcome_templates") or {}).get(audience or "")
@@ -395,7 +395,7 @@ async def create_for_student(db_, student_id: str) -> dict:
     student_circle_email = (member.get("email") or "").strip().lower()
 
     # Circle-side duplicate guard: does ANY coach already share a group chat
-    # with this student? Critically checks all coaches, not just the sender —
+    # with this student? Critically checks all coaches, not just the sender -
     # historical chats were made by Oksana and Coralie (the sender) isn't in
     # them, so a sender-only check would miss them and spawn a duplicate chat
     # (→ a new thread, splitting the student's video replies). Matches by member
@@ -405,7 +405,7 @@ async def create_for_student(db_, student_id: str) -> dict:
         existing_ids, existing_names, _, existing_chats = await _gather_coach_chats(db_, all_coach_emails)
         nm = _norm_name(row.get("name") or "")
         # Find the actual existing room (by member id, then name) so we can
-        # record its URL — not just refuse. (Fixes "set up but no link on the
+        # record its URL - not just refuse. (Fixes "set up but no link on the
         # dashboard": e.g. Cate Luce already had a chat, we skipped without
         # recording it, so she kept showing as missing.)
         match_uuid = None
@@ -454,7 +454,7 @@ async def create_for_student(db_, student_id: str) -> dict:
         status = (created or {}).get("status")
         logger.warning(f"[private-chat] create failed for {student_id} status={status} err={err[:200]}")
         if _looks_like_dms_off(err, status):
-            # The student has Circle DMs off — record it so the team chases them
+            # The student has Circle DMs off - record it so the team chases them
             # (replaces the signal the old Zapier zap used to set). Pinned so the
             # Monday sync won't wipe it.
             now = datetime.now(timezone.utc)
@@ -467,7 +467,7 @@ async def create_for_student(db_, student_id: str) -> dict:
             }})
             return {"ok": False, "skipped": "awaiting_dms", "detail": err[:200]}
         # Persist the raw failure on the row so it's visible in the dashboard
-        # (students-db lookup) instead of buried in Render logs — lets us see
+        # (students-db lookup) instead of buried in Render logs - lets us see
         # Circle's exact rejection and tighten DMs-off detection.
         try:
             await db_.academy_members.update_one({"_id": student_id}, {"$set": {
@@ -505,7 +505,7 @@ async def create_for_student(db_, student_id: str) -> dict:
     await db_.academy_members.update_one({"_id": student_id}, {"$set": set_fields})
     await _bust_gather_cache(db_)  # new chat → invalidate the dedup cache
 
-    # Welcome message — render the tier template (best-effort; a failed post
+    # Welcome message - render the tier template (best-effort; a failed post
     # doesn't undo the chat).
     welcome = _render(template, _welcome_context(row))
     posted = await circle_api.post_dm_message(db_, sender_email, uuid, welcome)
@@ -540,7 +540,7 @@ async def link_existing_chats(db_, apply: bool = False) -> dict:
     leaves the flag set."""
     global _link_scan_started_at
     if link_scan_running():
-        return {"ok": False, "error": "a scan is already running — wait ~2 min"}
+        return {"ok": False, "error": "a scan is already running - wait ~2 min"}
     _link_scan_started_at = datetime.now(timezone.utc)
     try:
         return await _link_existing_impl(db_, apply=apply)
@@ -556,7 +556,7 @@ async def _link_existing_impl(db_, apply: bool = False) -> dict:
     Fixes the backlog of zap-created chats that were never written back to the
     dashboard (the zaps make the Circle chat but don't update the row). Reports
     who got linked and who couldn't be matched, so the residual is the genuine
-    'needs a fresh chat / not on Circle' set — not a mystery.
+    'needs a fresh chat / not on Circle' set - not a mystery.
     """
     async def _cache(res: dict) -> dict:
         try:
@@ -579,9 +579,9 @@ async def _link_existing_impl(db_, apply: bool = False) -> dict:
         _ids, _names, coaches_read, chats = await asyncio.wait_for(
             _gather_coach_chats(db_, coach_emails, use_cache=True), timeout=180)
     except asyncio.TimeoutError:
-        return await _cache({"ok": False, "error": "Circle read timed out — likely rate-limited; the scheduled run will retry shortly"})
+        return await _cache({"ok": False, "error": "Circle read timed out - likely rate-limited; the scheduled run will retry shortly"})
     if not coaches_read:
-        return await _cache({"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit) — try again in a few minutes"})
+        return await _cache({"ok": False, "error": "couldn't read any coach group chats (Circle session/rate-limit) - try again in a few minutes"})
 
     by_email = await _build_email_index()
     linked, not_found = [], []
@@ -594,7 +594,7 @@ async def _link_existing_impl(db_, apply: bool = False) -> dict:
         if (r.get("private_chat_url") or "").strip():
             already += 1
             continue
-        # Email-only match (in-memory, fast) — no per-student Circle name_search,
+        # Email-only match (in-memory, fast) - no per-student Circle name_search,
         # which would make this scan time out at the proxy.
         em = (r.get("email") or "").strip().lower()
         cem = (r.get("circle_email") or "").strip().lower()
@@ -645,7 +645,7 @@ async def _link_existing_impl(db_, apply: bool = False) -> dict:
 
 
 def autocreate_enabled() -> bool:
-    """The hybrid auto-create job only runs when explicitly enabled — so we can
+    """The hybrid auto-create job only runs when explicitly enabled - so we can
     cut over deliberately (enable this + turn the Zapier zaps 46/47/53 OFF the
     same day; running both would double-create)."""
     import os
@@ -661,7 +661,7 @@ async def auto_create_ready_chats(db_, limit: int = 25) -> dict:
       - on Circle but no welcome template for their tier        → report (no create)
       - not matched on Circle (likely dual-email / not joined)  → report (no create)
 
-    Idempotent and guarded — create_for_student re-checks eligibility, existing
+    Idempotent and guarded - create_for_student re-checks eligibility, existing
     chats across ALL coaches, and dups before creating. `limit` caps creates per
     run so a backlog doesn't fire a huge burst / hit Circle rate limits.
     """

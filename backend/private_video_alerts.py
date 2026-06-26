@@ -4,13 +4,13 @@ Slack alerts for private-tier videos → the #private-tiers channel.
 Two checks, both idempotent (never re-spam) via the `private_video_alerts_sent`
 collection:
 
-1. interview_imminent — event-driven (on Tally ingest): when a video is
+1. interview_imminent - event-driven (on Tally ingest): when a video is
    submitted, if that student's interview is within IMMINENT_DAYS (today or
    tomorrow), post an urgent "review ASAP" alert. One alert per submission.
    `recheck_imminent` re-scans recent submissions (catches an interview date
    set AFTER submission) and doubles as the manual test.
 
-2. unanswered_24h — periodic (every 2h): any private video submitted >24h ago
+2. unanswered_24h - periodic (every 2h): any private video submitted >24h ago
    that is NOT marked Done. One alert per video.
 
 "Answered" = status == "done" (per Tessa, 2026-06-05). reply_link alone does
@@ -19,7 +19,7 @@ NOT count as answered.
 Webhook resolution (so it works without an env redeploy):
    1. app_settings.private_tier_webhook  (DB, set via API)
    2. SLACK_PRIVATE_TIER_WEBHOOK_URL      (env)
-   3. SLACK_WEBHOOK_URL                   (env, general fallback — wrong channel)
+   3. SLACK_WEBHOOK_URL                   (env, general fallback - wrong channel)
 """
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ async def set_webhook_url(db, url: str) -> dict:
 async def _post(db, text: str) -> bool:
     url = await get_webhook_url(db)
     if not url:
-        logger.warning("[pv-alerts] no Slack webhook configured — skipping post")
+        logger.warning("[pv-alerts] no Slack webhook configured - skipping post")
         return False
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
@@ -134,12 +134,12 @@ async def _videos_for_emails(db, emails: list[str]) -> list[dict]:
 
 
 # ------------------------------------------- check 1: imminent interview (event)
-# How soon counts as "imminent" — interview today (0 days) or tomorrow (1).
+# How soon counts as "imminent" - interview today (0 days) or tomorrow (1).
 IMMINENT_DAYS = int(os.environ.get("PV_IMMINENT_DAYS") or 1)
 
 
 async def _interview_date_for(db, submission: dict) -> Optional[str]:
-    """Interview date for this submission — prefer the value carried on the
+    """Interview date for this submission - prefer the value carried on the
     submission itself (Tally hidden field), else look the student up in
     academy_members by email/circle_email."""
     d = (submission.get("interview_date") or "").strip()
@@ -190,12 +190,12 @@ async def notify_if_interview_imminent(db, submission: dict, *, dry_run: bool = 
         return {"alerted": False, "reason": "already_sent"}
 
     name = _student_name(submission)
-    tier = submission.get("tier") or "—"
+    tier = submission.get("tier") or "-"
     url = submission.get("tally_video_url") or ""
     text = (
-        f"🚨 *Interview {when} — review this video ASAP* ({date_str})\n"
+        f"🚨 *Interview {when} - review this video ASAP* ({date_str})\n"
         f"*{name}* ({tier}) just submitted a private video and interviews {when}."
-        + (f" — <{url}|video>" if url else "") + "\n"
+        + (f" - <{url}|video>" if url else "") + "\n"
         f"<{DASHBOARD_VIDEOS_URL}|Open Private-Tier Videos>"
     )
     if await _post(db, text):
@@ -208,7 +208,7 @@ async def notify_if_interview_imminent(db, submission: dict, *, dry_run: bool = 
 
 async def recheck_imminent(db, *, days_back: int = 14, dry_run: bool = False) -> dict:
     """Safety-net / test: re-scan recent (last `days_back`) not-Done submissions
-    and alert any whose interview is now imminent — catches the case where the
+    and alert any whose interview is now imminent - catches the case where the
     interview date was set AFTER the video was submitted. Idempotent."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
     posted, candidates = 0, []
@@ -251,7 +251,7 @@ async def check_unanswered_24h(db, *, dry_run: bool = False) -> dict:
         url = v.get("tally_video_url") or ""
         text = (
             f"⏰ *Private video unanswered for {hours}h* (not marked Done)\n"
-            f"*{name}* — status {status}" + (f" — <{url}|video>" if url else "") + "\n"
+            f"*{name}* - status {status}" + (f" - <{url}|video>" if url else "") + "\n"
             f"<{DASHBOARD_VIDEOS_URL}|Open Private-Tier Videos>"
         )
         if await _post(db, text):
