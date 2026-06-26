@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2, MessagesSquare, Calendar } from "lucide-react";
+import { Loader2, Save, Send, MessageSquare, Hash, Eye, EyeOff, Zap, Video, UserPlus, RefreshCw, Link2, MessagesSquare, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
@@ -35,6 +35,90 @@ export default function IntegrationsSection({ isAdmin }) {
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
       <ZapierCircleReplyCard isAdmin={isAdmin} />
       <CalendlyBonusCallCard isAdmin={isAdmin} />
+      <UnmatchedBonusBookingsCard isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+/**
+ * Bonus-call bookings the dashboard couldn't tie to a student (booked under an
+ * unknown email). Each can be linked to the right student - the booking email is
+ * saved onto their "Other emails" so it auto-matches next time. Hidden when empty.
+ */
+function UnmatchedBonusBookingsCard({ isAdmin }) {
+  const [state, setState] = useState({ loading: true, bookings: [] });
+  const [linking, setLinking] = useState(null);
+  const [emails, setEmails] = useState({});
+
+  const load = async () => {
+    try {
+      const { data } = await apiClient.get("/bonus-call/unmatched");
+      setState({ loading: false, bookings: data?.bookings || [] });
+    } catch {
+      setState({ loading: false, bookings: [] });
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const link = async (b) => {
+    const studentEmail = (emails[b.invitee_uri] || "").trim();
+    if (!studentEmail) { toast.error("Enter the student's email on file to link to"); return; }
+    setLinking(b.invitee_uri);
+    try {
+      const { data } = await apiClient.post("/bonus-call/link", {
+        invitee_uri: b.invitee_uri, student_email: studentEmail,
+      });
+      toast.success(`Linked ${b.email} to ${data.name || studentEmail}`);
+      await load();
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't link");
+    } finally {
+      setLinking(null);
+    }
+  };
+
+  if (state.loading || state.bookings.length === 0) return null;
+
+  return (
+    <div className="bg-white border border-amber-200 rounded-xl p-5 sm:p-6" data-testid="unmatched-bonus-card">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+          <AlertTriangle className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="font-display font-bold text-lg text-[var(--ayci-ink)]">
+            Unmatched bonus-call bookings
+          </h2>
+          <p className="text-sm text-[var(--ayci-ink-muted)] mt-0.5 max-w-prose">
+            These were booked under an email we don't have on a student record. Link each to the right
+            student - their booking email gets saved to "Other emails" so it matches automatically next time.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {state.bookings.map((b) => (
+          <div key={b.invitee_uri} className="border border-[var(--ayci-border)] rounded-lg p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="min-w-0 flex-1 text-sm">
+              <div className="font-medium text-[var(--ayci-ink)] truncate">{b.name || b.email}</div>
+              <div className="text-xs text-[var(--ayci-ink-muted)] truncate">
+                {b.email}{b.date ? ` · ${b.date}` : ""}{b.coach ? ` · ${b.coach}` : ""}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="student's email on file"
+                value={emails[b.invitee_uri] || ""}
+                onChange={(e) => setEmails((m) => ({ ...m, [b.invitee_uri]: e.target.value }))}
+                className="h-8 text-sm w-full sm:w-56"
+              />
+              <Button size="sm" disabled={linking === b.invitee_uri || !isAdmin} onClick={() => link(b)}>
+                {linking === b.invitee_uri ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4 mr-1.5" />}
+                Link
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

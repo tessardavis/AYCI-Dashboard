@@ -168,6 +168,10 @@ async def handle_invitee_created(db, payload: dict) -> dict:
                 fields["bonus_call_rescheduled_from"] = old_date
             await _set_bonus_fields(db, row, fields)
             result["row_updated"] = row["_id"]
+            if email not in (row.get("email"), row.get("circle_email")):
+                # Matched via "other emails" - the booking email isn't their main
+                # one, so they may have a duplicate ConvertKit subscriber.
+                result["dup_email_note"] = row.get("email") or row.get("circle_email")
         else:
             result["row_updated"] = "student_not_found"
     except Exception as e:
@@ -191,6 +195,9 @@ async def handle_invitee_created(db, payload: dict) -> dict:
             )
         if result["row_updated"] == "student_not_found":
             msg += " · :warning: not found in dashboard - check their email"
+        elif result.get("dup_email_note"):
+            msg += (f" · :warning: booked under {email} but record's main email is "
+                    f"{result['dup_email_note']} - check for a duplicate Kit subscriber")
         sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
         result["slack"] = bool(sl.get("ok"))
     except Exception as e:
@@ -199,9 +206,11 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     if invitee_uri:
         await db.calendly_events_seen.update_one(
             {"_id": invitee_uri},
-            {"$set": {"_id": invitee_uri, "email": email, "coach": host,
-                      "call_date": call_date, "start_time": start_time,
+            {"$set": {"_id": invitee_uri, "email": email, "name": payload.get("name"),
+                      "coach": host, "call_date": call_date, "start_time": start_time,
                       "status": "rescheduled" if is_reschedule else "booked",
+                      "matched": isinstance(result["row_updated"], str)
+                      and result["row_updated"] != "student_not_found",
                       "at": datetime.now(timezone.utc)}},
             upsert=True,
         )

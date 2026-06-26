@@ -10,7 +10,9 @@ subscriptions via GET /api/admin/calendly/webhooks.
 """
 import logging
 import os
+import re
 import secrets
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -136,6 +138,72 @@ async def mark_bonus_eligible(body: MarkEligibleBody,
     logger.info(f"[bonus-call] marked eligible (ad-hoc): {email} tag={tag_ids[0]}")
     return {"ok": True, "email": email, "tag_id": tag_ids[0],
             "via": calendly_webhook.AD_HOC_TAG_SUFFIX}
+
+
+class LinkBookingBody(BaseModel):
+    invitee_uri: str
+    student_email: str
+
+
+@router.get("/bonus-call/unmatched")
+async def unmatched_bonus_bookings(user: dict = Depends(require_board("students"))):
+    """Bonus-call bookings the dashboard couldn't tie to a student (booked under
+    an email we'd never seen). The team links each to the right student."""
+    rows = await db.calendly_events_seen.find(
+        {"matched": False, "status": {"$in": ["booked", "rescheduled"]}},
+        {"_id": 1, "email": 1, "name": 1, "coach": 1, "call_date": 1},
+    ).sort("at", -1).to_list(100)
+    return {"bookings": [
+        {"invitee_uri": r["_id"], "email": r.get("email"), "name": r.get("name"),
+         "coach": r.get("coach"), "date": r.get("call_date")}
+        for r in rows
+    ]}
+
+
+@router.post("/bonus-call/link")
+async def link_bonus_booking(body: LinkBookingBody,
+                             user: dict = Depends(require_board("students"))):
+    """Link an unmatched booking to a student: save the booking email onto their
+    'Other emails' (so it auto-matches next time) and record the booking."""
+    seen = await db.calendly_events_seen.find_one({"_id": body.invitee_uri})
+    if not seen:
+        raise HTTPException(404, "booking not found")
+    target = (body.student_email or "").strip().lower()
+    if not target:
+        raise HTTPException(400, "student_email required")
+    row = await db.academy_members.find_one({"$or": [
+        {"email": target},
+        {"circle_email": target},
+        {"other_emails": {"$regex": re.escape(target), "$options": "i"}},
+    ]})
+    if not row:
+        raise HTTPException(404, f"No student found for {target}")
+
+    booking_email = (seen.get("email") or "").strip().lower()
+    existing = [e.strip() for e in re.split(r"[,;]", row.get("other_emails") or "") if e.strip()]
+    if booking_email and booking_email not in [e.lower() for e in existing]:
+        existing.append(booking_email)
+    coach = seen.get("coach")
+    now = datetime.now(timezone.utc)
+    fields = {
+        "other_emails": ", ".join(existing) or None,
+        "bonus_call": f"Booked - {coach}" if coach else "Booked",
+        "bonus_call_coach": coach,
+        "bonus_call_date": seen.get("call_date"),
+        "bonus_call_status": "Booked",
+    }
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(fields.keys()))
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        **fields, "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": now, "dashboard_edited_by": "bonus-call-link",
+    }})
+    await db.calendly_events_seen.update_one(
+        {"_id": body.invitee_uri},
+        {"$set": {"matched": True, "linked_to": row["_id"], "linked_at": now}},
+    )
+    logger.info(f"[bonus-call] linked {booking_email} -> {row['_id']} ({row.get('name')})")
+    return {"ok": True, "student_id": row["_id"], "name": row.get("name"),
+            "added_email": booking_email}
 
 
 @router.post("/admin/calendly/backfill-bonus-tags")
