@@ -15,6 +15,8 @@ import { readCache, writeCache } from "@/lib/swrCache";
 import { tallyPrefillUrl } from "@/lib/tally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PrivateCallsBlock } from "@/components/student/CoachSummary";
+import { summarizePrivateCalls } from "@/lib/privateCalls";
 
 const EDITABLE_FIELDS = [
   { key: "name",           label: "Name" },
@@ -911,6 +913,19 @@ function EditModal({ row, onClose, onSaved }) {
             </Button>
           </div>
         </div>
+
+        {(() => {
+          // Private-tier (Private Plus / VIP) call allowance + bookings, computed
+          // from the raw row. Lets the team log off-Calendly calls and grant
+          // extra allowance here too (same controls as Student Lookup).
+          const pt = summarizePrivateCalls(row.tier, row.private_calls, row.private_call_allowance);
+          if (!pt.eligible) return null;
+          return (
+            <div className="px-4 pb-2">
+              <PrivateCallsBlock summary={pt} email={row.email} />
+            </div>
+          );
+        })()}
 
         {protectedFields.size > 0 && (
           <div className="px-4 pb-2 text-[11px] text-[var(--ayci-ink-muted)]">

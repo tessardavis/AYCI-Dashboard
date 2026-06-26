@@ -336,7 +336,7 @@ const PRIVATE_KIND_ORDER = ["tessa_30", "coach_30", "mock_60"];
 // grant or remove extra allowance above the tier default, and an "Add a call"
 // form to log a call that wasn't booked through Calendly. Local state updates
 // optimistically so the view reflects changes without a full re-lookup.
-function PrivateCallsBlock({ summary, email }) {
+export function PrivateCallsBlock({ summary, email }) {
   const [overrides, setOverrides] = useState({}); // invitee_uri -> new status
   const [extra, setExtra] = useState({});         // kind -> extra-allowance delta added this session
   const [added, setAdded] = useState([]);         // calls logged manually this session

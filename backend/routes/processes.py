@@ -151,7 +151,7 @@ Student Lookup card and marks that call a no-show. (Unlike bonus calls, there is
 NO Kit tag applied on booking - private-tier reminders are manual via Coralie.)
 
 LOGGING AN OFF-CALENDLY CALL + GRANTING EXTRA ALLOWANCE: on the Student Lookup
-card a team member can "Log a call" that wasn't booked through Calendly (pick the
+card (or Students DB > Edit) a team member can "Log a call" that wasn't booked through Calendly (pick the
 type, coach, date, outcome - defaults to Attended; it counts as one of their
 eligible calls), and can grant or remove EXTRA allowance above the tier default
 using the + / - buttons next to a call type (e.g. give a VIP a 3rd coach call).
