@@ -21,6 +21,7 @@ import PrivateVideos from "@/pages/PrivateVideos";
 import Refunds from "@/pages/Refunds";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
+import Processes from "@/pages/Processes";
 import NotAuthorized from "@/pages/NotAuthorized";
 
 function Protected() {
@@ -85,6 +86,7 @@ function App() {
                 <Route path="/refunds" element={<BoardGuard board="refunds"><Refunds /></BoardGuard>} />
                 <Route path="/settings" element={<BoardGuard board={["settings","bot"]}><Settings /></BoardGuard>} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/processes" element={<Processes />} />
               </Route>
             </Route>
           </Routes>
