@@ -35,6 +35,21 @@ BONUS_EVENT_MATCH = "bonus call"
 KIT_BOOKED_TAG_SUFFIX = "1:1 Call Booked"
 SLACK_CHANNEL = "#fulfillment-team"
 
+# Manual/ad-hoc eligibility tag the dashboard applies when a team member marks
+# a student eligible for a bonus call.
+AD_HOC_TAG_SUFFIX = "Ad Hoc Bonus Call"
+# Holding ANY of these (current cohort) means a student is eligible for a bonus
+# call. The first four are applied automatically at purchase by Kit/Kajabi; the
+# last is the dashboard-applied ad-hoc one. Matched by suffix so they rotate
+# with the cohort prefix automatically.
+ELIGIBILITY_TAG_SUFFIXES = [
+    "Purchase - Live webinar",
+    "Legacy Video Launch Day 1 Upgrade",
+    "Legacy Video Launch Last Day Upgrade",
+    "Cart Close Signup",
+    AD_HOC_TAG_SUFFIX,
+]
+
 
 async def _get_signing_key(db) -> str:
     doc = await db.app_settings.find_one(
