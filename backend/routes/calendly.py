@@ -452,6 +452,15 @@ async def private_call_summary(user: dict = Depends(get_current_user)):
     )
 
 
+@router.post("/admin/private-call/post-monthly-summary")
+async def post_monthly_summary_now(admin: dict = Depends(require_admin)):
+    """Post last month's private-tier summary to #private-tiers now (test /
+    catch-up). The scheduler also posts this automatically on the 1st of each
+    month. The Slack bot must be a member of #private-tiers."""
+    res = await calendly_webhook.post_monthly_private_summary(db)
+    return {"ok": True, **res}
+
+
 @router.get("/admin/calendly/status")
 async def calendly_status(admin: dict = Depends(require_admin)):
     """Whether the bonus-call webhook has been registered (drives the
