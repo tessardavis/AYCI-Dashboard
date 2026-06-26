@@ -34,6 +34,13 @@ for the current cohort (the "[AYCI MON-YY]" prefix changes each launch):
 The first four are applied automatically at purchase by Kit/Kajabi. The Ad Hoc
 tag is applied by the dashboard when a team member marks someone eligible.
 
+WHERE THE TAGS ARE APPLIED: the four purchase tags are applied at purchase by
+Zapier zaps (Kajabi purchase -> Kit tag) - Cart Close by the zap "Cart Close
+Bonus Call - Kit tag" (https://zapier.com/editor/365778815), and the legacy
+Day 1 / Last day by "Legacy Video Launch Upgrade Bonus Kit Tags". These
+purchase-tagging zaps must NOT be deleted - the bonus-call flow depends on them.
+The Ad Hoc tag is the only one applied by the dashboard (no zap).
+
 MARKING SOMEONE ELIGIBLE (AD HOC): On a student's record - either Student Lookup
 (the "Coach view" card at the top) or Students DB > Edit - click
 "Mark eligible (ad hoc)". That tags them "Ad Hoc Bonus Call" in Kit, which

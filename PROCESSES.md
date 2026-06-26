@@ -45,6 +45,19 @@ So eligibility comes from two places: **automatic** (the purchase tags, applied 
 signup automations) and **manual/ad-hoc** (a team member marks the student eligible in the dashboard,
 which applies the `Ad Hoc Bonus Call` tag).
 
+### Where the eligibility tags are applied
+
+The four purchase tags are applied at purchase by **Zapier zaps** (Kajabi purchase → Kit tag) -
+**do not delete these; the whole bonus-call flow depends on them.** The Ad Hoc tag is applied by the
+dashboard, so it has no zap.
+
+| Tag | Applied by | Link |
+|---|---|---|
+| `Purchase - Live webinar` | Zapier (Kajabi purchase) | _[link to add]_ |
+| `Legacy Video Launch Day 1 Upgrade` + `… Last Day Upgrade` | Zapier zap "Legacy Video Launch Upgrade Bonus Kit Tags" | _[link to add]_ |
+| `Cart Close Signup` | Zapier zap "Cart Close Bonus Call - Kit tag" | https://zapier.com/editor/365778815 |
+| `Ad Hoc Bonus Call` | **The dashboard** (Mark eligible button) | _no zap_ |
+
 ## How a team member marks someone eligible (ad-hoc) 🔨
 
 On the student's record there's a **"Mark eligible for bonus call"** action. Clicking it tags the
