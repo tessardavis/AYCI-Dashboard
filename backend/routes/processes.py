@@ -184,15 +184,19 @@ WHO'S IN THE CHAT: the student plus the coaches Tessa, Arub, Coralie and Becky.
 you can't remove people from a Circle group DM.) The coach list is editable in
 Settings > Integrations > Private chat setup.
 
-HOW A CHAT GETS CREATED (two paths, both live):
-  - Automatically via Zapier when the student joins Circle with the current cohort
-    tag - three zaps: VIP & Private Plus members
+HOW A CHAT GETS CREATED (two paths): the Zapier zaps are the PRIMARY, reliable
+creator; the dashboard "Create chat" button is a manual fallback (it can
+occasionally fail on Circle's side, so it isn't yet the sole route).
+  - Automatically (primary) via Zapier when the student joins Circle with the
+    current cohort tag - three zaps: VIP & Private Plus members
     (https://zapier.com/editor/356003238/published, plus the "In Between" join
     variant), Legacy Upgrades (https://zapier.com/editor/356048959/published), and
     VIP & Private Plus standard join (https://zapier.com/editor/370426888/published).
-  - Manually via the dashboard "Create chat" button in Students DB (and the "Needs
-    setup" list). It adds the coaches + student, posts the welcome message, records
-    the URL, and checks first that no chat already exists (safe to press).
+  - Manually (fallback) via the dashboard "Create chat" button in Students DB (and
+    the "Needs setup" list), for backlog or anyone the zaps missed. It adds the
+    coaches + student, posts the welcome message, records the URL, checks first that
+    no chat already exists (safe to press), and now shows the outcome - if it fails
+    it tells you why rather than doing nothing.
 
 THE WELCOME MESSAGE: posted from Coralie. Content is set on the dashboard in
 Settings > Integrations > Private chat setup - a separate template per tier

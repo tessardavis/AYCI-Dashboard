@@ -317,15 +317,18 @@ is editable in **Settings → Integrations → Private chat setup**.
 
 ## How a chat gets created
 
-Two paths, both live right now:
+Two paths. **The Zapier zaps are the primary, reliable creator**; the dashboard "Create chat" button is a
+manual fallback (it can occasionally fail on Circle's side, so it's not yet the sole route).
 
-- **Automatically** via Zapier when the student joins Circle with the current cohort tag - three zaps:
+- **Automatically (primary)** via Zapier when the student joins Circle with the current cohort tag - the
+  dependable path. Three zaps:
   - VIP & Private Plus members (+ "In Between" join variant): https://zapier.com/editor/356003238/published
   - Legacy Upgrades: https://zapier.com/editor/356048959/published
   - VIP & Private Plus (standard join): https://zapier.com/editor/370426888/published
-- **Manually** via the dashboard - the **"Create chat"** button in Students DB (and the "Needs setup" list).
-  It adds the coaches + student, posts the welcome message, records the URL, and checks first that no chat
-  already exists (safe to press).
+- **Manually (fallback)** via the dashboard - the **"Create chat"** button in Students DB (and the "Needs
+  setup" list), for backlog or anyone the zaps missed. It adds the coaches + student, posts the welcome
+  message, records the URL, and checks first that no chat already exists (safe to press). It now shows the
+  outcome - if it fails it tells you why (Circle DMs off, a Circle hiccup, etc.) rather than doing nothing.
 
 ## The welcome message
 
