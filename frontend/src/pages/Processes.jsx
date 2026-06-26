@@ -409,8 +409,14 @@ function PrivateTierCallsDoc() {
       </P>
 
       <H>Tracking the data</H>
+      <P>
+        On the <strong>1st of each month</strong> the dashboard automatically posts the previous month's
+        summary to the <strong>#private-tiers</strong> Slack channel - how many 1:1 calls were held, broken
+        down by <strong>tier</strong>, <strong>call type</strong> and <strong>coach</strong> (plus no-shows
+        and cancellations). No one needs to compile it by hand.
+      </P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
-        <LI>A monthly summary of how many 1:1 calls were completed - broken down by <strong>tier</strong>, <strong>call type</strong>, and <strong>coach</strong>.</LI>
+        <LI><strong>Monthly Slack summary (#private-tiers, automatic on the 1st):</strong> 1:1 calls held, by tier, call type and coach.</LI>
         <LI>A summary of how many private-tier students had interviews, and how much of their call allowance they used.</LI>
       </ul>
 

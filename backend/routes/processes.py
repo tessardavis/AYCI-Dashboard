@@ -162,9 +162,11 @@ The extra allowance is stored per student and persists.
 REMINDERS: Coralie tracks who has interviews coming up and checks in with
 private-tier students to remind them how to book and what allowance is left.
 
-DATA: a monthly summary of completed 1:1 calls broken down by tier, call type, and
-coach; and a summary of how many private-tier students had interviews and how much
-of their allowance they used.
+DATA: on the 1st of each month the dashboard AUTOMATICALLY posts the previous
+month's summary to the #private-tiers Slack channel - 1:1 calls held, broken down
+by tier, call type and coach (plus no-shows / cancellations). No one compiles it
+by hand. (Also tracked: how many private-tier students had interviews and how much
+of their allowance they used.)
 
 EACH COHORT: the dashboard needs no change - it reads the tier off each student and
 matches the Calendly events by name, so the same booking links carry over. The
