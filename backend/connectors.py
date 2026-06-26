@@ -127,7 +127,7 @@ async def convertkit_weekly_subscribers(params: dict, start_iso: str, end_iso: s
     return float(count)
 
 
-async def _resolve_ayci_cohort_tags(suffix: str, carry_over: int = 0) -> list[int]:
+async def _resolve_ayci_cohort_tags(suffix: str, carry_over: int = 0, *, exclude_future: bool = False) -> list[int]:
     """Resolve `[AYCI <MONTH-YY>] <suffix>` cohort tags newest-first.
 
     `suffix` matches the bit after the bracketed cohort prefix (e.g.
@@ -171,7 +171,15 @@ async def _resolve_ayci_cohort_tags(suffix: str, carry_over: int = 0) -> list[in
             continue
         matches.append((cohort, int(t["id"]), t["name"]))
 
-    matches.sort(key=lambda x: x[0], reverse=True)
+    matches.sort(key=lambda x: x[0], reverse=True)  # newest cohort first
+    if exclude_future:
+        # Skip cohorts whose month hasn't started yet (e.g. SEP-26 tags created
+        # during the JUN-26 cohort). Bonus-call tagging must stick to the running
+        # cohort, not a pre-created future one. Fall back to newest only if this
+        # tag exists exclusively for future cohorts.
+        non_future = [m for m in matches if m[0] <= _dt.utcnow()]
+        if non_future:
+            matches = non_future
     keep = max(1, 1 + max(0, carry_over))
     return [tid for _, tid, _ in matches[:keep]]
 

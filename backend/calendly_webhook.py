@@ -143,7 +143,7 @@ async def handle_invitee_created(db, payload: dict) -> dict:
 
     # 1) Kit tag - stops the reminder emails. Current cohort's tag, newest-first.
     try:
-        tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX)
+        tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX, exclude_future=True)
         if tag_ids:
             await connectors.convertkit_add_tag_to_subscriber(email, tag_ids[0])
             result["kit_tagged"] = tag_ids[0]
@@ -295,7 +295,7 @@ async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120
                "unique_emails": 0, "tagged": 0, "recorded": 0, "not_found": 0,
                "errors": 0}
 
-    tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX)
+    tag_ids = await connectors._resolve_ayci_cohort_tags(KIT_BOOKED_TAG_SUFFIX, exclude_future=True)
     booked_tag = tag_ids[0] if tag_ids else None
     summary["booked_tag"] = booked_tag
 
