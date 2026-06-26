@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, MessageCircle, Gift, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, Phone, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
@@ -8,8 +8,7 @@ import BonusCallSummary from "@/components/BonusCallSummary";
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
 const PROCESSES = [
   { slug: "bonus-calls", title: "Bonus calls", status: "ready", body: BonusCallsDoc },
-  { slug: "one-to-one-calls", title: "1:1 call allowances", status: "soon" },
-  { slug: "mock-interviews", title: "Mock interview allowances", status: "soon" },
+  { slug: "private-tier-calls", title: "Private Tier calls", status: "ready", body: PrivateTierCallsDoc },
   { slug: "testimonials", title: "Testimonial status", status: "soon" },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
@@ -305,6 +304,107 @@ function BonusCallsDoc() {
         <LI><strong>Dashboard:</strong> nothing to change. Keep Calendly connected (Settings → Integrations). It auto-detects the new tags + event.</LI>
         <LI><strong>End of cohort:</strong> read the snapshot (eligible / booked / no-show / rescheduled) on the Cohort Dashboard, share with Tessa, then the coaches.</LI>
       </ol>
+    </div>
+  );
+}
+
+function PrivateTierCallsDoc() {
+  return (
+    <div data-testid="process-private-tier-calls">
+      <div className="flex items-center gap-2 mb-1">
+        <Phone className="w-5 h-5 text-[var(--ayci-teal)]" />
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private Tier calls</h1>
+      </div>
+      <P>
+        Students on the <strong>Private Plus</strong> and <strong>VIP</strong> tiers get a set of free
+        1:1 coaching calls as part of their package. They can use them <strong>any time</strong> - there
+        is no expiry (people were previously told 12 months, but they can keep their allowance for as
+        long as they need).
+      </P>
+
+      <H>Who gets what</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Private Plus</strong> - 1 x 30-minute coach call.</LI>
+        <LI><strong>VIP</strong> - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls in total).</LI>
+      </ul>
+
+      <H>Who's eligible &amp; how it's identified</H>
+      <P>
+        When a student buys a Private Plus or VIP package, the <strong>Sales Zap</strong> tags them on
+        Circle for the current cohort:
+      </P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><Tag>[AYCI MON-YY] Cohort - Private Plus</Tag> / <Tag>... Private Plus (4-Pay)</Tag></LI>
+        <LI><Tag>[AYCI MON-YY] Cohort - VIP</Tag> / <Tag>... VIP (6-Pay)</Tag> / <Tag>... VIP (12-Pay)</Tag></LI>
+      </ul>
+      <P>
+        That tier flows through to the dashboard as the student's <strong>tier</strong>, which is what
+        sets their call allowance. The <strong>Sales Zap</strong> that applies the Circle tier tags is{" "}
+        <a href="https://zapier.com/editor/00000000-0000-c000-8000-000365773719/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">here</a>.
+      </P>
+
+      <H>How they get the booking links</H>
+      <P>Eligible students get the booking links in two places:</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>the onboarding email they receive via the <Tag>[AYCI MON-YY] Onboarding (Megan)</Tag> Kit automation (<a href="https://app.kit.com/automations/1982218/edit" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">here</a>); and</LI>
+        <LI>an initial post from <strong>Coralie</strong> in their private chat, containing the same links.</LI>
+      </ul>
+
+      <H>The booking links &amp; coaches</H>
+      <P><strong>Private Plus</strong> - the 30-minute coach call (with Becky, Charlotte, or Anoop):</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><a href="https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min</a></LI>
+      </ul>
+      <P><strong>VIP</strong> - five calls across three links:</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>2 x 30-min <strong>with Tessa</strong> - <a href="https://calendly.com/tessardavis/ayci-vip-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/tessardavis/ayci-vip-30-min</a></LI>
+        <LI>2 x 30-min <strong>coach calls</strong> (with Becky) - the same <a href="https://calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cxkz-kf9-xb4/ayci-1-1-30-min</a> link as Private Plus</LI>
+        <LI>1 x 60-min <strong>mock interview</strong> (with Becky, Charlotte, or Anoop) - <a href="https://calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/d/cttc-mx5-gz6/ayci-1-1-60-min</a></LI>
+      </ul>
+
+      <H>Keeping coaching availability open</H>
+      <P>
+        Unlike bonus calls, these links stay live all year, so availability has to be kept topped up:
+      </P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>set coach availability on Calendly <strong>well ahead</strong> of each launch;</LI>
+        <LI>availability should run <strong>consistently throughout the year</strong>; and</LI>
+        <LI>do <strong>regular checks</strong> on each booking link to confirm there's enough open: the Private Plus 30-min coach call, the VIP 60-min mock, the VIP 2 x 30-min coach calls, and the VIP 2 x 30-min Tessa calls.</LI>
+      </ul>
+
+      <H>How bookings are tracked</H>
+      <P>When a student books any of these calls, the dashboard automatically:</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>logs the call against their record - which call it was, the coach, and the date;</LI>
+        <LI>shows their allowance used vs. remaining (e.g. a VIP who's booked 1 of their 2 Tessa calls); and</LI>
+        <LI>posts a heads-up in <Tag>#fulfillment-team</Tag>.</LI>
+      </ul>
+      <P>
+        If a student <strong>reschedules</strong>, the dashboard updates the date automatically. If a
+        student <strong>doesn't show up</strong>, the coach opens that student's <strong>Student Lookup</strong>
+        card and marks that call a <strong>no-show</strong>.
+      </P>
+
+      <H>Reminders to book</H>
+      <P>
+        <strong>Coralie</strong> keeps track of who has interviews coming up and checks in with private-tier
+        students to make sure they know how to book and to remind them of their remaining allowance.
+      </P>
+
+      <H>Tracking the data</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>A monthly summary of how many 1:1 calls were completed - broken down by <strong>tier</strong>, <strong>call type</strong>, and <strong>coach</strong>.</LI>
+        <LI>A summary of how many private-tier students had interviews, and how much of their call allowance they used.</LI>
+      </ul>
+
+      <H>Each cohort</H>
+      <P>
+        The dashboard needs <strong>no change</strong> per cohort - it reads the tier off each student and
+        matches the Calendly events by name, so the same booking links carry over. The team's per-launch
+        jobs are: confirm the Sales Zap is tagging the new cohort's tier tags, update the cohort prefix in
+        the onboarding email + Coralie's private-chat post, and check coach availability is set on all
+        the booking links.
+      </P>
     </div>
   );
 }
