@@ -237,9 +237,10 @@ function BonusCallsDoc() {
 
       <H>Marking someone eligible (ad hoc)</H>
       <P>
-        On a student's record - either <strong>Student Lookup</strong> (the "Coach view" card at the top)
-        or <strong>Students DB → Edit</strong> - use the <strong>"Mark eligible (ad hoc)"</strong> button.
-        It tags them <Tag>Ad Hoc Bonus Call</Tag> in Kit, which triggers Kit's email with the booking link.
+        <strong>Arub</strong> is the person who marks ad-hoc students eligible. On the student's record -
+        either <strong>Student Lookup</strong> (the "Coach view" card at the top) or
+        <strong>Students DB → Edit</strong> - click <strong>"Mark eligible (ad hoc)"</strong>. It tags
+        them <Tag>Ad Hoc Bonus Call</Tag> in Kit, which triggers Kit's email with the booking link.
       </P>
       <Figure src="/process-img/bonus-eligibility-record.png" alt="Bonus call line on the student record"
         caption="Student Lookup - the Coach view 'Bonus call' line + Mark eligible button" />

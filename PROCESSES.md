@@ -60,9 +60,9 @@ dashboard, so it has no zap.
 
 ## How a team member marks someone eligible (ad-hoc) 🔨
 
-On the student's record there's a **"Mark eligible for bonus call"** action. Clicking it tags the
-student in ConvertKit with `Ad Hoc Bonus Call`. The Kit automation tied to that tag then emails them
-the booking link.
+**Arub** is the person who marks ad-hoc students eligible. On the student's record there's a
+**"Mark eligible for bonus call"** action. Clicking it tags the student in ConvertKit with
+`Ad Hoc Bonus Call`. The Kit automation tied to that tag then emails them the booking link.
 > ❓ **Confirm:** is there a Kit automation that sends the booking link when `Ad Hoc Bonus Call` is
 > applied? Your doc lists send-automations for the other 4 tags but not Ad Hoc - if it doesn't exist,
 > it needs creating in Kit (the dashboard applies the tag; Kit sends the email).

@@ -42,7 +42,7 @@ WHERE THE TAGS ARE APPLIED (Zapier zaps, Kajabi purchase -> Kit tag):
 These purchase-tagging zaps must NOT be deleted - the bonus-call flow depends on
 them. The Ad Hoc tag is the only one applied by the dashboard (no zap).
 
-MARKING SOMEONE ELIGIBLE (AD HOC): On a student's record - either Student Lookup
+MARKING SOMEONE ELIGIBLE (AD HOC): Arub is the person who does this. On a student's record - either Student Lookup
 (the "Coach view" card at the top) or Students DB > Edit - click
 "Mark eligible (ad hoc)". That tags them "Ad Hoc Bonus Call" in Kit, which
 triggers Kit's email with the booking link.
