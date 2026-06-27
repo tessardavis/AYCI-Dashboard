@@ -289,6 +289,48 @@ EACH COHORT (Boost & Go): the Sales zap tags buyers on purchase and the chat zap
 creates chats - both per launch. The dashboard needs no change (it reads the
 Boost & Go field). Main per-launch job: make sure new B&G buyers have their
 Boost & Go field set (watch the dual-email cases).
+
+
+# Boss Badge & testimonials
+
+WHAT IT IS: when a student lands their substantive job we celebrate it (the Boss
+Badge) and turn it into social proof - they share their win in the community and
+record a testimonial with Tessa. The aim is that nothing slips through.
+OWNER: Coralie.
+
+1. IT STARTS WHEN A STUDENT TELLS US THEY GOT THE JOB: students tell us in all
+sorts of ways (success form, a DM to a coach, an email, a message to Coralie).
+The tidy path is the substantive success form, but the rule that stops wins
+leaking: COACHES, if a student tells you they got their substantive job, pass it
+to Coralie straight away (coaches don't all have dashboard access, so Coralie is
+the one person who records every win).
+
+2. CORALIE RECORDS IT ON THE DASHBOARD: Coralie opens the student and clicks
+"Mark as Boss" - the single source of truth. It cascades: the Boss Badge tag on
+Circle, the Kit tag + bonus-content access, and it starts the testimonial chase.
+(The success form triggers the same automatically; a manual Circle tag is a
+fallback.)
+
+3. THE JOURNEY THE BOARD TRACKS (per Boss): Boss tagged -> win shared ->
+testimonial booked -> testimonial recorded.
+  - Boss tagged: set when Coralie marks them (or the form fires).
+  - Win shared: auto-detected from a post in the Share Your Wins Circle space
+    (https://ayci-academy.circle.so/c/share-your-wins/).
+  - Testimonial booked: auto from the Testimonial Call Calendly event
+    (https://calendly.com/tessardavis/testimonial).
+  - Testimonial recorded: when the booked call actually happens.
+
+4. THE NUDGES (already automated): a Circle DM sequence chases them to book - a
+first message from Coralie + 3 follow-ups, each with the booking link; they stop
+once the call is booked.
+
+5. CORALIE'S "BOSSES TO CHASE" VIEW: the board surfaces who's stuck at each step
+(tagged but no win, no booking, booked but not recorded) so Coralie can nudge
+stragglers on top of the automated DMs.
+
+KEY LINKS: wins channel = Share Your Wins
+(https://ayci-academy.circle.so/c/share-your-wins/); testimonial booking =
+https://calendly.com/tessardavis/testimonial.
 """
 
 

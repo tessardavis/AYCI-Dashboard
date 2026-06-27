@@ -15,11 +15,10 @@ where it lives, and what the team needs to do. One section per process.
 2. [Private Tier calls](#2-private-tier-calls) - *draft for review*
 3. [Private chat](#3-private-chat) - *draft for review*
 4. [Boost & Go](#4-boost--go) - *draft for review*
-5. Reminder statuses - _to be documented_
-6. Boss badge / Win shared - _to be documented_
-7. Testimonial status - _to be documented_
-8. Interview reminders - _to be documented_
-9. Refund status - _to be documented_
+5. [Boss Badge & testimonials](#5-boss-badge--testimonials) - *draft for review*
+6. Reminder statuses - _to be documented_
+7. Interview reminders - _to be documented_
+8. Refund status - _to be documented_
 
 ---
 
@@ -450,3 +449,60 @@ their record. That's what makes them eligible.
 The Sales zap tags buyers on purchase; the chat zap creates chats - both per launch. The dashboard reads
 the Boost & Go field and applies the right video + (Plus) call allowance automatically. Main per-launch
 job: make sure new B&G buyers have their **Boost & Go field set** (watch the dual-email cases).
+
+---
+
+# 5. Boss Badge & testimonials
+
+When a student lands their **substantive job** we celebrate it (the **Boss Badge**) and turn it into
+social proof - they **share their win** in the community and **record a testimonial** with Tessa. The
+whole point is that nothing slips through. **Owner: Coralie.**
+
+## 1. It starts when a student tells us they got the job
+
+Students tell us in all sorts of ways - the success form, a DM to a coach, an email, a message to
+Coralie. The tidy path is the **substantive success form**, but the rule that stops wins leaking is:
+
+> **Coaches:** if a student tells you they've got their substantive job, **pass it to Coralie straight
+> away.** (Coaches don't all have dashboard access, so Coralie is the one person who records every win.)
+
+## 2. Coralie records it on the dashboard
+
+Coralie opens the student and clicks **"Mark as Boss"** - the single source of truth. It cascades: the
+**Boss Badge** tag on Circle, the Kit tag + bonus-content access, and it starts the testimonial chase.
+(The success form triggers the same automatically; a manual Circle tag is a fallback.)
+
+## 3. The journey the board tracks
+
+Per Boss: **Boss tagged → win shared → testimonial booked → testimonial recorded.**
+
+- **Boss tagged** - set when Coralie marks them (or the form fires).
+- **Win shared** - auto-detected from a post in the **Share Your Wins** space (https://ayci-academy.circle.so/c/share-your-wins/, space id 996901).
+- **Testimonial booked** - auto from the **Testimonial Call** Calendly event (https://calendly.com/tessardavis/testimonial).
+- **Testimonial recorded** - when the booked call actually happens.
+
+## 4. The nudges (already automated)
+
+A Circle DM sequence chases them to book: a first message from Coralie + 3 follow-ups, each with the
+booking link; they stop once the call is booked. ("Student Wins Tracking" zaps.)
+
+## 5. Coralie's "Bosses to chase" view
+
+The board surfaces who's stuck at each step (tagged-but-no-win, no-booking, booked-not-recorded) so
+Coralie can personally nudge stragglers on top of the automated DMs.
+
+## Open tasks & to-clarify
+
+- **[Tessa - Zapier]** Consolidate the Boss-tagging zaps (success form + manual Circle tag + Monday taggers) into one clean path.
+- **[Tessa - Zapier/scorecard]** Swap **Oksana → Coralie** on the "Student Wins Tracking - First Message" zap and the "Testimonial Calls Recorded" scorecard owner.
+
+### Build status
+| Piece | Status |
+|---|---|
+| Document the process (board + this file + Q&A) | ✅ Live |
+| "Mark as Boss" button (single source of truth) | 🔨 |
+| Journey status on the board (tagged → shared → booked → recorded) | 🔨 |
+| Win-shared auto-detect (Share Your Wins posts) | 🔨 |
+| Testimonial booked/recorded auto-detect (Calendly) | 🔨 |
+| "Bosses to chase" view | 🔨 |
+| Scorecard owner Oksana → Coralie | 🔨 |
