@@ -507,8 +507,8 @@ async def _seed_metrics():
         # SOCIAL PROOF
         {"name": "Results Received", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 15, "format": "number"},
         {"name": "Interviews This Week", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 20, "format": "number"},
-        {"name": "Testimonial Calls Recorded", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 3, "format": "number"},
-        {"name": "Wins Shared", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 10, "format": "number"},
+        {"name": "Testimonial Calls Recorded", "category": "SOCIAL PROOF", "owner_ids": [coralie], "goal": 3, "format": "number"},
+        {"name": "Wins Shared", "category": "SOCIAL PROOF", "owner_ids": [coralie], "goal": 10, "format": "number"},
         {"name": "Active Academy Members", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 180, "format": "number"},
         {"name": "Student Satisfaction Score", "category": "SOCIAL PROOF", "owner_ids": [oksana], "goal": 4.5, "format": "number"},
         # DELIVERY + OPERATIONS
@@ -1320,6 +1320,23 @@ async def on_startup():
         _monthly_private_summary,
         CronTrigger(day=1, hour=7, minute=0, timezone=tz),
         id="monthly_private_summary",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
+    async def _boss_journey_sweep():
+        import boss_journey
+        try:
+            await boss_journey.sweep(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] boss-journey sweep failed: {e}")
+
+    # Every 6h: detect Bosses who've shared their win (Share Your Wins posts) +
+    # flip past-date testimonial bookings to Recorded. See PROCESSES.md #5.
+    scheduler.add_job(
+        _boss_journey_sweep,
+        CronTrigger(hour="2,8,14,20", minute=40, timezone=tz),
+        id="boss_journey_sweep",
         replace_existing=True,
         max_instances=1, coalesce=True,
     )

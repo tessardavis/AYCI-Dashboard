@@ -1003,6 +1003,104 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
     return {"ok": True, "queued": True, "id": monday_item_id}
 
 
+# ------------------------------------------------- Boss Badge (substantive job)
+async def _apply_boss(row: dict, marked_by: str) -> dict:
+    """Mark a student a Boss (single source of truth on the board). Sets
+    boss_badge=Yes + boss_tagged_at (pinned) and fires the outbound column-change
+    webhook so the consolidation zap can apply the Circle Boss tag / Kit tag /
+    bonus-content access. Idempotent: re-marking an existing Boss won't re-fire."""
+    if (row.get("boss_badge") or "").strip().lower() in {"yes", "true", "1", "y"} and row.get("boss_tagged_at"):
+        return {"ok": True, "id": row["_id"], "already_boss": True}
+    now = datetime.now(timezone.utc)
+    set_fields = {"boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": marked_by}
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(set_fields.keys()))
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        **set_fields, "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": now, "dashboard_edited_by": "mark-boss",
+    }})
+    # Fan-out: one outbound webhook a single consolidation zap can hang the Circle
+    # Boss tag + Kit tag + bonus-content access off (see PROCESSES.md #5).
+    try:
+        asyncio.create_task(webhooks_outbound.notify_column_changes(
+            db, item_id=row["_id"], fields_changed={"boss_badge": "Yes"},
+            student={**row, **set_fields}))
+    except Exception as e:
+        logger.warning(f"[mark-boss] outbound webhook failed for {row['_id']}: {e}")
+    logger.info(f"[mark-boss] {row['_id']} ({row.get('name')}) marked Boss by {marked_by}")
+    return {"ok": True, "id": row["_id"], "name": row.get("name")}
+
+
+@router.post("/students-db/{monday_item_id}/mark-boss")
+async def mark_boss(monday_item_id: str, user: dict = Depends(require_board("students"))):
+    """Coralie's "Mark as Boss" button - the single source of truth for a student
+    landing their substantive job. Sets the board state + fans out (see _apply_boss)."""
+    row = await db.academy_members.find_one({"_id": monday_item_id})
+    if not row:
+        raise HTTPException(404, "Student not found")
+    return await _apply_boss(row, user.get("email") or "dashboard")
+
+
+class MarkBossByEmailBody(BaseModel):
+    email: str
+
+
+@router.post("/students-db/mark-boss-by-email")
+async def mark_boss_by_email(
+    body: MarkBossByEmailBody,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Zapier-callable: mark a student a Boss by email. The single entry point the
+    success-form zap and the manual-Circle-tag zap should call (instead of each
+    doing the Circle/Kit/Monday work themselves) - see the zap-consolidation plan."""
+    _check_webhook_secret(x_webhook_secret)
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    _email_re = rf"(^|[,;\s]){re.escape(email)}([,;\s]|$)"
+    row = await db.academy_members.find_one({"$or": [
+        {"email": email}, {"circle_email": email},
+        {"other_emails": {"$regex": _email_re, "$options": "i"}}]})
+    if not row:
+        raise HTTPException(404, f"No student found for {email}")
+    return await _apply_boss(row, "zapier")
+
+
+@router.get("/students-db/bosses")
+async def list_bosses(user: dict = Depends(require_board("students"))):
+    """The 'Bosses to chase' view: every Boss with their testimonial-journey
+    status (tagged -> win shared -> booked -> recorded), incomplete ones first."""
+    import boss_journey
+    proj = {"name": 1, "email": 1, "circle_email": 1, "boss_badge": 1,
+            "boss_tagged_at": 1, "win_shared_at": 1, "testimonial_status": 1,
+            "testimonial_booked_date": 1, "testimonial_recorded_at": 1, "testimonial_coach": 1}
+    out = []
+    async for r in db.academy_members.find({"boss_badge": {"$exists": True, "$nin": [None, ""]}}, proj):
+        if not boss_journey.is_boss(r):
+            continue
+        st = boss_journey.journey_status(r)
+        out.append({"id": r["_id"], "name": r.get("name"), "email": r.get("email"), **st})
+    order = {"win": 0, "booking": 1, "recording": 2, None: 3}
+    out.sort(key=lambda x: (order.get(x["stuck"], 3), (x.get("name") or "").lower()))
+    counts = {
+        "total": len(out),
+        "win": sum(1 for b in out if b["stuck"] == "win"),
+        "booking": sum(1 for b in out if b["stuck"] == "booking"),
+        "recording": sum(1 for b in out if b["stuck"] == "recording"),
+        "complete": sum(1 for b in out if b["complete"]),
+    }
+    return {"bosses": out, "counts": counts}
+
+
+@router.post("/admin/boss-journey/scan")
+async def boss_journey_scan(admin: dict = Depends(require_admin)):
+    """Run the Boss-journey sweep now (detect newly-shared wins + flip past-date
+    testimonial bookings to Recorded). Runs in the background (the wins scan reads
+    Circle); the scheduler also runs it every 6h."""
+    import boss_journey
+    asyncio.create_task(boss_journey.sweep(db))
+    return {"ok": True, "started": True}
+
+
 _BONUS_CALLS_URL = "https://ayci-academy.circle.so/c/bonus-live-sessions/"
 
 

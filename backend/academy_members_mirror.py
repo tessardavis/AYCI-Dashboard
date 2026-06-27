@@ -202,6 +202,13 @@ PROTECTED_FIELDS = {
     "fifteen_minute_call",
     # Boss Badge status (zap 8c - substantive success form). Monday label: Yes.
     "boss_badge",
+    # Boss Badge -> testimonial journey (dashboard-owned). See PROCESSES.md #5.
+    # boss_tagged_at: set when Coralie clicks "Mark as Boss" (single source of
+    # truth). win_shared_at: auto-detected from a Share Your Wins post.
+    # testimonial_* : booked/recorded from the Testimonial Call Calendly event.
+    "boss_tagged_at", "boss_marked_by", "win_shared_at",
+    "testimonial_status", "testimonial_booked_date", "testimonial_recorded_at",
+    "testimonial_coach",
     # Kajabi add-on purchases (order bump + upsells). Dashboard-owned - NOT on
     # Monday. Set "Yes" by the Kajabi purchase-capture zap (via update-by-email),
     # keyed to the offer the student bought. The toolkit site reads these via
