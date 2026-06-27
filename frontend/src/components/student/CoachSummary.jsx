@@ -206,6 +206,8 @@ export default function CoachSummary({ result }) {
         <PrivateCallsBlock summary={privateCalls} email={result?.email} />
       )}
 
+      <BossBlock studentId={monday.id} boss={monday.boss} who={monday.name || result?.email} />
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <CallsStat
           callsRemaining={totalCallsRemaining}
@@ -601,6 +603,86 @@ function SummaryStat({ icon: Icon, label, value, sub, tone, testid }) {
       {sub && (
         <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-0.5 line-clamp-2">
           {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Boss Badge -> testimonial journey. If not yet a Boss, shows Coralie's "Mark as
+// Boss" button (single source of truth). Once a Boss, shows the journey:
+// tagged -> win shared -> testimonial booked -> recorded. Exported so the
+// Students DB edit modal can reuse it.
+export function BossBlock({ studentId, boss, who }) {
+  const [marked, setMarked] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const markBoss = async () => {
+    if (!studentId) { toast.error("No student id on this record"); return; }
+    setBusy(true);
+    try {
+      await apiClient.post(`/students-db/${encodeURIComponent(studentId)}/mark-boss`, {}, { timeout: 30000 });
+      setMarked(true);
+      toast.success(`${who || "Student"} marked as Boss`);
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Couldn't mark as Boss");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const j = boss || (marked ? { tagged: true, win_shared: false, testimonial_booked: false, testimonial_recorded: false, stuck: "win" } : null);
+
+  if (!j) {
+    return (
+      <div className="mt-3 flex items-center gap-2 flex-wrap" data-testid="boss-block">
+        <span className="text-[10px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">Boss Badge</span>
+        <button
+          type="button"
+          onClick={markBoss}
+          disabled={busy}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--ayci-border)] text-[10px] uppercase tracking-wider font-semibold text-[var(--ayci-teal)] hover:bg-slate-50 disabled:opacity-50"
+          data-testid="mark-boss-btn"
+          title="They got their substantive job - tag them a Boss (starts the win + testimonial journey)"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
+          Mark as Boss
+        </button>
+      </div>
+    );
+  }
+
+  const steps = [
+    ["Boss tagged", true],
+    ["Win shared", !!j.win_shared],
+    ["Testimonial booked", !!j.testimonial_booked],
+    ["Recorded", !!j.testimonial_recorded],
+  ];
+  return (
+    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3" data-testid="boss-block">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Award className="w-3.5 h-3.5 text-amber-600" />
+        <span className="text-[10px] uppercase tracking-wider font-subhead text-amber-700">Boss - testimonial journey</span>
+        {j.complete && <span className="text-[10px] text-emerald-700 font-semibold">· complete</span>}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {steps.map(([label, done]) => (
+          <span
+            key={label}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold border ${
+              done ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-[var(--ayci-ink-muted)] border-[var(--ayci-border)]"
+            }`}
+          >
+            {done ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-3 h-3 inline-block rounded-full border border-current opacity-50" />}
+            {label}
+          </span>
+        ))}
+      </div>
+      {j.testimonial_status && (
+        <div className="text-[10px] text-[var(--ayci-ink-muted)] mt-1.5">
+          Testimonial: {j.testimonial_status}
+          {j.testimonial_booked_date ? ` · ${j.testimonial_booked_date}` : ""}
+          {j.testimonial_coach ? ` · ${j.testimonial_coach}` : ""}
         </div>
       )}
     </div>

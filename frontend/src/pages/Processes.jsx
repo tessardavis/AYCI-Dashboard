@@ -4,6 +4,7 @@ import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, Award, CheckCircle
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
 import PrivateCallSummary from "@/components/PrivateCallSummary";
+import BossChaseSummary from "@/components/BossChaseSummary";
 
 // In-dashboard process docs the whole team can read. Add a process by adding an
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
@@ -627,6 +628,7 @@ function BoostAndGoDoc() {
 function BossTestimonialsDoc() {
   return (
     <div data-testid="process-boss-testimonials">
+      <BossChaseSummary className="mb-5" />
       <div className="flex items-center gap-2 mb-1">
         <Award className="w-5 h-5 text-[var(--ayci-teal)]" />
         <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Boss Badge & testimonials</h1>
