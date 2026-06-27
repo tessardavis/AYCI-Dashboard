@@ -38,6 +38,9 @@ BONUS_EVENT_MATCH = "bonus call"
 # Kit tag suffix (the bit after the "[AYCI MON-YY]" prefix) to apply on booking.
 KIT_BOOKED_TAG_SUFFIX = "1:1 Call Booked"
 SLACK_CHANNEL = "#fulfillment-team"
+# Testimonial Call event (calendly.com/tessardavis/testimonial). Matched as a
+# substring of the event name. Drives the Boss -> testimonial journey.
+TESTIMONIAL_EVENT_MATCH = "testimonial"
 
 # Manual/ad-hoc eligibility tag the dashboard applies when a team member marks
 # a student eligible for a bonus call.
@@ -277,6 +280,8 @@ async def handle_invitee_created(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
+        if TESTIMONIAL_EVENT_MATCH in event_name.lower():
+            return await handle_testimonial_created(db, payload)
         slug = await _resolve_event_slug(ev.get("event_type") or "")
         kind = _classify_private_event(event_name, slug)
         if kind:
@@ -394,6 +399,8 @@ async def handle_invitee_canceled(db, payload: dict) -> dict:
     ev = payload.get("scheduled_event") or {}
     event_name = ev.get("name") or ""
     if BONUS_EVENT_MATCH not in event_name.lower():
+        if TESTIMONIAL_EVENT_MATCH in event_name.lower():
+            return await handle_testimonial_canceled(db, payload)
         slug = await _resolve_event_slug(ev.get("event_type") or "")
         kind = _classify_private_event(event_name, slug)
         if kind:
@@ -761,6 +768,111 @@ async def handle_private_canceled(db, payload: dict, kind: str) -> dict:
             upsert=True,
         )
     logger.info(f"[calendly] private-call cancellation processed: {result}")
+    return result
+
+
+# ============================== Testimonial calls =========================
+
+async def _set_testimonial_fields(db, row: dict, fields: dict) -> None:
+    pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(fields.keys()))
+    await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+        **fields, "dashboard_edited_fields": pinned,
+        "dashboard_edited_at": datetime.now(timezone.utc),
+        "dashboard_edited_by": "calendly-testimonial",
+    }})
+
+
+async def handle_testimonial_created(db, payload: dict) -> dict:
+    """A Testimonial Call booking. Records testimonial_status=Booked + date + coach
+    on the student row (the 'testimonial booked' step of the Boss journey).
+    'Recorded' is set later by the boss-journey sweep once the call date passes."""
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        return {"skipped": "no_email", "kind": "testimonial"}
+    ev = payload.get("scheduled_event") or {}
+    invitee_uri = payload.get("uri") or ""
+    if invitee_uri and await db.calendly_events_seen.find_one({"_id": invitee_uri}):
+        return {"skipped": "duplicate", "email": email, "kind": "testimonial"}
+    host = _host_from_payload(payload)
+    start_time = ev.get("start_time") or ""
+    call_date = start_time[:10] or None
+    when = start_time[:16].replace("T", " ")
+    is_reschedule = bool(payload.get("rescheduled")) or bool(payload.get("old_invitee"))
+
+    result = {"email": email, "kind": "testimonial", "call_date": call_date,
+              "rescheduled": is_reschedule, "row_updated": False, "slack": False}
+    try:
+        row = await _match_student(db, email)
+        if row:
+            await _set_testimonial_fields(db, row, {
+                "testimonial_status": "Rescheduled" if is_reschedule else "Booked",
+                "testimonial_booked_date": call_date,
+                "testimonial_coach": host,
+            })
+            result["row_updated"] = row["_id"]
+        else:
+            result["row_updated"] = "student_not_found"
+    except Exception as e:
+        logger.warning(f"[calendly] testimonial row update failed for {email}: {e}")
+
+    try:
+        name = payload.get("name") or email
+        verb = "rescheduled" if is_reschedule else "booked"
+        msg = (f":star2: *Testimonial call {verb}* - {name} ({email})"
+               + (f" with *{host}*" if host else "")
+               + (f" · {when} UTC" if when else ""))
+        if result["row_updated"] == "student_not_found":
+            msg += " · :warning: not found in dashboard - check their email"
+        sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
+        result["slack"] = bool(sl.get("ok"))
+    except Exception as e:
+        logger.warning(f"[calendly] testimonial Slack failed for {email}: {e}")
+
+    if invitee_uri:
+        await db.calendly_events_seen.update_one(
+            {"_id": invitee_uri},
+            {"$set": {"_id": invitee_uri, "email": email, "name": payload.get("name"),
+                      "coach": host, "call_date": call_date, "start_time": start_time,
+                      "kind": "testimonial", "testimonial": True,
+                      "status": "rescheduled" if is_reschedule else "booked",
+                      "at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    logger.info(f"[calendly] testimonial processed: {result}")
+    return result
+
+
+async def handle_testimonial_canceled(db, payload: dict) -> dict:
+    """invitee.canceled for a Testimonial Call. Reschedule half is ignored (the
+    new created handles it); a genuine cancel clears the booked status."""
+    email = (payload.get("email") or "").strip().lower()
+    invitee_uri = payload.get("uri") or ""
+    if bool(payload.get("rescheduled")):
+        return {"email": email, "kind": "testimonial", "skipped": "reschedule_cancel_half"}
+    seen = await db.calendly_events_seen.find_one({"_id": invitee_uri}) if invitee_uri else None
+    if seen and seen.get("status") == "cancelled":
+        return {"email": email, "skipped": "duplicate_cancel"}
+    result = {"email": email, "kind": "testimonial", "row_updated": False, "slack": False}
+    try:
+        row = await _match_student(db, email)
+        if row and (row.get("testimonial_status") or "") in ("Booked", "Rescheduled"):
+            await _set_testimonial_fields(db, row, {"testimonial_status": "Cancelled"})
+            result["row_updated"] = row["_id"]
+    except Exception as e:
+        logger.warning(f"[calendly] testimonial cancel failed for {email}: {e}")
+    try:
+        name = payload.get("name") or email
+        msg = f":x: *Testimonial call cancelled* - {name} ({email})"
+        sl = await slack_dm.post_to_channel(db, SLACK_CHANNEL, msg)
+        result["slack"] = bool(sl.get("ok"))
+    except Exception as e:
+        logger.warning(f"[calendly] testimonial cancel Slack failed for {email}: {e}")
+    if invitee_uri:
+        await db.calendly_events_seen.update_one(
+            {"_id": invitee_uri},
+            {"$set": {"_id": invitee_uri, "email": email, "kind": "testimonial",
+                      "testimonial": True, "status": "cancelled",
+                      "at": datetime.now(timezone.utc)}}, upsert=True)
     return result
 
 
