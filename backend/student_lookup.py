@@ -46,6 +46,16 @@ def _normalise(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", s.lower())).strip()
 
 
+def _boss_summary(row):
+    """Boss -> testimonial journey status, or None if not a Boss. Lazy import
+    avoids a boss_journey import cycle."""
+    try:
+        from boss_journey import is_boss, journey_status
+        return journey_status(row) if is_boss(row) else None
+    except Exception:
+        return None
+
+
 def _private_calls_summary(tier, calls, extra=None, boost=None):
     """Allowance view of a student's private-tier (Private Plus / VIP / B&G Plus)
     calls. Lazy import keeps student_lookup free of a calendly_webhook import
@@ -531,6 +541,9 @@ async def monday_lookup(email: str, board_id: str = ACADEMY_MEMBERS_BOARD_ID, na
                         "private_calls": _private_calls_summary(
                             row.get("tier"), row.get("private_calls"),
                             row.get("private_call_allowance"), row.get("boost_and_go")),
+                        # Boss Badge -> testimonial journey (None until they're a
+                        # Boss). See PROCESSES.md #5.
+                        "boss": _boss_summary(row),
                     },
                     "error": None,
                     "source": "mongo_mirror",

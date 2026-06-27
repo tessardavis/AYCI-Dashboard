@@ -15,7 +15,7 @@ import { readCache, writeCache } from "@/lib/swrCache";
 import { tallyPrefillUrl } from "@/lib/tally";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PrivateCallsBlock } from "@/components/student/CoachSummary";
+import { PrivateCallsBlock, BossBlock } from "@/components/student/CoachSummary";
 import { summarizePrivateCalls } from "@/lib/privateCalls";
 
 const EDITABLE_FIELDS = [
@@ -961,6 +961,28 @@ function EditModal({ row, onClose, onSaved }) {
           return (
             <div className="px-4 pb-2">
               <PrivateCallsBlock summary={pt} email={row.email} />
+            </div>
+          );
+        })()}
+
+        {(() => {
+          // Boss Badge -> testimonial journey (Mark as Boss / journey status).
+          const isBoss = (row.boss_badge || "").trim().toLowerCase().match(/^(yes|true|1|y)$/);
+          const ts = row.testimonial_status || "";
+          const booked = ["Booked", "Rescheduled", "Recorded", "Attended", "Done"].includes(ts);
+          const recorded = ["Recorded", "Attended", "Done"].includes(ts) || !!row.testimonial_recorded_at;
+          const win = !!row.win_shared_at;
+          const boss = isBoss ? {
+            tagged: true, win_shared: win, testimonial_status: ts,
+            testimonial_booked: booked && !["Cancelled", "No-show"].includes(ts),
+            testimonial_booked_date: row.testimonial_booked_date,
+            testimonial_coach: row.testimonial_coach,
+            testimonial_recorded: recorded,
+            complete: win && booked && recorded,
+          } : null;
+          return (
+            <div className="px-4 pb-2">
+              <BossBlock studentId={row._id} boss={boss} who={row.name || row.email} />
             </div>
           );
         })()}
