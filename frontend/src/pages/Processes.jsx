@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, MessageCircle, Gift, Phone, Users, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
@@ -11,6 +11,7 @@ const PROCESSES = [
   { slug: "bonus-calls", title: "Bonus calls", status: "ready", body: BonusCallsDoc },
   { slug: "private-tier-calls", title: "Private Tier calls", status: "ready", body: PrivateTierCallsDoc },
   { slug: "private-chat", title: "Private chat", status: "ready", body: PrivateChatDoc },
+  { slug: "boost-and-go", title: "Boost & Go", status: "ready", body: BoostAndGoDoc },
   { slug: "testimonials", title: "Testimonial status", status: "soon" },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
@@ -543,6 +544,81 @@ function PrivateChatDoc() {
         The three zaps need to fire on the <strong>new cohort's tag</strong> each launch (and Coralie's
         welcome-message links should be checked). The dashboard side needs no change - it reads tier and
         the per-tier templates, which carry over.
+      </P>
+    </div>
+  );
+}
+
+function BoostAndGoDoc() {
+  return (
+    <div data-testid="process-boost-and-go">
+      <div className="flex items-center gap-2 mb-1">
+        <Rocket className="w-5 h-5 text-[var(--ayci-teal)]" />
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Boost & Go</h1>
+      </div>
+      <P>
+        <strong>Boost & Go</strong> is an add-on package, sold in two levels: <strong>Boost & Go</strong>{" "}
+        and <strong>Boost & Go Plus</strong>. It's usually bought by people who are <strong>already
+        Academy members</strong> (an upgrade), as well as new buyers. This page is the single source of
+        truth for what each level gets and how the dashboard handles them.
+      </P>
+
+      <H>What each level gets</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Boost & Go</strong> - a private chat + <strong>5 video answers</strong>. <strong>No 1:1 calls.</strong></LI>
+        <LI><strong>Boost & Go Plus</strong> - a private chat + <strong>10 video answers</strong> + <strong>2 x 30-minute coach calls</strong>.</LI>
+      </ul>
+      <P>
+        The private chat is covered in the <strong>Private chat</strong> process; the calls (Plus only) in
+        the <strong>Private Tier calls</strong> process. Everything keys off one field on their record.
+      </P>
+
+      <H>The one field that drives everything: "Boost & Go"</H>
+      <P>
+        Each student's record has a <strong>Boost & Go</strong> field (Students DB / Student Lookup). When
+        it's set, the dashboard treats them as a paying B&G customer and gives them the chat, video
+        allowance, and (for Plus) the calls. <strong>If it's blank, they get nothing B&G.</strong>
+      </P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Paying customer</strong> - the field contains <Tag>B&G</Tag> or <Tag>B&G Plus</Tag> (sometimes with "- Presentation"), or <Tag>Upgraded</Tag>.</LI>
+        <LI><strong>NOT a customer</strong> - sales-pipeline states like <Tag>Offer Due</Tag>, <Tag>Offer Made</Tag>, <Tag>Declined</Tag>. These are leads, not buyers - the dashboard ignores them.</LI>
+      </ul>
+
+      <H>How they get tagged</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>On a Kajabi purchase, the <strong>Boost & Go Sales zap</strong> (<a href="https://zapier.com/editor/262763852/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a>, 4 paths: B&G / B&G Plus × Presentation) tags them in <strong>Kit</strong> and posts to Slack.</LI>
+        <LI>Their <strong>Boost & Go field</strong> on the dashboard is what the dashboard reads. If it didn't get set automatically, set it by hand (Students DB → Edit).</LI>
+      </ul>
+      <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 my-2">
+        <P>
+          <strong>⚠️ Dual-email gotcha:</strong> if someone bought Boost & Go under a <strong>different email</strong>
+          than their Academy / Circle account, the automatic link can miss them (the Stripe backfill can't
+          match them). When that happens, set their <strong>Boost & Go field by hand</strong> on their record -
+          that's what makes them eligible.
+        </P>
+      </div>
+
+      <H>What the dashboard does once they're tagged</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Private chat</strong> - they appear in <strong>Students DB → "Needs setup"</strong> until their chat exists; it's created by the Boost & Go chat zap (<a href="https://zapier.com/editor/341446766/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a>) or the dashboard "Create chat" button.</LI>
+        <LI><strong>Video allowance</strong> - expected <strong>5</strong> (B&G) or <strong>10</strong> (B&G Plus). "Needs setup" flags it if their allowance is missing or doesn't match.</LI>
+        <LI><strong>Calls (Plus only)</strong> - 2 x 30-min coach calls show on their record automatically; plain B&G shows no calls.</LI>
+      </ul>
+
+      <H>Common confusions</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Plain B&G ≠ B&G Plus.</strong> Only <strong>Plus</strong> gets the 2 coach calls. Plain B&G is chat + videos only.</LI>
+        <LI><strong>Their tier is usually still "Academy".</strong> B&G is a separate add-on, so don't expect "Boost & Go" in the Tier field - look at the <strong>Boost & Go field</strong>.</LI>
+        <LI><strong>Pipeline states aren't customers.</strong> "Offer Due / Made / Declined" means a lead, not a buyer - no chat, videos, or calls.</LI>
+        <LI><strong>It's a separate track from VIP/Private Plus.</strong> Different sales zap, different chat zap, different Kit tagging.</LI>
+      </ul>
+
+      <H>Each cohort</H>
+      <P>
+        The Sales zap tags B&G buyers on purchase and the chat zap creates their chats - both per launch.
+        The dashboard side needs no change: it reads the Boost & Go field and applies the right video
+        allowance + (for Plus) call allowance automatically. Main per-launch job: make sure new B&G buyers
+        actually have their <strong>Boost & Go field set</strong> (watch the dual-email cases).
       </P>
     </div>
   );
