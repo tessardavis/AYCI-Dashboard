@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, Award, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
@@ -12,7 +12,7 @@ const PROCESSES = [
   { slug: "private-tier-calls", title: "Private Tier calls", status: "ready", body: PrivateTierCallsDoc },
   { slug: "private-chat", title: "Private chat", status: "ready", body: PrivateChatDoc },
   { slug: "boost-and-go", title: "Boost & Go", status: "ready", body: BoostAndGoDoc },
-  { slug: "testimonials", title: "Testimonial status", status: "soon" },
+  { slug: "boss-testimonials", title: "Boss Badge & testimonials", status: "ready", body: BossTestimonialsDoc },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
 
@@ -620,6 +620,82 @@ function BoostAndGoDoc() {
         allowance + (for Plus) call allowance automatically. Main per-launch job: make sure new B&G buyers
         actually have their <strong>Boost & Go field set</strong> (watch the dual-email cases).
       </P>
+    </div>
+  );
+}
+
+function BossTestimonialsDoc() {
+  return (
+    <div data-testid="process-boss-testimonials">
+      <div className="flex items-center gap-2 mb-1">
+        <Award className="w-5 h-5 text-[var(--ayci-teal)]" />
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Boss Badge & testimonials</h1>
+      </div>
+      <P>
+        When a student lands their <strong>substantive job</strong> we celebrate it (the <strong>Boss
+        Badge</strong>) and turn it into social proof - they <strong>share their win</strong> in the
+        community and <strong>record a testimonial</strong> with Tessa. This is the end-to-end, and the
+        whole point is that <strong>nothing slips through</strong>.
+      </P>
+      <P><strong>Owner: Coralie.</strong></P>
+
+      <H>1. It starts when a student tells us they got the job</H>
+      <P>
+        Students tell us in all sorts of ways - the success form, a DM to a coach, an email, a message to
+        Coralie. The tidy path is the <strong>substantive success form</strong>, but the rule that stops
+        wins leaking is:
+      </P>
+      <div className="rounded-lg border border-[var(--ayci-teal)]/30 bg-emerald-50/50 p-3 my-2">
+        <P>
+          <strong>Coaches:</strong> if a student tells you they've got their substantive job,
+          <strong> pass it to Coralie straight away.</strong> (Coaches don't all have dashboard access, so
+          Coralie is the one person who records every win - that's how we make sure none are missed.)
+        </P>
+      </div>
+
+      <H>2. Coralie records it on the dashboard</H>
+      <P>
+        Coralie opens the student and clicks <strong>"Mark as Boss"</strong> on their record. That's the
+        single source of truth, and it cascades: the <strong>Boss Badge</strong> tag on Circle, the Kit
+        tag + bonus-content access, and it starts the testimonial chase. <em>(The success form triggers the
+        same thing automatically; a manual Circle tag is a fallback.)</em>
+      </P>
+
+      <H>3. The journey the board tracks</H>
+      <P>For every Boss, the dashboard shows where they are:</P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Boss tagged</strong> - set when Coralie marks them (or the form fires).</LI>
+        <LI><strong>Win shared</strong> - detected automatically from a post in the <a href="https://ayci-academy.circle.so/c/share-your-wins/" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">Share Your Wins</a> space.</LI>
+        <LI><strong>Testimonial booked</strong> - detected from the <strong>Testimonial Call</strong> Calendly event (<a href="https://calendly.com/tessardavis/testimonial" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/tessardavis/testimonial</a>).</LI>
+        <LI><strong>Testimonial recorded</strong> - when the booked call actually happens.</LI>
+      </ul>
+
+      <H>4. The nudges (already automated)</H>
+      <P>
+        Once they're a Boss, a Circle DM sequence chases them to book the testimonial call: a first
+        message from Coralie, then three follow-ups, each carrying the booking link. They stop
+        automatically once the call is booked.
+      </P>
+
+      <H>5. Coralie's "Bosses to chase" view</H>
+      <P>
+        The board surfaces who's stuck at each step - tagged but hasn't shared their win, or hasn't
+        booked, or booked but not yet recorded - so Coralie can give the stragglers a personal nudge on
+        top of the automated DMs.
+      </P>
+
+      <H>Key links</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>Wins channel: <a href="https://ayci-academy.circle.so/c/share-your-wins/" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">Share Your Wins</a></LI>
+        <LI>Testimonial booking: <a href="https://calendly.com/tessardavis/testimonial" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/tessardavis/testimonial</a></LI>
+      </ul>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 my-2">
+        <ul className="list-disc pl-5 space-y-2 text-sm text-[var(--ayci-ink)]">
+          <li><strong>[Tessa - Zapier]</strong> Consolidate the Boss-tagging zaps (success form + manual Circle tag + the Monday taggers) so "becoming a Boss" has one clean path.</li>
+          <li><strong>[Tessa - Zapier/scorecard]</strong> Swap <strong>Oksana → Coralie</strong> on the "Student Wins Tracking - First Message" zap and the "Testimonial Calls Recorded" scorecard owner.</li>
+        </ul>
+      </div>
     </div>
   );
 }
