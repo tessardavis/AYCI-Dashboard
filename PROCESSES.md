@@ -14,11 +14,12 @@ where it lives, and what the team needs to do. One section per process.
 1. [Bonus calls](#1-bonus-calls) - *draft for review*
 2. [Private Tier calls](#2-private-tier-calls) - *draft for review*
 3. [Private chat](#3-private-chat) - *draft for review*
-4. Reminder statuses - _to be documented_
-5. Boss badge / Win shared - _to be documented_
-6. Testimonial status - _to be documented_
-7. Interview reminders - _to be documented_
-8. Refund status - _to be documented_
+4. [Boost & Go](#4-boost--go) - *draft for review*
+5. Reminder statuses - _to be documented_
+6. Boss badge / Win shared - _to be documented_
+7. Testimonial status - _to be documented_
+8. Interview reminders - _to be documented_
+9. Refund status - _to be documented_
 
 ---
 
@@ -395,3 +396,57 @@ should be checked). The dashboard side needs no change.
 - **Needs-setup alert:** `routes/students_db.private_chat_setup_alerts` (15-min sweep) → #fulfillment-team.
 - **Zaps 46/47/53** still create chats in parallel; candidates for retirement once dashboard auto-create
   (`PRIVATE_CHAT_AUTOCREATE_ENABLED`) is switched on and proven.
+
+---
+
+# 4. Boost & Go
+
+**Boost & Go** is an add-on package in two levels: **Boost & Go** and **Boost & Go Plus**. Usually bought
+by existing Academy members (an upgrade), plus new buyers. This is the single source of truth for what
+each level gets and how the dashboard handles them.
+
+## What each level gets
+
+- **Boost & Go** - a private chat + **5 video answers**. **No 1:1 calls.**
+- **Boost & Go Plus** - a private chat + **10 video answers** + **2 x 30-minute coach calls**.
+
+(Chat → see #3 Private chat; calls → see #2 Private Tier calls.)
+
+## The one field that drives everything: "Boost & Go"
+
+Each record has a **Boost & Go** field. When set, the dashboard treats them as a paying B&G customer
+(chat + video allowance + Plus calls). If blank, they get nothing B&G.
+
+- **Paying customer** - the field contains `B&G` or `B&G Plus` (sometimes "- Presentation"), or `Upgraded`.
+- **NOT a customer** - sales-pipeline states `Offer Due` / `Offer Made` / `Declined` (leads, not buyers - ignored).
+
+## How they get tagged
+
+- On a Kajabi purchase, the **Boost & Go Sales zap** (https://zapier.com/editor/262763852/published - 4 paths:
+  B&G / B&G Plus × Presentation) tags them in **Kit** and posts to Slack.
+- The dashboard reads their **Boost & Go field**. If it didn't get set automatically, set it by hand
+  (Students DB → Edit).
+
+**⚠️ Dual-email gotcha:** if they bought B&G under a different email than their Academy / Circle account,
+the automatic link can miss them (Stripe backfill can't match) - set the **Boost & Go field by hand** on
+their record. That's what makes them eligible.
+
+## What the dashboard does once they're tagged
+
+- **Private chat** - they show in Students DB → "Needs setup" until their chat exists; created by the
+  Boost & Go chat zap (https://zapier.com/editor/341446766/published) or the "Create chat" button.
+- **Video allowance** - expected **5** (B&G) / **10** (B&G Plus); "Needs setup" flags missing/mismatch.
+- **Calls (Plus only)** - 2 x 30-min coach calls show on their record automatically; plain B&G shows none.
+
+## Common confusions
+
+- **Plain B&G ≠ B&G Plus** - only Plus gets the 2 coach calls.
+- **Their Tier is usually still "Academy"** - B&G is a separate add-on; look at the Boost & Go field, not Tier.
+- **Pipeline states aren't customers** - Offer Due/Made/Declined = a lead, gets nothing.
+- **Separate track from VIP/Private Plus** - different sales zap, chat zap, and Kit tagging.
+
+## Each cohort
+
+The Sales zap tags buyers on purchase; the chat zap creates chats - both per launch. The dashboard reads
+the Boost & Go field and applies the right video + (Plus) call allowance automatically. Main per-launch
+job: make sure new B&G buyers have their **Boost & Go field set** (watch the dual-email cases).

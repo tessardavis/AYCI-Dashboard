@@ -240,6 +240,55 @@ someone who's clearly on Circle.
 EACH COHORT (private chat): the three zaps must fire on the new cohort's tag each
 launch, and Coralie's welcome-message links should be checked. The dashboard side
 needs no change.
+
+
+# Boost & Go
+
+WHAT IT IS: Boost & Go is an add-on package in two levels - "Boost & Go" and
+"Boost & Go Plus". Usually bought by people already in the Academy (an upgrade),
+plus new buyers. It is a SEPARATE track from VIP / Private Plus.
+
+WHAT EACH LEVEL GETS:
+  - Boost & Go: a private chat + 5 video answers. NO 1:1 calls.
+  - Boost & Go Plus: a private chat + 10 video answers + 2 x 30-minute coach calls.
+(Chat = the Private chat process; calls = the Private Tier calls process.)
+
+THE ONE FIELD THAT DRIVES EVERYTHING - "Boost & Go": each student record has a
+Boost & Go field. When set, the dashboard treats them as a paying B&G customer and
+gives them the chat, the video allowance, and (for Plus) the calls. If it's blank
+they get nothing B&G.
+  - Paying customer = the field contains "B&G" or "B&G Plus" (sometimes with
+    "- Presentation"), or "Upgraded".
+  - NOT a customer = sales-pipeline states "Offer Due" / "Offer Made" / "Declined"
+    (leads, not buyers - the dashboard ignores them).
+
+HOW THEY GET TAGGED: on a Kajabi purchase the Boost & Go Sales zap
+(https://zapier.com/editor/262763852/published - 4 paths: B&G / B&G Plus x
+Presentation) tags them in Kit and posts to Slack. The dashboard reads their
+Boost & Go field; if it didn't get set automatically, set it by hand
+(Students DB > Edit).
+
+DUAL-EMAIL GOTCHA: if they bought B&G under a different email than their Academy /
+Circle account, the automatic link can miss them (the Stripe backfill can't match)
+- set their Boost & Go field by hand on their record; that's what makes them
+eligible.
+
+WHAT THE DASHBOARD DOES ONCE TAGGED: shows them in Students DB > "Needs setup"
+until their chat exists (created by the Boost & Go chat zap
+https://zapier.com/editor/341446766/published or the "Create chat" button);
+expects a video allowance of 5 (B&G) or 10 (B&G Plus), flagging missing/mismatch;
+and for Plus shows 2 x 30-min coach calls on their record automatically.
+
+COMMON CONFUSIONS: plain B&G is NOT B&G Plus (only Plus gets the 2 coach calls);
+their Tier field is usually still "Academy" (B&G is a separate add-on - look at the
+Boost & Go field, not Tier); pipeline states (Offer Due/Made/Declined) are leads,
+not customers; B&G is a separate track from VIP/Private Plus (different sales zap,
+chat zap, Kit tagging).
+
+EACH COHORT (Boost & Go): the Sales zap tags buyers on purchase and the chat zap
+creates chats - both per launch. The dashboard needs no change (it reads the
+Boost & Go field). Main per-launch job: make sure new B&G buyers have their
+Boost & Go field set (watch the dual-email cases).
 """
 
 
