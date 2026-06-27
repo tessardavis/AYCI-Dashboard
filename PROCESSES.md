@@ -500,9 +500,10 @@ Coralie can personally nudge stragglers on top of the automated DMs.
 | Piece | Status |
 |---|---|
 | Document the process (board + this file + Q&A) | ✅ Live |
-| "Mark as Boss" button (single source of truth) | 🔨 |
-| Journey status on the board (tagged → shared → booked → recorded) | 🔨 |
-| Win-shared auto-detect (Share Your Wins posts) | 🔨 |
-| Testimonial booked/recorded auto-detect (Calendly) | 🔨 |
-| "Bosses to chase" view | 🔨 |
-| Scorecard owner Oksana → Coralie | 🔨 |
+| "Mark as Boss" button (single source of truth) | ✅ Live |
+| Journey status on the board (tagged → shared → booked → recorded) | ✅ Live |
+| Win-shared auto-detect (Share Your Wins posts) | ✅ Live |
+| Testimonial booked/recorded auto-detect (Calendly) | ✅ Live |
+| "Bosses to chase" view | ✅ Live |
+| Scorecard owner Oksana → Coralie | ✅ Live |
+| Consolidate Boss-tagging zaps (form + manual tag) → call `mark-boss-by-email` | 🔨 [Tessa - Zapier] |
