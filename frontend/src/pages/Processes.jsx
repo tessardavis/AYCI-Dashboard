@@ -563,9 +563,13 @@ function BoostAndGoDoc() {
       </div>
       <P>
         <strong>Boost & Go</strong> is an add-on package, sold in two levels: <strong>Boost & Go</strong>{" "}
-        and <strong>Boost & Go Plus</strong>. It's usually bought by people who are <strong>already
-        Academy members</strong> (an upgrade), as well as new buyers. This page is the single source of
-        truth for what each level gets and how the dashboard handles them.
+        and <strong>Boost & Go Plus</strong>. It's always an <strong>upgrade bought by existing Academy
+        members</strong> - never new subscribers. This page is the single source of truth for what each
+        level gets and how the dashboard handles them.
+      </P>
+      <P>
+        <strong>Walkthrough video:</strong>{" "}
+        <a href="https://www.loom.com/share/2ed5759fb425430cb51e798545d416d0" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">loom.com/share/2ed5759fb425430cb51e798545d416d0</a>
       </P>
 
       <H>What each level gets</H>
@@ -596,7 +600,7 @@ function BoostAndGoDoc() {
       </ul>
       <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 my-2">
         <P>
-          <strong>⚠️ Dual-email gotcha:</strong> if someone bought Boost & Go under a <strong>different email</strong>
+          <strong>⚠️ Dual-email gotcha:</strong> if someone bought Boost & Go under a <strong>different email</strong>{" "}
           than their Academy / Circle account, the automatic link can miss them (the Stripe backfill can't
           match them). When that happens, set their <strong>Boost & Go field by hand</strong> on their record -
           that's what makes them eligible.

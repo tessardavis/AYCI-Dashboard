@@ -247,8 +247,10 @@ needs no change.
 # Boost & Go
 
 WHAT IT IS: Boost & Go is an add-on package in two levels - "Boost & Go" and
-"Boost & Go Plus". Usually bought by people already in the Academy (an upgrade),
-plus new buyers. It is a SEPARATE track from VIP / Private Plus.
+"Boost & Go Plus". It is ALWAYS an upgrade bought by existing Academy members -
+never new subscribers. It is a SEPARATE track from VIP / Private Plus.
+
+WALKTHROUGH VIDEO: https://www.loom.com/share/2ed5759fb425430cb51e798545d416d0
 
 WHAT EACH LEVEL GETS:
   - Boost & Go: a private chat + 5 video answers. NO 1:1 calls.
