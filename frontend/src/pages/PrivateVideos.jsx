@@ -74,6 +74,9 @@ export default function PrivateVideos() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [editing, setEditing] = useState(null); // currently-edited row
   const [fetchedAt, setFetchedAt] = useState(() => readCache("private-videos")?.data?.fetchedAt || null);
+  // Whole-collection counts from the server (total/new/working/done/source),
+  // so the chips reflect the DB even though the list hides the Done backlog.
+  const [serverCounts, setServerCounts] = useState(null);
   // Hide "Done" by default - clears the active backlog so the team only
   // sees what still needs attention. Toggleable.
   const [showDone, setShowDone] = useState(false);
@@ -100,6 +103,7 @@ export default function PrivateVideos() {
       const newItems = list.items || [];
       const newUsers = u.users || [];
       setItems(newItems);
+      if (list.counts) setServerCounts(list.counts);
       setFetchedAt(list.fetched_at);
       setUsers(newUsers);
       // Only cache the lean active-queue view so the instant paint on next
@@ -248,8 +252,20 @@ export default function PrivateVideos() {
       else if (it.data_source === "monday") c.monday++;
       if (it.total_allowance) c.hasAllowance++;
     }
+    // The list deliberately omits the Done backlog, so the per-status tallies
+    // above only describe what's loaded. Override the headline numbers with
+    // the server's whole-collection counts when present, so "Total" and
+    // "Done · hidden" reflect the database, not just the active queue.
+    if (serverCounts) {
+      c.total = serverCounts.total ?? c.total;
+      c.new = serverCounts.new ?? c.new;
+      c.working = serverCounts.working ?? c.working;
+      c.done = serverCounts.done ?? c.done;
+      c.tally = serverCounts.tally ?? c.tally;
+      c.monday = serverCounts.monday ?? c.monday;
+    }
     return c;
-  }, [items]);
+  }, [items, serverCounts]);
 
   // Row-level Send: quick confirm dialog (student name + destination URL),
   // then fire /send-to-circle directly. For full preview flow the coach

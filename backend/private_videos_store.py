@@ -292,7 +292,29 @@ async def list_submissions(db, *, force: bool = False, include_done: bool = Fals
 
     team_by_id = await _team_members_by_id(db)
     items = [_decorate(r, team_by_id) for r in rows]
-    return {"items": items, "fetched_at": _now_iso(), "source": "db"}
+
+    # Whole-collection counts, independent of include_done / what's actually
+    # loaded into the list. The Done backlog is hidden from the active queue
+    # (and excluded from the default fetch) but must still be counted, or the
+    # UI chips read "Done 0" / an undercounted "Total" once the history is in.
+    status_rows = await db.private_video_submissions.aggregate([
+        {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+    ]).to_list(50)
+    by_status = {(r.get("_id") or "new"): r.get("n", 0) for r in status_rows}
+    counts = {
+        "total": sum(by_status.values()),
+        "new": by_status.get("new", 0),
+        "working": by_status.get("working", 0),
+        "done": by_status.get("done", 0),
+        "update_name": by_status.get("update_name", 0),
+        "tally": await db.private_video_submissions.count_documents(
+            {"tally_submission_id": {"$ne": None}}
+        ),
+        "monday": await db.private_video_submissions.count_documents(
+            {"monday_item_id": {"$ne": None}}
+        ),
+    }
+    return {"items": items, "fetched_at": _now_iso(), "source": "db", "counts": counts}
 
 
 async def boot_warm_active_videos(db, *, limit: int = 30) -> dict:
