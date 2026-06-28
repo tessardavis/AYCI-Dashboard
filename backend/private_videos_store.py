@@ -724,60 +724,85 @@ async def sync_from_monday(db, *, preserve_team_edits: bool = False) -> dict:
     dashboard so a stray sync doesn't undo their work.
     """
     import private_videos as monday_pv
+    from pymongo import UpdateOne
+
     monday_data = await monday_pv.list_submissions(db, force=True)
     items = monday_data.get("items") or []
+    now = _now_iso()
+
+    # Build every upsert as one bulk operation. The previous implementation
+    # did a find_one + update/insert PER ROW (~900 sequential round trips for
+    # 462 rows), which overran the HTTP request timeout: only the first chunk
+    # (New rows, which sort first) committed and the Done history never landed.
+    # One bulk_write is a single round trip, so the whole mirror finishes in
+    # well under the timeout. Per-row try/except means a single malformed row
+    # can't abort the rest of the import.
+    ops: list = []
+    errors: list = []
+    for it in items:
+        try:
+            monday_id = str(it.get("id"))
+            tally_url = (it.get("tally_video") or {}).get("url") or (it.get("video") or {}).get("url")
+            reply_url = (it.get("reply_link") or {}).get("url")
+            # Tally-source fields - always safe to overwrite from Monday
+            tally_fields = {
+                "first_name": (it.get("first_name") or "").strip(),
+                "last_name": (it.get("last_name") or "").strip(),
+                "email": (it.get("email") or "").strip().lower(),
+                "submitted_at": it.get("submitted") or it.get("created_at"),
+                "question": (it.get("question") or "").strip(),
+                "tally_video_url": tally_url,
+                "total_allowance": _to_int(it.get("total_allowance")),
+                "submission_number": _to_int(it.get("submission_number")),
+                "interview_date": it.get("interview_date"),
+                "updated_at": now,
+            }
+            # Team-edit fields - mirrored from Monday when preserve_team_edits
+            # is False; only seeded on first insert when True.
+            team_fields = {
+                "status": _norm_status(it.get("status")),
+                "assignee_team_member_id": None,
+                "replied_at": it.get("replied"),
+                "reply_link": reply_url,
+                "private_chat_url": it.get("private_chat"),
+            }
+            set_fields = dict(tally_fields)
+            set_on_insert = {
+                "id": str(uuid.uuid4()),
+                "tally_submission_id": None,
+                "data_source": "monday",
+                "created_at": now,
+            }
+            if preserve_team_edits:
+                set_on_insert.update(team_fields)
+            else:
+                set_fields.update(team_fields)
+            ops.append(UpdateOne(
+                {"monday_item_id": monday_id},
+                {"$set": set_fields, "$setOnInsert": set_on_insert},
+                upsert=True,
+            ))
+        except Exception as e:
+            errors.append({"item": str(it.get("id")), "error": str(e)})
+
     created = 0
     updated = 0
-    now = _now_iso()
-    for it in items:
-        monday_id = str(it.get("id"))
-        tally_url = (it.get("tally_video") or {}).get("url") or (it.get("video") or {}).get("url")
-        reply_url = (it.get("reply_link") or {}).get("url")
-        # Tally-source fields - always safe to overwrite from Monday
-        tally_fields = {
-            "first_name": (it.get("first_name") or "").strip(),
-            "last_name": (it.get("last_name") or "").strip(),
-            "email": (it.get("email") or "").strip().lower(),
-            "submitted_at": it.get("submitted") or it.get("created_at"),
-            "question": (it.get("question") or "").strip(),
-            "tally_video_url": tally_url,
-            "total_allowance": _to_int(it.get("total_allowance")),
-            "submission_number": _to_int(it.get("submission_number")),
-            "interview_date": it.get("interview_date"),
-            "updated_at": now,
-        }
-        # Team-edit fields - only set on insert (or when preserve=False)
-        team_fields = {
-            "status": _norm_status(it.get("status")),
-            "assignee_team_member_id": None,
-            "replied_at": it.get("replied"),
-            "reply_link": reply_url,
-            "private_chat_url": it.get("private_chat"),
-        }
-        existing = await db.private_video_submissions.find_one(
-            {"monday_item_id": monday_id}, {"_id": 0, "id": 1}
+    if ops:
+        res = await db.private_video_submissions.bulk_write(ops, ordered=False)
+        created = res.upserted_count
+        updated = res.modified_count
+
+    if errors:
+        logger.warning(
+            f"[private-videos] sync_from_monday: {len(errors)} row(s) failed; "
+            f"first: {errors[0]}"
         )
-        if existing:
-            update_doc = dict(tally_fields)
-            if not preserve_team_edits:
-                update_doc.update(team_fields)
-            await db.private_video_submissions.update_one(
-                {"monday_item_id": monday_id}, {"$set": update_doc}
-            )
-            updated += 1
-        else:
-            row = {**tally_fields, **team_fields}
-            row["id"] = str(uuid.uuid4())
-            row["monday_item_id"] = monday_id
-            row["tally_submission_id"] = None
-            row["data_source"] = "monday"
-            row["created_at"] = now
-            await db.private_video_submissions.insert_one(row)
-            created += 1
     return {
         "ok": True,
         "created": created,
         "updated": updated,
+        "error_count": len(errors),
+        "errors": errors[:20],
         "total_in_monday": len(items),
         "preserve_team_edits": preserve_team_edits,
         "ran_at": now,
