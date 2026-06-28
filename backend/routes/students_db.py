@@ -1549,6 +1549,15 @@ async def update_student(
             )
         )
 
+    # Recompute the list-view flags so the UI's optimistic merge reflects them
+    # immediately - e.g. a student drops off "Needs setup" the moment a chat URL
+    # is saved, instead of only after a full reload (this was the "Edward still
+    # showing" confusion).
+    fresh["needs_setup"] = _needs_private_chat_setup(fresh)
+    fresh["allowance_flag"] = _allowance_flag(fresh)
+    fresh["video_allowance_expected"] = expected_video_allowance(
+        fresh.get("tier"), fresh.get("boost_and_go"))
+
     return fresh
 
 
