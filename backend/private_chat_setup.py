@@ -382,6 +382,15 @@ async def create_via_webhook(db_, student_id: str) -> dict:
     if not (template or "").strip():
         return {"ok": False, "error": f"no welcome template configured for audience '{audience}'"}
     welcome = _render(template, _welcome_context(row))
+    sender = (cfg.get("sender_email") or "").strip().lower()
+    # Coaches to ADD to the chat, EXCLUDING the sender - the sender is the chat's
+    # creator (the Zapier Circle connection) and Circle rejects adding the creator
+    # to their own chat ("you can't direct message yourself"). The student email
+    # is sent separately so the zap maps [coaches + email] into Member Emails.
+    coach_emails = [
+        e for e in ((c.get("email") or "").strip().lower() for c in cfg["coaches"])
+        if e and e != sender
+    ]
     payload = {
         "event": "private_chat_create",
         "student_id": row["_id"],
@@ -393,8 +402,8 @@ async def create_via_webhook(db_, student_id: str) -> dict:
         "boost_and_go": row.get("boost_and_go"),
         "audience": audience,
         "welcome_message": welcome,
-        "coaches": [c["email"] for c in cfg["coaches"] if c.get("email")],
-        "sender_email": cfg.get("sender_email"),
+        "coaches": coach_emails,
+        "sender_email": sender,
     }
     try:
         async with httpx.AsyncClient(timeout=20) as c:
