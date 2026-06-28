@@ -74,28 +74,23 @@ async def _build_email_index() -> dict:
 
 
 def _looks_like_dms_off(error_text: Optional[str], status) -> bool:
-    """Heuristic: did Circle reject the group-chat create because the student has
-    direct messages switched off? Circle's exact wording isn't documented, so we
-    match likely phrasings on a 4xx. The raw error is always logged so we can
-    tighten this on the first confirmed real case."""
+    """Did Circle reject the group-chat create specifically because the student
+    has direct messages switched off? Only true for an explicit DMs/privacy
+    message on a CLIENT-side rejection (4xx). A generic 500 "something went
+    wrong" is NOT treated as DMs-off - that was a false positive (members with
+    DMs on, e.g. Chenai/Emma, were wrongly flagged "Awaiting DMs"); those now
+    surface as a real error so the true cause shows."""
     t = (error_text or "").lower()
     if not t:
         return False
-    # Circle returns an opaque 500 ("something went wrong / contact support") when
-    # a specific member can't be added to a chat - almost always their messaging/
-    # privacy settings (since the same call works for other members). Treat it as
-    # a probable DMs-off so it routes to the "ask them to enable DMs" action
-    # rather than a dead-end error. (The raw 500 is still kept in last_error.)
-    if status == 500 and ("something went wrong" in t or "contact support" in t):
-        return True
     keywords = (
         "direct message", "messaging is", "messaging disabled", "disabled messaging",
         "not allow", "cannot be messaged", "can't be messaged", "does not allow",
-        "messaging off", "privacy", "blocked",
+        "messaging off", "privacy",
     )
     hit = any(k in t for k in keywords)
     # Only treat as DMs-off on a client-side rejection, not a 5xx/transient.
-    return hit and (status in (400, 403, 409, 422) or status is None)
+    return hit and status in (400, 403, 409, 422)
 
 
 def _chat_name(row: dict) -> str:
