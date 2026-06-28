@@ -1213,12 +1213,10 @@ function TicketDetailModal({ ticket, team, onClose, onUpdate, onRefresh }) {
         };
         toast.success(`Ticket marked ${LABEL[value] || value}`);
         if (value === "closed" || value === "resolved") {
-          // Give the toast a moment to appear, then close the modal and
-          // refresh the parent list so the Kanban columns reflect the move.
-          setTimeout(() => {
-            onRefresh();
-            onClose();
-          }, 300);
+          // Just close the modal - the optimistic update in updateTicket already
+          // moved this ticket to the Resolved/Closed column, so a full list
+          // reload here is redundant (it was the lag when marking tickets done).
+          setTimeout(onClose, 250);
         }
       }
     }
