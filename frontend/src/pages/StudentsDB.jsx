@@ -274,7 +274,13 @@ export default function StudentsDB() {
   };
 
   const onSaved = (updated) => {
-    setRows((prev) => prev.map((r) => (r._id === updated._id ? { ...r, ...updated } : r)));
+    setRows((prev) => {
+      const next = prev.map((r) => (r._id === updated._id ? { ...r, ...updated } : r));
+      // Persist to the SWR cache too, so a reload shows the saved value
+      // immediately instead of the stale pre-edit copy (the "it reverted" flash).
+      writeCache("students-db", next);
+      return next;
+    });
     setEditing(null);
     toast.success("Saved");
   };
