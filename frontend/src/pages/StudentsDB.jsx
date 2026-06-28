@@ -66,6 +66,8 @@ function friendlyChatError(note) {
     return "they're not a current private-tier / Boost & Go student.";
   if (n.includes("coach config"))
     return "coach setup is incomplete - check Settings → Integrations → Private chat setup.";
+  if (n.includes("something went wrong") || n.includes("[500]") || n.includes("circle create failed"))
+    return "Circle hit a server error creating the chat - a known issue with the dashboard's create path (not a DMs problem). The chat zaps still create it reliably; flag to Tessa.";
   return note || "unknown error";
 }
 
