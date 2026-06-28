@@ -1500,6 +1500,13 @@ async def update_student(
         if k in set_fields and set_fields[k] is not None:
             set_fields[k] = set_fields[k].strip().lower() or None
 
+    # Pasting a real chat URL means setup is done - clear any stale "Awaiting DMs"
+    # status / error note so the student drops off "Needs setup" (mirrors the zap
+    # write-back). Only when the URL is being set to a non-empty value here.
+    if (set_fields.get("private_chat_url") or "").strip():
+        set_fields.setdefault("private_chat_status", "")
+        set_fields["private_chat_last_error"] = ""
+
     # "Videos used" is edited as an absolute figure but stored as a DELTA over
     # the live submission count, so it keeps incrementing as new feedback comes
     # in. Convert the desired value → adjustment = desired - live (null clears).
