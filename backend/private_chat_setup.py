@@ -17,6 +17,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+
 from db import db
 import settings_store
 import circle_api
@@ -356,6 +358,60 @@ async def no_chat_audit(db_) -> dict:
         "no_chat": no_chat,
         "not_on_circle": not_on_circle,
     }
+
+
+async def create_via_webhook(db_, student_id: str) -> dict:
+    """Trigger chat creation via the dashboard's Zapier catch-hook (the reliable
+    path - a Catch-Hook zap does Circle's "Start Group Chat" + posts the welcome
+    + POSTs the URL back to /students-db/update-by-email). The dashboard owns the
+    decision + the rendered per-tier welcome message; the zap just executes.
+    Replaces the unreliable headless group-create and the Monday-triggered zaps."""
+    cfg = await settings_store.get_private_chat_config(db_)
+    url = (cfg.get("create_webhook_url") or "").strip()
+    if not url:
+        return {"ok": False, "error": "no create webhook configured (Settings > Private chat setup)"}
+    row = await db_.academy_members.find_one({"_id": student_id})
+    if not row:
+        return {"ok": False, "error": "student not found"}
+    if not _eligible(row):
+        return {"ok": False, "error": "student is not an eligible private-tier row"}
+    if (row.get("private_chat_url") or "").strip():
+        return {"ok": False, "skipped": "already_has_chat", "private_chat_url": row["private_chat_url"]}
+    audience = _audience(row)
+    template = (cfg.get("welcome_templates") or {}).get(audience or "")
+    if not (template or "").strip():
+        return {"ok": False, "error": f"no welcome template configured for audience '{audience}'"}
+    welcome = _render(template, _welcome_context(row))
+    payload = {
+        "event": "private_chat_create",
+        "student_id": row["_id"],
+        "email": (row.get("email") or "").strip().lower(),
+        "circle_email": (row.get("circle_email") or "").strip().lower(),
+        "name": row.get("name"),
+        "first_name": row.get("first_name"),
+        "tier": row.get("tier"),
+        "boost_and_go": row.get("boost_and_go"),
+        "audience": audience,
+        "welcome_message": welcome,
+        "coaches": [c["email"] for c in cfg["coaches"] if c.get("email")],
+        "sender_email": cfg.get("sender_email"),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(url, json=payload)
+        ok = r.status_code in (200, 201, 202, 204)
+        if not ok:
+            await db_.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+                "private_chat_last_error": f"chat-create webhook returned {r.status_code}: {r.text[:160]}"[:300],
+                "private_chat_last_error_at": datetime.now(timezone.utc)}})
+            return {"ok": False, "error": f"chat-create webhook returned {r.status_code}"}
+    except Exception as e:
+        await db_.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+            "private_chat_last_error": f"chat-create webhook errored: {str(e)[:160]}"[:300],
+            "private_chat_last_error_at": datetime.now(timezone.utc)}})
+        return {"ok": False, "error": f"chat-create webhook errored: {str(e)[:160]}"}
+    logger.info(f"[private-chat] create requested via webhook for {student_id} ({audience})")
+    return {"ok": True, "id": student_id, "via": "webhook", "queued": True}
 
 
 async def create_for_student(db_, student_id: str) -> dict:

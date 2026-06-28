@@ -353,7 +353,12 @@ async def get_private_chat_config(db) -> dict:
         templates = dict(DEFAULT_PRIVATE_CHAT_WELCOME_TEMPLATES)
     else:
         templates = {str(k): (v or "") for k, v in templates.items()}
-    return {"coaches": coaches, "sender_email": sender_email, "welcome_templates": templates}
+    # Zapier catch-hook the dashboard POSTs to so a Catch-Hook zap creates the
+    # chat (the reliable Circle "Start Group Chat" action) - replaces the
+    # unreliable headless create + the Monday-column-triggered zaps.
+    create_webhook_url = ((doc or {}).get("create_webhook_url") or "").strip()
+    return {"coaches": coaches, "sender_email": sender_email,
+            "welcome_templates": templates, "create_webhook_url": create_webhook_url}
 
 
 async def set_private_chat_config(db, payload: dict) -> dict:
@@ -367,6 +372,11 @@ async def set_private_chat_config(db, payload: dict) -> dict:
     if sender_email and sender_email not in coach_emails:
         raise ValueError("sender_email must be one of the coaches' emails")
     update = {"coaches": coaches, "sender_email": sender_email}
+    if "create_webhook_url" in (payload or {}):
+        wh = ((payload or {}).get("create_webhook_url") or "").strip()
+        if wh and not wh.startswith("https://hooks.zapier.com/"):
+            raise ValueError("create_webhook_url must be a https://hooks.zapier.com/ URL (or blank)")
+        update["create_webhook_url"] = wh
     if "welcome_templates" in (payload or {}):
         raw = payload.get("welcome_templates") or {}
         if not isinstance(raw, dict):

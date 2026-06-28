@@ -855,6 +855,7 @@ function PrivateChatSetupCard({ isAdmin }) {
   const [coaches, setCoaches] = useState([]);
   const [senderEmail, setSenderEmail] = useState("");
   const [templates, setTemplates] = useState({});
+  const [createWebhookUrl, setCreateWebhookUrl] = useState("");
   const [selectedAud, setSelectedAud] = useState(PC_AUDIENCES[0][0]);
   const [savingCfg, setSavingCfg] = useState(false);
   const [creatingId, setCreatingId] = useState(null);
@@ -876,6 +877,7 @@ function PrivateChatSetupCard({ isAdmin }) {
       setCoaches(cfg.coaches || []);
       setSenderEmail(cfg.sender_email || "");
       setTemplates(cfg.welcome_templates || {});
+      setCreateWebhookUrl(cfg.create_webhook_url || "");
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load private-chat setup");
     } finally {
@@ -894,10 +896,12 @@ function PrivateChatSetupCard({ isAdmin }) {
     try {
       const { data } = await apiClient.post("/students-db/private-chat/config", {
         coaches, sender_email: senderEmail, welcome_templates: templates,
+        create_webhook_url: createWebhookUrl,
       });
       setCoaches(data.coaches || []);
       setSenderEmail(data.sender_email || "");
       setTemplates(data.welcome_templates || {});
+      setCreateWebhookUrl(data.create_webhook_url || "");
       toast.success("Coach config saved");
       await loadPreview();
     } catch (err) {
@@ -1019,6 +1023,24 @@ function PrivateChatSetupCard({ isAdmin }) {
                 </div>
               ))}
             </div>
+
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-4 mb-1">
+              Chat-create webhook (Zapier catch-hook)
+            </p>
+            <p className="text-[11px] text-[var(--ayci-ink-muted)] mb-2">
+              When set, "Create chat" POSTs the student + rendered welcome message here, and your
+              Catch-Hook zap creates the chat (the reliable path). Leave blank to use the old (unreliable)
+              direct create.
+            </p>
+            <Input
+              type="url"
+              value={createWebhookUrl}
+              onChange={(e) => setCreateWebhookUrl(e.target.value)}
+              placeholder="https://hooks.zapier.com/hooks/catch/…/…/"
+              disabled={!isAdmin || savingCfg}
+              className="font-mono text-xs"
+              data-testid="pc-create-webhook"
+            />
 
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ayci-ink-muted)] mt-4 mb-2">
               Welcome message per tier

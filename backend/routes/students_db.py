@@ -975,11 +975,19 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
     (chat URL written, or 'Awaiting DMs' flagged); the UI re-fetches the preview
     to reflect it."""
     import private_chat_setup
+    import settings_store
     import asyncio as _asyncio
 
     async def _run():
         try:
-            res = await private_chat_setup.create_for_student(db, monday_item_id)
+            # Prefer the reliable webhook path (a Catch-Hook zap does Circle's
+            # "Start Group Chat") when a create webhook is configured; otherwise
+            # fall back to the (unreliable) headless create.
+            cfg = await settings_store.get_private_chat_config(db)
+            if (cfg.get("create_webhook_url") or "").strip():
+                res = await private_chat_setup.create_via_webhook(db, monday_item_id)
+            else:
+                res = await private_chat_setup.create_for_student(db, monday_item_id)
             # Record any non-success outcome (other than DMs-off, which writes its
             # own status) so nothing fails silently - surfaced as private_chat_last_error.
             if res and not res.get("ok") and res.get("skipped") != "awaiting_dms":
@@ -990,7 +998,7 @@ async def create_private_chat(monday_item_id: str, user: dict = Depends(require_
                 }})
         except Exception as e:
             import logging
-            logging.getLogger("private_chat").exception(f"create_for_student crashed for {monday_item_id}")
+            logging.getLogger("private_chat").exception(f"create chat crashed for {monday_item_id}")
             try:
                 await db.academy_members.update_one({"_id": monday_item_id}, {"$set": {
                     "private_chat_last_error": f"exception: {type(e).__name__}: {e}"[:300],
