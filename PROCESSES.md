@@ -12,10 +12,10 @@ where it lives, and what the team needs to do. One section per process.
 ## Processes
 
 1. [Bonus calls](#1-bonus-calls) - *draft for review*
-2. [Private Tier calls](#2-private-tier-calls) - *draft for review*
+2. [Private tier calls](#2-private-tier-calls) - *draft for review*
 3. [Private chat](#3-private-chat) - *draft for review*
 4. [Boost & Go](#4-boost--go) - *draft for review*
-5. [Boss Badge & testimonials](#5-boss-badge--testimonials) - *draft for review*
+5. [Boss badge & testimonials](#5-boss-badge--testimonials) - *draft for review*
 6. Reminder statuses - _to be documented_
 7. Interview reminders - _to be documented_
 8. Refund status - _to be documented_
@@ -199,7 +199,7 @@ process and on the **Cohort Dashboard** (`/api/bonus-call/summary`). Share with 
 
 ---
 
-# 2. Private Tier calls
+# 2. Private tier calls
 
 Students on the **Private Plus** and **VIP** tiers get a set of free 1:1 coaching calls as part of
 their package. They can use them **any time** - there is no expiry (people were previously told 12
@@ -318,11 +318,13 @@ post, and check coach availability is set on all the booking links.
 Every **Private Plus**, **VIP** and active **Boost & Go** student gets a **private group chat on Circle**
 with the coaching team - where they ask questions, get video feedback, and find the links they need.
 
+**Walkthrough video:** https://www.loom.com/share/f52b61461a2646179a3ce412ab62ea03
+
 ## Who's in the chat
 
-The student + the coaches: **Tessa, Arub, Coralie, Becky**. (Oksana is no longer added to new chats;
-older chats keep whoever was in them - you can't remove people from a Circle group DM.) The coach list
-is editable in **Settings → Integrations → Private chat setup**.
+The student, plus **the coaches Tessa & Becky** and **AYCI team members Arub & Coralie**. (Oksana is no
+longer added to new chats; older chats keep whoever was in them - you can't remove people from a Circle
+group DM.) The member list is editable in **Settings → Integrations → Private chat setup**.
 
 ## How a chat gets created
 
@@ -364,7 +366,7 @@ Any private-tier / Boost & Go student **without** a chat link shows in **Student
 - paste an existing chat's URL into the record (Edit) by hand.
 
 A new private-tier / Boost & Go student who lands without a chat also fires a **Slack heads-up in
-#fulfillment-team for Coralie** (see Private Tier calls / the needs-setup alert).
+#fulfillment-team for Coralie** (see Private tier calls / the needs-setup alert).
 
 ## If their Circle DMs are off
 
@@ -409,7 +411,7 @@ each level gets and how the dashboard handles them.
 - **Boost & Go** - a private chat + **5 video answers**. **No 1:1 calls.**
 - **Boost & Go Plus** - a private chat + **10 video answers** + **2 x 30-minute coach calls**.
 
-(Chat → see #3 Private chat; calls → see #2 Private Tier calls.)
+(Chat → see #3 Private chat; calls → see #2 Private tier calls.)
 
 ## The one field that drives everything: "Boost & Go"
 
@@ -452,7 +454,7 @@ job: make sure new B&G buyers have their **Boost & Go field set** (watch the dua
 
 ---
 
-# 5. Boss Badge & testimonials
+# 5. Boss badge & testimonials
 
 When a student lands their **substantive job** we celebrate it (the **Boss Badge**) and turn it into
 social proof - they **share their win** in the community and **record a testimonial** with Tessa. The

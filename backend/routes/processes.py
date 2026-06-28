@@ -104,7 +104,7 @@ one (with the Ad Hoc tag added); the booking-link emails currently show the wron
 cohort name; reminders need extending beyond Live Webinar signups.
 
 
-# Private Tier calls
+# Private tier calls
 
 WHAT IT IS: Students on the Private Plus and VIP tiers get a set of free 1:1
 coaching calls as part of their package. They can be used ANY TIME - there is no
@@ -186,10 +186,12 @@ WHAT IT IS: Every Private Plus, VIP and active Boost & Go student gets a private
 group chat on Circle with the coaching team - where they ask questions, get video
 feedback, and find the links they need.
 
-WHO'S IN THE CHAT: the student plus the coaches Tessa, Arub, Coralie and Becky.
-(Oksana is no longer added to new chats; older chats keep whoever was in them -
-you can't remove people from a Circle group DM.) The coach list is editable in
-Settings > Integrations > Private chat setup.
+WALKTHROUGH VIDEO: https://www.loom.com/share/f52b61461a2646179a3ce412ab62ea03
+
+WHO'S IN THE CHAT: the student plus - the coaches Tessa & Becky, and AYCI team
+members Arub & Coralie. (Oksana is no longer added to new chats; older chats keep
+whoever was in them - you can't remove people from a Circle group DM.) The member
+list is editable in Settings > Integrations > Private chat setup.
 
 HOW A CHAT GETS CREATED (two paths): the Zapier zaps are the PRIMARY, reliable
 creator; the dashboard "Create chat" button is a manual fallback (it can
@@ -251,7 +253,7 @@ plus new buyers. It is a SEPARATE track from VIP / Private Plus.
 WHAT EACH LEVEL GETS:
   - Boost & Go: a private chat + 5 video answers. NO 1:1 calls.
   - Boost & Go Plus: a private chat + 10 video answers + 2 x 30-minute coach calls.
-(Chat = the Private chat process; calls = the Private Tier calls process.)
+(Chat = the Private chat process; calls = the Private tier calls process.)
 
 THE ONE FIELD THAT DRIVES EVERYTHING - "Boost & Go": each student record has a
 Boost & Go field. When set, the dashboard treats them as a paying B&G customer and
@@ -291,7 +293,7 @@ Boost & Go field). Main per-launch job: make sure new B&G buyers have their
 Boost & Go field set (watch the dual-email cases).
 
 
-# Boss Badge & testimonials
+# Boss badge & testimonials
 
 WHAT IT IS: when a student lands their substantive job we celebrate it (the Boss
 Badge) and turn it into social proof - they share their win in the community and

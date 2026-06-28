@@ -10,10 +10,10 @@ import BossChaseSummary from "@/components/BossChaseSummary";
 // entry here. The canonical/source copy also lives in PROCESSES.md in the repo.
 const PROCESSES = [
   { slug: "bonus-calls", title: "Bonus calls", status: "ready", body: BonusCallsDoc },
-  { slug: "private-tier-calls", title: "Private Tier calls", status: "ready", body: PrivateTierCallsDoc },
+  { slug: "private-tier-calls", title: "Private tier calls", status: "ready", body: PrivateTierCallsDoc },
   { slug: "private-chat", title: "Private chat", status: "ready", body: PrivateChatDoc },
   { slug: "boost-and-go", title: "Boost & Go", status: "ready", body: BoostAndGoDoc },
-  { slug: "boss-testimonials", title: "Boss Badge & testimonials", status: "ready", body: BossTestimonialsDoc },
+  { slug: "boss-testimonials", title: "Boss badge & testimonials", status: "ready", body: BossTestimonialsDoc },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
 
@@ -322,7 +322,7 @@ function PrivateTierCallsDoc() {
       <PrivateCallSummary className="mb-5" />
       <div className="flex items-center gap-2 mb-1">
         <Phone className="w-5 h-5 text-[var(--ayci-teal)]" />
-        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private Tier calls</h1>
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Private tier calls</h1>
       </div>
       <P>
         Students on the <strong>Private Plus</strong>, <strong>VIP</strong> and <strong>Boost & Go Plus</strong>{" "}
@@ -452,12 +452,16 @@ function PrivateChatDoc() {
         student gets a <strong>private group chat on Circle</strong> with the coaching team. It's where
         they ask questions and get their video feedback, and it carries the links they need.
       </P>
+      <P>
+        <strong>Walkthrough video:</strong>{" "}
+        <a href="https://www.loom.com/share/f52b61461a2646179a3ce412ab62ea03" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">loom.com/share/f52b61461a2646179a3ce412ab62ea03</a>
+      </P>
 
       <H>Who's in the chat</H>
       <P>
-        The student plus the coaches: <strong>Tessa, Arub, Coralie and Becky</strong>. (Oksana is no
-        longer added to new chats - older chats keep whoever was in them, since you can't remove people
-        from a Circle group DM.) The coach list is editable in{" "}
+        The student, plus <strong>the coaches Tessa & Becky</strong> and <strong>AYCI team members Arub &
+        Coralie</strong>. (Oksana is no longer added to new chats - older chats keep whoever was in them,
+        since you can't remove people from a Circle group DM.) The member list is editable in{" "}
         <strong>Settings → Integrations → Private chat setup</strong>.
       </P>
 
@@ -631,7 +635,7 @@ function BossTestimonialsDoc() {
       <BossChaseSummary className="mb-5" />
       <div className="flex items-center gap-2 mb-1">
         <Award className="w-5 h-5 text-[var(--ayci-teal)]" />
-        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Boss Badge & testimonials</h1>
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Boss badge & testimonials</h1>
       </div>
       <P>
         When a student lands their <strong>substantive job</strong> we celebrate it (the <strong>Boss
