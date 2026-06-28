@@ -402,9 +402,11 @@ should be checked). The dashboard side needs no change.
 
 # 4. Boost & Go
 
-**Boost & Go** is an add-on package in two levels: **Boost & Go** and **Boost & Go Plus**. Usually bought
-by existing Academy members (an upgrade), plus new buyers. This is the single source of truth for what
-each level gets and how the dashboard handles them.
+**Boost & Go** is an add-on package in two levels: **Boost & Go** and **Boost & Go Plus**. It's always an
+**upgrade bought by existing Academy members** - never new subscribers. This is the single source of truth
+for what each level gets and how the dashboard handles them.
+
+**Walkthrough video:** https://www.loom.com/share/2ed5759fb425430cb51e798545d416d0
 
 ## What each level gets
 
