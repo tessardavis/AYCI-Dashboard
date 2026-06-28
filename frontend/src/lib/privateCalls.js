@@ -6,7 +6,8 @@
 const PRIVATE_ALLOWANCE = {
   "Private Plus": { coach_30: 1 },
   VIP: { tessa_30: 2, coach_30: 2, mock_60: 1 },
-  "Boost & Go Plus": { coach_30: 2 },
+  "Boost & Go": { mock_60: 1 },
+  "Boost & Go Plus": { coach_30: 2, mock_60: 1 },
 };
 const PRIVATE_KIND_LABELS = {
   coach_30: "30-min coach call",
@@ -30,7 +31,7 @@ function resolveAllowance(tier, boost) {
   const hay = `${tier || ""} ${boost || ""}`.toLowerCase();
   if (hay.includes("b&g") || hay.includes("boost & go") || hay.includes("upgraded")) {
     if (hay.includes("plus")) return [PRIVATE_ALLOWANCE["Boost & Go Plus"], "Boost & Go Plus"];
-    return [{}, "Boost & Go"];
+    return [PRIVATE_ALLOWANCE["Boost & Go"], "Boost & Go"];
   }
   return [{}, null];
 }

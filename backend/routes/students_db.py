@@ -1633,6 +1633,13 @@ async def update_student_by_email(
         if k in set_fields and set_fields[k] is not None:
             set_fields[k] = str(set_fields[k]).strip().lower() or None
 
+    # Recording a real chat URL means setup is done - clear any stale
+    # "Awaiting DMs" status / error note so the student drops off "Needs setup"
+    # (these were often left over from the old mislabelled headless attempts).
+    if (set_fields.get("private_chat_url") or "").strip():
+        set_fields.setdefault("private_chat_status", "")
+        set_fields.setdefault("private_chat_last_error", "")
+
     # Capture the pre-write values for read-modify-write callers (Zapier
     # filter steps that need the prior value). Empty string for fields not
     # previously set, since Zapier filters treat null awkwardly.
