@@ -211,7 +211,8 @@ months, but they keep their allowance for as long as they need).
 
 - **Private Plus** - 1 x 30-minute coach call.
 - **VIP** - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls total).
-- **Boost & Go Plus** - 2 x 30-minute coach calls (same 30-min coach link). Plain Boost & Go gets a chat but no calls.
+- **Boost & Go** - 1 x 60-minute mock interview.
+- **Boost & Go Plus** - 2 x 30-minute coach calls (same 30-min coach link) + 1 x 60-minute mock interview.
 
 **Boost & Go Plus students are usually existing Academy members** who upgrade. Once tagged **B&G Plus**
 on the dashboard (their Boost & Go field), their call allowance shows automatically and their private
@@ -410,8 +411,8 @@ for what each level gets and how the dashboard handles them.
 
 ## What each level gets
 
-- **Boost & Go** - a private chat + **5 video answers**. **No 1:1 calls.**
-- **Boost & Go Plus** - a private chat + **10 video answers** + **2 x 30-minute coach calls**.
+- **Boost & Go** - a private chat + **5 video answers** + **1 x 60-minute mock interview**.
+- **Boost & Go Plus** - a private chat + **10 video answers** + **2 x 30-minute coach calls** + **1 x 60-minute mock interview**.
 
 (Chat → see #3 Private chat; calls → see #2 Private tier calls.)
 
@@ -439,11 +440,11 @@ their record. That's what makes them eligible.
 - **Private chat** - they show in Students DB → "Needs setup" until their chat exists; created by the
   Boost & Go chat zap (https://zapier.com/editor/341446766/published) or the "Create chat" button.
 - **Video allowance** - expected **5** (B&G) / **10** (B&G Plus); "Needs setup" flags missing/mismatch.
-- **Calls (Plus only)** - 2 x 30-min coach calls show on their record automatically; plain B&G shows none.
+- **Calls** - both levels get a 60-min mock; B&G Plus also gets 2 x 30-min coach calls. Shown on their record automatically.
 
 ## Common confusions
 
-- **Plain B&G ≠ B&G Plus** - only Plus gets the 2 coach calls.
+- **Plain B&G ≠ B&G Plus** - both get the 60-min mock, but only Plus also gets the 2 coach calls.
 - **Their Tier is usually still "Academy"** - B&G is a separate add-on; look at the Boost & Go field, not Tier.
 - **Pipeline states aren't customers** - Offer Due/Made/Declined = a lead, gets nothing.
 - **Separate track from VIP/Private Plus** - different sales zap, chat zap, and Kit tagging.

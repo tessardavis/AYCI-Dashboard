@@ -117,11 +117,12 @@ WHO GETS WHAT:
   - Private Plus: 1 x 30-minute coach call.
   - VIP: 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x
     60-minute mock interview (5 calls in total).
-  - Boost & Go Plus: 2 x 30-minute coach calls (same 30-min coach link). Plain
-    Boost & Go gets a private chat but no calls. B&G Plus students are usually
-    existing Academy members who upgrade - once tagged B&G Plus on the dashboard
-    (their Boost & Go field), their call allowance shows automatically and their
-    chat is created by the Boost & Go chat zap.
+  - Boost & Go: 1 x 60-minute mock interview.
+  - Boost & Go Plus: 2 x 30-minute coach calls (same 30-min coach link) + 1 x
+    60-minute mock interview. B&G (Plus) students are usually existing Academy
+    members who upgrade - once tagged on the dashboard (their Boost & Go field),
+    their call allowance shows automatically and their chat is created by the
+    Boost & Go chat zap.
 
 WHO IS ELIGIBLE / HOW IT'S IDENTIFIED: When a student buys Private Plus or VIP,
 the Sales Zap tags them in ConvertKit (Kit) for the current cohort:
@@ -253,8 +254,9 @@ never new subscribers. It is a SEPARATE track from VIP / Private Plus.
 WALKTHROUGH VIDEO: https://www.loom.com/share/2ed5759fb425430cb51e798545d416d0
 
 WHAT EACH LEVEL GETS:
-  - Boost & Go: a private chat + 5 video answers. NO 1:1 calls.
-  - Boost & Go Plus: a private chat + 10 video answers + 2 x 30-minute coach calls.
+  - Boost & Go: a private chat + 5 video answers + 1 x 60-minute mock interview.
+  - Boost & Go Plus: a private chat + 10 video answers + 2 x 30-minute coach calls
+    + 1 x 60-minute mock interview.
 (Chat = the Private chat process; calls = the Private tier calls process.)
 
 THE ONE FIELD THAT DRIVES EVERYTHING - "Boost & Go": each student record has a
@@ -281,9 +283,11 @@ WHAT THE DASHBOARD DOES ONCE TAGGED: shows them in Students DB > "Needs setup"
 until their chat exists (created by the Boost & Go chat zap
 https://zapier.com/editor/341446766/published or the "Create chat" button);
 expects a video allowance of 5 (B&G) or 10 (B&G Plus), flagging missing/mismatch;
-and for Plus shows 2 x 30-min coach calls on their record automatically.
+and shows the call allowance on their record automatically (both levels: a 60-min
+mock; B&G Plus also: 2 x 30-min coach calls).
 
-COMMON CONFUSIONS: plain B&G is NOT B&G Plus (only Plus gets the 2 coach calls);
+COMMON CONFUSIONS: plain B&G is NOT B&G Plus (both get the 60-min mock, but only
+Plus also gets the 2 coach calls);
 their Tier field is usually still "Academy" (B&G is a separate add-on - look at the
 Boost & Go field, not Tier); pipeline states (Offer Due/Made/Declined) are leads,
 not customers; B&G is a separate track from VIP/Private Plus (different sales zap,

@@ -72,13 +72,14 @@ PRIVATE_KIND_LABELS = {
     "mock_60": "60-min mock interview",
 }
 # Allowance per audience -> how many of each kind they're entitled to.
-# Private Plus / VIP come from the `tier` field; Boost & Go Plus comes from the
+# Private Plus / VIP come from the `tier` field; Boost & Go (Plus) come from the
 # `boost_and_go` field (those students are usually base Academy on `tier`).
-# Plain Boost & Go gets a private chat but NO calls.
+# Both B&G levels get a 60-min mock; only B&G Plus also gets the 2 coach calls.
 PRIVATE_ALLOWANCE = {
     "Private Plus": {"coach_30": 1},
     "VIP": {"tessa_30": 2, "coach_30": 2, "mock_60": 1},
-    "Boost & Go Plus": {"coach_30": 2},
+    "Boost & Go": {"mock_60": 1},
+    "Boost & Go Plus": {"coach_30": 2, "mock_60": 1},
 }
 
 
@@ -93,7 +94,7 @@ def _private_allowance(tier, boost=None) -> tuple[dict, str | None]:
     if "b&g" in hay or "boost & go" in hay or "upgraded" in hay:
         if "plus" in hay:
             return PRIVATE_ALLOWANCE["Boost & Go Plus"], "Boost & Go Plus"
-        return {}, "Boost & Go"  # plain B&G: chat but no calls
+        return PRIVATE_ALLOWANCE["Boost & Go"], "Boost & Go"  # plain B&G: 60-min mock
     return {}, None
 
 

@@ -339,7 +339,8 @@ function PrivateTierCallsDoc() {
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI><strong>Private Plus</strong> - 1 x 30-minute coach call.</LI>
         <LI><strong>VIP</strong> - 2 x 30-minute calls with Tessa, 2 x 30-minute coach calls, and 1 x 60-minute mock interview (5 calls in total).</LI>
-        <LI><strong>Boost & Go Plus</strong> - 2 x 30-minute coach calls (with Becky, Anoop, or Charlotte - the same 30-min coach link as above). Plain Boost & Go gets a private chat but no calls.</LI>
+        <LI><strong>Boost & Go</strong> - 1 x 60-minute mock interview.</LI>
+        <LI><strong>Boost & Go Plus</strong> - 2 x 30-minute coach calls (with Becky, Anoop, or Charlotte - the same 30-min coach link as above) + 1 x 60-minute mock interview.</LI>
       </ul>
       <P>
         <strong>Boost & Go Plus students are usually existing Academy members</strong> who upgrade. Once
@@ -574,8 +575,8 @@ function BoostAndGoDoc() {
 
       <H>What each level gets</H>
       <ul className="list-disc pl-5 space-y-1 mb-3">
-        <LI><strong>Boost & Go</strong> - a private chat + <strong>5 video answers</strong>. <strong>No 1:1 calls.</strong></LI>
-        <LI><strong>Boost & Go Plus</strong> - a private chat + <strong>10 video answers</strong> + <strong>2 x 30-minute coach calls</strong>.</LI>
+        <LI><strong>Boost & Go</strong> - a private chat + <strong>5 video answers</strong> + <strong>1 x 60-minute mock interview</strong>.</LI>
+        <LI><strong>Boost & Go Plus</strong> - a private chat + <strong>10 video answers</strong> + <strong>2 x 30-minute coach calls</strong> + <strong>1 x 60-minute mock interview</strong>.</LI>
       </ul>
       <P>
         The private chat is covered in the <strong>Private chat</strong> process; the calls (Plus only) in
@@ -611,12 +612,12 @@ function BoostAndGoDoc() {
       <ul className="list-disc pl-5 space-y-1 mb-3">
         <LI><strong>Private chat</strong> - they appear in <strong>Students DB → "Needs setup"</strong> until their chat exists; it's created by the Boost & Go chat zap (<a href="https://zapier.com/editor/341446766/published" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline">zap</a>) or the dashboard "Create chat" button.</LI>
         <LI><strong>Video allowance</strong> - expected <strong>5</strong> (B&G) or <strong>10</strong> (B&G Plus). "Needs setup" flags it if their allowance is missing or doesn't match.</LI>
-        <LI><strong>Calls (Plus only)</strong> - 2 x 30-min coach calls show on their record automatically; plain B&G shows no calls.</LI>
+        <LI><strong>Calls</strong> - both levels get a <strong>60-min mock</strong>; B&G Plus also gets <strong>2 x 30-min coach calls</strong>. These show on their record automatically.</LI>
       </ul>
 
       <H>Common confusions</H>
       <ul className="list-disc pl-5 space-y-1 mb-3">
-        <LI><strong>Plain B&G ≠ B&G Plus.</strong> Only <strong>Plus</strong> gets the 2 coach calls. Plain B&G is chat + videos only.</LI>
+        <LI><strong>Plain B&G ≠ B&G Plus.</strong> Both get the 60-min mock, but only <strong>Plus</strong> also gets the 2 coach calls.</LI>
         <LI><strong>Their tier is usually still "Academy".</strong> B&G is a separate add-on, so don't expect "Boost & Go" in the Tier field - look at the <strong>Boost & Go field</strong>.</LI>
         <LI><strong>Pipeline states aren't customers.</strong> "Offer Due / Made / Declined" means a lead, not a buyer - no chat, videos, or calls.</LI>
         <LI><strong>It's a separate track from VIP/Private Plus.</strong> Different sales zap, different chat zap, different Kit tagging.</LI>
