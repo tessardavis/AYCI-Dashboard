@@ -336,6 +336,34 @@ def _clean_coach_list(raw) -> list[dict]:
     return out
 
 
+async def get_testimonial_chase_config(db) -> dict:
+    """Config for the dashboard-driven testimonial chase (replaces the Monday
+    Student Wins Tracker flow). `enabled` gates the whole thing (OFF until set
+    up, so deploying it can't blast anyone). `webhook_url` is the Zapier
+    catch-hook the dashboard POSTs each chase message to - the zap sends the
+    Circle DM from Coralie's account, picking the copy by `message_number`."""
+    doc = await db.app_settings.find_one({"_id": "testimonial_chase"}, {"_id": 0})
+    return {
+        "enabled": bool((doc or {}).get("enabled")),
+        "webhook_url": ((doc or {}).get("webhook_url") or "").strip(),
+    }
+
+
+async def set_testimonial_chase_config(db, payload: dict) -> dict:
+    update = {}
+    if "enabled" in (payload or {}):
+        update["enabled"] = bool(payload.get("enabled"))
+    if "webhook_url" in (payload or {}):
+        wh = ((payload or {}).get("webhook_url") or "").strip()
+        if wh and not wh.startswith("https://hooks.zapier.com/"):
+            raise ValueError("webhook_url must be a https://hooks.zapier.com/ URL (or blank)")
+        update["webhook_url"] = wh
+    if update:
+        await db.app_settings.update_one(
+            {"_id": "testimonial_chase"}, {"$set": update}, upsert=True)
+    return await get_testimonial_chase_config(db)
+
+
 async def get_private_chat_config(db) -> dict:
     """Return {coaches: [{name, email}], sender_email}. Defaults to the seeded
     coach list (emails blank) until configured."""
