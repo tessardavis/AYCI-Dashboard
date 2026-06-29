@@ -169,21 +169,25 @@ async def _compute_bonus_summary() -> dict:
                 emails |= await connectors._ck_tag_emails(tag_ids[0])
         return emails
 
-    eligible = booked = booked_total = None
+    eligible = booked = None
     try:
-        elig_emails = await _tag_emails(calendly_webhook.ELIGIBILITY_TAG_SUFFIXES)
+        elig_emails = {e.strip().lower() for e in await _tag_emails(calendly_webhook.ELIGIBILITY_TAG_SUFFIXES)}
         eligible = len(elig_emails)
-        # `booked` = of the eligible, how many actually booked (the overlap), so
-        # the two headline numbers reconcile and booked never exceeds eligible.
-        # The "1:1 Call Booked" tag on its own is broader (the bonus coaches also
-        # run other 1:1s), which is why the raw count outran "eligible".
-        booked_emails = await _tag_emails([calendly_webhook.KIT_BOOKED_TAG_SUFFIX])
-        booked = len(elig_emails & booked_emails)
-        booked_total = len(booked_emails)  # all "1:1 Call Booked" this cohort (reference)
+        elig_list = list(elig_emails)
+        # `booked` = of the eligible, how many have a non-cancelled BONUS-call
+        # booking on their dashboard record. `bonus_call_status` is set ONLY by
+        # the bonus Calendly event ("Booked"/"Rescheduled"; "Cancelled" on cancel)
+        # - so this is bonus-only and cancel-aware, unlike the shared
+        # "1:1 Call Booked" Kit tag (which the bonus coaches' other 1:1s polluted,
+        # making the raw count outrun "eligible").
+        booked = await db.academy_members.count_documents({
+            "$or": [{"email": {"$in": elig_list}}, {"circle_email": {"$in": elig_list}}],
+            "bonus_call_status": {"$nin": [None, "", "Cancelled"]},
+        }) if elig_list else 0
     except Exception as e:
         logger.warning(f"[bonus-call] eligible/booked count failed: {e}")
 
-    return {"eligible": eligible, "booked": booked, "booked_total": booked_total,
+    return {"eligible": eligible, "booked": booked,
             "by_status": by_status, "tracked": booked or 0}
 
 
