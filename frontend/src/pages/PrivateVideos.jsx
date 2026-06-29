@@ -220,22 +220,26 @@ export default function PrivateVideos() {
       }
       return true;
     });
-    // Active queue (not Done) - oldest submission first; the longest-waiting
-    // student rises to the top so the team clears the queue fairly.
-    // Done queue - newest-replied first so the most recently completed rows
-    // are easy to find / re-open. (Tessa explicitly asked for this on
-    // 2026-05-29 because Done rows used to bury recent completions.)
+    // Clean TOTAL order (a sort comparator must be consistent for every pair,
+    // or JS produces an arbitrary order - which previously scattered recent
+    // Done rows among old ones once Done was shown):
+    //   1. Active queue (not Done) first, oldest-submitted first, so the
+    //      longest-waiting student rises to the top and the team clears it
+    //      fairly.
+    //   2. Done rows after, newest-replied first, so the most recent
+    //      completions are easy to find / re-open. (Tessa asked for this on
+    //      2026-05-29 because Done rows used to bury recent completions.)
+    const ts = (v) => {
+      if (!v) return 0;
+      const t = new Date(v).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
     rows.sort((a, b) => {
       const aDone = (a.status || "").toLowerCase() === "done";
       const bDone = (b.status || "").toLowerCase() === "done";
-      if (aDone && bDone) {
-        const ax = a.replied ? new Date(a.replied).getTime() : 0;
-        const bx = b.replied ? new Date(b.replied).getTime() : 0;
-        return bx - ax; // newest-replied first
-      }
-      const ax = a.submitted ? new Date(a.submitted).getTime() : 0;
-      const bx = b.submitted ? new Date(b.submitted).getTime() : 0;
-      return ax - bx; // oldest-submitted first
+      if (aDone !== bDone) return aDone ? 1 : -1; // active before done
+      if (aDone) return ts(b.replied) - ts(a.replied); // both done: newest reply first
+      return ts(a.submitted) - ts(b.submitted); // both active: oldest submission first
     });
     return rows;
   }, [items, search, statusFilter, assigneeFilter, showDone]);
