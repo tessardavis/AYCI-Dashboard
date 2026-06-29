@@ -15,11 +15,11 @@ export default function CohortDashboard() {
   const [loading, setLoading] = useState(true);
   const [labels, setLabels] = useState([DEFAULT_COHORT]);
 
-  const load = async (label = cohort) => {
+  const load = async (label = cohort, force = false) => {
     setLoading(true);
     try {
       const { data } = await apiClient.get(`/cohorts/summary`, {
-        params: { cohort: label },
+        params: { cohort: label, ...(force ? { force: true } : {}) },
         timeout: 45000,
       });
       setData(data);
@@ -73,7 +73,7 @@ export default function CohortDashboard() {
             </select>
             <Button
               variant="outline"
-              onClick={() => load()}
+              onClick={() => load(cohort, true)}
               disabled={loading}
               data-testid="cohort-refresh"
               className="bg-white/95 border-white/20 text-[var(--ayci-ink)] hover:bg-white"
