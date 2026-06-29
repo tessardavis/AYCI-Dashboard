@@ -1324,6 +1324,43 @@ async def on_startup():
         max_instances=1, coalesce=True,
     )
 
+    async def _private_video_snapshot():
+        import private_video_backup
+        try:
+            await private_video_backup.take_snapshot(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] private-video snapshot failed: {e}")
+
+    # Nightly lean snapshot of the private-video board - the restore safety net
+    # (status / reply links / replied dates), pruned to ~2 weeks.
+    scheduler.add_job(
+        _private_video_snapshot,
+        CronTrigger(hour=3, minute=0, timezone=tz),
+        id="private_video_snapshot",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+    # Take one shortly after startup too, so a baseline exists immediately
+    # after this deploy (and the collapse check below has something to compare).
+    _asyncio.create_task(_private_video_snapshot())
+
+    async def _private_video_collapse_check():
+        import private_video_backup
+        try:
+            await private_video_backup.check_collapse_and_alert(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] private-video collapse check failed: {e}")
+
+    # Every 30 min: Slack-alert if the board's row count collapses vs the last
+    # snapshot, so a real wipe is instantly distinguishable from a load glitch.
+    scheduler.add_job(
+        _private_video_collapse_check,
+        CronTrigger(minute="*/30", timezone=tz),
+        id="private_video_collapse_check",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     async def _boss_journey_sweep():
         import boss_journey
         try:
