@@ -30,6 +30,7 @@ export default function IntegrationsSection({ isAdmin }) {
       <IntakeStatusCard isAdmin={isAdmin} />
       <CircleEmailGapsCard isAdmin={isAdmin} />
       <PrivateChatSetupCard isAdmin={isAdmin} />
+      <TestimonialChaseCard isAdmin={isAdmin} />
       <SlackBotTokenCard isAdmin={isAdmin} />
       <CircleDaysWebhookCard isAdmin={isAdmin} />
       <PrivateVideoAlertsCard isAdmin={isAdmin} />
@@ -848,6 +849,83 @@ const PC_AUDIENCES = [
   ["boost_and_go", "Boost & Go"],
   ["boost_and_go_plus", "Boost & Go Plus"],
 ];
+
+function TestimonialChaseCard({ isAdmin }) {
+  const [loading, setLoading] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/students-db/testimonial-chase/config");
+      setEnabled(!!data.enabled);
+      setWebhookUrl(data.webhook_url || "");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Couldn't load testimonial-chase config");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!isAdmin) return;
+    setSaving(true);
+    try {
+      const { data } = await apiClient.post("/students-db/testimonial-chase/config", {
+        enabled, webhook_url: webhookUrl,
+      });
+      setEnabled(!!data.enabled);
+      setWebhookUrl(data.webhook_url || "");
+      toast.success("Testimonial chase saved");
+    } catch (err) {
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-[var(--ayci-border)] bg-white p-5" data-testid="testimonial-chase-card">
+      <div className="font-display font-semibold text-[var(--ayci-ink)] mb-1">
+        Testimonial chase <span className="text-xs font-normal text-[var(--ayci-ink-muted)]">(Boss badge → book a testimonial)</span>
+      </div>
+      <p className="text-sm text-[var(--ayci-ink-muted)] mb-3">
+        When someone is marked a Boss, the dashboard sends a first DM + 3 follow-ups over ~30 days, stopping
+        once they book, the call is recorded, or they reply. The dashboard decides <em>when</em>; this Zapier
+        catch-hook sends the Circle DM from Coralie's account (it receives <code>message_number</code> 1-4 so
+        the zap can pick the right copy). Only Bosses marked from now on are chased.
+      </p>
+      <label className="block text-xs font-medium text-[var(--ayci-ink-muted)] mb-1">Chase webhook (Zapier catch-hook)</label>
+      <input
+        type="url"
+        value={webhookUrl}
+        onChange={(e) => setWebhookUrl(e.target.value)}
+        placeholder="https://hooks.zapier.com/..."
+        disabled={!isAdmin}
+        className="w-full px-3 py-2 border border-[var(--ayci-border)] rounded text-sm mb-3"
+      />
+      <label className="flex items-center gap-2 text-sm mb-3">
+        <input type="checkbox" checked={enabled} disabled={!isAdmin} onChange={(e) => setEnabled(e.target.checked)} />
+        Chase enabled {enabled ? "" : "(off - no DMs sent)"}
+      </label>
+      {isAdmin && (
+        <div>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || loading}
+            className="px-3 py-1.5 rounded bg-[var(--ayci-teal)] text-white text-sm font-medium disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PrivateChatSetupCard({ isAdmin }) {
   const [loading, setLoading] = useState(true);

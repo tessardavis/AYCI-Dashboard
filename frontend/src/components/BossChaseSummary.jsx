@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Award } from "lucide-react";
 
 import { apiClient } from "@/lib/api";
 
 // "Bosses to chase" widget for the Boss Badge & testimonials process. Shows where
-// each Boss is stuck in the journey (win shared -> booked -> recorded) so Coralie
-// can nudge stragglers. Hides itself on error.
+// each Boss is stuck in the journey (win shared -> booked -> recorded) and, for
+// the dashboard-driven testimonial chase, how many reminder DMs have gone out -
+// with a Stop control (the "Replied" rule) so Coralie can end a chase by hand.
+// Hides itself on error.
 const STUCK_LABEL = {
   win: "needs to share their win",
   booking: "needs to book the testimonial call",
@@ -15,10 +17,25 @@ const STUCK_LABEL = {
 
 export default function BossChaseSummary({ className = "" }) {
   const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     apiClient.get("/students-db/bosses").then(({ data }) => setData(data)).catch(() => {});
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const stopChase = async (id) => {
+    setBusy(id);
+    try {
+      await apiClient.post(`/students-db/${id}/testimonial-chase/stop`);
+      load();
+    } catch (e) {
+      // best-effort; leave the row as-is on failure
+    } finally {
+      setBusy(null);
+    }
+  };
 
   if (!data) return null;
   const c = data.counts || {};
@@ -48,7 +65,28 @@ export default function BossChaseSummary({ className = "" }) {
               >
                 {b.name || b.email || "(unnamed)"}
               </Link>
-              <span className="text-[11px] text-[var(--ayci-ink-muted)] shrink-0">{STUCK_LABEL[b.stuck] || b.stuck}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                {b.chase_active && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700" title="Testimonial reminder DMs sent so far">
+                    chasing {b.chase_step ?? 0}/4
+                  </span>
+                )}
+                {b.chase_stopped_reason === "replied" && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)]">replied</span>
+                )}
+                <span className="text-[11px] text-[var(--ayci-ink-muted)]">{STUCK_LABEL[b.stuck] || b.stuck}</span>
+                {b.chase_active && (
+                  <button
+                    type="button"
+                    onClick={() => stopChase(b.id)}
+                    disabled={busy === b.id}
+                    className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50"
+                    title="Stop the reminder DMs (they replied / handled manually)"
+                  >
+                    {busy === b.id ? "…" : "Stop"}
+                  </button>
+                )}
+              </span>
             </li>
           ))}
         </ul>
