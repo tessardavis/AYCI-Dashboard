@@ -887,6 +887,20 @@ async def stop_testimonial_chase(monday_item_id: str, user: dict = Depends(requi
     return await testimonial_chase.mark_replied(db, student_id=monday_item_id)
 
 
+@router.post("/students-db/{monday_item_id}/testimonial-chase/start")
+async def start_testimonial_chase(monday_item_id: str, user: dict = Depends(require_board("students"))):
+    """Manually enrol a Boss in the testimonial chase - e.g. a BACKFILLED Boss we
+    decide to chase (backfilled Bosses are never auto-chased). Stamps the chase
+    start (resetting any prior stop) so the scheduler picks them up from message 1."""
+    now = datetime.now(timezone.utc)
+    res = await db.academy_members.update_one(
+        {"_id": monday_item_id, "boss_badge": {"$exists": True, "$nin": [None, ""]}},
+        {"$set": {"testimonial_chase_started_at": now, "testimonial_chase_step": 0,
+                  "testimonial_chase_stopped_at": None, "testimonial_chase_stopped_reason": None,
+                  "testimonial_replied_at": None}})
+    return {"ok": True, "matched": res.matched_count, "modified": res.modified_count}
+
+
 @router.get("/students-db/private-chat/preview")
 async def private_chat_preview(user: dict = Depends(require_board("students"))):
     """Dry run - private-tier students who'd get a chat, matched on either
@@ -1140,6 +1154,72 @@ async def boss_journey_scan(admin: dict = Depends(require_admin)):
     import boss_journey
     asyncio.create_task(boss_journey.sweep(db))
     return {"ok": True, "started": True}
+
+
+async def _backfill_boss_badges() -> dict:
+    """Set boss_badge=Yes (NO chase enrolment) for every academy member matching a
+    Circle 'Boss'-tagged email. Idempotent; existing Bosses skipped. Backfilled
+    Bosses are deliberately NOT chased (no `testimonial_chase_started_at`) - they're
+    opted in by hand via the Start-chase control."""
+    import circle_api
+    emails = await circle_api.list_member_emails_by_tag(77050, "Boss")
+    now = datetime.now(timezone.utc)
+    res = {"boss_emails": len(emails), "set": 0, "already": 0, "not_found": 0}
+    for em in emails:
+        row = await db.academy_members.find_one(
+            {"$or": [{"email": em}, {"circle_email": em},
+                     {"other_emails": {"$regex": re.escape(em), "$options": "i"}}]},
+            {"_id": 1, "boss_badge": 1, "dashboard_edited_fields": 1})
+        if not row:
+            res["not_found"] += 1
+            continue
+        if (row.get("boss_badge") or "").strip().lower() in {"yes", "true", "1", "y"}:
+            res["already"] += 1
+            continue
+        pinned = sorted(set(row.get("dashboard_edited_fields") or []) | {"boss_badge", "boss_tagged_at"})
+        await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+            "boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": "backfill",
+            "dashboard_edited_fields": pinned, "dashboard_edited_at": now,
+            "dashboard_edited_by": "boss-badge-backfill"}})
+        res["set"] += 1
+    return res
+
+
+@router.post("/admin/boss/backfill")
+async def boss_backfill(admin: dict = Depends(require_admin)):
+    """One-off: backfill Boss badges from the Circle 'Boss' tag (NO chase) + import
+    recorded testimonials from Calendly history. Runs in the background (Circle +
+    Calendly reads are slow); poll GET /admin/boss/backfill/status for the result."""
+    import calendly_webhook
+
+    async def _run():
+        status = {"id": "boss_backfill_status", "state": "running",
+                  "started_at": datetime.now(timezone.utc)}
+        await db.app_settings.update_one({"id": "boss_backfill_status"}, {"$set": status}, upsert=True)
+        out = {}
+        try:
+            out["badges"] = await _backfill_boss_badges()
+        except Exception as e:
+            out["badges_error"] = str(e)[:200]
+            logger.warning(f"[boss-backfill] badges failed: {e}")
+        try:
+            out["testimonials"] = await calendly_webhook.backfill_testimonials_recorded(db)
+        except Exception as e:
+            out["testimonials_error"] = str(e)[:200]
+            logger.warning(f"[boss-backfill] testimonials failed: {e}")
+        await db.app_settings.update_one({"id": "boss_backfill_status"}, {"$set": {
+            "id": "boss_backfill_status", "state": "done",
+            "finished_at": datetime.now(timezone.utc), "result": out}}, upsert=True)
+        logger.info(f"[boss-backfill] done: {out}")
+
+    asyncio.create_task(_run())
+    return {"ok": True, "started": True}
+
+
+@router.get("/admin/boss/backfill/status")
+async def boss_backfill_status(admin: dict = Depends(require_admin)):
+    doc = await db.app_settings.find_one({"id": "boss_backfill_status"}, {"_id": 0})
+    return doc or {"state": "never_run"}
 
 
 _BONUS_CALLS_URL = "https://ayci-academy.circle.so/c/bonus-live-sessions/"

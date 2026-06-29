@@ -979,6 +979,102 @@ async def backfill_private_calls(db, days_back: int = 180, days_fwd: int = 180) 
     return summary
 
 
+async def backfill_testimonials_recorded(db, days_back: int = 730, days_fwd: int = 90) -> dict:
+    """One-shot: scan Calendly 'Testimonial Call' events in the window and set the
+    matching student's testimonial status - Recorded for past events (the call
+    happened), Booked for upcoming. Brings the Boss board up to date with history.
+    Idempotent; never downgrades a Recorded back to Booked."""
+    headers = connectors._calendly_headers()
+    base = connectors.CALENDLY_BASE
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+
+    def _fmt(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+    summary = {"events_scanned": 0, "testimonial_events": 0, "invitees": 0,
+               "recorded": 0, "booked": 0, "not_found": 0, "errors": 0}
+    seen: dict[str, dict] = {}  # email -> {date, coach, any_past}
+    async with httpx.AsyncClient(timeout=60) as c:
+        me = await _cal_get(c, f"{base}/users/me", headers=headers)
+        org = (me.json().get("resource") or {}).get("current_organization")
+        if not org:
+            return {**summary, "error": "could not resolve organization"}
+        url = f"{base}/scheduled_events"
+        params = {"organization": org, "status": "active", "count": 100,
+                  "min_start_time": _fmt(now - timedelta(days=days_back)),
+                  "max_start_time": _fmt(now + timedelta(days=days_fwd)),
+                  "sort": "start_time:asc"}
+        while url:
+            r = await _cal_get(c, url, headers=headers, params=params)
+            body = r.json()
+            for ev in body.get("collection", []):
+                summary["events_scanned"] += 1
+                if TESTIMONIAL_EVENT_MATCH not in (ev.get("name") or "").lower():
+                    continue
+                summary["testimonial_events"] += 1
+                host = None
+                for m in (ev.get("event_memberships") or []):
+                    nm = m.get("user_name") or m.get("user_email")
+                    if nm:
+                        host = nm.split()[0]
+                        break
+                ev_date = (ev.get("start_time") or "")[:10] or None
+                is_past = bool(ev_date) and ev_date < today
+                inv_url = f"{ev.get('uri')}/invitees"
+                inv_params = {"count": 100, "status": "active"}
+                while inv_url:
+                    ir = await _cal_get(c, inv_url, headers=headers, params=inv_params)
+                    ib = ir.json()
+                    await asyncio.sleep(0.1)
+                    for inv in ib.get("collection", []):
+                        em = (inv.get("email") or "").strip().lower()
+                        if not em:
+                            continue
+                        summary["invitees"] += 1
+                        cur = seen.get(em)
+                        if not cur or (ev_date or "") > (cur.get("date") or ""):
+                            seen[em] = {"date": ev_date, "coach": host,
+                                        "any_past": (cur or {}).get("any_past", False) or is_past}
+                        else:
+                            cur["any_past"] = cur.get("any_past") or is_past
+                    inv_url = (ib.get("pagination") or {}).get("next_page")
+                    inv_params = None
+            url = (body.get("pagination") or {}).get("next_page")
+            params = None
+
+    _DONE = {"recorded", "attended", "done"}
+    for em, e in seen.items():
+        try:
+            row = await _match_student(db, em)
+            if not row:
+                summary["not_found"] += 1
+                continue
+            cur_status = (row.get("testimonial_status") or "").strip().lower()
+            if e.get("any_past"):
+                if cur_status in _DONE:
+                    continue
+                await _set_testimonial_fields(db, row, {
+                    "testimonial_status": "Recorded",
+                    "testimonial_booked_date": e.get("date"),
+                    "testimonial_recorded_at": now,
+                    "testimonial_coach": e.get("coach")})
+                summary["recorded"] += 1
+            else:
+                if cur_status in _DONE | {"booked", "rescheduled"}:
+                    continue
+                await _set_testimonial_fields(db, row, {
+                    "testimonial_status": "Booked",
+                    "testimonial_booked_date": e.get("date"),
+                    "testimonial_coach": e.get("coach")})
+                summary["booked"] += 1
+        except Exception as ex:
+            summary["errors"] += 1
+            logger.warning(f"[testimonial-backfill] {em}: {ex}")
+    logger.info(f"[testimonial-backfill] {summary}")
+    return summary
+
+
 async def post_monthly_private_summary(db, channel: str = "#private-tiers", ref_date=None) -> dict:
     """Post the PREVIOUS month's private-tier call summary to Slack - calls held,
     broken down by call type, coach, and tier (the 'Tracking the data' monthly
