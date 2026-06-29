@@ -180,9 +180,14 @@ async def _compute_bonus_summary() -> dict:
         # - so this is bonus-only and cancel-aware, unlike the shared
         # "1:1 Call Booked" Kit tag (which the bonus coaches' other 1:1s polluted,
         # making the raw count outrun "eligible").
+        # Count `bonus_call` (the booking record) rather than `bonus_call_status`:
+        # the live webhook sets both, but the catch-up backfill only sets
+        # `bonus_call`, so checking status alone misses every backfilled booking.
+        # Still cancel-aware (status flips to "Cancelled" on a cancel).
         booked = await db.academy_members.count_documents({
             "$or": [{"email": {"$in": elig_list}}, {"circle_email": {"$in": elig_list}}],
-            "bonus_call_status": {"$nin": [None, "", "Cancelled"]},
+            "bonus_call": {"$nin": [None, ""]},
+            "bonus_call_status": {"$ne": "Cancelled"},
         }) if elig_list else 0
     except Exception as e:
         logger.warning(f"[bonus-call] eligible/booked count failed: {e}")
