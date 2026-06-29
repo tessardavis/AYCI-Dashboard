@@ -317,6 +317,20 @@ function BonusCallsDoc() {
       <Figure src="/process-img/bonus-eligibility-edit.png" alt="Mark eligible in the Students DB edit modal"
         caption="Students DB - Edit - the Bonus call box" />
 
+      <H>Reminder emails (chasing un-booked students)</H>
+      <P>
+        Eligible students who haven't booked yet are chased by a Kit automation - currently{" "}
+        <Tag>[AYCI JUNE-26] Bonus Call Reminders (Megan)</Tag> (the cohort prefix changes each launch).
+      </P>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Who enters:</strong> students tagged <Tag>Purchase - Live webinar</Tag>. <em>(Today that's the only entry tag - see the open task to add the other eligibility tags so everyone gets chased.)</em></LI>
+        <LI><strong>Cadence:</strong> 4 reminders over about three weeks - 5 days after they're tagged, then +7, +7, +3 days.</LI>
+        <LI><strong>How they stop:</strong> the moment they're tagged <Tag>1:1 Call Booked</Tag> (applied automatically when they book on Calendly) they're removed from the automation, so booking ends the chasing.</LI>
+      </ul>
+      <P>
+        <strong>Each cohort:</strong> the <strong>booking link inside these reminder emails must be updated</strong> with the new cohort's round-robin Calendly link, and the entry/exit tags carry the cohort prefix.
+      </P>
+
       <H>What happens when they book</H>
       <P>When a student books on the Calendly bonus-call event, the dashboard automatically:</P>
       <ul className="list-disc pl-5 space-y-1 mb-3">
