@@ -197,8 +197,18 @@ async def _compute_bonus_summary() -> dict:
 
 
 @router.get("/bonus-call/summary")
-async def bonus_call_summary(user: dict = Depends(get_current_user)):
-    """Cached 30 min - the Kit eligibility count paginates a few tags."""
+async def bonus_call_summary(force: bool = False, user: dict = Depends(get_current_user)):
+    """Cached 30 min - the Kit eligibility count paginates a few tags. Pass
+    `?force=true` to recompute now and overwrite the cache (e.g. right after a
+    backfill, so you don't wait out the 30-min TTL)."""
+    if force:
+        payload = await _compute_bonus_summary()
+        await db[launches_mod._FN_CACHE].update_one(
+            {"_id": "bonus_call_summary"},
+            {"$set": {"payload": payload, "cached_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        return payload
     return await launches_mod._stale_while_revalidate(
         db, "bonus_call_summary", ttl_min=30, compute_fn=_compute_bonus_summary,
     )
