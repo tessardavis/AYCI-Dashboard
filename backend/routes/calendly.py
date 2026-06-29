@@ -161,26 +161,30 @@ async def _compute_bonus_summary() -> dict:
     ]):
         by_status[r["_id"]] = r["n"]
 
-    async def _unique_tag_emails(suffixes: list[str]) -> int:
+    async def _tag_emails(suffixes: list[str]) -> set:
         emails: set = set()
         for suf in suffixes:
             tag_ids = await connectors._resolve_ayci_cohort_tags(suf, exclude_future=True)
             if tag_ids:
                 emails |= await connectors._ck_tag_emails(tag_ids[0])
-        return len(emails)
+        return emails
 
-    eligible = booked = None
+    eligible = booked = booked_total = None
     try:
-        eligible = await _unique_tag_emails(calendly_webhook.ELIGIBILITY_TAG_SUFFIXES)
+        elig_emails = await _tag_emails(calendly_webhook.ELIGIBILITY_TAG_SUFFIXES)
+        eligible = len(elig_emails)
+        # `booked` = of the eligible, how many actually booked (the overlap), so
+        # the two headline numbers reconcile and booked never exceeds eligible.
+        # The "1:1 Call Booked" tag on its own is broader (the bonus coaches also
+        # run other 1:1s), which is why the raw count outran "eligible".
+        booked_emails = await _tag_emails([calendly_webhook.KIT_BOOKED_TAG_SUFFIX])
+        booked = len(elig_emails & booked_emails)
+        booked_total = len(booked_emails)  # all "1:1 Call Booked" this cohort (reference)
     except Exception as e:
-        logger.warning(f"[bonus-call] eligible count failed: {e}")
-    try:
-        booked = await _unique_tag_emails([calendly_webhook.KIT_BOOKED_TAG_SUFFIX])
-    except Exception as e:
-        logger.warning(f"[bonus-call] booked count failed: {e}")
+        logger.warning(f"[bonus-call] eligible/booked count failed: {e}")
 
-    return {"eligible": eligible, "booked": booked, "by_status": by_status,
-            "tracked": booked or 0}
+    return {"eligible": eligible, "booked": booked, "booked_total": booked_total,
+            "by_status": by_status, "tracked": booked or 0}
 
 
 @router.get("/bonus-call/summary")
