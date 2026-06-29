@@ -474,9 +474,11 @@ Coralie. The tidy path is the **substantive success form**, but the rule that st
 
 ## 2. Coralie records it on the dashboard
 
-Coralie opens the student and clicks **"Mark as Boss"** - the single source of truth. It cascades: the
-**Boss Badge** tag on Circle, the Kit tag + bonus-content access, and it starts the testimonial chase.
-(The success form triggers the same automatically; a manual Circle tag is a fallback.)
+Coralie opens the student and clicks **"Mark as Boss"** - the single source of truth. It sets the board
+state, fires the webhook that applies the **Boss Badge tag on Circle + the Kit tag + bonus-content access**,
+and **enrols them in the testimonial chase** (see section 4). The success form is meant to do the same
+automatically. **Important:** tagging the Boss badge *directly on Circle* does NOT do the Kit/chase part -
+always use the dashboard button (see "Good to know" below).
 
 ## 3. The journey the board tracks
 
@@ -487,30 +489,59 @@ Per Boss: **Boss tagged → win shared → testimonial booked → testimonial re
 - **Testimonial booked** - auto from the **Testimonial Call** Calendly event (https://calendly.com/tessardavis/testimonial).
 - **Testimonial recorded** - when the booked call actually happens.
 
-## 4. The nudges (already automated)
+## 4. The testimonial chase (now dashboard-driven)
 
-A Circle DM sequence chases them to book: a first message from Coralie + 3 follow-ups, each with the
-booking link; they stop once the call is booked. ("Student Wins Tracking" zaps.)
+When Coralie marks someone a Boss, the **dashboard** schedules the chase: a **first DM + 3 follow-ups
+over ~30 days** (offsets 0 / 7 / 16 / 30 days), sent from **Coralie's Circle account**, and it **stops
+automatically** the moment they book, the call is recorded, or they reply.
+
+- This **replaces the old Monday "Student Wins Tracker" (board 5095636561) → Zapier** chain, which broke
+  ~16 June 2026 (no one was added to the tracker after Kate Kybird, so recent job-getters weren't chased).
+- The dashboard decides *when*; a **Zapier catch-hook** still does the actual Circle send (so the DM comes
+  from Coralie's account, exactly as before - just triggered by the dashboard, not Monday).
+- **Only Bosses marked from now on are chased.** Existing/legacy Bosses are handled by Coralie manually
+  (DM to congratulate → nudge to share the win → invite to book a testimonial).
+- A student **replying** (any inbound Circle DM) stops their chase; Coralie can also **Stop** a chase by
+  hand from the Bosses-to-chase view.
 
 ## 5. Coralie's "Bosses to chase" view
 
-The board surfaces who's stuck at each step (tagged-but-no-win, no-booking, booked-not-recorded) so
-Coralie can personally nudge stragglers on top of the automated DMs.
+The board surfaces who's stuck at each step (tagged-but-no-win, no-booking, booked-not-recorded), plus
+each active chase's progress (`chasing N/4`) and a **Stop** control, so Coralie can personally nudge on
+top of the automated DMs.
 
-## Open tasks & to-clarify
+## Good to know (common questions)
 
-- **[Tessa - Zapier]** Consolidate the Boss-tagging zaps (success form + manual Circle tag + Monday taggers) into one clean path.
-- **[Tessa - Zapier/scorecard]** Swap **Oksana → Coralie** on the "Student Wins Tracking - First Message" zap and the "Testimonial Calls Recorded" scorecard owner.
+- **Boss badges are awarded manually** (the dashboard "Mark as Boss" button, or a Circle tag) - there's
+  no reliable auto-award. The success form is the tidy auto-path when it's used.
+- **Tagging the Boss badge *directly on Circle* does NOT update Kit** (or start the chase). Use the
+  **dashboard "Mark as Boss" button** - that's what applies the Circle tag + Kit tag + bonus access *and*
+  enrols the chase. (Direct Circle tagging is why some recent job-getters were mis-tagged in Kit.)
+
+## To switch the new chase on (remaining Zapier wiring)
+
+- **[Megan - Zapier]** Repoint the existing **"Student Wins Tracking - First Message"** DM zap (+ follow-ups):
+  swap the trigger from "new Monday item" to a **Zapier catch-hook**, and send the Circle DM based on the
+  `message_number` (1-4) the dashboard passes (reuse the existing copy).
+- **[Tessa]** Paste that catch-hook URL into **Settings → Integrations → Testimonial chase** and tick **Enabled**.
+- **[Tessa]** Once a test fires cleanly, **retire the Monday Student Wins Tracker (5095636561)**.
+- **[Tessa - Zapier]** Consolidate the Boss-*tagging* zaps (success form + manual Circle tag) to call
+  **`mark-boss-by-email`**, so every win lands on the board and applies Circle + Kit + bonus in one place.
 
 ### Build status
 | Piece | Status |
 |---|---|
 | Document the process (board + this file + Q&A) | ✅ Live |
 | "Mark as Boss" button (single source of truth) | ✅ Live |
-| Journey status on the board (tagged → shared → booked → recorded) | ✅ Live |
+| Journey status (tagged → shared → booked → recorded) | ✅ Live |
 | Win-shared auto-detect (Share Your Wins posts) | ✅ Live |
 | Testimonial booked/recorded auto-detect (Calendly) | ✅ Live |
-| "Bosses to chase" view | ✅ Live |
+| "Bosses to chase" view (+ chase progress + Stop) | ✅ Live |
+| Dashboard testimonial-chase engine (1st + 3 follow-ups; stops on booked/recorded/replied) | ✅ Live, **OFF until enabled** |
+| Settings card to configure + enable the chase | ✅ Live |
+| Repoint "Student Wins Tracking" DM zap → dashboard catch-hook, then enable | 🔨 [Megan/Tessa - Zapier] |
+| Retire Monday Student Wins Tracker (5095636561) | 🔨 [Tessa] |
+| Consolidate Boss-tagging zaps (form + manual tag → `mark-boss-by-email`) | 🔨 [Tessa - Zapier] |
 | Scorecard owner Oksana → Coralie | ✅ Live |
 | Consolidate Boss-tagging zaps (form + manual tag) → call `mark-boss-by-email` | 🔨 [Tessa - Zapier] |
 
