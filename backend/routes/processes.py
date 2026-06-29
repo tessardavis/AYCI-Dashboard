@@ -347,12 +347,16 @@ Testimonial chase.
 chase's progress and a Stop control, so Coralie can nudge on top of the
 automated DMs.
 
-TO SWITCH THE CHASE ON (remaining Zapier wiring): repoint the "Student Wins
-Tracking - First Message" DM zap (+ follow-ups) from the Monday trigger to a
-Zapier catch-hook keyed on message_number 1-4; paste that URL into Settings >
-Integrations > Testimonial chase and enable; then retire the Monday Student Wins
-Tracker. Separately, consolidate the Boss-TAGGING zaps (form + manual tag) to
-call mark-boss-by-email.
+STATUS - THE CHASE IS LIVE: the "Student Wins Tracking" DM zap was rebuilt as a
+Zapier catch-hook with one path per message_number (1-4, published), and the
+chase is enabled in Settings > Integrations > Testimonial chase. Every new Boss
+is chased automatically. STILL TO DO: (1) backfill the board from existing data
+- set Boss badges from the Circle "Boss" tag (no chase, so existing Bosses
+aren't retro-DM'd) and import who's already recorded a testimonial; (2) turn off
+the 3 old Monday-triggered follow-up zaps + retire the Monday Student Wins
+Tracker; (3) consolidate the Boss-TAGGING zaps (form + manual tag) to call
+mark-boss-by-email (the live mis-tagging fix - a Circle-only badge doesn't reach
+Kit without it).
 
 KEY LINKS: wins channel = Share Your Wins
 (https://ayci-academy.circle.so/c/share-your-wins/); testimonial booking =
