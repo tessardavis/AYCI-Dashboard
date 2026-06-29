@@ -9,7 +9,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from db import db
@@ -480,6 +480,26 @@ async def sync_from_monday(user: dict = Depends(require_board("private_videos"))
     (which Monday doesn't know about), and a stray sync would otherwise
     flip Done rows back to New."""
     return await pv_store.sync_from_monday(db, preserve_team_edits=True)
+
+
+@router.get("/backups")
+async def list_backups(admin: dict = Depends(require_admin)):
+    """Nightly snapshot metadata (newest first) - the restore safety net."""
+    import private_video_backup
+    return {"snapshots": await private_video_backup.list_snapshots(db)}
+
+
+@router.post("/restore-snapshot")
+async def restore_snapshot(
+    payload: dict = Body(default={}),
+    admin: dict = Depends(require_admin),
+):
+    """Restore rows from a snapshot (defaults to the most recent). Additive +
+    safe: upserts by `id`, never deletes current rows. Pass {"snapshot_id": "..."}
+    to pick a specific one."""
+    import private_video_backup
+    snap_id = (payload or {}).get("snapshot_id")
+    return await private_video_backup.restore_snapshot(db, snap_id)
 
 
 @router.get("/stats")
