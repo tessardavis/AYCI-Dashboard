@@ -789,13 +789,19 @@ function BossTestimonialsDoc() {
         <LI>Testimonial booking: <a href="https://calendly.com/tessardavis/testimonial" target="_blank" rel="noreferrer" className="text-[var(--ayci-teal)] underline break-all">calendly.com/tessardavis/testimonial</a></LI>
       </ul>
 
-      <H>To switch the new chase on (remaining Zapier wiring)</H>
+      <H>Status: the chase is live ✅</H>
+      <P>
+        The chase now runs from the dashboard: <strong>"Student Wins Tracking" zap rebuilt</strong> as a
+        Zapier catch-hook with one path per <Tag>message_number</Tag> (1-4, published), and the chase is
+        <strong> enabled</strong> in Settings → Integrations → Testimonial chase. Every <em>new</em> Boss is
+        now chased automatically; the old Monday-tracker chain is being wound down.
+      </P>
+      <P><strong>Still to do:</strong></P>
       <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 my-2">
         <ul className="list-disc pl-5 space-y-2 text-sm text-[var(--ayci-ink)]">
-          <li><strong>[Megan - Zapier]</strong> Repoint the <strong>"Student Wins Tracking - First Message"</strong> DM zap (+ follow-ups): swap the trigger from "new Monday item" to a <strong>Zapier catch-hook</strong>, and pick the message by the <Tag>message_number</Tag> (1-4) the dashboard sends (reuse the existing copy).</li>
-          <li><strong>[Tessa]</strong> Paste that catch-hook URL into <strong>Settings → Integrations → Testimonial chase</strong> and tick <strong>Enabled</strong>.</li>
-          <li><strong>[Tessa]</strong> Once a test fires cleanly, <strong>retire the Monday Student Wins Tracker</strong>.</li>
-          <li><strong>[Tessa - Zapier]</strong> Consolidate the Boss-<em>tagging</em> zaps (success form + manual Circle tag) to call <Tag>mark-boss-by-email</Tag>, so every win lands on the board and applies Circle + Kit + bonus in one place.</li>
+          <li><strong>[Backfill]</strong> Bring the board up to date with existing data - set <strong>Boss badges from the Circle "Boss" tag</strong> (no chase - existing Bosses aren't retro-DM'd) and import <strong>who's already recorded a testimonial</strong>.</li>
+          <li><strong>[Tessa]</strong> Once a test Boss confirms the new chase sends, <strong>turn off the 3 old Monday-triggered follow-up zaps</strong> and <strong>retire the Monday Student Wins Tracker</strong>.</li>
+          <li><strong>[Tessa - Zapier]</strong> Consolidate the Boss-<em>tagging</em> zaps (success form + manual Circle tag) to call <Tag>mark-boss-by-email</Tag>, so every win lands on the board and applies Circle + Kit + bonus in one place. <em>(This is the live mis-tagging fix - a Circle-only badge doesn't reach Kit without it.)</em></li>
         </ul>
       </div>
     </div>
