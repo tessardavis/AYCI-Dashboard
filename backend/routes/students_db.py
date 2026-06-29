@@ -860,6 +860,33 @@ async def set_private_chat_config(request: Request, admin: dict = Depends(requir
         raise HTTPException(400, str(e))
 
 
+@router.get("/students-db/testimonial-chase/config")
+async def get_testimonial_chase_config(user: dict = Depends(require_board("students"))):
+    import settings_store
+    return await settings_store.get_testimonial_chase_config(db)
+
+
+@router.post("/students-db/testimonial-chase/config")
+async def set_testimonial_chase_config(request: Request, admin: dict = Depends(require_admin)):
+    import settings_store
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+    try:
+        return await settings_store.set_testimonial_chase_config(db, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/students-db/{monday_item_id}/testimonial-chase/stop")
+async def stop_testimonial_chase(monday_item_id: str, user: dict = Depends(require_board("students"))):
+    """Manually stop a Boss's testimonial chase (Coralie's 'Replied' / 'Stop'
+    control). Marks it stopped with reason 'replied'."""
+    import testimonial_chase
+    return await testimonial_chase.mark_replied(db, student_id=monday_item_id)
+
+
 @router.get("/students-db/private-chat/preview")
 async def private_chat_preview(user: dict = Depends(require_board("students"))):
     """Dry run - private-tier students who'd get a chat, matched on either
@@ -1011,7 +1038,12 @@ async def _apply_boss(row: dict, marked_by: str) -> dict:
     if (row.get("boss_badge") or "").strip().lower() in {"yes", "true", "1", "y"} and row.get("boss_tagged_at"):
         return {"ok": True, "id": row["_id"], "already_boss": True}
     now = datetime.now(timezone.utc)
-    set_fields = {"boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": marked_by}
+    set_fields = {"boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": marked_by,
+                  # Enrol them in the dashboard testimonial chase. Stamped only
+                  # when a NEW Boss is marked, so existing/legacy Bosses are never
+                  # retro-chased (testimonial_chase.run_chase only acts on rows
+                  # with this stamp). The chase itself is gated by a settings flag.
+                  "testimonial_chase_started_at": now}
     pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(set_fields.keys()))
     await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
         **set_fields, "dashboard_edited_fields": pinned,
@@ -1071,13 +1103,23 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
     import boss_journey
     proj = {"name": 1, "email": 1, "circle_email": 1, "boss_badge": 1,
             "boss_tagged_at": 1, "win_shared_at": 1, "testimonial_status": 1,
-            "testimonial_booked_date": 1, "testimonial_recorded_at": 1, "testimonial_coach": 1}
+            "testimonial_booked_date": 1, "testimonial_recorded_at": 1, "testimonial_coach": 1,
+            "testimonial_chase_started_at": 1, "testimonial_chase_step": 1,
+            "testimonial_chase_last_sent_at": 1, "testimonial_chase_stopped_at": 1,
+            "testimonial_chase_stopped_reason": 1, "testimonial_replied_at": 1}
     out = []
     async for r in db.academy_members.find({"boss_badge": {"$exists": True, "$nin": [None, ""]}}, proj):
         if not boss_journey.is_boss(r):
             continue
         st = boss_journey.journey_status(r)
-        out.append({"id": r["_id"], "name": r.get("name"), "email": r.get("email"), **st})
+        chase = {
+            "chase_active": bool(r.get("testimonial_chase_started_at")) and not r.get("testimonial_chase_stopped_at"),
+            "chase_step": int(r.get("testimonial_chase_step") or 0),
+            "chase_last_sent_at": r.get("testimonial_chase_last_sent_at"),
+            "chase_stopped_reason": r.get("testimonial_chase_stopped_reason"),
+            "replied_at": r.get("testimonial_replied_at"),
+        }
+        out.append({"id": r["_id"], "name": r.get("name"), "email": r.get("email"), **st, **chase})
     order = {"win": 0, "booking": 1, "recording": 2, None: 3}
     out.sort(key=lambda x: (order.get(x["stuck"], 3), (x.get("name") or "").lower()))
     counts = {

@@ -1378,6 +1378,24 @@ async def on_startup():
         max_instances=1, coalesce=True,
     )
 
+    async def _testimonial_chase():
+        import testimonial_chase
+        try:
+            await testimonial_chase.run_chase(db)
+        except Exception as e:
+            logger.warning(f"[scheduler] testimonial chase failed: {e}")
+
+    # Every 2h: send the next due testimonial-chase DM (first + 3 follow-ups over
+    # ~30 days), stopping on booked / recorded / replied. OFF until enabled in
+    # settings. Replaces the Monday Student Wins Tracker flow. See PROCESSES.md #5.
+    scheduler.add_job(
+        _testimonial_chase,
+        CronTrigger(hour="*/2", minute=50, timezone=tz),
+        id="testimonial_chase",
+        replace_existing=True,
+        max_instances=1, coalesce=True,
+    )
+
     async def _daily_sla_digest():
         import sla_notifications
         try:

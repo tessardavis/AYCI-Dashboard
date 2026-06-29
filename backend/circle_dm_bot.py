@@ -327,6 +327,16 @@ async def handle_dm_webhook(db, payload: dict, background) -> dict:
                 coach_name = m["name"] or coach_name
             admin_email = m.get("email")
 
+    # If a Boss with an active testimonial chase replies to a coach, that reply
+    # stops their chase (the "Replied" → no-more-follow-ups rule). No-op for
+    # anyone not in an active chase.
+    if sender_email:
+        try:
+            import testimonial_chase
+            background.add_task(testimonial_chase.mark_replied, db, email=sender_email)
+        except Exception:
+            pass
+
     # If we still don't have the message body, try Headless (requires
     # CIRCLE_HEADLESS_TOKEN + a valid admin email).
     if not message and sender_id and admin_email:
