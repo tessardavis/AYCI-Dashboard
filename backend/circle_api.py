@@ -151,6 +151,46 @@ async def fetch_member(member_id: int | str) -> dict | None:
     }
 
 
+async def list_member_emails_by_tag(tag_id: int, tag_name: str = "", max_pages: int = 40) -> list[str]:
+    """List emails of community members carrying a given member tag, via the Admin
+    API. Paginated + page-capped, routed through circle_meter (non-essential, so
+    the breaker caps runaway cost). Belt-and-braces: keep only members whose
+    member_tags actually include `tag_name` (in case the API tag filter is ignored,
+    so we never mis-tag a non-Boss). One-off use (e.g. the Boss-badge backfill)."""
+    import circle_meter
+    emails: list[str] = []
+    want = (tag_name or "").strip().lower()
+    page = 1
+    while page <= max_pages:
+        try:
+            r = await circle_meter.circle_admin_request(
+                "GET", f"{ADMIN_BASE}/community_members",
+                headers=_admin_headers(), timeout=30,
+                params={"per_page": 100, "page": page, "member_tag_id": tag_id},
+                endpoint="community_members", essential=False)
+            r.raise_for_status()
+        except Exception as e:
+            logger.warning(f"[circle-api] list_member_emails_by_tag page {page} failed: {e}")
+            break
+        body = r.json()
+        records = body.get("records") or body.get("community_members") or []
+        if not records:
+            break
+        for d in records:
+            tags = [(t.get("name") or "").strip().lower() for t in (d.get("member_tags") or [])]
+            if want and want not in tags:
+                continue
+            em = (d.get("email") or "").strip().lower()
+            if em:
+                emails.append(em)
+        has_next = bool(body.get("has_next_page")) or ((body.get("page_count") or 0) > page)
+        if not has_next:
+            break
+        page += 1
+    logger.info(f"[circle-api] list_member_emails_by_tag({tag_name or tag_id}): {len(set(emails))} emails over {page} page(s)")
+    return sorted(set(emails))
+
+
 async def fetch_member_cached(db, member_id: int | str, max_age_hours: int = 6) -> dict | None:
     """`fetch_member` with a MongoDB cache so we don't re-call Circle Admin
     API for every poll cycle. Cache key: `circle_members_cache.{member_id}`."""
