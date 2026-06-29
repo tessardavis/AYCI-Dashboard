@@ -57,9 +57,20 @@ EXCLUDED_TAGS_RAW = [
 ]
 EXCLUDED_TAGS = {t.strip().lower() for t in EXCLUDED_TAGS_RAW}
 
+# Cohort tags are month-year markers ("June '26", "Apr '26", "Sep '25",
+# "Jan '24", "Sep-25 early"). Match them by PATTERN so EVERY cohort - including
+# each new one - is auto-excluded. Hand-maintaining the list above is exactly
+# why "June '26" leaked onto the score.
+_MONTHS = (r"jan|feb|mar|march|apr|april|may|jun|june|jul|july|aug|august|"
+           r"sep|sept|september|oct|october|nov|november|dec|december")
+COHORT_RE = re.compile(rf"^(?:{_MONTHS})[\s'`‘’–-]*\d{{2}}\b", re.IGNORECASE)
+
 
 def _is_excluded(name: str) -> bool:
-    return (name or "").strip().lower() in EXCLUDED_TAGS
+    n = (name or "").strip()
+    if n.lower() in EXCLUDED_TAGS:
+        return True
+    return bool(COHORT_RE.match(n))
 
 
 def _tag_name(t) -> str:
