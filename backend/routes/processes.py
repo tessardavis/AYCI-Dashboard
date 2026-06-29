@@ -339,6 +339,49 @@ stragglers on top of the automated DMs.
 KEY LINKS: wins channel = Share Your Wins
 (https://ayci-academy.circle.so/c/share-your-wins/); testimonial booking =
 https://calendly.com/tessardavis/testimonial.
+
+
+# Toolkit (Prep Tools access & eligibility)
+
+WHAT IT IS: which students can access each Prep Tool. Access is driven by
+membership TIER (read from their Circle tags at login) plus a few standalone
+paid add-ons. Tiers lowest to highest: Academy, Private Plus, VIP. (Last
+reviewed 29 June 2026.)
+
+WHO GETS EACH TOOL:
+- Timeline Prepper: Admin, Private Plus, VIP, active Boost Plus.
+- Prep Hub (dashboard + coach bots): Admin, Private Plus, VIP.
+- Question Bank, full library: Admin, VIP, an active 14-day QB trial, or active Boost / Boost Plus.
+- Question Bank, bonus (30 sets): anyone with the "30 Recent Sets" Dashboard upsell, or on the legacy bonus-grant list.
+- Pre-Interview Toolkit: Admin, or anyone with the Toolkit add-on (independent of tier).
+
+HOW TIERS ARE DETERMINED: from Circle tags, checked at login - a VIP tag means
+VIP, a Private Plus tag means Private Plus, no premium tag means Academy (base).
+Academy members do NOT get Timeline or Prep Hub (those are Private Plus / VIP
+only). A student's tier only refreshes when they log in, so after a Circle
+upgrade they may need to log out and back in.
+
+ADD-ONS (independent of tier):
+- Boost & Go: time-limited subscription. Boost Plus unlocks Timeline + Question Bank; plain Boost unlocks Question Bank only. Both expire.
+- Pre-Interview Toolkit: standalone paid add-on, stamped at sign-in.
+- Question Bank bonus pack: the 30-set upsell; the full library still requires VIP.
+
+NOTES: Admins bypass all access gates. The Prep Hub has an internal beta flag
+that can lock it to admins only; it is currently OFF (open to Private Plus / VIP).
+
+TROUBLESHOOTING ACCESS (most "I paid but the tool won't let me in" reports):
+- Upgraded in Circle but the tool shows the old tier / blocks access: tier only
+  refreshes at login - log out and back in (re-reads Circle tags).
+- Timeline shows the wrong cohort's live sessions: still on the previous cohort
+  tag and/or missing the new one - in Circle add the current cohort tag, remove
+  the old, then regenerate the timeline (cohort tags are read live, no re-login).
+- No cohort sessions show at all: missing a cohort tag, or the tools-app login
+  email doesn't match their Circle email - confirm the tag and that the emails match.
+- "Private Plus / VIP only" despite being a paying member: tier tag genuinely
+  missing or not refreshed since upgrade - check the Circle tag, then re-login.
+KEY PRINCIPLE: tier is cached and refreshes only on login; cohort tags are read
+live every time a timeline is generated. A re-login fixes tier issues;
+regenerating the timeline fixes cohort issues.
 """
 
 

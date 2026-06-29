@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, Award, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
+import { BookOpen, MessageCircle, Gift, Phone, Users, Rocket, Award, Wrench, CheckCircle2, Clock, Loader2, Send } from "lucide-react";
 
 import { apiClient, formatApiErrorDetail } from "@/lib/api";
 import BonusCallSummary from "@/components/BonusCallSummary";
@@ -14,6 +14,7 @@ const PROCESSES = [
   { slug: "private-chat", title: "Private chat", status: "ready", body: PrivateChatDoc },
   { slug: "boost-and-go", title: "Boost & Go", status: "ready", body: BoostAndGoDoc },
   { slug: "boss-testimonials", title: "Boss badge & testimonials", status: "ready", body: BossTestimonialsDoc },
+  { slug: "toolkit", title: "Toolkit", status: "ready", body: ToolkitDoc },
   { slug: "refunds", title: "Refund status", status: "soon" },
 ];
 
@@ -191,6 +192,63 @@ function Figure({ src, alt, caption }) {
         </figcaption>
       )}
     </figure>
+  );
+}
+
+function ToolkitDoc() {
+  return (
+    <div data-testid="process-toolkit">
+      <div className="flex items-center gap-2 mb-1">
+        <Wrench className="w-5 h-5 text-[var(--ayci-teal)]" />
+        <h1 className="font-display font-extrabold text-2xl text-[var(--ayci-ink)] m-0">Toolkit</h1>
+      </div>
+      <P>
+        Access to the Prep Tools is driven by a student's <strong>membership tier</strong> - read
+        automatically from their Circle tags at login - plus a few standalone paid add-ons. Tiers,
+        lowest to highest: <strong>Academy, Private Plus, VIP</strong>. <em>(Last reviewed 29 June 2026.)</em>
+      </P>
+
+      <H>Who gets each tool</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Timeline Prepper</strong> - Admin, Private Plus, VIP, and active Boost Plus.</LI>
+        <LI><strong>Prep Hub</strong> (dashboard + coach bots) - Admin, Private Plus, VIP.</LI>
+        <LI><strong>Question Bank - full library</strong> - Admin, VIP, an active 14-day QB trial, or active Boost / Boost Plus.</LI>
+        <LI><strong>Question Bank - bonus (30 sets)</strong> - anyone with the "30 Recent Sets" Dashboard upsell, or on the legacy bonus-grant list.</LI>
+        <LI><strong>Pre-Interview Toolkit</strong> - Admin, or anyone with the Toolkit add-on (independent of tier).</LI>
+      </ul>
+
+      <H>How tiers are determined</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI>Tiers come from <strong>Circle tags</strong>, checked when the student logs in: a VIP tag means <strong>VIP</strong>, a Private Plus tag means <strong>Private Plus</strong>, and no premium tag means <strong>Academy</strong> (base).</LI>
+        <LI><strong>Academy members do not get the Timeline or Prep Hub</strong> - those are Private Plus / VIP only.</LI>
+        <LI>A student's tier only refreshes <strong>when they log in</strong>, so after a Circle upgrade they may need to log out and back in for the change to take effect.</LI>
+      </ul>
+
+      <H>Add-ons (independent of tier)</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Boost & Go</strong> - a time-limited subscription. <em>Boost Plus</em> unlocks Timeline + Question Bank; plain <em>Boost</em> unlocks Question Bank only. Both expire.</LI>
+        <LI><strong>Pre-Interview Toolkit</strong> - a standalone paid add-on, stamped at sign-in.</LI>
+        <LI><strong>Question Bank bonus pack</strong> - the 30-set upsell; the full library still requires VIP.</LI>
+      </ul>
+
+      <H>Notes</H>
+      <ul className="list-disc pl-5 space-y-1 mb-3">
+        <LI><strong>Admins</strong> bypass all access gates.</LI>
+        <LI>The Prep Hub has an internal beta flag that can lock it to admins only; it is currently <strong>off</strong> (open to Private Plus / VIP).</LI>
+      </ul>
+
+      <H>Troubleshooting access</H>
+      <P>Most "I paid but the tool won't let me in" reports come down to one of these:</P>
+      <ul className="list-disc pl-5 space-y-2 mb-3">
+        <LI><strong>Upgraded in Circle but the tool still shows the old tier / blocks access.</strong> Tier only refreshes <strong>at login</strong>, so their session is running on the old cached tier - ask them to <strong>log out and back in</strong>, which re-reads their Circle tags.</LI>
+        <LI><strong>Timeline shows the wrong cohort's live sessions.</strong> They're still on the <strong>previous cohort tag</strong> in Circle and/or missing the new one - in Circle, add the current cohort tag and remove the old one, then have them <strong>regenerate their timeline</strong> (cohort tags are read live, so no re-login needed).</LI>
+        <LI><strong>No cohort sessions show at all.</strong> A cohort tag is missing entirely, or their tools-app login email doesn't match their Circle email - confirm the cohort tag is present and that <strong>the login email matches their Circle email</strong>.</LI>
+        <LI><strong>"Private Plus / VIP only" message despite being a paying member.</strong> Their Circle tier tag is genuinely missing, or the tier hasn't refreshed since the upgrade - check the tag exists in Circle, then have them <strong>re-login</strong>.</LI>
+      </ul>
+      <P>
+        <strong>Key principle:</strong> <strong>tier</strong> is cached and refreshes only on login; <strong>cohort tags</strong> are read live every time a timeline is generated. So a re-login fixes tier issues, and regenerating the timeline fixes cohort issues.
+      </P>
+    </div>
   );
 }
 
