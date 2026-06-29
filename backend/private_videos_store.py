@@ -290,6 +290,37 @@ async def list_submissions(db, *, force: bool = False, include_done: bool = Fals
     except Exception as e:
         logger.info(f"[private-videos] list-time pre-warm skipped: {e}")
 
+    # Override each row's allowance (the "X / Y" denominator) with the
+    # tier-derived value, so the board stops showing Monday's broken numbers
+    # (e.g. a Private Plus at "0", a VIP top-up that got lost). Looked up from
+    # academy_members by email, with a manual top-up winning when it's above
+    # the tier default. One batched query, not per-row.
+    try:
+        from tier_allowance import effective_video_allowance
+        emails = {(r.get("email") or "").strip().lower() for r in rows if r.get("email")}
+        amap: dict = {}
+        if emails:
+            async for m in db.academy_members.find(
+                {"$or": [{"email": {"$in": list(emails)}},
+                         {"circle_email": {"$in": list(emails)}}]},
+                {"_id": 0, "email": 1, "circle_email": 1, "tier": 1,
+                 "boost_and_go": 1, "video_allowance": 1},
+            ):
+                info = {"tier": m.get("tier"), "boost": m.get("boost_and_go"),
+                        "manual": m.get("video_allowance")}
+                for key in (m.get("email"), m.get("circle_email")):
+                    if key:
+                        amap.setdefault(key.strip().lower(), info)
+        for r in rows:
+            info = amap.get((r.get("email") or "").strip().lower())
+            if not info:
+                continue
+            eff = effective_video_allowance(info["tier"], info["boost"], info["manual"])
+            if eff is not None:
+                r["total_allowance"] = eff
+    except Exception as e:
+        logger.warning(f"[private-videos] allowance override skipped: {e}")
+
     team_by_id = await _team_members_by_id(db)
     items = [_decorate(r, team_by_id) for r in rows]
 

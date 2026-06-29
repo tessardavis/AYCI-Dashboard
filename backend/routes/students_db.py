@@ -113,23 +113,14 @@ def _b_and_g_active(boost: Optional[str]) -> bool:
 
 
 # Expected private video allowance per tier / Boost & Go level (Tessa, 2026-06-06).
-_VIDEO_ALLOWANCE_BY_TIER = {
-    "academy private plus": 15, "upgrade private plus": 15, "private plus": 15,
-    "vip": 30, "upgrade vip": 30,
-    "boost & go": 5, "boost & go plus": 10,
-}
-
-
-def expected_video_allowance(tier: Optional[str], boost: Optional[str]) -> Optional[int]:
-    """Expected private video allowance, or None if the tier/B&G doesn't have a
-    defined allowance (e.g. base Academy, or 1:1/Platinum - not yet specified)."""
-    t = (tier or "").strip().lower()
-    if t in _VIDEO_ALLOWANCE_BY_TIER:
-        return _VIDEO_ALLOWANCE_BY_TIER[t]
-    b = (boost or "").strip().lower()
-    if "b&g" in b or b == "upgraded":
-        return 10 if "plus" in b else 5
-    return None
+# Tier → video-allowance logic lives in tier_allowance.py (shared with the
+# Private Videos board). Re-exported here so existing references and
+# `from routes.students_db import expected_video_allowance` keep working.
+from tier_allowance import (  # noqa: E402
+    _VIDEO_ALLOWANCE_BY_TIER,
+    expected_video_allowance,
+    effective_video_allowance,
+)
 
 
 def _is_boss(row: dict) -> bool:
