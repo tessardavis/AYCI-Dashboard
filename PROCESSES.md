@@ -16,9 +16,10 @@ where it lives, and what the team needs to do. One section per process.
 3. [Private chat](#3-private-chat) - *draft for review*
 4. [Boost & Go](#4-boost--go) - *draft for review*
 5. [Boss badge & testimonials](#5-boss-badge--testimonials) - *draft for review*
-6. Reminder statuses - _to be documented_
-7. Interview reminders - _to be documented_
-8. Refund status - _to be documented_
+6. [Toolkit](#6-toolkit) - *draft for review*
+7. Reminder statuses - _to be documented_
+8. Interview reminders - _to be documented_
+9. Refund status - _to be documented_
 
 ---
 
@@ -512,3 +513,49 @@ Coralie can personally nudge stragglers on top of the automated DMs.
 | "Bosses to chase" view | ✅ Live |
 | Scorecard owner Oksana → Coralie | ✅ Live |
 | Consolidate Boss-tagging zaps (form + manual tag) → call `mark-boss-by-email` | 🔨 [Tessa - Zapier] |
+
+---
+
+# 6. Toolkit
+
+*Last reviewed: 29 June 2026*
+
+Access to the Prep Tools is driven by a student's **membership tier** (read automatically from their Circle tags at login), plus a few standalone paid add-ons. Tiers, lowest to highest: **Academy → Private Plus → VIP**.
+
+## Who gets each tool
+
+| Tool | Who has access |
+|---|---|
+| **Timeline Prepper** | Admin · Private Plus · VIP · active Boost Plus |
+| **Prep Hub** (dashboard + coach bots) | Admin · Private Plus · VIP |
+| **Question Bank - full library** | Admin · VIP · active 14-day QB trial · active Boost or Boost Plus |
+| **Question Bank - bonus (30 sets)** | Anyone with the "30 Recent Sets" Dashboard upsell, or on the legacy bonus-grant list |
+| **Pre-Interview Toolkit** | Admin · anyone with the Toolkit add-on (independent of tier) |
+
+## How tiers are determined
+
+- Tiers come from **Circle tags**, checked when the student logs in: VIP tag → **VIP**, Private Plus tag → **Private Plus**, no premium tag → **Academy** (base).
+- **Academy members do not get the Timeline or Prep Hub** - those are Private Plus / VIP only.
+- A student's tier only refreshes **when they log in**, so after a Circle upgrade they may need to log out and back in for the change to take effect.
+
+## Add-ons (independent of tier)
+
+- **Boost & Go** - a time-limited subscription. *Boost Plus* unlocks Timeline + Question Bank; plain *Boost* unlocks Question Bank only. Both expire.
+- **Pre-Interview Toolkit** - a standalone paid add-on, stamped at sign-in.
+- **Question Bank bonus pack** - the 30-set upsell; the full library still requires VIP.
+
+## Notes
+
+- **Admins** bypass all access gates.
+- The Prep Hub has an internal beta flag that can lock it to admins only; it is currently **off** (open to Private Plus / VIP).
+
+## Troubleshooting access
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Upgraded in Circle but the tool still shows the old tier / blocks access | Tier only refreshes **at login** - their session is on the old cached tier | Log out and back in (re-reads their Circle tags) |
+| Timeline shows the **wrong cohort's** live sessions | Still on the **previous cohort tag** and/or missing the new one | In Circle, add the current cohort tag and remove the old one, then regenerate the timeline (read live, no re-login) |
+| No cohort sessions show at all | Missing a cohort tag entirely, or the login email ≠ their Circle email | Confirm the cohort tag is present and that the login email matches the Circle email |
+| "Private Plus / VIP only" despite being a paying member | Tier tag genuinely missing, or tier not refreshed since the upgrade | Check the tag exists in Circle, then re-login |
+
+**Key principle:** **tier** is cached and refreshes only on login; **cohort tags** are read live every time a timeline is generated. A re-login fixes tier issues; regenerating the timeline fixes cohort issues.
