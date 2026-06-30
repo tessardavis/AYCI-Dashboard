@@ -151,42 +151,50 @@ async def fetch_member(member_id: int | str) -> dict | None:
     }
 
 
-async def list_member_emails_by_tag(tag_id: int, tag_name: str = "", max_pages: int = 40) -> list[str]:
+async def list_member_emails_by_tag(tag_id: int, tag_name: str = "", max_pages: int = 40):
     """List emails of community members carrying a given member tag, via the Admin
-    API. Paginated + page-capped, routed through circle_meter (non-essential, so
-    the breaker caps runaway cost). Belt-and-braces: keep only members whose
-    member_tags actually include `tag_name` (in case the API tag filter is ignored,
-    so we never mis-tag a non-Boss). One-off use (e.g. the Boss-badge backfill)."""
+    API tag-scoped endpoint. Returns (emails, diag) - diag surfaces WHY it found
+    nothing (HTTP status / error / response keys) so the backfill isn't a silent
+    no-op. Essential=True so the budget breaker can't quietly zero it out for this
+    one-off (it's page-capped, so cost is bounded anyway)."""
     import circle_meter
     emails: list[str] = []
+    diag = {"pages": 0, "first_status": None, "first_keys": None, "error": None}
     page = 1
     while page <= max_pages:
         try:
-            # Tag-scoped endpoint: returns ONLY this tag's members (so ~5 pages
-            # for the Boss tag, not the whole 15k tag-assignment list).
             r = await circle_meter.circle_admin_request(
                 "GET", f"{ADMIN_BASE}/member_tags/{tag_id}/tagged_members",
                 headers=_admin_headers(), timeout=30,
                 params={"per_page": 100, "page": page},
-                endpoint="tagged_members", essential=False)
+                endpoint="tagged_members", essential=True)
+            if page == 1:
+                diag["first_status"] = r.status_code
             r.raise_for_status()
         except Exception as e:
+            diag["error"] = f"{type(e).__name__}: {str(e)[:200]}"
             logger.warning(f"[circle-api] list_member_emails_by_tag page {page} failed: {e}")
             break
         body = r.json()
-        records = body.get("records") or []
+        if page == 1:
+            diag["first_keys"] = list(body.keys()) if isinstance(body, dict) else f"type={type(body).__name__}"
+        records = body.get("records") if isinstance(body, dict) else (body if isinstance(body, list) else [])
+        records = records or []
         if not records:
             break
         for d in records:
             em = (d.get("user_email") or d.get("email") or "").strip().lower()
             if em:
                 emails.append(em)
+        diag["pages"] = page
         has_next = bool(body.get("has_next_page")) or ((body.get("page_count") or 0) > page)
         if not has_next:
             break
         page += 1
-    logger.info(f"[circle-api] list_member_emails_by_tag({tag_name or tag_id}): {len(set(emails))} emails over {page} page(s)")
-    return sorted(set(emails))
+    out = sorted(set(emails))
+    diag["emails"] = len(out)
+    logger.info(f"[circle-api] list_member_emails_by_tag({tag_name or tag_id}): {diag}")
+    return out, diag
 
 
 async def fetch_member_cached(db, member_id: int | str, max_age_hours: int = 6) -> dict | None:
