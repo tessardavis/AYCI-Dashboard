@@ -1162,9 +1162,10 @@ async def _backfill_boss_badges() -> dict:
     Bosses are deliberately NOT chased (no `testimonial_chase_started_at`) - they're
     opted in by hand via the Start-chase control."""
     import circle_api
-    emails = await circle_api.list_member_emails_by_tag(77050, "Boss")
+    emails, circle_diag = await circle_api.list_member_emails_by_tag(77050, "Boss")
     now = datetime.now(timezone.utc)
-    res = {"boss_emails": len(emails), "set": 0, "already": 0, "not_found": 0}
+    res = {"boss_emails": len(emails), "set": 0, "already": 0, "not_found": 0,
+           "circle_diag": circle_diag}
     for em in emails:
         row = await db.academy_members.find_one(
             {"$or": [{"email": em}, {"circle_email": em},

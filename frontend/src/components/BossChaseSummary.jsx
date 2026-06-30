@@ -43,10 +43,29 @@ export default function BossChaseSummary({ className = "" }) {
     setBackfill("running");
     try {
       await apiClient.post("/admin/boss/backfill");
-      setBackfill("started - this runs in the background (~1-2 min). Refresh to see updated counts.");
     } catch (e) {
       setBackfill("failed (admins only) - " + (e.response?.status === 403 ? "needs an admin login" : "see logs"));
+      return;
     }
+    // Poll the status doc so we can see the actual result (counts + diagnostics).
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const { data } = await apiClient.get("/admin/boss/backfill/status");
+        if (data.state === "done") {
+          const b = data.result?.badges || {};
+          const t = data.result?.testimonials || {};
+          setBackfill(
+            `Done. Badges: found ${b.boss_emails ?? "?"} Boss-tagged, set ${b.set ?? 0}, already ${b.already ?? 0}, not-found ${b.not_found ?? 0}. ` +
+            `Testimonials: recorded ${t.recorded ?? 0}, booked ${t.booked ?? 0}. ` +
+            `[circle: ${JSON.stringify(b.circle_diag || data.result?.badges_error || {})}]`
+          );
+          load();
+          return;
+        }
+      } catch { /* keep polling */ }
+    }
+    setBackfill("still running - refresh in a minute.");
   };
 
   if (!data) return null;
