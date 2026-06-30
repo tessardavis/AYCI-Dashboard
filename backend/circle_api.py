@@ -159,17 +159,45 @@ async def list_member_emails_by_tag(tag_id: int, tag_name: str = "", max_pages: 
     one-off (it's page-capped, so cost is bounded anyway)."""
     import circle_meter
     emails: list[str] = []
-    diag = {"pages": 0, "first_status": None, "first_keys": None, "error": None}
+    diag = {"pages": 0, "first_status": None, "first_keys": None, "error": None, "base": None}
+
+    # The /member_tags/{id}/tagged_members endpoint 404s on app.circle.so (where
+    # community_members lives) - it's served on the headless-admin host (where the
+    # v2 swagger is published). Try that first, fall back to app.circle.so.
+    candidate_bases = [
+        "https://api-headless.circle.so/api/admin/v2",
+        ADMIN_BASE,
+    ]
+
+    async def _get(base, page):
+        return await circle_meter.circle_admin_request(
+            "GET", f"{base}/member_tags/{tag_id}/tagged_members",
+            headers=_admin_headers(), timeout=30,
+            params={"per_page": 100, "page": page},
+            endpoint="tagged_members", essential=True)
+
+    # Pick a base that doesn't 404 on page 1.
+    base = None
+    for cand in candidate_bases:
+        try:
+            r = await _get(cand, 1)
+            diag["first_status"] = r.status_code
+            if r.status_code == 404:
+                continue
+            r.raise_for_status()
+            base = cand
+            break
+        except Exception as e:
+            diag["error"] = f"{type(e).__name__}: {str(e)[:160]}"
+    diag["base"] = base
+    if base is None:
+        logger.info(f"[circle-api] list_member_emails_by_tag({tag_name or tag_id}): {diag}")
+        return [], diag
+
     page = 1
     while page <= max_pages:
         try:
-            r = await circle_meter.circle_admin_request(
-                "GET", f"{ADMIN_BASE}/member_tags/{tag_id}/tagged_members",
-                headers=_admin_headers(), timeout=30,
-                params={"per_page": 100, "page": page},
-                endpoint="tagged_members", essential=True)
-            if page == 1:
-                diag["first_status"] = r.status_code
+            r = await _get(base, page)
             r.raise_for_status()
         except Exception as e:
             diag["error"] = f"{type(e).__name__}: {str(e)[:200]}"
