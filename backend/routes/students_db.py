@@ -1161,11 +1161,25 @@ async def _backfill_boss_badges() -> dict:
     Circle 'Boss'-tagged email. Idempotent; existing Bosses skipped. Backfilled
     Bosses are deliberately NOT chased (no `testimonial_chase_started_at`) - they're
     opted in by hand via the Start-chase control."""
-    import circle_api
-    emails, circle_diag = await circle_api.list_member_emails_by_tag(77050, "Boss")
+    # Read the cached all-members snapshot (the same source the Cohort Dashboard
+    # uses) and pull everyone with the Circle "Boss" tag - no Circle API call (the
+    # tagged_members endpoint 404s for us), and always fresh enough for a one-off.
     now = datetime.now(timezone.utc)
-    res = {"boss_emails": len(emails), "set": 0, "already": 0, "not_found": 0,
-           "circle_diag": circle_diag}
+    res = {"boss_emails": 0, "set": 0, "already": 0, "not_found": 0, "cache": None}
+    doc = await db.circle_members_cache.find_one({"_id": "all"}, {"_id": 0, "members": 1})
+    members = (doc or {}).get("members") or []
+    res["cache"] = "missing" if not doc else f"{len(members)} members"
+    emails = set()
+    for m in members:
+        em = (m.get("email") or "").strip().lower()
+        if not em:
+            continue
+        for t in (m.get("member_tags") or []):
+            name = t.get("name") if isinstance(t, dict) else str(t or "")
+            if (name or "").strip().lower() == "boss":
+                emails.add(em)
+                break
+    res["boss_emails"] = len(emails)
     for em in emails:
         row = await db.academy_members.find_one(
             {"$or": [{"email": em}, {"circle_email": em},
