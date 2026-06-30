@@ -57,8 +57,8 @@ export default function BossChaseSummary({ className = "" }) {
           const t = data.result?.testimonials || {};
           setBackfill(
             `Done. Badges: found ${b.boss_emails ?? "?"} Boss-tagged, set ${b.set ?? 0}, already ${b.already ?? 0}, not-found ${b.not_found ?? 0}. ` +
-            `Testimonials: recorded ${t.recorded ?? 0}, booked ${t.booked ?? 0}. ` +
-            `[circle: ${JSON.stringify(b.circle_diag || data.result?.badges_error || {})}]`
+            `Testimonials: ${JSON.stringify(t)}` +
+            (data.result?.testimonials_error ? ` ERROR: ${data.result.testimonials_error}` : "")
           );
           load();
           return;
