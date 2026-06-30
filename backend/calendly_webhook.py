@@ -482,8 +482,7 @@ async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120
     emails: dict[str, str | None] = {}  # email -> host first name
 
     async with httpx.AsyncClient(timeout=60) as c:
-        me = await c.get(f"{base}/users/me", headers=headers)
-        me.raise_for_status()
+        me = await _cal_get(c, f"{base}/users/me", headers=headers)
         org = (me.json().get("resource") or {}).get("current_organization")
         if not org:
             return {**summary, "error": "could not resolve organization"}
@@ -494,8 +493,7 @@ async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120
                   "max_start_time": _fmt(now + timedelta(days=days_fwd)),
                   "sort": "start_time:asc"}
         while url:
-            r = await c.get(url, headers=headers, params=params)
-            r.raise_for_status()
+            r = await _cal_get(c, url, headers=headers, params=params)
             body = r.json()
             for ev in body.get("collection", []):
                 summary["events_scanned"] += 1
@@ -511,9 +509,9 @@ async def backfill_bonus_call_tags(db, days_back: int = 120, days_fwd: int = 120
                 inv_url = f"{ev.get('uri')}/invitees"
                 inv_params = {"count": 100, "status": "active"}
                 while inv_url:
-                    ir = await c.get(inv_url, headers=headers, params=inv_params)
-                    ir.raise_for_status()
+                    ir = await _cal_get(c, inv_url, headers=headers, params=inv_params)
                     ib = ir.json()
+                    await asyncio.sleep(0.1)  # gentle throttle - year-round calendar = many calls
                     for inv in ib.get("collection", []):
                         summary["invitees"] += 1
                         em = (inv.get("email") or "").strip().lower()
