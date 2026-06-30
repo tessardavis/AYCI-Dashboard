@@ -184,18 +184,32 @@ function CalendlyBonusCallCard({ isAdmin }) {
     if (!isAdmin) return;
     setBackfilling(true);
     try {
-      const { data } = await apiClient.post("/admin/calendly/backfill-bonus-tags", {}, { timeout: 120000 });
-      if (data?.ok) {
-        toast.success(
-          `Backfill done - tagged ${data.tagged} of ${data.unique_emails} past bookers` +
-          (data.recorded ? ` · ${data.recorded} recorded` : "") +
-          (data.not_found ? ` · ${data.not_found} not in dashboard` : "")
-        );
-      } else {
-        toast.error(data?.error || "Backfill failed");
+      // Runs in the background now (the synchronous scan timed out on a
+      // year-round calendar). Kick it off, then poll for the result.
+      await apiClient.post("/admin/calendly/backfill-bonus-tags");
+      toast.success("Bonus backfill started - scanning Calendly (~1-2 min)…");
+      let done = false;
+      for (let i = 0; i < 40 && !done; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const { data } = await apiClient.get("/admin/calendly/backfill-bonus-tags/status");
+          if (data.state === "done") {
+            const d = data.result || {};
+            toast.success(
+              `Backfill done - tagged ${d.tagged} of ${d.unique_emails} past bookers` +
+              (d.recorded ? ` · ${d.recorded} recorded` : "") +
+              (d.not_found ? ` · ${d.not_found} not in dashboard` : "")
+            );
+            done = true;
+          } else if (data.state === "error") {
+            toast.error("Backfill failed: " + (data.error || "see logs"));
+            done = true;
+          }
+        } catch { /* keep polling */ }
       }
+      if (!done) toast("Backfill still running - check back shortly.");
     } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Backfill failed");
+      toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Backfill failed to start");
     } finally {
       setBackfilling(false);
     }

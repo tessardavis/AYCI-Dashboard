@@ -283,19 +283,38 @@ async def link_bonus_booking(body: LinkBookingBody,
 @router.post("/admin/calendly/backfill-bonus-tags")
 async def backfill_bonus_tags(admin: dict = Depends(require_admin)):
     """Catch up bookings missed while the Zapier zaps were off: tag every past/
-    upcoming AYCI Bonus Call booker (Anoop + Charlotte) with the current cohort's
-    '1:1 Call Booked' Kit tag and record bonus_call. Idempotent. Uses
-    CALENDLY_TOKEN directly, so it works whether or not the live webhook is set."""
+    upcoming AYCI Bonus Call booker with the current cohort's '1:1 Call Booked'
+    Kit tag and record bonus_call. Idempotent.
+
+    Runs in the BACKGROUND - scanning a year-round Calendly calendar overran the
+    request timeout (the 'Something went wrong' 500). Poll
+    GET /admin/calendly/backfill-bonus-tags/status for the result."""
     if not os.environ.get("CALENDLY_TOKEN"):
         raise HTTPException(400, "CALENDLY_TOKEN not set")
-    try:
-        result = await calendly_webhook.backfill_bonus_call_tags(db)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Calendly: {e.response.text[:200]}")
-    except Exception as e:
-        logger.exception("[calendly] backfill error")
-        raise HTTPException(500, f"backfill failed: {str(e)[:200]}")
-    return {"ok": True, **result}
+
+    async def _run():
+        await db.fn_cache.update_one({"_id": "bonus_backfill_status"}, {"$set": {
+            "_id": "bonus_backfill_status", "state": "running",
+            "started_at": datetime.now(timezone.utc)}}, upsert=True)
+        try:
+            result = await calendly_webhook.backfill_bonus_call_tags(db)
+            await db.fn_cache.update_one({"_id": "bonus_backfill_status"}, {"$set": {
+                "state": "done", "result": result,
+                "finished_at": datetime.now(timezone.utc)}}, upsert=True)
+        except Exception as e:
+            logger.exception("[calendly] backfill error")
+            await db.fn_cache.update_one({"_id": "bonus_backfill_status"}, {"$set": {
+                "state": "error", "error": str(e)[:300],
+                "finished_at": datetime.now(timezone.utc)}}, upsert=True)
+
+    asyncio.create_task(_run())
+    return {"ok": True, "started": True}
+
+
+@router.get("/admin/calendly/backfill-bonus-tags/status")
+async def backfill_bonus_tags_status(admin: dict = Depends(require_admin)):
+    doc = await db.fn_cache.find_one({"_id": "bonus_backfill_status"}, {"_id": 0})
+    return doc or {"state": "never_run"}
 
 
 # ----------------------------- Private Tier calls -------------------------
