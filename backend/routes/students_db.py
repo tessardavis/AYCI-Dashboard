@@ -1229,6 +1229,33 @@ async def tally_interview_webhook(
                         {"other_emails": {"$regex": _re, "$options": "i"}}]
             row = await db.academy_members.find_one({"$or": ors})
 
+        # Record the interview DATE (+ context) straight onto the student, pinned so
+        # the Monday mirror can't overwrite it. This is what lets zap "3" (Tally ->
+        # Monday) be retired for Upcoming Interviews. Runs for any submission carrying
+        # a date, regardless of the result answer.
+        recorded_date = None
+        idate = _field_by_labels(resolved, {"interview date", "interviewdate"})
+        today_str = datetime.now(timezone.utc).date().isoformat()
+        if idate and row and idate >= today_str:  # only record UPCOMING dates
+            meta = {"interview_date": idate}
+            itype = _field_by_labels(resolved, {"interviewtype", "interview type"})
+            if itype:
+                meta["interview_type"] = itype
+            for label, _typ, txt in resolved:
+                if "hospital" in label and txt.strip():
+                    meta["interview_hospital"] = txt.strip()
+                    break
+            for label, _typ, txt in resolved:
+                if label == "speciality" and txt.strip():
+                    meta["interview_speciality"] = txt.strip()
+                    break
+            pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(meta.keys()))
+            await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
+                **meta, "dashboard_edited_fields": pinned,
+                "dashboard_edited_at": datetime.now(timezone.utc),
+                "dashboard_edited_by": "tally-interview-form"}})
+            recorded_date = idate
+
         # SUCCESS -> mark Boss (front door -> 8b).
         if got_it and substantive:
             if not row:
@@ -1267,8 +1294,10 @@ async def tally_interview_webhook(
                 logger.warning(f"[tally-interview] unsuccessful hook failed: {e}")
                 return {"ok": False, "action": "unsuccessful_followup", "error": str(e)}
 
-        return {"ok": True, "ignored": True, "got_it": got_it, "didnt": didnt,
-                "substantive": substantive, "reason": "no action for this result"}
+        return {"ok": True, "ignored": recorded_date is None,
+                "recorded_interview_date": recorded_date,
+                "got_it": got_it, "didnt": didnt, "substantive": substantive,
+                "reason": "interview date recorded" if recorded_date else "no action for this result"}
     except HTTPException:
         raise
     except Exception as e:

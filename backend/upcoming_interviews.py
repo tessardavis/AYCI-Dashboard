@@ -107,7 +107,8 @@ async def _fetch_items_from_mirror(db, start_str: str, end_str: str) -> list[dic
     without changes."""
     cursor = db.academy_members.find(
         {"interview_date": {"$gte": start_str, "$lte": end_str}},
-        {"_id": 1, "name": 1, "url": 1, "columns_by_id": 1, "boost_and_go": 1},
+        {"_id": 1, "name": 1, "url": 1, "columns_by_id": 1, "boost_and_go": 1,
+         "interview_date": 1, "interview_speciality": 1, "interview_hospital": 1},
     )
     items: list[dict] = []
     async for row in cursor:
@@ -122,6 +123,22 @@ async def _fetch_items_from_mirror(db, start_str: str, end_str: str) -> list[dic
             }
             for cid, entry in cols_by_id.items()
         ]
+
+        # Authoritative dashboard-set interview fields (written by the Tally webhook,
+        # pinned) override the Monday column - so a student still shows even when the
+        # Monday column is blank (i.e. after zap "3" is retired).
+        def _override(cid: str, val):
+            if not val:
+                return
+            for cv in column_values:
+                if cv["id"] == cid:
+                    cv["text"] = val
+                    return
+            column_values.append({"id": cid, "text": val, "type": "text",
+                                  "column": {"title": cid}})
+        _override(COL_INTERVIEW_DATE, row.get("interview_date"))
+        _override(COL_SPECIALITY, row.get("interview_speciality"))
+        _override(COL_HOSPITAL, row.get("interview_hospital"))
         items.append({
             "id": row.get("_id"),
             "name": row.get("name"),
