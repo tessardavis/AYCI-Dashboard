@@ -68,6 +68,17 @@ export default function BossChaseSummary({ className = "" }) {
     setBackfill("still running - refresh in a minute.");
   };
 
+  const rescanWins = async () => {
+    setBackfill("running");
+    try {
+      await apiClient.post("/admin/boss-journey/scan");
+      setBackfill("Rescanning the Share Your Wins channel (~1-2 min)… refresh shortly to see updated wins.");
+      setTimeout(load, 90000);
+    } catch (e) {
+      setBackfill("rescan failed (admins only)");
+    }
+  };
+
   if (!data) return null;
   const c = data.counts || {};
   // Only the actionable list: recently-marked or actively-chased Bosses. The
@@ -81,15 +92,26 @@ export default function BossChaseSummary({ className = "" }) {
         <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-subhead text-[var(--ayci-ink-muted)]">
           <Award className="w-3.5 h-3.5" /> Bosses to chase
         </div>
-        <button
-          type="button"
-          onClick={runBackfill}
-          disabled={backfill === "running"}
-          className="text-[10px] px-2 py-0.5 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50"
-          title="One-off: set Boss badges from the Circle tag (no chase) + import recorded testimonials from Calendly"
-        >
-          {backfill === "running" ? "Backfilling…" : "Backfill history"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={rescanWins}
+            disabled={backfill === "running"}
+            className="text-[10px] px-2 py-0.5 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50"
+            title="Re-scan the Share Your Wins channel now and update who's shared + the totals"
+          >
+            Rescan wins
+          </button>
+          <button
+            type="button"
+            onClick={runBackfill}
+            disabled={backfill === "running"}
+            className="text-[10px] px-2 py-0.5 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50"
+            title="One-off: set Boss badges from the Circle tag (no chase) + import recorded testimonials from Calendly"
+          >
+            {backfill === "running" ? "Backfilling…" : "Backfill history"}
+          </button>
+        </div>
       </div>
       {backfill && backfill !== "running" && (
         <div className="text-[11px] text-[var(--ayci-ink-muted)] mb-2">{backfill}</div>
@@ -108,6 +130,15 @@ export default function BossChaseSummary({ className = "" }) {
         <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Testimonials booked: <strong>{c.testimonials_booked ?? 0}</strong></span>
         <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Recorded: <strong>{c.testimonials_recorded ?? 0}</strong></span>
       </div>
+      {c.wins_total_posts != null && (
+        <div className="flex flex-wrap gap-2 items-center mb-2 text-xs text-[var(--ayci-ink-muted)]">
+          <span className="uppercase tracking-wider text-[10px]">Share Your Wins channel (everyone):</span>
+          <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Total win posts: <strong>{c.wins_total_posts}</strong></span>
+          {c.wins_unique_sharers != null && (
+            <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">People who shared: <strong>{c.wins_unique_sharers}</strong></span>
+          )}
+        </div>
+      )}
       {toChase.length === 0 ? (
         <span className="text-xs text-[var(--ayci-ink-muted)]">Nothing to chase - every Boss is complete (or there are none yet).</span>
       ) : (
