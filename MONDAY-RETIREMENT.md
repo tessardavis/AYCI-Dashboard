@@ -44,8 +44,14 @@ dependency in a fragile flow and proves the pattern (Tally → dashboard direct)
   Hook -> Find Member (on `best_email`) -> Date/Time -> Split (<4d DM / >4d email, off
   days-since-last-Circle-activity) -> DM/email. Monday trigger + steps + result filter
   removed; v9 replaced the Monday-triggered v8 (same zap, nothing separate to disable).
-- [ ] **Interview dates (Stage 3):** receiver records the interview date straight to
-  the dashboard's Upcoming Interviews - replaces zap "3" (Tally→Monday).
+- [x] **Interview dates (Stage 3): dashboard side DONE.** On any interview-form
+  submission with an *upcoming* date, the receiver writes `interview_date`
+  (+type/hospital/speciality) to the matched student, pinned; Upcoming Interviews'
+  mirror read overrides the Monday column with the dashboard value (shows even when
+  the Monday column is blank). So the interview **date** no longer depends on Monday.
+  **Note:** zap "3" also does other contact updates, so its *full* retirement is gated
+  on the Phase 1 field audit - but its interview-date role is now redundant. Verify by
+  watching a real date submission appear on Upcoming Interviews.
 
 ## Phase 1 - field inventory & origin audit  *(the foundation)*
 
@@ -113,7 +119,7 @@ as their own mini-migrations complete).
 
 | Phase | Status |
 |---|---|
-| 0 - interview/Boss flow off Monday | 🔨 Stages 1 & 2 done (8a/8c removed, 8d off Monday); Stage 3 to build |
+| 0 - interview/Boss flow off Monday | ✅ Stages 1-3 done (8a/8c gone, 8d off Monday, interview date dashboard-sourced); zap "3" full retirement gated on Phase 1 audit |
 | 1 - field inventory & origin audit | ⬜ not started (the next real step for #2) |
 | 2 - re-source derivable fields | ⬜ |
 | 3 - dashboard as write target + data entry | ⬜ |
