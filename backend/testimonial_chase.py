@@ -100,16 +100,18 @@ async def run_chase(db) -> dict:
     now = datetime.now(timezone.utc)
     cursor = db.academy_members.find(
         {"testimonial_chase_started_at": {"$nin": [None, ""]},
-         "testimonial_chase_stopped_at": {"$in": [None, ""]}},
+         "testimonial_chase_stopped_at": {"$in": [None, ""]},
+         "testimonial_chase_opt_out": {"$ne": True}},
         {"name": 1, "first_name": 1, "email": 1, "circle_email": 1,
          "boss_badge": 1, "boss_tagged_at": 1, "win_shared_at": 1,
          "testimonial_status": 1, "testimonial_booked_date": 1,
          "testimonial_recorded_at": 1, "testimonial_replied_at": 1,
-         "testimonial_chase_started_at": 1, "testimonial_chase_step": 1},
+         "testimonial_chase_started_at": 1, "testimonial_chase_step": 1,
+         "testimonial_chase_opt_out": 1},
     )
     async for row in cursor:
         summary["checked"] += 1
-        if not is_boss(row):
+        if not is_boss(row) or row.get("testimonial_chase_opt_out"):
             continue
         reason = _stop_reason(row)
         if reason:

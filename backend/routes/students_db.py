@@ -891,13 +891,45 @@ async def stop_testimonial_chase(monday_item_id: str, user: dict = Depends(requi
 async def start_testimonial_chase(monday_item_id: str, user: dict = Depends(require_board("students"))):
     """Manually enrol a Boss in the testimonial chase - e.g. a BACKFILLED Boss we
     decide to chase (backfilled Bosses are never auto-chased). Stamps the chase
-    start (resetting any prior stop) so the scheduler picks them up from message 1."""
+    start (resetting any prior stop) so the scheduler picks them up from message 1.
+    Refuses if the person has been opted out (opt them back in first)."""
     now = datetime.now(timezone.utc)
+    existing = await db.academy_members.find_one({"_id": monday_item_id}, {"testimonial_chase_opt_out": 1})
+    if existing and existing.get("testimonial_chase_opt_out"):
+        raise HTTPException(409, "This person is opted out of the testimonial chase. Opt them back in first.")
     res = await db.academy_members.update_one(
         {"_id": monday_item_id, "boss_badge": {"$exists": True, "$nin": [None, ""]}},
         {"$set": {"testimonial_chase_started_at": now, "testimonial_chase_step": 0,
                   "testimonial_chase_stopped_at": None, "testimonial_chase_stopped_reason": None,
                   "testimonial_replied_at": None}})
+    return {"ok": True, "matched": res.matched_count, "modified": res.modified_count}
+
+
+@router.post("/students-db/{monday_item_id}/testimonial-chase/opt-out")
+async def opt_out_testimonial_chase(monday_item_id: str, user: dict = Depends(require_board("students"))):
+    """Permanently opt a Boss OUT of the testimonial chase: they won't be auto-chased
+    (even if re-marked a Boss) and Start is blocked until opted back in. Also stops
+    any chase currently running for them."""
+    now = datetime.now(timezone.utc)
+    res = await db.academy_members.update_one(
+        {"_id": monday_item_id},
+        {"$set": {"testimonial_chase_opt_out": True,
+                  "testimonial_chase_opt_out_at": now,
+                  "testimonial_chase_opt_out_by": user.get("email") or "dashboard",
+                  # end any live chase so no further DMs go out
+                  "testimonial_chase_stopped_at": now,
+                  "testimonial_chase_stopped_reason": "opted_out"}})
+    return {"ok": True, "matched": res.matched_count, "modified": res.modified_count}
+
+
+@router.post("/students-db/{monday_item_id}/testimonial-chase/opt-in")
+async def opt_in_testimonial_chase(monday_item_id: str, user: dict = Depends(require_board("students"))):
+    """Undo an opt-out. Clears the flag so the person CAN be chased again. Does not
+    itself start a chase - use Start for that."""
+    res = await db.academy_members.update_one(
+        {"_id": monday_item_id},
+        {"$set": {"testimonial_chase_opt_out": False},
+         "$unset": {"testimonial_chase_opt_out_at": "", "testimonial_chase_opt_out_by": ""}})
     return {"ok": True, "matched": res.matched_count, "modified": res.modified_count}
 
 
@@ -1052,12 +1084,13 @@ async def _apply_boss(row: dict, marked_by: str) -> dict:
     if (row.get("boss_badge") or "").strip().lower() in {"yes", "true", "1", "y"} and row.get("boss_tagged_at"):
         return {"ok": True, "id": row["_id"], "already_boss": True}
     now = datetime.now(timezone.utc)
-    set_fields = {"boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": marked_by,
-                  # Enrol them in the dashboard testimonial chase. Stamped only
-                  # when a NEW Boss is marked, so existing/legacy Bosses are never
-                  # retro-chased (testimonial_chase.run_chase only acts on rows
-                  # with this stamp). The chase itself is gated by a settings flag.
-                  "testimonial_chase_started_at": now}
+    set_fields = {"boss_badge": "Yes", "boss_tagged_at": now, "boss_marked_by": marked_by}
+    # Enrol them in the dashboard testimonial chase. Stamped only when a NEW Boss is
+    # marked, so existing/legacy Bosses are never retro-chased (run_chase only acts
+    # on rows with this stamp). Skipped if this person has been opted OUT of the
+    # chase entirely. The chase itself is also gated by a settings flag.
+    if not row.get("testimonial_chase_opt_out"):
+        set_fields["testimonial_chase_started_at"] = now
     pinned = sorted(set(row.get("dashboard_edited_fields") or []) | set(set_fields.keys()))
     await db.academy_members.update_one({"_id": row["_id"]}, {"$set": {
         **set_fields, "dashboard_edited_fields": pinned,
@@ -1120,7 +1153,8 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
             "testimonial_booked_date": 1, "testimonial_recorded_at": 1, "testimonial_coach": 1,
             "testimonial_chase_started_at": 1, "testimonial_chase_step": 1,
             "testimonial_chase_last_sent_at": 1, "testimonial_chase_stopped_at": 1,
-            "testimonial_chase_stopped_reason": 1, "testimonial_replied_at": 1}
+            "testimonial_chase_stopped_reason": 1, "testimonial_replied_at": 1,
+            "testimonial_chase_opt_out": 1}
     now = datetime.now(timezone.utc)
 
     def _recent(v) -> bool:
@@ -1144,7 +1178,8 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
         # (marked_by=backfill, all stamped today) unless it's an active chase; for
         # genuinely-marked Bosses, only those tagged in the last ~month.
         backfilled = (r.get("boss_marked_by") or "") == "backfill"
-        chaseable = active or (not backfilled and _recent(r.get("boss_tagged_at")))
+        opted_out = bool(r.get("testimonial_chase_opt_out"))
+        chaseable = (not opted_out) and (active or (not backfilled and _recent(r.get("boss_tagged_at"))))
         chase = {
             "chase_active": active,
             "chase_step": int(r.get("testimonial_chase_step") or 0),
@@ -1152,6 +1187,7 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
             "chase_stopped_reason": r.get("testimonial_chase_stopped_reason"),
             "replied_at": r.get("testimonial_replied_at"),
             "marked_by": r.get("boss_marked_by"),
+            "opted_out": opted_out,
             "chaseable": chaseable,
         }
         out.append({"id": r["_id"], "name": r.get("name"), "email": r.get("email"), **st, **chase})

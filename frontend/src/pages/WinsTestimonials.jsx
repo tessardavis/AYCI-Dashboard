@@ -13,6 +13,7 @@ const FILTERS = [
   { key: "no_win", label: "No win shared" },
   { key: "no_testimonial", label: "No testimonial" },
   { key: "complete", label: "Did both" },
+  { key: "opted_out", label: "Opted out" },
   { key: "all", label: "All Bosses" },
 ];
 
@@ -60,6 +61,7 @@ export default function WinsTestimonials() {
       if (filter === "chase") return b.chaseable && !b.complete;
       if (filter === "no_win") return !b.win_shared;
       if (filter === "no_testimonial") return !b.testimonial_recorded;
+      if (filter === "opted_out") return b.opted_out;
       return true;
     });
   }, [bosses, filter, q]);
@@ -173,24 +175,40 @@ export default function WinsTestimonials() {
                     {b.testimonial_coach && <span className="text-[11px] text-[var(--ayci-ink-muted)]"> · {b.testimonial_coach}</span>}
                   </td>
                   <td className="px-3 py-3">
-                    {b.chase_active
-                      ? <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700">chasing {b.chase_step ?? 0}/4</span>
-                      : b.chase_stopped_reason
-                        ? <span className="text-[11px] text-[var(--ayci-ink-muted)]">{b.chase_stopped_reason}</span>
-                        : <span className="text-[11px] text-[var(--ayci-ink-muted)]">–</span>}
+                    {b.opted_out
+                      ? <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-100 border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)]">opted out</span>
+                      : b.chase_active
+                        ? <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700">chasing {b.chase_step ?? 0}/4</span>
+                        : b.chase_stopped_reason
+                          ? <span className="text-[11px] text-[var(--ayci-ink-muted)]">{b.chase_stopped_reason}</span>
+                          : <span className="text-[11px] text-[var(--ayci-ink-muted)]">–</span>}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    {!b.complete && (b.chase_active ? (
-                      <button type="button" onClick={() => chaseAction(b.id, "stop")} disabled={busy === b.id}
-                        className="text-[11px] px-2 py-1 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50">
-                        {busy === b.id ? "…" : "Stop"}
-                      </button>
-                    ) : (
-                      <button type="button" onClick={() => chaseAction(b.id, "start")} disabled={busy === b.id}
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {b.opted_out ? (
+                      <button type="button" onClick={() => chaseAction(b.id, "opt-in")} disabled={busy === b.id}
                         className="text-[11px] px-2 py-1 rounded border border-[var(--ayci-teal)]/40 text-[var(--ayci-teal)] hover:bg-teal-50 disabled:opacity-50">
-                        {busy === b.id ? "…" : "Start chase"}
+                        {busy === b.id ? "…" : "Opt back in"}
                       </button>
-                    ))}
+                    ) : !b.complete && (
+                      <span className="inline-flex items-center gap-2">
+                        {b.chase_active ? (
+                          <button type="button" onClick={() => chaseAction(b.id, "stop")} disabled={busy === b.id}
+                            className="text-[11px] px-2 py-1 rounded border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)] hover:bg-slate-50 disabled:opacity-50">
+                            {busy === b.id ? "…" : "Stop"}
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => chaseAction(b.id, "start")} disabled={busy === b.id}
+                            className="text-[11px] px-2 py-1 rounded border border-[var(--ayci-teal)]/40 text-[var(--ayci-teal)] hover:bg-teal-50 disabled:opacity-50">
+                            {busy === b.id ? "…" : "Start chase"}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => chaseAction(b.id, "opt-out")} disabled={busy === b.id}
+                          title="Never auto-chase this person for a testimonial"
+                          className="text-[11px] text-[var(--ayci-ink-muted)] hover:text-[var(--ayci-ink)] hover:underline disabled:opacity-50">
+                          Opt out
+                        </button>
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
