@@ -1240,11 +1240,16 @@ async def tally_interview_webhook(
         # Find Member -> Date/Time steps), so the dashboard only needs to supply the
         # email(s) + name. Monday-free replacement for 8d's Monday trigger.
         if didnt and substantive:
+            _circle_email = (row or {}).get("circle_email") or _field_by_labels(resolved, {"circle email"})
+            _main_email = (row or {}).get("email") or (candidates[0] if candidates else "")
             hook_payload = {
                 "event": "substantive_unsuccessful",
-                "email": (row or {}).get("email") or (candidates[0] if candidates else ""),
-                "circle_email": (row or {}).get("circle_email")
-                    or _field_by_labels(resolved, {"circle email"}),
+                # best_email = the single field to map 8d's Find Member to: the Circle
+                # email when known (best for the Circle lookup), else the main email.
+                # Always populated when we have any email at all.
+                "best_email": _circle_email or _main_email,
+                "email": _main_email,
+                "circle_email": _circle_email,
                 "candidate_emails": candidates,
                 "name": (row or {}).get("name")
                     or _field_by_labels(resolved, {"fullname", "full name", "name"}),
