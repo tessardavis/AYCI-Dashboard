@@ -40,10 +40,11 @@ dependency in a fragile flow and proves the pattern (Tally → dashboard direct)
   interview-success → Boss path. ✅
 - [~] **Unsuccessful path (Stage 2):** dashboard **done & verified** - on a Substantive
   "didn't get it" it POSTs to the 8d catch-hook (`uyhckj5`) with
-  email/circle_email/name/first_name/interview_date/days_since_interview (hook 200).
-  **Remaining (Zapier):** rewire 8d's downstream steps to read those catch-hook fields
-  (not Monday), drop the Monday steps, keep its <4d-DM / >4d-email logic, publish, and
-  switch off the old Monday-triggered 8d.
+  email/circle_email/candidate_emails/name/first_name/interview_date (hook 200). NB the
+  <4d/>4d channel split is **days since last seen on Circle**, which 8d derives itself
+  from Find Member -> Date/Time (not from the dashboard). **Remaining (Zapier):** point
+  8d's Find Member at the catch-hook `circle_email`/`email`, drop the Monday steps, keep
+  Find Member -> Date/Time -> Split -> DM/email as-is, publish, switch off old 8d.
 - [ ] **Interview dates (Stage 3):** receiver records the interview date straight to
   the dashboard's Upcoming Interviews - replaces zap "3" (Tally→Monday).
 

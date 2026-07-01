@@ -1235,19 +1235,11 @@ async def tally_interview_webhook(
                 return {"ok": False, "reason": f"no student for {candidates}"}
             return await _apply_boss(row, "tally-interview-form")
 
-        # UNSUCCESSFUL -> fire the 8d catch-hook so it sends the 15-min link (Circle
-        # DM if the interview was recent, email if older). Monday-free replacement for
-        # 8d's Monday trigger; 8d keeps its own <4d/>4d channel logic.
+        # UNSUCCESSFUL -> fire the 8d catch-hook so it sends the 15-min link. 8d itself
+        # decides Circle DM vs email off "days since last seen on Circle" (via its own
+        # Find Member -> Date/Time steps), so the dashboard only needs to supply the
+        # email(s) + name. Monday-free replacement for 8d's Monday trigger.
         if didnt and substantive:
-            idate = _field_by_labels(resolved, {"interview date", "interviewdate"})
-            days_since = None
-            try:
-                d = datetime.fromisoformat(idate.replace("Z", "+00:00"))
-                if d.tzinfo is None:
-                    d = d.replace(tzinfo=timezone.utc)
-                days_since = (datetime.now(timezone.utc) - d).days
-            except (ValueError, TypeError):
-                pass
             hook_payload = {
                 "event": "substantive_unsuccessful",
                 "email": (row or {}).get("email") or (candidates[0] if candidates else ""),
@@ -1258,8 +1250,7 @@ async def tally_interview_webhook(
                     or _field_by_labels(resolved, {"fullname", "full name", "name"}),
                 "first_name": (row or {}).get("first_name")
                     or _field_by_labels(resolved, {"firstname", "first name"}),
-                "interview_date": idate,
-                "days_since_interview": days_since,
+                "interview_date": _field_by_labels(resolved, {"interview date", "interviewdate"}),
             }
             try:
                 import httpx
