@@ -4,15 +4,15 @@ import { Award, RefreshCw, Search } from "lucide-react";
 
 import { apiClient } from "@/lib/api";
 
-// Coralie's Wins & Testimonials board: every Boss with where they are in the
-// journey (win shared -> testimonial booked -> recorded), the channel-wide win
-// totals, and per-Boss chase controls. Data comes from /students-db/bosses.
+// Coralie's Wins & Testimonials board. Baseline = every Boss (substantive job).
+// We'd like each to do two INDEPENDENT things - share a win AND record a
+// testimonial - so those are tracked as two separate goals, not a funnel.
+// Channel-wide win totals + per-Boss chase controls. Data: /students-db/bosses.
 const FILTERS = [
   { key: "chase", label: "To chase" },
-  { key: "win", label: "Needs to share win" },
-  { key: "booking", label: "Needs to book" },
-  { key: "recording", label: "Awaiting recording" },
-  { key: "complete", label: "Complete" },
+  { key: "no_win", label: "No win shared" },
+  { key: "no_testimonial", label: "No testimonial" },
+  { key: "complete", label: "Did both" },
   { key: "all", label: "All Bosses" },
 ];
 
@@ -58,7 +58,9 @@ export default function WinsTestimonials() {
       if (filter === "all") return true;
       if (filter === "complete") return b.complete;
       if (filter === "chase") return b.chaseable && !b.complete;
-      return b.stuck === filter; // win / booking / recording
+      if (filter === "no_win") return !b.win_shared;
+      if (filter === "no_testimonial") return !b.testimonial_recorded;
+      return true;
     });
   }, [bosses, filter, q]);
 
@@ -75,7 +77,7 @@ export default function WinsTestimonials() {
             <Award className="w-8 h-8 text-[var(--ayci-teal)]" /> Wins &amp; Testimonials
           </h1>
           <p className="text-[var(--ayci-ink-muted)] text-sm mt-1 max-w-2xl">
-            Every Boss (substantive job) and where they are: shared their win → booked a testimonial → recorded it.
+            Every Boss (substantive job). We'd like each to do two things - <strong>share a win</strong> and <strong>record a testimonial</strong>. They're independent: some do one, some both, some neither.
           </p>
         </div>
         <button
@@ -92,12 +94,12 @@ export default function WinsTestimonials() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: "Bosses", value: c.total },
-          { label: "Wins shared (Bosses)", value: c.wins_shared },
-          { label: "Testimonials booked", value: c.testimonials_booked },
-          { label: "Recorded", value: c.testimonials_recorded },
-          { label: "Complete", value: c.complete, tone: "emerald" },
-          { label: "To chase", value: c.to_chase, tone: "amber" },
+          { label: "Bosses (baseline)", value: c.total },
+          { label: "Shared a win", value: c.wins_shared },
+          { label: "Recorded a testimonial", value: c.testimonials_recorded },
+          { label: "Did both", value: c.complete, tone: "emerald" },
+          { label: "No win yet", value: c.needs_win },
+          { label: "No testimonial yet", value: c.needs_testimonial },
         ].map((s) => (
           <div key={s.label} className={"rounded-lg border p-3 " + (s.tone === "emerald" ? "border-emerald-200 bg-emerald-50/50" : s.tone === "amber" ? "border-amber-200 bg-amber-50/50" : "border-[var(--ayci-border)] bg-white")}>
             <div className="text-2xl font-display font-bold text-[var(--ayci-ink)]">{s.value ?? 0}</div>

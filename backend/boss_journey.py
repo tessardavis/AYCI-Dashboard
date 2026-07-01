@@ -27,12 +27,20 @@ def is_boss(row: dict) -> bool:
 
 
 def journey_status(row: dict) -> dict:
-    """Per-Boss journey + which step they're stuck on (None = complete)."""
+    """Per-Boss status. The baseline is EVERY Boss-tagged member; we'd like each to
+    do two INDEPENDENT things - share a win AND record a testimonial. They are not a
+    funnel: someone can record a testimonial without ever posting a win, or vice
+    versa. `complete` = did both. `needs_win` / `needs_testimonial` flag each gap
+    independently. (`stuck` is kept only for legacy sort ordering.)"""
     win = bool(row.get("win_shared_at"))
     tstatus = (row.get("testimonial_status") or "").strip().lower()
     cancelled = tstatus in ("cancelled", "no-show")
     booked = tstatus in _BOOKED_STATES
     recorded = tstatus in _RECORDED_STATES or bool(row.get("testimonial_recorded_at"))
+    needs_win = not win
+    needs_testimonial = not recorded
+    complete = win and recorded
+    # Legacy single-axis label (win first) - only used to order the list nicely.
     if not win:
         stuck = "win"
     elif not booked or cancelled:
@@ -51,8 +59,10 @@ def journey_status(row: dict) -> dict:
         "testimonial_booked_date": row.get("testimonial_booked_date"),
         "testimonial_recorded": recorded,
         "testimonial_coach": row.get("testimonial_coach"),
+        "needs_win": needs_win,
+        "needs_testimonial": needs_testimonial,
         "stuck": stuck,
-        "complete": stuck is None,
+        "complete": complete,
     }
 
 

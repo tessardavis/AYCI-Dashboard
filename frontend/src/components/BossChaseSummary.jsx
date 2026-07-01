@@ -4,16 +4,17 @@ import { Award } from "lucide-react";
 
 import { apiClient } from "@/lib/api";
 
-// "Bosses to chase" widget for the Boss Badge & testimonials process. Shows where
-// each Boss is stuck in the journey (win shared -> booked -> recorded) and, for
-// the dashboard-driven testimonial chase, how many reminder DMs have gone out -
-// with a Stop control (the "Replied" rule) so Coralie can end a chase by hand.
-// Hides itself on error.
-const STUCK_LABEL = {
-  win: "needs to share their win",
-  booking: "needs to book the testimonial call",
-  recording: "booked - awaiting the recording",
-};
+// "Bosses to chase" widget for the Boss Badge & testimonials process. Baseline is
+// every Boss; we'd like each to do two INDEPENDENT things - share a win AND record
+// a testimonial. Shows the two gaps per Boss and, for the dashboard-driven
+// testimonial chase, how many reminder DMs have gone out - with a Stop control
+// (the "Replied" rule) so Coralie can end a chase by hand. Hides itself on error.
+function needLabel(b) {
+  const parts = [];
+  if (b.needs_win) parts.push("share their win");
+  if (b.needs_testimonial) parts.push("record a testimonial");
+  return parts.length ? "needs to " + parts.join(" + ") : "done both";
+}
 
 export default function BossChaseSummary({ className = "" }) {
   const [data, setData] = useState(null);
@@ -84,7 +85,6 @@ export default function BossChaseSummary({ className = "" }) {
   // Only the actionable list: recently-marked or actively-chased Bosses. The
   // historical backfill (hundreds) stays in the total count but isn't dumped here.
   const toChase = (data.bosses || []).filter((b) => !b.complete && b.chaseable);
-  const stuck = (k) => toChase.filter((b) => b.stuck === k).length;
 
   return (
     <div className={"rounded-lg border border-[var(--ayci-border)] bg-white p-4 " + className} data-testid="boss-chase-summary">
@@ -119,10 +119,9 @@ export default function BossChaseSummary({ className = "" }) {
       <div className="flex flex-wrap gap-2 items-center mb-2">
         <span className="text-sm mr-1"><strong className="text-lg text-[var(--ayci-ink)]">{c.to_chase ?? toChase.length}</strong> to chase</span>
         <span className="text-xs text-[var(--ayci-ink-muted)] mr-1">of {c.total ?? 0} Bosses</span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">No win yet: <strong>{stuck("win")}</strong></span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Not booked: <strong>{stuck("booking")}</strong></span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Awaiting recording: <strong>{stuck("recording")}</strong></span>
-        <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">Complete: <strong>{c.complete ?? 0}</strong></span>
+        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">No win yet: <strong>{c.needs_win ?? 0}</strong></span>
+        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">No testimonial yet: <strong>{c.needs_testimonial ?? 0}</strong></span>
+        <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">Did both: <strong>{c.complete ?? 0}</strong></span>
       </div>
       <div className="flex flex-wrap gap-2 items-center mb-2 text-xs text-[var(--ayci-ink-muted)]">
         <span className="uppercase tracking-wider text-[10px]">Across all {c.total ?? 0} Bosses:</span>
@@ -160,7 +159,7 @@ export default function BossChaseSummary({ className = "" }) {
                 {b.chase_stopped_reason === "replied" && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 border border-[var(--ayci-border)] text-[var(--ayci-ink-muted)]">replied</span>
                 )}
-                <span className="text-[11px] text-[var(--ayci-ink-muted)]">{STUCK_LABEL[b.stuck] || b.stuck}</span>
+                <span className="text-[11px] text-[var(--ayci-ink-muted)]">{needLabel(b)}</span>
                 {b.chase_active ? (
                   <button
                     type="button"

@@ -1165,10 +1165,13 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
         "recording": sum(1 for b in out if b["stuck"] == "recording"),
         "complete": sum(1 for b in out if b["complete"]),
         "to_chase": len(chaseable_incomplete),
-        # Totals across ALL Bosses (not just the to-chase list):
+        # Totals across ALL Bosses (not just the to-chase list). Win and testimonial
+        # are two INDEPENDENT goals against the same baseline, not a funnel.
         "wins_shared": sum(1 for b in out if b.get("win_shared")),
+        "needs_win": sum(1 for b in out if b.get("needs_win")),
         "testimonials_booked": sum(1 for b in out if b.get("testimonial_booked") or b.get("testimonial_recorded")),
         "testimonials_recorded": sum(1 for b in out if b.get("testimonial_recorded")),
+        "needs_testimonial": sum(1 for b in out if b.get("needs_testimonial")),
     }
     # Channel-wide win totals (all sharers, Boss or not) from the last wins scan.
     ws = await db.fn_cache.find_one({"_id": "wins_share_summary"}, {"_id": 0})
