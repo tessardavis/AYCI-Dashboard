@@ -31,6 +31,7 @@ import CohortMilestonesSection from "@/components/settings/CohortMilestonesSecti
 import CohortConfigSection from "@/components/settings/CohortConfigSection";
 import ConnectedInboxesSection from "@/components/settings/ConnectedInboxesSection";
 import IntegrationsSection from "@/components/settings/IntegrationsSection";
+import CoachingDocsSection from "@/components/settings/CoachingDocsSection";
 
 const CATEGORIES = [
   "GROWTH + INTEREST",
@@ -83,7 +84,7 @@ export default function Settings() {
         {isAdmin && <TabsContent value="launches"><LaunchesSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="cohort"><CohortMilestonesSection isAdmin={isAdmin} /><CohortConfigSection isAdmin={isAdmin} /></TabsContent>}
         {isAdmin && <TabsContent value="inboxes"><ConnectedInboxesSection isAdmin={isAdmin} /></TabsContent>}
-        {(isAdmin || hasStudents) && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /></TabsContent>}
+        {(isAdmin || hasStudents) && <TabsContent value="integrations"><IntegrationsSection isAdmin={isAdmin} /><CoachingDocsSection isAdmin={isAdmin} /></TabsContent>}
         {hasBot && <TabsContent value="bot"><CoachPlaybookSection isAdmin={hasBot} /></TabsContent>}
       </Tabs>
     </div>
