@@ -1199,25 +1199,26 @@ async def tally_interview_webhook(
         if not (got_it and substantive):
             return {"ok": True, "ignored": True, "got_it": got_it,
                     "substantive": substantive, "reason": "not a substantive success"}
-        # email: a field labelled 'email' first, else any INPUT_EMAIL field.
-        email = ""
+        # Collect EVERY email-ish value on the form (the follow-up link pre-fills the
+        # student's Circle email; there may also be a contact 'email' field), and match
+        # a student if ANY candidate hits email / circle_email / other_emails. Trying
+        # all candidates against all three fields is what beats the dual-email gap.
+        candidates: list[str] = []
         for label, typ, txt in resolved:
-            if label == "email" and txt.strip():
-                email = txt.strip().lower()
-                break
-        if not email:
-            for label, typ, txt in resolved:
-                if (typ == "INPUT_EMAIL" or "email" in label) and txt.strip():
-                    email = txt.strip().lower()
-                    break
-        if not email:
+            if (typ == "INPUT_EMAIL" or "email" in label) and txt.strip():
+                c = txt.strip().lower()
+                if c not in candidates:
+                    candidates.append(c)
+        if not candidates:
             return {"ok": False, "reason": "no email in submission"}
-        _email_re = rf"(^|[,;\s]){re.escape(email)}([,;\s]|$)"
-        row = await db.academy_members.find_one({"$or": [
-            {"email": email}, {"circle_email": email},
-            {"other_emails": {"$regex": _email_re, "$options": "i"}}]})
+        ors: list[dict] = []
+        for c in candidates:
+            _re = rf"(^|[,;\s]){re.escape(c)}([,;\s]|$)"
+            ors += [{"email": c}, {"circle_email": c},
+                    {"other_emails": {"$regex": _re, "$options": "i"}}]
+        row = await db.academy_members.find_one({"$or": ors})
         if not row:
-            return {"ok": False, "reason": f"no student for {email}"}
+            return {"ok": False, "reason": f"no student for {candidates}"}
         return await _apply_boss(row, "tally-interview-form")
     except HTTPException:
         raise

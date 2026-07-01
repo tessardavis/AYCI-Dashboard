@@ -30,8 +30,13 @@ Not part of the board decommission itself, but it removes the biggest *active* M
 dependency in a fragile flow and proves the pattern (Tally → dashboard direct).
 
 - [x] **Success path:** `POST /api/students-db/tally/interview` marks Boss on a
-  Substantive "I got it!" (replaces zap 8a + the Monday-triggered 8c). **Live.**
-- [ ] Point the Tally webhook at it; verify one real success; **turn off 8c**.
+  Substantive "I got it!" (replaces zap 8a + the Monday-triggered 8c). **Live &
+  verified end-to-end** (native Tally Webhook on form nGyGj2 → dashboard →
+  matched a real student → idempotent). The student's follow-up link **pre-fills
+  their Circle email**, and the receiver matches on **any** email field vs
+  email / circle_email / other_emails - so the dual-email gap is largely closed;
+  a mismatch just means no auto-mark and Coralie marks by hand.
+- [ ] **Turn off 8c** and discard draft 8a (dashboard now owns the success path).
 - [ ] **Unsuccessful path (Stage 2):** receiver detects "didn't get it" and fires the
   15-min-link follow-up (Circle DM <4 days / email >4 days) - replaces the
   Monday-triggered 8d.
