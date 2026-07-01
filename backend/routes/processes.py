@@ -366,9 +366,14 @@ per message (1-4), from Coralie's Circle. The chase is enabled in Settings >
 Integrations > Testimonial chase, and the 3 old Monday-triggered follow-up zaps
 are OFF (no double-chasing). The backfill has been run (Boss badges set from the
 Circle tag, recorded testimonials imported). STILL TO DO: (1) archive the now-
-dormant Monday Student Wins Tracker (5095636561); (2) consolidate the
-Boss-TAGGING zaps (form + manual tag) to call mark-boss-by-email (the live
-mis-tagging fix - a Circle-only badge doesn't reach Kit without it).
+dormant Monday Student Wins Tracker (5095636561); (2) finish the Boss-TAGGING
+consolidation. The outbound worker zap is DONE - "8b - Boss tagging" subscribes
+to the boss_badge column, so any dashboard change to boss_badge (the Mark as
+Boss button already) applies Circle + Kit + space access. What remains is the
+inbound trigger zaps for non-button routes: the success form and a manual Circle
+"Boss" tag should each POST to mark-boss-by-email (the leak-closer - a
+Circle-only badge otherwise never reaches Kit/space). Check for a half-built
+"8a" zap first.
 
 KEY LINKS: wins channel = Share Your Wins
 (https://ayci-academy.circle.so/c/share-your-wins/); testimonial booking =

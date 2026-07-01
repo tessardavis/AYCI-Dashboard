@@ -544,9 +544,13 @@ follow-up zaps are switched off** - so there's no double-chasing. Every *new* Bo
 
 - **[Tessa]** **Retire / archive the Monday Student Wins Tracker (5095636561)** - the 3 follow-up zaps
   are already off, so the board is now dormant; archive it to finish winding down the old chain.
-- **[Tessa - Zapier]** Consolidate the Boss-*tagging* zaps (success form + manual Circle tag) to call
-  **`mark-boss-by-email`**, so every win lands on the board and applies Circle + Kit + bonus in one place.
-  (This is the live mis-tagging fix - a Circle-only badge doesn't reach Kit without it.)
+- **[Tessa - Zapier]** Finish the Boss-*tagging* consolidation. The **outbound worker zap is done**:
+  **"8b - Boss tagging (Circle/Kit/space_access)"** subscribes to the `boss_badge` column, so any
+  dashboard change to boss_badge (the "Mark as Boss" button already) applies Circle + Kit + space access.
+  What remains is the **inbound trigger zaps** that feed the front door for non-button routes: (a) the
+  **success form** → POST `mark-boss-by-email`; (b) a **manual Circle "Boss" tag** → POST
+  `mark-boss-by-email` (the leak-closer - a Circle-only badge otherwise never reaches Kit/space). Check
+  for a half-built **"8a"** zap first.
 
 ### Build status
 | Piece | Status |
@@ -565,7 +569,8 @@ follow-up zaps are switched off** - so there's no double-chasing. Every *new* Bo
 | Backfill: Boss badges from Circle tag (no chase) + recorded testimonials | ✅ Done |
 | Turn off the 3 old Monday-triggered follow-up zaps | ✅ Done |
 | Archive the Monday Student Wins Tracker (5095636561) - now dormant | 🔨 [Tessa] |
-| Consolidate Boss-tagging zaps (form + manual tag → `mark-boss-by-email`) | 🔨 [Tessa - Zapier] |
+| Boss-tagging worker zap "8b" (boss_badge column → Circle + Kit + space access) | ✅ Live |
+| Inbound trigger zaps (form + manual Circle tag → `mark-boss-by-email`) | 🔨 [Tessa - Zapier] |
 
 ---
 
