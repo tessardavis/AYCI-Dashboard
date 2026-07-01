@@ -1255,6 +1255,14 @@ async def tally_interview_webhook(
                 "dashboard_edited_at": datetime.now(timezone.utc),
                 "dashboard_edited_by": "tally-interview-form"}})
             recorded_date = idate
+            # Grant Deep Dive 5 + specialty-space access (replaces Monday zaps 7/7b).
+            try:
+                import interview_access
+                fresh = await db.academy_members.find_one({"_id": row["_id"]}) or row
+                await interview_access.grant_interview_access(
+                    db, fresh, meta.get("interview_speciality") or "")
+            except Exception as e:
+                logger.warning(f"[tally-interview] access grant failed for {row['_id']}: {e}")
 
         # SUCCESS -> mark Boss (front door -> 8b).
         if got_it and substantive:
