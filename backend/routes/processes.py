@@ -305,6 +305,7 @@ WHAT IT IS: when a student lands their substantive job we celebrate it (the Boss
 Badge) and turn it into social proof - they share their win in the community and
 record a testimonial with Tessa. The aim is that nothing slips through.
 OWNER: Coralie.
+WALKTHROUGH VIDEO: https://www.loom.com/share/6ea141a491544316a249d0d0b5445c0a
 
 1. IT STARTS WHEN A STUDENT TELLS US THEY GOT THE JOB: students tell us in all
 sorts of ways (success form, a DM to a coach, an email, a message to Coralie).

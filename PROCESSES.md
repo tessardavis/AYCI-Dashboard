@@ -464,6 +464,8 @@ When a student lands their **substantive job** we celebrate it (the **Boss Badge
 social proof - they **share their win** in the community and **record a testimonial** with Tessa. The
 whole point is that nothing slips through. **Owner: Coralie.**
 
+📹 **Walkthrough video:** https://www.loom.com/share/6ea141a491544316a249d0d0b5445c0a
+
 ## 1. It starts when a student tells us they got the job
 
 Students tell us in all sorts of ways - the success form, a DM to a coach, an email, a message to
