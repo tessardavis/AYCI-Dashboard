@@ -1146,6 +1146,19 @@ async def mark_boss_by_email(
 # Tally "AYCI - Interview Date Form" - the single source of interview events.
 _INTERVIEW_FORM_ID = "nGyGj2"
 
+# Zapier catch-hook that zap "8d" listens on to send the "substantive unsuccessful"
+# 15-minute booking link (Circle DM if the interview was recent, email if older).
+# The dashboard fires this so 8d no longer needs a Monday trigger. Overridable via env.
+_UNSUCCESSFUL_HOOK = (os.environ.get("UNSUCCESSFUL_FOLLOWUP_HOOK")
+                      or "https://hooks.zapier.com/hooks/catch/532155/uyhckj5/")
+
+
+def _field_by_labels(resolved: list, labels: set) -> str:
+    for label, _typ, txt in resolved:
+        if label in labels and (txt or "").strip():
+            return txt.strip()
+    return ""
+
 
 def _tally_field_text(f: dict) -> str:
     """Resolve a Tally webhook field to human text: maps multiple-choice option
@@ -1191,14 +1204,12 @@ async def tally_interview_webhook(
         resolved = [((f.get("label") or "").strip().lower(), f.get("type"),
                      _tally_field_text(f)) for f in fields]
         blob = " ".join(t.lower() for _, _, t in resolved)
-        # Success = they picked "I got it!" AND it was a Substantive interview.
-        # (Both answers land in the value blob; "i got it" is not a substring of
-        # the other options - "unfortunately i didn't get it" / "rescheduled".)
+        # The result question has three options; classify from the value blob.
+        # "i got it" is not a substring of "unfortunately i didn't get it".
         got_it = "i got it" in blob
+        didnt = ("didn't get it" in blob) or ("did not get it" in blob) or ("didnt get it" in blob)
         substantive = "substantive" in blob
-        if not (got_it and substantive):
-            return {"ok": True, "ignored": True, "got_it": got_it,
-                    "substantive": substantive, "reason": "not a substantive success"}
+
         # Collect EVERY email-ish value on the form (the follow-up link pre-fills the
         # student's Circle email; there may also be a contact 'email' field), and match
         # a student if ANY candidate hits email / circle_email / other_emails. Trying
@@ -1209,17 +1220,59 @@ async def tally_interview_webhook(
                 c = txt.strip().lower()
                 if c not in candidates:
                     candidates.append(c)
-        if not candidates:
-            return {"ok": False, "reason": "no email in submission"}
-        ors: list[dict] = []
-        for c in candidates:
-            _re = rf"(^|[,;\s]){re.escape(c)}([,;\s]|$)"
-            ors += [{"email": c}, {"circle_email": c},
-                    {"other_emails": {"$regex": _re, "$options": "i"}}]
-        row = await db.academy_members.find_one({"$or": ors})
-        if not row:
-            return {"ok": False, "reason": f"no student for {candidates}"}
-        return await _apply_boss(row, "tally-interview-form")
+        row = None
+        if candidates:
+            ors: list[dict] = []
+            for c in candidates:
+                _re = rf"(^|[,;\s]){re.escape(c)}([,;\s]|$)"
+                ors += [{"email": c}, {"circle_email": c},
+                        {"other_emails": {"$regex": _re, "$options": "i"}}]
+            row = await db.academy_members.find_one({"$or": ors})
+
+        # SUCCESS -> mark Boss (front door -> 8b).
+        if got_it and substantive:
+            if not row:
+                return {"ok": False, "reason": f"no student for {candidates}"}
+            return await _apply_boss(row, "tally-interview-form")
+
+        # UNSUCCESSFUL -> fire the 8d catch-hook so it sends the 15-min link (Circle
+        # DM if the interview was recent, email if older). Monday-free replacement for
+        # 8d's Monday trigger; 8d keeps its own <4d/>4d channel logic.
+        if didnt and substantive:
+            idate = _field_by_labels(resolved, {"interview date", "interviewdate"})
+            days_since = None
+            try:
+                d = datetime.fromisoformat(idate.replace("Z", "+00:00"))
+                if d.tzinfo is None:
+                    d = d.replace(tzinfo=timezone.utc)
+                days_since = (datetime.now(timezone.utc) - d).days
+            except (ValueError, TypeError):
+                pass
+            hook_payload = {
+                "event": "substantive_unsuccessful",
+                "email": (row or {}).get("email") or (candidates[0] if candidates else ""),
+                "circle_email": (row or {}).get("circle_email")
+                    or _field_by_labels(resolved, {"circle email"}),
+                "candidate_emails": candidates,
+                "name": (row or {}).get("name")
+                    or _field_by_labels(resolved, {"fullname", "full name", "name"}),
+                "first_name": (row or {}).get("first_name")
+                    or _field_by_labels(resolved, {"firstname", "first name"}),
+                "interview_date": idate,
+                "days_since_interview": days_since,
+            }
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=20) as c:
+                    r = await c.post(_UNSUCCESSFUL_HOOK, json=hook_payload)
+                return {"ok": True, "action": "unsuccessful_followup",
+                        "hook_status": r.status_code, "student_found": bool(row)}
+            except Exception as e:
+                logger.warning(f"[tally-interview] unsuccessful hook failed: {e}")
+                return {"ok": False, "action": "unsuccessful_followup", "error": str(e)}
+
+        return {"ok": True, "ignored": True, "got_it": got_it, "didnt": didnt,
+                "substantive": substantive, "reason": "no action for this result"}
     except HTTPException:
         raise
     except Exception as e:
