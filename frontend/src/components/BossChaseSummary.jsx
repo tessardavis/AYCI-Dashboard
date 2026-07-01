@@ -102,6 +102,12 @@ export default function BossChaseSummary({ className = "" }) {
         <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Awaiting recording: <strong>{stuck("recording")}</strong></span>
         <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">Complete: <strong>{c.complete ?? 0}</strong></span>
       </div>
+      <div className="flex flex-wrap gap-2 items-center mb-2 text-xs text-[var(--ayci-ink-muted)]">
+        <span className="uppercase tracking-wider text-[10px]">Across all {c.total ?? 0} Bosses:</span>
+        <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Wins shared: <strong>{c.wins_shared ?? 0}</strong></span>
+        <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Testimonials booked: <strong>{c.testimonials_booked ?? 0}</strong></span>
+        <span className="px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Recorded: <strong>{c.testimonials_recorded ?? 0}</strong></span>
+      </div>
       {toChase.length === 0 ? (
         <span className="text-xs text-[var(--ayci-ink-muted)]">Nothing to chase - every Boss is complete (or there are none yet).</span>
       ) : (
