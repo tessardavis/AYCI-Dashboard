@@ -34,7 +34,11 @@ async def coach_activity_summary(
     return await launches_mod._stale_while_revalidate(
         db,
         key,
-        ttl_min=30,
+        # 4h (was 30 min): this summary fans out one Circle /comments call PER post,
+        # which dominated Circle Admin-API usage. It's an engagement overview, so a
+        # few hours stale is fine - and `refresh=true` (the Refresh button) or a
+        # dismiss forces a fresh recompute on demand.
+        ttl_min=240,
         compute_fn=lambda: coach_act.fetch_coach_activity_summary(db, cohort),
     )
 
@@ -55,7 +59,9 @@ async def coach_activity_dismiss(
         by_name=user.get("name"),
     )
     # Bust the SWR cache so the freshly-dismissed item disappears immediately
-    await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
+    # Bust every cohort variant (key is coach_activity:summary:<cohort>) so a
+    # dismiss/undismiss shows immediately even with the longer TTL.
+    await db["fn_cache"].delete_many({"_id": {"$regex": "^coach_activity:summary"}})
     return res
 
 
@@ -70,7 +76,9 @@ async def coach_activity_undismiss(
     res = await dismissals.undismiss(
         db, alert_type=payload.alert_type, key=payload.key,
     )
-    await db["fn_cache"].delete_one({"_id": "coach_activity:summary"})
+    # Bust every cohort variant (key is coach_activity:summary:<cohort>) so a
+    # dismiss/undismiss shows immediately even with the longer TTL.
+    await db["fn_cache"].delete_many({"_id": {"$regex": "^coach_activity:summary"}})
     return res
 
 
