@@ -1170,6 +1170,11 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
         "testimonials_booked": sum(1 for b in out if b.get("testimonial_booked") or b.get("testimonial_recorded")),
         "testimonials_recorded": sum(1 for b in out if b.get("testimonial_recorded")),
     }
+    # Channel-wide win totals (all sharers, Boss or not) from the last wins scan.
+    ws = await db.fn_cache.find_one({"_id": "wins_share_summary"}, {"_id": 0})
+    if ws:
+        counts["wins_total_posts"] = ws.get("total_posts")
+        counts["wins_unique_sharers"] = ws.get("unique_sharers")
     return {"bosses": out, "counts": counts}
 
 

@@ -114,6 +114,19 @@ async def scan_wins_shared(db) -> dict:
     summary["posts"] = len(posts)
     author_ids, author_emails = _post_author_ids_emails(posts)
 
+    # Record channel-wide totals (all sharers, Boss or not) so the Bosses widget
+    # can show "total wins shared overall" without re-reading Circle each load.
+    try:
+        await db.fn_cache.update_one(
+            {"_id": "wins_share_summary"},
+            {"$set": {"_id": "wins_share_summary",
+                      "total_posts": len(posts),
+                      "unique_sharers": len(author_ids | author_emails),
+                      "scanned_at": datetime.now(timezone.utc)}},
+            upsert=True)
+    except Exception as e:
+        logger.warning(f"[boss-journey] wins summary store failed: {e}")
+
     try:
         by_email = await private_chat_setup._build_email_index()
     except Exception:
