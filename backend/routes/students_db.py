@@ -1165,6 +1165,10 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
         "recording": sum(1 for b in out if b["stuck"] == "recording"),
         "complete": sum(1 for b in out if b["complete"]),
         "to_chase": len(chaseable_incomplete),
+        # Totals across ALL Bosses (not just the to-chase list):
+        "wins_shared": sum(1 for b in out if b.get("win_shared")),
+        "testimonials_booked": sum(1 for b in out if b.get("testimonial_booked") or b.get("testimonial_recorded")),
+        "testimonials_recorded": sum(1 for b in out if b.get("testimonial_recorded")),
     }
     return {"bosses": out, "counts": counts}
 
