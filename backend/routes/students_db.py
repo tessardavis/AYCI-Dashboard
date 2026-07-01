@@ -1143,6 +1143,89 @@ async def mark_boss_by_email(
     return await _apply_boss(row, "zapier")
 
 
+# Tally "AYCI - Interview Date Form" - the single source of interview events.
+_INTERVIEW_FORM_ID = "nGyGj2"
+
+
+def _tally_field_text(f: dict) -> str:
+    """Resolve a Tally webhook field to human text: maps multiple-choice option
+    ids -> their labels, joins lists, stringifies scalars."""
+    val = f.get("value")
+    opts = f.get("options") or []
+    if opts:
+        idmap = {o.get("id"): o.get("text") for o in opts if isinstance(o, dict)}
+        if isinstance(val, list):
+            return ", ".join(str(idmap.get(v, v)) for v in val)
+        return str(idmap.get(val, "" if val is None else val))
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val)
+    return "" if val is None else str(val)
+
+
+@router.post("/students-db/tally/interview")
+async def tally_interview_webhook(
+    request: Request,
+    secret: Optional[str] = None,
+    x_webhook_secret: Optional[str] = Header(default=None, alias="X-Webhook-Secret"),
+):
+    """Tally webhook receiver for the Interview Date Form (nGyGj2). Marks a student
+    a Boss when they report a SUBSTANTIVE interview result of "I got it!" - the
+    Monday-free replacement for the 8a(zap)/8c(Monday) success path.
+
+    Point Tally at: form nGyGj2 -> Integrations -> Webhooks ->
+      https://<host>/api/students-db/tally/interview?secret=<ZAPIER_WEBHOOK_SECRET>
+
+    Idempotent (via _apply_boss, which no-ops an existing Boss). Always acks 200 on
+    anything it does not act on, so Tally will not aggressively retry."""
+    _check_webhook_secret(secret or x_webhook_secret)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+    try:
+        data = payload.get("data") or {}
+        form_id = data.get("formId") or payload.get("formId")
+        if form_id and form_id != _INTERVIEW_FORM_ID:
+            return {"ok": True, "ignored": True, "reason": f"form {form_id} not handled"}
+        fields = data.get("fields") or []
+        resolved = [((f.get("label") or "").strip().lower(), f.get("type"),
+                     _tally_field_text(f)) for f in fields]
+        blob = " ".join(t.lower() for _, _, t in resolved)
+        # Success = they picked "I got it!" AND it was a Substantive interview.
+        # (Both answers land in the value blob; "i got it" is not a substring of
+        # the other options - "unfortunately i didn't get it" / "rescheduled".)
+        got_it = "i got it" in blob
+        substantive = "substantive" in blob
+        if not (got_it and substantive):
+            return {"ok": True, "ignored": True, "got_it": got_it,
+                    "substantive": substantive, "reason": "not a substantive success"}
+        # email: a field labelled 'email' first, else any INPUT_EMAIL field.
+        email = ""
+        for label, typ, txt in resolved:
+            if label == "email" and txt.strip():
+                email = txt.strip().lower()
+                break
+        if not email:
+            for label, typ, txt in resolved:
+                if (typ == "INPUT_EMAIL" or "email" in label) and txt.strip():
+                    email = txt.strip().lower()
+                    break
+        if not email:
+            return {"ok": False, "reason": "no email in submission"}
+        _email_re = rf"(^|[,;\s]){re.escape(email)}([,;\s]|$)"
+        row = await db.academy_members.find_one({"$or": [
+            {"email": email}, {"circle_email": email},
+            {"other_emails": {"$regex": _email_re, "$options": "i"}}]})
+        if not row:
+            return {"ok": False, "reason": f"no student for {email}"}
+        return await _apply_boss(row, "tally-interview-form")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[tally-interview] webhook error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 @router.get("/students-db/bosses")
 async def list_bosses(user: dict = Depends(require_board("students"))):
     """The 'Bosses to chase' view: every Boss with their testimonial-journey
