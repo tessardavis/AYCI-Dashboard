@@ -70,7 +70,10 @@ export default function BossChaseSummary({ className = "" }) {
 
   if (!data) return null;
   const c = data.counts || {};
-  const toChase = (data.bosses || []).filter((b) => !b.complete);
+  // Only the actionable list: recently-marked or actively-chased Bosses. The
+  // historical backfill (hundreds) stays in the total count but isn't dumped here.
+  const toChase = (data.bosses || []).filter((b) => !b.complete && b.chaseable);
+  const stuck = (k) => toChase.filter((b) => b.stuck === k).length;
 
   return (
     <div className={"rounded-lg border border-[var(--ayci-border)] bg-white p-4 " + className} data-testid="boss-chase-summary">
@@ -92,10 +95,11 @@ export default function BossChaseSummary({ className = "" }) {
         <div className="text-[11px] text-[var(--ayci-ink-muted)] mb-2">{backfill}</div>
       )}
       <div className="flex flex-wrap gap-2 items-center mb-2">
-        <span className="text-sm mr-1"><strong className="text-lg text-[var(--ayci-ink)]">{c.total ?? 0}</strong> Bosses</span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">No win yet: <strong>{c.win ?? 0}</strong></span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Not booked: <strong>{c.booking ?? 0}</strong></span>
-        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Awaiting recording: <strong>{c.recording ?? 0}</strong></span>
+        <span className="text-sm mr-1"><strong className="text-lg text-[var(--ayci-ink)]">{c.to_chase ?? toChase.length}</strong> to chase</span>
+        <span className="text-xs text-[var(--ayci-ink-muted)] mr-1">of {c.total ?? 0} Bosses</span>
+        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">No win yet: <strong>{stuck("win")}</strong></span>
+        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Not booked: <strong>{stuck("booking")}</strong></span>
+        <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-[var(--ayci-border)]">Awaiting recording: <strong>{stuck("recording")}</strong></span>
         <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">Complete: <strong>{c.complete ?? 0}</strong></span>
       </div>
       {toChase.length === 0 ? (
