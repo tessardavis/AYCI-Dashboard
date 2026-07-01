@@ -38,13 +38,12 @@ dependency in a fragile flow and proves the pattern (Tally → dashboard direct)
   a mismatch just means no auto-mark and Coralie marks by hand.
 - [x] **8c turned off, draft 8a discarded** - dashboard now solely owns the
   interview-success → Boss path. ✅
-- [~] **Unsuccessful path (Stage 2):** dashboard **done & verified** - on a Substantive
-  "didn't get it" it POSTs to the 8d catch-hook (`uyhckj5`) with
-  email/circle_email/candidate_emails/name/first_name/interview_date (hook 200). NB the
-  <4d/>4d channel split is **days since last seen on Circle**, which 8d derives itself
-  from Find Member -> Date/Time (not from the dashboard). **Remaining (Zapier):** point
-  8d's Find Member at the catch-hook `circle_email`/`email`, drop the Monday steps, keep
-  Find Member -> Date/Time -> Split -> DM/email as-is, publish, switch off old 8d.
+- [x] **Unsuccessful path (Stage 2): DONE.** On a Substantive "didn't get it" the
+  dashboard POSTs to the 8d catch-hook (`uyhckj5`) with best_email (Circle-preferred) +
+  name/first_name/interview_date. 8d rebuilt off the catch-hook (v9 published): Catch
+  Hook -> Find Member (on `best_email`) -> Date/Time -> Split (<4d DM / >4d email, off
+  days-since-last-Circle-activity) -> DM/email. Monday trigger + steps + result filter
+  removed; v9 replaced the Monday-triggered v8 (same zap, nothing separate to disable).
 - [ ] **Interview dates (Stage 3):** receiver records the interview date straight to
   the dashboard's Upcoming Interviews - replaces zap "3" (Tally→Monday).
 
@@ -114,7 +113,7 @@ as their own mini-migrations complete).
 
 | Phase | Status |
 |---|---|
-| 0 - interview/Boss flow off Monday | 🔨 Stage 1 done (8a/8c removed); Stages 2-3 to build |
+| 0 - interview/Boss flow off Monday | 🔨 Stages 1 & 2 done (8a/8c removed, 8d off Monday); Stage 3 to build |
 | 1 - field inventory & origin audit | ⬜ not started (the next real step for #2) |
 | 2 - re-source derivable fields | ⬜ |
 | 3 - dashboard as write target + data entry | ⬜ |
