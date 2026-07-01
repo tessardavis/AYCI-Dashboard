@@ -20,6 +20,7 @@ where it lives, and what the team needs to do. One section per process.
 7. Reminder statuses - _to be documented_
 8. Interview reminders - _to be documented_
 9. Refund status - _to be documented_
+10. [Interview-date access (Deep Dive 5 + specialty spaces)](#10-interview-date-access-deep-dive-5--specialty-spaces) - *live*
 
 ---
 
@@ -623,3 +624,38 @@ Access to the Prep Tools is driven by a student's **membership tier** (read auto
 | "Private Plus / VIP only" despite being a paying member | Tier tag genuinely missing, or tier not refreshed since the upgrade | Check the tag exists in Circle, then re-login |
 
 **Key principle:** **tier** is cached and refreshes only on login; **cohort tags** are read live every time a timeline is generated. A re-login fixes tier issues; regenerating the timeline fixes cohort issues.
+
+---
+
+# 10. Interview-date access (Deep Dive 5 + specialty spaces)
+
+When a student tells us their **interview date**, we give them access to the **Deep Dive 5** course
+and their **specialty-specific question space(s)**. **Owner: fulfilment (Megan).**
+
+## How it works (dashboard-driven, since July 2026)
+
+The trigger is the **interview-date submission on the Tally interview form**. That form posts straight
+to the dashboard (`/api/students-db/tally/interview`), and the dashboard:
+
+1. Matches the student by **any of their emails** (closes the dual-email gap).
+2. Records their interview date (shows on Upcoming Interviews).
+3. **Grants Circle access:** the **Deep Dive 5** space (`1194525`) **+** their **specialty space(s)** from
+   the mapping in the *Specialty spaces* Google Sheet (e.g. Cardiology → Medical Specialties; Paediatrics
+   → Paediatrics + Subspecialties; EM → EM + PEM). Adds are idempotent, so re-submitting does no harm.
+4. If the student's **specialty isn't in the mapping**, it still grants Deep Dive 5 and **posts a Slack
+   alert to #fulfillment-team** so someone adds the specialty space by hand - it never fails silently.
+
+## What this replaced
+
+The old **Monday-triggered zaps "7. Deep Dive access" and "7b. Speciality Space access"** - a fragile
+chain (Monday column → Zapier Table dedup → Google Sheet lookup → Circle) that could silently miss a
+student if the Monday column never updated or a Find Member hit the wrong email. That's what happened to
+**Kate Bowman** (June '26, Paeds): the automation didn't grant her, and Coralie added her by hand. The
+dashboard flow removes that whole class of failure. **To finish: retire zaps 7 and 7b.**
+
+## Good to know
+
+- The specialty→space mapping lives in code (`interview_access.SPECIALTY_SPACES`), copied from the Google
+  Sheet. If the sheet changes, update that map.
+- Access is deduped per student (`interview_access_spaces`), so it's safe to re-run / re-submit.
+- Grants use the Circle Admin **v1** `space_members` add (a true single-space add).

@@ -424,6 +424,30 @@ TROUBLESHOOTING ACCESS (most "I paid but the tool won't let me in" reports):
 KEY PRINCIPLE: tier is cached and refreshes only on login; cohort tags are read
 live every time a timeline is generated. A re-login fixes tier issues;
 regenerating the timeline fixes cohort issues.
+
+
+# Interview-date access (Deep Dive 5 + specialty spaces)
+
+WHAT IT IS: when a student tells us their INTERVIEW DATE, we give them the Deep
+Dive 5 course + their specialty-specific question space(s). OWNER: fulfilment
+(Megan).
+
+HOW IT WORKS (dashboard-driven since July 2026): the trigger is the interview-date
+submission on the Tally interview form, which posts to the dashboard
+(/api/students-db/tally/interview). The dashboard matches the student by ANY of
+their emails (closes the dual-email gap), records the interview date (Upcoming
+Interviews), and grants Circle access: the Deep Dive 5 space (1194525) PLUS the
+student's specialty space(s) from the Specialty-spaces Google Sheet mapping (e.g.
+Cardiology -> Medical Specialties; Paediatrics -> Paediatrics + Subspecialties; EM
+-> EM + PEM). Adds are idempotent + deduped. If the specialty ISN'T in the mapping
+it still grants Deep Dive 5 and posts a Slack alert to #fulfillment-team so someone
+adds the specialty space by hand - never a silent miss.
+
+REPLACED: the Monday-triggered zaps "7. Deep Dive access" + "7b. Speciality Space
+access" - a fragile Monday->ZapierTable->GoogleSheet->Circle chain that could
+silently miss a student (e.g. Kate Bowman, who Coralie had to add by hand). STILL
+TO DO: retire zaps 7 and 7b. The specialty->space map lives in code
+(interview_access.SPECIALTY_SPACES) - update it if the sheet changes.
 """
 
 
