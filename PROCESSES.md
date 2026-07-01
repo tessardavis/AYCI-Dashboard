@@ -15,7 +15,7 @@ where it lives, and what the team needs to do. One section per process.
 2. [Private tier calls](#2-private-tier-calls) - *draft for review*
 3. [Private chat](#3-private-chat) - *draft for review*
 4. [Boost & Go](#4-boost--go) - *draft for review*
-5. [Boss badge & testimonials](#5-boss-badge--testimonials) - *draft for review*
+5. [Boss badge & testimonials](#5-boss-badge--testimonials) - *live*
 6. [Toolkit](#6-toolkit) - *draft for review*
 7. Reminder statuses - _to be documented_
 8. Interview reminders - _to be documented_
@@ -534,17 +534,16 @@ also appears as a compact widget on the process page.
 
 ## Status: the chase is live
 
-The chase now runs from the dashboard: the **"Student Wins Tracking" zap was rebuilt** as a Zapier
-catch-hook with one path per `message_number` (1-4, **published**), and the chase is **enabled** in
-Settings → Integrations → Testimonial chase. Every *new* Boss is chased automatically; the old
-Monday-tracker chain is being wound down.
+The chase runs from the dashboard. The **"Student Wins Tracking - First Message" zap is confirmed live**:
+its trigger is now the dashboard **Catch Hook** (Webhooks by Zapier) → Circle **Find Member** → **Paths**
+split on `message_number` → one **Send Direct Message** per message (1-4), all from Coralie's Circle.
+The chase is **enabled** in Settings → Integrations → Testimonial chase, and the **3 old Monday-triggered
+follow-up zaps are switched off** - so there's no double-chasing. Every *new* Boss is chased automatically.
 
 **Still to do:**
 
-- **[Backfill]** Bring the board up to date with existing data: set **Boss badges from the Circle "Boss"
-  tag** (no chase - existing Bosses aren't retro-DM'd) and import **who's already recorded a testimonial**.
-- **[Tessa]** Once a test Boss confirms the new chase sends, **turn off the 3 old Monday-triggered
-  follow-up zaps** and **retire the Monday Student Wins Tracker (5095636561)**.
+- **[Tessa]** **Retire / archive the Monday Student Wins Tracker (5095636561)** - the 3 follow-up zaps
+  are already off, so the board is now dormant; archive it to finish winding down the old chain.
 - **[Tessa - Zapier]** Consolidate the Boss-*tagging* zaps (success form + manual Circle tag) to call
   **`mark-boss-by-email`**, so every win lands on the board and applies Circle + Kit + bonus in one place.
   (This is the live mis-tagging fix - a Circle-only badge doesn't reach Kit without it.)
@@ -561,10 +560,11 @@ Monday-tracker chain is being wound down.
 | Dashboard testimonial-chase engine (1st + 3 follow-ups; stops on booked/recorded/replied) | ✅ Live |
 | Permanent **opt-out** (never auto-chase; blocks Start; reversible) | ✅ Live |
 | Settings card to configure + enable the chase | ✅ Live |
-| "Student Wins Tracking" DM zap repointed → dashboard catch-hook (4 paths, published) + chase enabled | ✅ Done |
+| "Student Wins Tracking" DM zap repointed → dashboard catch-hook (4 paths) + chase enabled | ✅ Live (confirmed) |
 | Scorecard owner Oksana → Coralie | ✅ Live |
-| Backfill: Boss badges from Circle tag (no chase) + recorded testimonials | 🔨 [Tessa - source TBC] |
-| Turn off the 3 old Monday-triggered follow-up zaps + retire Monday Student Wins Tracker (5095636561) | 🔨 [Tessa] |
+| Backfill: Boss badges from Circle tag (no chase) + recorded testimonials | ✅ Done |
+| Turn off the 3 old Monday-triggered follow-up zaps | ✅ Done |
+| Archive the Monday Student Wins Tracker (5095636561) - now dormant | 🔨 [Tessa] |
 | Consolidate Boss-tagging zaps (form + manual tag → `mark-boss-by-email`) | 🔨 [Tessa - Zapier] |
 
 ---

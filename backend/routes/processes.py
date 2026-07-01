@@ -359,16 +359,16 @@ short actionable list (recent or actively-chased Bosses still needing a
 testimonial), not the whole history. The same summary also shows as a widget on
 the process page.
 
-STATUS - THE CHASE IS LIVE: the "Student Wins Tracking" DM zap was rebuilt as a
-Zapier catch-hook with one path per message_number (1-4, published), and the
-chase is enabled in Settings > Integrations > Testimonial chase. Every new Boss
-is chased automatically. STILL TO DO: (1) backfill the board from existing data
-- set Boss badges from the Circle "Boss" tag (no chase, so existing Bosses
-aren't retro-DM'd) and import who's already recorded a testimonial; (2) turn off
-the 3 old Monday-triggered follow-up zaps + retire the Monday Student Wins
-Tracker; (3) consolidate the Boss-TAGGING zaps (form + manual tag) to call
-mark-boss-by-email (the live mis-tagging fix - a Circle-only badge doesn't reach
-Kit without it).
+STATUS - THE CHASE IS LIVE: the "Student Wins Tracking - First Message" zap is
+confirmed live - trigger is the dashboard Catch Hook (Webhooks by Zapier) ->
+Circle Find Member -> Paths split on message_number -> one Send Direct Message
+per message (1-4), from Coralie's Circle. The chase is enabled in Settings >
+Integrations > Testimonial chase, and the 3 old Monday-triggered follow-up zaps
+are OFF (no double-chasing). The backfill has been run (Boss badges set from the
+Circle tag, recorded testimonials imported). STILL TO DO: (1) archive the now-
+dormant Monday Student Wins Tracker (5095636561); (2) consolidate the
+Boss-TAGGING zaps (form + manual tag) to call mark-boss-by-email (the live
+mis-tagging fix - a Circle-only badge doesn't reach Kit without it).
 
 KEY LINKS: wins channel = Share Your Wins
 (https://ayci-academy.circle.so/c/share-your-wins/); testimonial booking =
