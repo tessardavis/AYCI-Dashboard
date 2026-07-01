@@ -9,6 +9,133 @@ import BonusCallSummary from "@/components/BonusCallSummary";
 
 const DEFAULT_COHORT = "June 26";
 
+const CONTACT_CHANNELS = [
+  { key: "email", label: "Email" },
+  { key: "dm", label: "DM" },
+  { key: "reminder", label: "Reminder" },
+  { key: "call", label: "Call" },
+  { key: "other", label: "Other" },
+];
+
+function relDays(iso) {
+  if (!iso) return "";
+  const then = new Date(iso);
+  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
+}
+
+// Per-student follow-up tracker for the "Still to join Circle" list. Shows how many
+// times contacted + when last, a quick "Log" control (channel + optional note), and
+// an expandable history. Keeps its own state so logging doesn't reload the page.
+function ContactCell({ email, initialCount, initialLast, initialEvents }) {
+  const [count, setCount] = useState(initialCount || 0);
+  const [last, setLast] = useState(initialLast || null);
+  const [events, setEvents] = useState(initialEvents || []);
+  const [open, setOpen] = useState(false);   // history expanded
+  const [form, setForm] = useState(false);   // log form open
+  const [channel, setChannel] = useState("email");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const apply = (res) => {
+    setCount(res.contact_count || 0);
+    setLast(res.last_contacted_at || null);
+    setEvents(res.contacts || []);
+  };
+
+  const log = async () => {
+    setBusy(true);
+    try {
+      const { data } = await apiClient.post("/cohorts/circle-join/contact", { email, channel, note });
+      apply(data); setForm(false); setNote("");
+    } catch { /* best effort */ } finally { setBusy(false); }
+  };
+
+  const undo = async () => {
+    setBusy(true);
+    try {
+      const { data } = await apiClient.post("/cohorts/circle-join/contact/undo", { email });
+      apply(data);
+    } catch { /* best effort */ } finally { setBusy(false); }
+  };
+
+  return (
+    <ContactCellView
+      {...{ email, count, last, events, open, setOpen, form, setForm, channel, setChannel,
+        note, setNote, busy, log, undo }}
+    />
+  );
+}
+
+function ContactCellView(p) {
+  return (
+    <div className="min-w-[9rem]">
+      <div className="flex items-center gap-2">
+        {p.count > 0 ? (
+          <button
+            type="button"
+            onClick={() => p.setOpen((v) => !v)}
+            className="text-[11px] px-2 py-0.5 rounded-full border border-[var(--ayci-border)] bg-slate-50 hover:bg-slate-100 text-[var(--ayci-ink)]"
+            title="Show follow-up history"
+          >
+            {p.count}× · {relDays(p.last)}
+          </button>
+        ) : (
+          <span className="text-[11px] text-[var(--ayci-ink-muted)]">not yet</span>
+        )}
+        <button
+          type="button"
+          onClick={() => p.setForm((v) => !v)}
+          className="text-[11px] px-1.5 py-0.5 rounded border border-[var(--ayci-teal)]/40 text-[var(--ayci-teal)] hover:bg-teal-50"
+        >
+          + Log
+        </button>
+      </div>
+
+      {p.form && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <select
+            value={p.channel}
+            onChange={(e) => p.setChannel(e.target.value)}
+            className="text-[11px] border border-[var(--ayci-border)] rounded px-1 py-0.5 bg-white"
+          >
+            {CONTACT_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </select>
+          <input
+            value={p.note}
+            onChange={(e) => p.setNote(e.target.value)}
+            placeholder="note (optional)"
+            className="text-[11px] border border-[var(--ayci-border)] rounded px-1.5 py-0.5 w-32"
+          />
+          <button type="button" onClick={p.log} disabled={p.busy}
+            className="text-[11px] px-2 py-0.5 rounded bg-[var(--ayci-teal)] text-white hover:opacity-90 disabled:opacity-50">
+            {p.busy ? "…" : "Save"}
+          </button>
+        </div>
+      )}
+
+      {p.open && p.events.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 border-l-2 border-[var(--ayci-border)] pl-2">
+          {p.events.slice().reverse().map((e, i) => (
+            <li key={i} className="text-[10px] text-[var(--ayci-ink-muted)]">
+              <span className="uppercase tracking-wide font-semibold text-[var(--ayci-ink)]">{e.channel}</span>
+              {" · "}{relDays(e.at)}{e.note ? ` · ${e.note}` : ""}
+            </li>
+          ))}
+          <li>
+            <button type="button" onClick={p.undo} disabled={p.busy}
+              className="text-[10px] text-rose-600 hover:underline disabled:opacity-50">
+              undo last
+            </button>
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function CohortDashboard() {
   const [cohort, setCohort] = useState(DEFAULT_COHORT);
   const [data, setData] = useState(null);
@@ -357,6 +484,7 @@ export default function CohortDashboard() {
                       <th className="px-3 py-2 font-semibold whitespace-nowrap">Signed up</th>
                       <th className="px-3 py-2 font-semibold">Email</th>
                       <th className="px-3 py-2 font-semibold text-center">Has Circle account?</th>
+                      <th className="px-3 py-2 font-semibold">Follow-ups</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -418,6 +546,14 @@ export default function CohortDashboard() {
                               No account
                             </span>
                           )}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <ContactCell
+                            email={s.email}
+                            initialCount={s.contact_count}
+                            initialLast={s.last_contacted_at}
+                            initialEvents={s.contacts}
+                          />
                         </td>
                       </tr>
                     ))}
