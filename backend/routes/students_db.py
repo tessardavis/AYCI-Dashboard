@@ -1305,6 +1305,38 @@ async def tally_interview_webhook(
         return {"ok": False, "error": str(e)}
 
 
+@router.post("/admin/coaching-docs/ensure")
+async def coaching_docs_ensure(dry_run: bool = True, adopt_fuzzy: bool = False,
+                               admin: dict = Depends(require_admin)):
+    """Ensure every private-tier student has a correctly-named coaching doc.
+    dry_run=true (default) is READ-ONLY - returns the plan (create/adopt/rename/flag).
+    dry_run=false writes (needs the service account to have write access to the shared
+    drive) and runs in the background - poll /admin/coaching-docs/ensure/status."""
+    import coaching_docs
+    if dry_run:
+        return await coaching_docs.ensure(db, dry_run=True, adopt_fuzzy=adopt_fuzzy)
+    key = "coaching_docs_ensure_status"
+    await db.fn_cache.update_one({"_id": key}, {"$set": {
+        "state": "running", "started_at": datetime.now(timezone.utc), "result": None}}, upsert=True)
+
+    async def _run():
+        try:
+            await coaching_docs.ensure(db, dry_run=False, adopt_fuzzy=adopt_fuzzy, status_key=key)
+        except Exception as e:
+            await db.fn_cache.update_one({"_id": key},
+                {"$set": {"state": "error", "error": str(e)}}, upsert=True)
+
+    asyncio.create_task(_run())
+    return {"ok": True, "state": "running",
+            "status_endpoint": "/api/admin/coaching-docs/ensure/status"}
+
+
+@router.get("/admin/coaching-docs/ensure/status")
+async def coaching_docs_ensure_status(admin: dict = Depends(require_admin)):
+    doc = await db.fn_cache.find_one({"_id": "coaching_docs_ensure_status"}, {"_id": 0})
+    return doc or {"state": "idle"}
+
+
 @router.get("/students-db/bosses")
 async def list_bosses(user: dict = Depends(require_board("students"))):
     """The 'Bosses to chase' view: every Boss with their testimonial-journey

@@ -30,6 +30,14 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
 ]
 
+# Write scopes - used ONLY by the coaching-doc create/rename helpers, kept separate
+# from the read path so the summariser keeps working even if write access isn't
+# granted yet. Needs the service account to be a Content-manager on the shared drive.
+WRITE_SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/documents",
+]
+
 SUMMARY_TTL_HOURS = 24
 MAX_DOC_CHARS = 12000  # Truncate input to the LLM
 
@@ -43,31 +51,60 @@ FUZZY_MIN_TOKEN = 0.78
 FUZZY_HARD_FLOOR = 0.55
 
 
-def _drive_service():
-    """Build a Drive client from either a service-account JSON file path OR
-    the raw JSON content pasted into the same env var. Lets non-technical
-    deployers paste the JSON blob into Emergent Secrets without needing to
-    add a separate filesystem path."""
+def _load_creds(scopes: list):
+    """Build service-account creds from either a JSON file path OR the raw JSON
+    content pasted into GOOGLE_SERVICE_ACCOUNT_FILE."""
     sa_value = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
     if not sa_value:
         raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_FILE not configured")
-    # If it's a file path that exists, load from disk
     if not sa_value.lstrip().startswith("{") and os.path.exists(sa_value):
-        creds = service_account.Credentials.from_service_account_file(
-            sa_value, scopes=SCOPES,
-        )
-    else:
-        # Otherwise treat the value as raw JSON content
-        try:
-            info = json.loads(sa_value)
-        except Exception as e:
-            raise RuntimeError(
-                f"GOOGLE_SERVICE_ACCOUNT_FILE is neither a valid path nor valid JSON: {e}"
-            ) from e
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES,
-        )
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+        return service_account.Credentials.from_service_account_file(sa_value, scopes=scopes)
+    try:
+        info = json.loads(sa_value)
+    except Exception as e:
+        raise RuntimeError(
+            f"GOOGLE_SERVICE_ACCOUNT_FILE is neither a valid path nor valid JSON: {e}"
+        ) from e
+    return service_account.Credentials.from_service_account_info(info, scopes=scopes)
+
+
+def _drive_service(scopes: list | None = None):
+    """Drive client. Defaults to read-only SCOPES; pass WRITE_SCOPES for create/rename."""
+    return build("drive", "v3", credentials=_load_creds(scopes or SCOPES), cache_discovery=False)
+
+
+def create_blank_doc(title: str) -> dict:
+    """Create a blank Google Doc named `title` in the private-tier folder, with the
+    title inserted as a heading line. Returns {id, web_view_link}. Needs WRITE_SCOPES
+    + Content-manager access on the shared drive."""
+    drive = _drive_service(WRITE_SCOPES)
+    meta = {
+        "name": title,
+        "mimeType": "application/vnd.google-apps.document",
+        "parents": [_folder_id()],
+    }
+    f = drive.files().create(body=meta, fields="id,webViewLink", supportsAllDrives=True).execute()
+    file_id = f["id"]
+    try:
+        docs = build("docs", "v1", credentials=_load_creds(WRITE_SCOPES), cache_discovery=False)
+        docs.documents().batchUpdate(
+            documentId=file_id,
+            body={"requests": [{"insertText": {"location": {"index": 1}, "text": title + "\n"}}]},
+        ).execute()
+    except Exception as e:  # non-fatal - the doc exists even if the heading insert fails
+        logger.warning(f"[coaching-doc] heading insert failed for {file_id}: {e}")
+    _bust_doc_list_cache()
+    return {"id": file_id, "web_view_link": f.get("webViewLink")
+            or f"https://docs.google.com/document/d/{file_id}/edit"}
+
+
+def rename_file(file_id: str, new_title: str) -> bool:
+    """Rename an existing Drive file (preserves content). Needs WRITE_SCOPES."""
+    drive = _drive_service(WRITE_SCOPES)
+    drive.files().update(fileId=file_id, body={"name": new_title},
+                         fields="id,name", supportsAllDrives=True).execute()
+    _bust_doc_list_cache()
+    return True
 
 
 def _folder_id() -> str:
