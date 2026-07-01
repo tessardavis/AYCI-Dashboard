@@ -38,9 +38,12 @@ dependency in a fragile flow and proves the pattern (Tally → dashboard direct)
   a mismatch just means no auto-mark and Coralie marks by hand.
 - [x] **8c turned off, draft 8a discarded** - dashboard now solely owns the
   interview-success → Boss path. ✅
-- [ ] **Unsuccessful path (Stage 2):** receiver detects "didn't get it" and fires the
-  15-min-link follow-up (Circle DM <4 days / email >4 days) - replaces the
-  Monday-triggered 8d.
+- [~] **Unsuccessful path (Stage 2):** dashboard **done & verified** - on a Substantive
+  "didn't get it" it POSTs to the 8d catch-hook (`uyhckj5`) with
+  email/circle_email/name/first_name/interview_date/days_since_interview (hook 200).
+  **Remaining (Zapier):** rewire 8d's downstream steps to read those catch-hook fields
+  (not Monday), drop the Monday steps, keep its <4d-DM / >4d-email logic, publish, and
+  switch off the old Monday-triggered 8d.
 - [ ] **Interview dates (Stage 3):** receiver records the interview date straight to
   the dashboard's Upcoming Interviews - replaces zap "3" (Tally→Monday).
 
