@@ -321,31 +321,43 @@ meant to do the same automatically. IMPORTANT: tagging the Boss badge directly
 on Circle does NOT update Kit or start the chase - always use the dashboard
 button (this is why some recent job-getters were mis-tagged in Kit).
 
-3. THE JOURNEY THE BOARD TRACKS (per Boss): Boss tagged -> win shared ->
-testimonial booked -> testimonial recorded.
-  - Boss tagged: set when Coralie marks them (or the form fires).
-  - Win shared: auto-detected from a post in the Share Your Wins Circle space
+3. WHAT THE BOARD TRACKS - TWO INDEPENDENT GOALS: the baseline is EVERY Boss
+(everyone with the badge). For each we'd like two things to happen, and they are
+INDEPENDENT, not a sequence - a Boss can record a testimonial without ever
+posting a win, or post a win and never do a testimonial:
+  - SHARED A WIN: auto-detected from a post in the Share Your Wins Circle space
     (https://ayci-academy.circle.so/c/share-your-wins/).
-  - Testimonial booked: auto from the Testimonial Call Calendly event
-    (https://calendly.com/tessardavis/testimonial).
-  - Testimonial recorded: when the booked call actually happens.
+  - RECORDED A TESTIMONIAL: booked auto from the Testimonial Call Calendly event
+    (https://calendly.com/tessardavis/testimonial); recorded when the booked
+    call happens.
+Each Boss is in one of four states: did BOTH (the goal), win only, testimonial
+only, or neither.
 
 4. THE TESTIMONIAL CHASE (dashboard-driven): when someone is marked a Boss, the
 dashboard sends a first DM + 3 follow-ups over ~30 days (offsets 0/7/16/30 days)
-from Coralie's Circle account, stopping automatically once they book, the call
-is recorded, or they reply. This REPLACES the old Monday "Student Wins Tracker"
-(board 5095636561) -> Zapier chain, which broke ~16 Jun 2026 (nobody was added
-to the tracker after that, so recent job-getters weren't chased). The dashboard
-decides WHEN; a Zapier catch-hook still does the Circle send (DM from Coralie's
-account, as before). Only Bosses marked from now on are chased; older ones are
-handled manually. A reply (any inbound Circle DM) stops the chase; Coralie can
-also Stop a chase by hand. OFF until enabled in Settings > Integrations >
-Testimonial chase.
+from Coralie's Circle account. It chases the TESTIMONIAL only (not the win).
+This REPLACES the old Monday "Student Wins Tracker" (board 5095636561) -> Zapier
+chain, which broke ~16 Jun 2026 (nobody was added after that, so recent
+job-getters weren't chased). The dashboard decides WHEN; a Zapier catch-hook
+still does the Circle send (DM from Coralie's account, as before). Only Bosses
+marked from now on are chased; the ~450 backfilled/historical Bosses are never
+auto-chased (handled by hand). THREE WAYS A CHASE STOPS: (a) automatically - the
+moment they book, the call is recorded, or they reply (or all 4 have gone); (b)
+STOP - Coralie ends this run by hand (a future new-Boss mark could re-enrol
+them); (c) OPT OUT - a permanent "never auto-chase this person" flag that also
+blocks Start and survives re-marking, reversible via Opt back in. OFF until
+enabled in Settings > Integrations > Testimonial chase.
 
-5. CORALIE'S "BOSSES TO CHASE" VIEW: the board surfaces who's stuck at each step
-(tagged but no win, no booking, booked but not recorded), plus each active
-chase's progress and a Stop control, so Coralie can nudge on top of the
-automated DMs.
+5. CORALIE'S BOARD - WINS & TESTIMONIALS (/wins): the left-sidebar page is home
+for this. Summary cards across ALL Bosses (Bosses / shared a win / recorded a
+testimonial / did both / no win yet / no testimonial yet + channel-wide win
+totals); filters for the two goals independently (To chase / No win shared / No
+testimonial / Did both / Opted out / All Bosses) + search; per-Boss row with a
+win tick, testimonial status, chase state (chasing N/4, opted out, stop reason),
+and controls (Start chase / Stop, Opt out / Opt back in). "To chase" is the
+short actionable list (recent or actively-chased Bosses still needing a
+testimonial), not the whole history. The same summary also shows as a widget on
+the process page.
 
 STATUS - THE CHASE IS LIVE: the "Student Wins Tracking" DM zap was rebuilt as a
 Zapier catch-hook with one path per message_number (1-4, published), and the

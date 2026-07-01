@@ -480,14 +480,19 @@ and **enrols them in the testimonial chase** (see section 4). The success form i
 automatically. **Important:** tagging the Boss badge *directly on Circle* does NOT do the Kit/chase part -
 always use the dashboard button (see "Good to know" below).
 
-## 3. The journey the board tracks
+## 3. What the board tracks - two independent goals
 
-Per Boss: **Boss tagged → win shared → testimonial booked → testimonial recorded.**
+The **baseline is every Boss** (everyone with the Boss badge). For each of them we'd
+like **two things** to happen - and they are **independent, not a sequence**. Someone
+can record a testimonial without ever posting a win, or post a win and never do a
+testimonial. Both are tracked separately:
 
-- **Boss tagged** - set when Coralie marks them (or the form fires).
-- **Win shared** - auto-detected from a post in the **Share Your Wins** space (https://ayci-academy.circle.so/c/share-your-wins/, space id 996901).
-- **Testimonial booked** - auto from the **Testimonial Call** Calendly event (https://calendly.com/tessardavis/testimonial).
-- **Testimonial recorded** - when the booked call actually happens.
+1. **Shared a win** - auto-detected from a post in the **Share Your Wins** space (https://ayci-academy.circle.so/c/share-your-wins/, space id 996901).
+2. **Recorded a testimonial** - **booked** auto from the **Testimonial Call** Calendly event (https://calendly.com/tessardavis/testimonial); **recorded** when the booked call actually happens.
+
+So each Boss is in one of four states: did **both**, **win only**, **testimonial
+only**, or **neither**. "Did both" = the goal. (The Boss tag itself is set when Coralie
+marks them, or the success form fires.)
 
 ## 4. The testimonial chase (now dashboard-driven)
 
@@ -499,16 +504,25 @@ automatically** the moment they book, the call is recorded, or they reply.
   ~16 June 2026 (no one was added to the tracker after Kate Kybird, so recent job-getters weren't chased).
 - The dashboard decides *when*; a **Zapier catch-hook** still does the actual Circle send (so the DM comes
   from Coralie's account, exactly as before - just triggered by the dashboard, not Monday).
-- **Only Bosses marked from now on are chased.** Existing/legacy Bosses are handled by Coralie manually
-  (DM to congratulate → nudge to share the win → invite to book a testimonial).
-- A student **replying** (any inbound Circle DM) stops their chase; Coralie can also **Stop** a chase by
-  hand from the Bosses-to-chase view.
+- The chase is about the **testimonial** only (it doesn't chase the win - that tends to be self-driven).
+- **Only Bosses marked from now on are chased.** The ~450 **backfilled/historical Bosses are never
+  auto-chased** - Coralie works those by hand (see the board's **Start chase** below), or just leaves them.
+- **Three ways a chase stops:**
+  - **Automatically** - the moment they book, the call is recorded, or they **reply** to any DM (or all 4 have gone).
+  - **Stop** (per chase) - Coralie ends *this* run by hand from the board. A future new-Boss mark would still re-enrol them.
+  - **Opt out** (permanent) - a durable "never auto-chase this person" flag. They're excluded from the auto-chase, **Start is blocked**, and even re-marking them a Boss won't re-enrol them. Opting out also stops any live chase. Reversible via **Opt back in**.
 
-## 5. Coralie's "Bosses to chase" view
+## 5. Coralie's board: Wins & Testimonials (`/wins`)
 
-The board surfaces who's stuck at each step (tagged-but-no-win, no-booking, booked-not-recorded), plus
-each active chase's progress (`chasing N/4`) and a **Stop** control, so Coralie can personally nudge on
-top of the automated DMs.
+The **Wins & Testimonials** page (left sidebar) is Coralie's home for this. It shows, across **all** Bosses:
+
+- **Summary cards:** Bosses (baseline) · Shared a win · Recorded a testimonial · **Did both** · No win yet · No testimonial yet - plus the channel-wide totals (total win posts in Share Your Wins + how many people shared).
+- **Filters** (the two goals, independently): **To chase · No win shared · No testimonial · Did both · Opted out · All Bosses**, plus a name/email search.
+- **Per-Boss row:** a win-shared tick, the testimonial status, the chase state (`chasing N/4`, `opted out`, or a stop reason), and controls - **Start chase / Stop**, plus **Opt out / Opt back in**.
+
+"To chase" is deliberately the **short, actionable list** (recently-marked or actively-chased Bosses who
+still need a testimonial), not the whole history - so it stays a handful, not hundreds. The same summary
+also appears as a compact widget on the process page.
 
 ## Good to know (common questions)
 
@@ -540,11 +554,12 @@ Monday-tracker chain is being wound down.
 |---|---|
 | Document the process (board + this file + Q&A) | ✅ Live |
 | "Mark as Boss" button (single source of truth) | ✅ Live |
-| Journey status (tagged → shared → booked → recorded) | ✅ Live |
+| Two independent goals per Boss (shared a win / recorded a testimonial) | ✅ Live |
 | Win-shared auto-detect (Share Your Wins posts) | ✅ Live |
 | Testimonial booked/recorded auto-detect (Calendly) | ✅ Live |
-| "Bosses to chase" view (+ chase progress + Stop) | ✅ Live |
+| **Wins & Testimonials board (`/wins`)** - cards, goal filters, search, per-Boss controls | ✅ Live |
 | Dashboard testimonial-chase engine (1st + 3 follow-ups; stops on booked/recorded/replied) | ✅ Live |
+| Permanent **opt-out** (never auto-chase; blocks Start; reversible) | ✅ Live |
 | Settings card to configure + enable the chase | ✅ Live |
 | "Student Wins Tracking" DM zap repointed → dashboard catch-hook (4 paths, published) + chase enabled | ✅ Done |
 | Scorecard owner Oksana → Coralie | ✅ Live |
