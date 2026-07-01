@@ -1116,32 +1116,55 @@ async def list_bosses(user: dict = Depends(require_board("students"))):
     status (tagged -> win shared -> booked -> recorded), incomplete ones first."""
     import boss_journey
     proj = {"name": 1, "email": 1, "circle_email": 1, "boss_badge": 1,
-            "boss_tagged_at": 1, "win_shared_at": 1, "testimonial_status": 1,
+            "boss_tagged_at": 1, "boss_marked_by": 1, "win_shared_at": 1, "testimonial_status": 1,
             "testimonial_booked_date": 1, "testimonial_recorded_at": 1, "testimonial_coach": 1,
             "testimonial_chase_started_at": 1, "testimonial_chase_step": 1,
             "testimonial_chase_last_sent_at": 1, "testimonial_chase_stopped_at": 1,
             "testimonial_chase_stopped_reason": 1, "testimonial_replied_at": 1}
+    now = datetime.now(timezone.utc)
+
+    def _recent(v) -> bool:
+        if not v:
+            return False
+        try:
+            d = v if isinstance(v, datetime) else datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+            return (now - d).days <= 35
+        except (ValueError, TypeError):
+            return False
+
     out = []
     async for r in db.academy_members.find({"boss_badge": {"$exists": True, "$nin": [None, ""]}}, proj):
         if not boss_journey.is_boss(r):
             continue
         st = boss_journey.journey_status(r)
+        active = bool(r.get("testimonial_chase_started_at")) and not r.get("testimonial_chase_stopped_at")
+        # "chaseable" = the short, actionable list. Exclude the historical backfill
+        # (marked_by=backfill, all stamped today) unless it's an active chase; for
+        # genuinely-marked Bosses, only those tagged in the last ~month.
+        backfilled = (r.get("boss_marked_by") or "") == "backfill"
+        chaseable = active or (not backfilled and _recent(r.get("boss_tagged_at")))
         chase = {
-            "chase_active": bool(r.get("testimonial_chase_started_at")) and not r.get("testimonial_chase_stopped_at"),
+            "chase_active": active,
             "chase_step": int(r.get("testimonial_chase_step") or 0),
             "chase_last_sent_at": r.get("testimonial_chase_last_sent_at"),
             "chase_stopped_reason": r.get("testimonial_chase_stopped_reason"),
             "replied_at": r.get("testimonial_replied_at"),
+            "marked_by": r.get("boss_marked_by"),
+            "chaseable": chaseable,
         }
         out.append({"id": r["_id"], "name": r.get("name"), "email": r.get("email"), **st, **chase})
     order = {"win": 0, "booking": 1, "recording": 2, None: 3}
     out.sort(key=lambda x: (order.get(x["stuck"], 3), (x.get("name") or "").lower()))
+    chaseable_incomplete = [b for b in out if b.get("chaseable") and not b["complete"]]
     counts = {
         "total": len(out),
         "win": sum(1 for b in out if b["stuck"] == "win"),
         "booking": sum(1 for b in out if b["stuck"] == "booking"),
         "recording": sum(1 for b in out if b["stuck"] == "recording"),
         "complete": sum(1 for b in out if b["complete"]),
+        "to_chase": len(chaseable_incomplete),
     }
     return {"bosses": out, "counts": counts}
 
