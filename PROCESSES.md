@@ -574,7 +574,7 @@ follow-up zaps are switched off** - so there's no double-chasing. Every *new* Bo
 | Archive the Monday Student Wins Tracker (5095636561) - now dormant | 🔨 [Tessa] |
 | Boss-tagging worker zap "8b" (boss_badge column → Circle + Kit + space access) | ✅ Live |
 | Manual Circle tag "Option A" repointed → `mark-boss-by-email` (leak-closer, verified live) | ✅ Done |
-| Success-form trigger zap → `mark-boss-by-email` | 🔨 [Tessa - Zapier, after Coralie sees it] |
+| Interview form → dashboard auto-marks Boss on Substantive "I got it!" (native Tally webhook → `/tally/interview`); zaps 8a + 8c removed | ✅ Live (verified) |
 
 ---
 

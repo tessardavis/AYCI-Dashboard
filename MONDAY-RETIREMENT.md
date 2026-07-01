@@ -36,7 +36,8 @@ dependency in a fragile flow and proves the pattern (Tally → dashboard direct)
   their Circle email**, and the receiver matches on **any** email field vs
   email / circle_email / other_emails - so the dual-email gap is largely closed;
   a mismatch just means no auto-mark and Coralie marks by hand.
-- [ ] **Turn off 8c** and discard draft 8a (dashboard now owns the success path).
+- [x] **8c turned off, draft 8a discarded** - dashboard now solely owns the
+  interview-success → Boss path. ✅
 - [ ] **Unsuccessful path (Stage 2):** receiver detects "didn't get it" and fires the
   15-min-link follow-up (Circle DM <4 days / email >4 days) - replaces the
   Monday-triggered 8d.
@@ -109,7 +110,7 @@ as their own mini-migrations complete).
 
 | Phase | Status |
 |---|---|
-| 0 - interview/Boss flow off Monday | 🔨 Stage 1 live; Stages 2-3 to build |
+| 0 - interview/Boss flow off Monday | 🔨 Stage 1 done (8a/8c removed); Stages 2-3 to build |
 | 1 - field inventory & origin audit | ⬜ not started (the next real step for #2) |
 | 2 - re-source derivable fields | ⬜ |
 | 3 - dashboard as write target + data entry | ⬜ |
